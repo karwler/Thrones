@@ -1,0 +1,4 @@
+- data exchange between players
+- game states
+- game rules
+- object creation

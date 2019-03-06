@@ -1,5 +1,4 @@
 #include "world.h"
-#include <GL/glew.h>
 
 // CLICK STAMP
 
@@ -12,43 +11,25 @@ ClickStamp::ClickStamp(Widget* widget, ScrollArea* area, const vec2i& mPos) :
 // SCENE
 
 Scene::Scene() :
+	mouseMove(0),
 	select(nullptr),
 	capture(nullptr),
 	layout(new Layout)	// dummy layout in case a function gets called preemptively
 {}
 
 void Scene::draw() {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glClear(clearSet);
 
 	// draw objects
 	camera.update();
-	glLoadIdentity();
-
 	for (Object* it : objects)
 		it->draw();
 
 	// draw UI
-	vec2i res = World::winSys()->windowSize();
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0, double(res.x), double(res.y), 0.0, 0.0, 1.0);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	
+	Camera::updateUI();
 	layout->draw();
-	if (popup) {	// dim everything behind popup and display if present
-		glDisable(GL_TEXTURE_2D);
-		glColor4ubv(reinterpret_cast<const GLubyte*>(&colorPopupDim));
-
-		glBegin(GL_QUADS);
-		glVertex2i(0, 0);
-		glVertex2i(res.x, 0);
-		glVertex2i(res.x, res.y);
-		glVertex2i(0, res.y);
-		glEnd();
-
+	if (popup)
 		popup->draw();
-	}
 	if (LabelEdit* let = dynamic_cast<LabelEdit*>(capture))
 		let->drawCaret();
 }
@@ -87,18 +68,10 @@ void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
 }
 
 void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
-	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box && box->unfocusConfirm)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
+	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
-	
-	setSelected(mPos, topLayout());	// update in case selection has changed through keys while cursor remained at the old position
-	if (mCnt == 1) {
-		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
-		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
-			stamps[mBut].area->onHold(mPos, mBut);
-		if (stamps[mBut].widget != stamps[mBut].area)
-			stamps[mBut].widget->onHold(mPos, mBut);
-	} else if (mCnt == 2 && stamps[mBut].widget == select && cursorInClickRange(mPos, mBut))
-		select->onDoubleClick(mPos, mBut);
+
+	setSelected(mPos, topLayout()) ? mouseDownWidget(mPos, mBut, mCnt) : mouseDownObject(mPos, mBut, mCnt);	// update in case selection has changed through keys while cursor remained at the old position
 }
 
 void Scene::onMouseUp(const vec2i& mPos, uint8 mBut) {
@@ -148,15 +121,14 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	onMouseMove(mousePos(), 0);
 }
 
-void Scene::setSelected(const vec2i& mPos, Layout* box) {
+Widget* Scene::setSelected(const vec2i& mPos, Layout* box) {
 	Rect frame = box->frame();
 	if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().getOverlap(frame).overlap(mPos); }); it != box->getWidgets().end()) {
 		if (Layout* lay = dynamic_cast<Layout*>(*it))
-			setSelected(mPos, lay);
-		else
-			select = (*it)->selectable() ? *it : box;
-	} else
-		select = box;
+			return setSelected(mPos, lay);
+		return select = (*it)->selectable() ? *it : nullptr;
+	}
+	return select = dynamic_cast<ScrollArea*>(box);
 }
 
 ScrollArea* Scene::getSelectedScrollArea() const {
@@ -174,4 +146,55 @@ sizet Scene::findSelectedID(Layout* box) {
 	while (child->getParent() && child->getParent() != box)
 		child = child->getParent();
 	return child->getParent() ? child->getID() : SIZE_MAX;
+}
+
+void Scene::mouseDownWidget(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
+	if (mCnt == 1) {
+		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
+		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
+			stamps[mBut].area->onHold(mPos, mBut);
+		if (stamps[mBut].widget != stamps[mBut].area)
+			stamps[mBut].widget->onHold(mPos, mBut);
+	} else if (mCnt == 2 && stamps[mBut].widget == select && cursorInClickRange(mPos, mBut))
+		select->onDoubleClick(mPos, mBut);
+}
+
+void Scene::mouseDownObject(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
+	if (mCnt != 1 || mBut != SDL_BUTTON_LEFT)
+		return;
+	if (Object* obj = rayCast(camera.direction(mPos) * 10.f))
+		std::cout << obj << std::endl;	// TODO: actual things
+}
+
+Object* Scene::rayCast(const vec3& ray) const {
+	for (Object* obj : objects) {
+		mat4 trans = obj->getTransform();
+		for (sizet i = 0; i < obj->elems.size(); i += 3)
+			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t))
+				return obj;
+	}
+	return nullptr;
+}
+
+bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t) {
+	vec3 e1 = v1 - v0;
+	vec3 e2 = v2 - v0;
+	vec3 h = glm::cross(dir, e2);
+	float a = glm::dot(e1, h);
+	if (a > -FLT_EPSILON && a < FLT_EPSILON)
+		return false;
+
+	float f = 1.f / a;
+	vec3 s = ori - v0;
+	float u = f * (glm::dot(s, h));
+	if (u < 0.f || u > 1.f)
+		return false;
+
+	vec3 q = glm::cross(s, e1);
+	float v = f * glm::dot(dir, q);
+	if (v < 0.f || u + v > 1.f)
+		return false;
+
+	t = f * glm::dot(e2, q);
+	return t > FLT_EPSILON;
 }

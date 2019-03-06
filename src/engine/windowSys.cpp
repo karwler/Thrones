@@ -1,4 +1,4 @@
-#include "world.h"
+#include "windowSys.h"
 
 // FONT SET
 
@@ -65,9 +65,11 @@ int WindowSys::start() {
 		init();
 		exec();
 	} catch (const std::runtime_error& e) {
+		std::cerr << e.what() << std::endl;
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", e.what(), window);
 	} catch (...) {
-		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "Unknown error.", window);
+		std::cerr << "unknown error" << std::endl;
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "Unknown error", window);
 	}
 	cleanup();
 	return 0;
@@ -75,13 +77,13 @@ int WindowSys::start() {
 
 void WindowSys::init() {
 	if (SDL_Init(SDL_INIT_VIDEO))
-		throw std::runtime_error(string("Couldn't initialize video:\n") + SDL_GetError());
+		throw std::runtime_error(string("couldn't initialize video:\n") + SDL_GetError());
 	if (TTF_Init())
-		throw std::runtime_error(string("Couldn't initialize fonts:\n") + SDL_GetError());
+		throw std::runtime_error(string("couldn't initialize fonts:\n") + SDL_GetError());
 	if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
-		std::cerr << "Couldn't initialize PNG:\n" << IMG_GetError() << std::endl;
+		std::cerr << "couldn't initialize PNG:\n" << IMG_GetError() << std::endl;
 	if (SDLNet_Init())
-		throw std::runtime_error(string("Couldn't initialize networking:\n") + SDLNet_GetError());
+		throw std::runtime_error(string("couldn't initialize networking:\n") + SDLNet_GetError());
 	SDL_StopTextInput();	// for some reason TextInput is on
 
 	fileSys.reset(new FileSys);
@@ -101,8 +103,7 @@ void WindowSys::exec() {
 		SDL_GL_SwapWindow(window);
 
 		scene->tick(dSec);
-		if (program->getGame())
-			program->getGame()->tick();
+		program->getGame()->tick();
 
 		uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
 		for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
@@ -140,9 +141,9 @@ void WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
 
-	sets->resolution = sets->resolution.clamp(minWindowSize, displayResolution());
+	setResolution(sets->resolution);
 	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->resolution.x, sets->resolution.y, windowFlags | (sets->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0))))
-		throw std::runtime_error(string("Couldn't create window:\n") + SDL_GetError());
+		throw std::runtime_error(string("couldn't create window:\n") + SDL_GetError());
 
 	SDL_SetWindowMinimumSize(window, minWindowSize.x, minWindowSize.y);
 	if (SDL_Surface* icon = IMG_Load(fileIcon)) {
@@ -152,20 +153,19 @@ void WindowSys::createWindow() {
 
 	// create context and set up rendering
 	if (!(context = SDL_GL_CreateContext(window)))
-		throw std::runtime_error(string("Couldn't create context:\n") + SDL_GetError());
+		throw std::runtime_error(string("couldn't create context:\n") + SDL_GetError());
 	setSwapInterval();
 
 	updateViewport();
-	glClearColor(0.f, 0.f, 0.f, 1.f);
+	glClearColor(colorClear[0], colorClear[1], colorClear[2], colorClear[3]);
 	glClearDepth(1.0);
-
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_CULL_FACE);
+	/*glEnable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
-	glFrontFace(GL_CCW);
+	glFrontFace(GL_CCW);*/
 	glShadeModel(GL_SMOOTH);
 	glEnable(GL_MULTISAMPLE);
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
@@ -244,7 +244,7 @@ void WindowSys::setDSec(uint32& oldTicks) {
 
 void WindowSys::setSwapInterval() {
 	if (SDL_GL_SetSwapInterval(sets->vsyncToInterval()))
-		std::cout << "Swap interval " << sets->vsyncToInterval() << " not supported " << std::endl;
+		std::cerr << "swap interval " << sets->vsyncToInterval() << " not supported " << std::endl;
 }
 
 Texture WindowSys::renderText(const string& text, int height) {
@@ -260,7 +260,7 @@ const Texture* WindowSys::texture(const string& name) const {
 	try {
 		return &texes.at(name);
 	} catch (const std::out_of_range&) {
-		std::cerr << "Texture " << name << " doesn't exist." << std::endl;
+		std::cerr << "texture " << name << " doesn't exist." << std::endl;
 	}
 	return nullptr;
 }
@@ -271,8 +271,13 @@ void WindowSys::setFullscreen(bool on) {
 }
 
 void WindowSys::setResolution(const string& line) {
-	sets->resolution = sets->resolution.set(line, strtoul, 0).clamp(minWindowSize, displayResolution());
+	setResolution(vec2i::get(line, strtoul, 0));
 	SDL_SetWindowSize(window, sets->resolution.x, sets->resolution.y);
+}
+
+void WindowSys::setResolution(const vec2i& res) {
+	sets->resolution = res.clamp(minWindowSize, displayResolution());
+	sets->resolution.x = clampLow(sets->resolution.x, sets->resolution.y);
 }
 
 void WindowSys::setVsync(Settings::VSync vsync) {

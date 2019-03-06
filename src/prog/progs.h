@@ -15,8 +15,9 @@ protected:
 
 	static constexpr int popupLineHeight = 40;
 	static constexpr int lineHeight = 30;
-	static constexpr int topHeight = 40;
-	static constexpr int topSpacing = 10;
+	static constexpr int superHeight = 40;
+	static constexpr int superSpacing = 10;
+	static constexpr int iconSize = 30;
 
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
@@ -35,11 +36,16 @@ protected:
 
 class ProgMenu : public ProgState {
 public:
-	LabelEdit* server;
-	LabelEdit* port;
-
-public:
 	virtual ~ProgMenu() override = default;
+
+	virtual void eventEscape() override;
+
+	virtual Layout* createLayout() override;
+};
+
+class ProgGame : public ProgState {
+public:
+	virtual ~ProgGame() override = default;
 
 	virtual void eventEscape() override;
 
@@ -56,14 +62,5 @@ public:
 	virtual void eventEscape() override;
 	virtual void eventResized() override;
 	
-	virtual Layout* createLayout() override;
-};
-
-class ProgGame : public ProgState {
-public:
-	virtual ~ProgGame() override = default;
-
-	virtual void eventEscape() override;
-
 	virtual Layout* createLayout() override;
 };

@@ -1,4 +1,4 @@
-#include "world.h"
+#include "fileSys.h"
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -15,7 +15,9 @@ Settings::Settings() :
 	maximized(false),
 	fullscreen(false),
 	vsync(VSync::synchronized),
-	resolution(800, 600)
+	resolution(800, 600),
+	address("127.0.0.1"),
+	port(Server::defaultPort)
 {}
 
 // FILE SYS
@@ -25,9 +27,9 @@ FileSys::FileSys() {
 
 	// check if all (more or less) necessary files and directories exist
 	if (fileType(dirSavs) != FTYPE_DIR && !createDir(dirSavs))
-		std::cerr << "Couldn't create save data directory" << std::endl;
+		std::cerr << "couldn't create save data directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
-		std::cerr << "Couldn't find texture directory" << std::endl;
+		std::cerr << "couldn't find texture directory" << std::endl;
 }
 
 Settings* FileSys::loadSettings() {
@@ -38,26 +40,26 @@ Settings* FileSys::loadSettings() {
 		else if (il.first == iniKeywordFullscreen)
 			sets->fullscreen = stob(il.second);
 		else if (il.first == iniKeywordResolution)
-			sets->resolution.set(il.second, strtoul, 0);
+			sets->resolution = vec2i::get(il.second, strtoul, 0);
 		else if (il.first == iniKeywordVsync)
 			sets->vsync = strToEnum<Settings::VSync>(Settings::vsyncNames, il.second);
+		else if (il.first == iniKeywordAddress)
+			sets->address = il.second;
+		else if (il.first == iniKeywordPort)
+			sets->port = uint16(stoul(il.second));
 	}
 	return sets;
 }
 
 bool FileSys::saveSettings(const Settings* sets) {
-	string text = makeIniLine(iniKeywordMaximized, btos(sets->maximized));
+	string text;
+	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
 	text += makeIniLine(iniKeywordFullscreen, btos(sets->fullscreen));
 	text += makeIniLine(iniKeywordResolution, sets->resolution.toString());
-	text += makeIniLine(iniKeywordVsync, enumToStr(Settings::vsyncNames, sets->vsync));
-
-	FILE* ofh = fopen(string(string(dirSavs) + fileSettings).c_str(), "wb");
-	if (!ofh) {
-		std::cerr << "Couldn't save settings" << std::endl;
-		return false;
-	}
-	fwrite(text.c_str(), sizeof(char), text.length(), ofh);
-	return !fclose(ofh);
+	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync)]);
+	text += makeIniLine(iniKeywordAddress, sets->address);
+	text += makeIniLine(iniKeywordPort, to_string(sets->port));
+	return writeTextFile(string(dirSavs) + fileSettings, text);
 }
 
 vector<string> FileSys::readFileLines(const string& file, bool printMessage) {
@@ -77,7 +79,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 	FILE* ifh = fopen(file.c_str(), "rb");
 	if (!ifh) {
 		if (printMessage)
-			std::cerr << "Couldn't open file " << file << std::endl;
+			std::cerr << "couldn't open file " << file << std::endl;
 		return "";
 	}
 	fseek(ifh, 0, SEEK_END);
@@ -95,7 +97,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 bool FileSys::writeTextFile(const string& file, const string& text) {
 	FILE* ofh = fopen(file.c_str(), "wb");
 	if (!ofh) {
-		std::cerr << "Couldn't write file " << file << std::endl;
+		std::cerr << "couldn't write file " << file << std::endl;
 		return false;
 	}
 	fputs(text.c_str(), ofh);
@@ -130,7 +132,7 @@ vector<string> FileSys::listDir(const string& drc, FileType filter) {
 			entries.emplace_back(entry->d_name);
 	closedir(directory);
 #endif
-	std::sort(entries.begin(), entries.end(), strnatless);
+	std::sort(entries.begin(), entries.end());
 	return entries;
 }
 
@@ -150,7 +152,7 @@ void FileSys::setWorkingDir() {
 #else
 	char* buf = new char[PATH_MAX];
 	if (sizet len = sizet(readlink(linkExe, buf, PATH_MAX)); len > PATH_MAX || chdir(parentPath(string(buf, buf + len)).c_str()))
-		std::cerr << "Couldn't set working directory" << std::endl;
+		std::cerr << "couldn't set working directory" << std::endl;
 #endif
 	delete[] buf;
 }

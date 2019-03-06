@@ -4,6 +4,7 @@
 
 Layout::Layout(const Size& relSize, const vector<Widget*>& children, bool vertical, bool canSelect, int spacing, Layout* parent, sizet id) :
 	Widget(relSize, parent, id),
+	selected(nullptr),
 	spacing(spacing),
 	canSelect(canSelect),
 	vertical(vertical)
@@ -38,12 +39,12 @@ void Layout::onResize() {
 	}
 
 	// calculate positions for each widget and set last poss element to end position of the last widget
-	vec2i pos;
+	vec2i pos = 0;	// TODO: revert
 	for (sizet i = 0; i < widgets.size(); i++) {
 		positions[i] = pos;
 		pos[vertical] += (widgets[i]->getRelSize().usePix ? widgets[i]->getRelSize().pix : int(widgets[i]->getRelSize().prc * space / total)) + spacing;
 	}
-	positions.back() = vec2i(wsiz[!vertical], pos[vertical], !vertical);
+	positions.back() = vec2i::swap(wsiz[!vertical], pos[vertical], !vertical);
 
 	// do the same for children
 	for (Widget* it : widgets)
@@ -102,7 +103,7 @@ vec2i Layout::wgtPosition(sizet id) const {
 }
 
 vec2i Layout::wgtSize(sizet id) const {
-	return vec2i(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - spacing, !vertical);
+	return vec2i::swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - spacing, !vertical);
 }
 
 vec2i Layout::listSize() const {
@@ -122,6 +123,7 @@ Popup::Popup(const vec2s& relSize, const vector<Widget*>& children, bool vertica
 {}
 
 void Popup::draw() const {
+	drawRect(Rect(0, World::winSys()->windowSize()), colorDim);	// dim other widgets
 	drawRect(rect(), Color::normal);	// draw background
 	Layout::draw();
 }
@@ -192,13 +194,13 @@ void ScrollArea::onDrag(const vec2i& mPos, const vec2i& mMov) {
 	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_RIGHT))
 		moveListPos(-mMov);
 	else
-		moveListPos(mMov * vec2i(0, -1, !vertical));
+		moveListPos(mMov * vec2i::swap(0, -1, !vertical));
 }
 
 void ScrollArea::onUndrag(uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		if (!World::scene()->cursorInClickRange(mousePos(), mBut) && !draggingSlider)
-			motion = World::scene()->getMouseMove() * vec2i(0, -1, !vertical);
+			motion = World::scene()->getMouseMove() * vec2i::swap(0, -1, !vertical);
 
 		draggingSlider = false;
 		World::scene()->capture = nullptr;
@@ -219,7 +221,7 @@ vec2i ScrollArea::wgtPosition(sizet id) const {
 }
 
 vec2i ScrollArea::wgtSize(sizet id) const {
-	return Layout::wgtSize(id) - vec2i(barSize(), 0, !vertical);
+	return Layout::wgtSize(id) - vec2i::swap(barSize(), 0, !vertical);
 }
 
 void ScrollArea::setSlider(int spos) {
@@ -262,7 +264,7 @@ Rect ScrollArea::sliderRect() const {
 }
 
 vec2t ScrollArea::visibleWidgets() const {
-	vec2t ival;
+	vec2t ival = 0;
 	if (widgets.empty())	// nothing to draw
 		return ival;
 

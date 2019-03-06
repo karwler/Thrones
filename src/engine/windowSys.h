@@ -39,6 +39,7 @@ private:
 	static constexpr uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
+	static constexpr GLclampf colorClear[4] = {0.f, 0.f, 0.f, 1.f};
 	static constexpr SDL_Color colorText = {220, 220, 220, 255};
 	static const vec2i minWindowSize;
 
@@ -91,6 +92,7 @@ private:
 
 	void updateViewport() const;
 	vec2i displayResolution() const;
+	void setResolution(const vec2i& res);
 };
 
 inline void WindowSys::close() {
@@ -131,9 +133,9 @@ inline void WindowSys::updateViewport() const {
 }
 
 inline vec2i WindowSys::windowSize() const {
-	int x, y;
-	SDL_GetWindowSize(window, &x, &y);
-	return vec2i(x, y);
+	vec2i res;
+	SDL_GetWindowSize(window, &res.x, &res.y);
+	return res;
 }
 
 inline vec2i WindowSys::displayResolution() const {

@@ -7,7 +7,7 @@
 class Program {
 private:
 	uptr<ProgState> state;
-	uptr<Game> game;
+	Game game;
 
 public:
 	Program();
@@ -17,12 +17,14 @@ public:
 	// main menu
 	void eventOpenMainMenu(Button* but = nullptr);
 	void eventConnectServer(Button* but = nullptr);
-	void eventConnectConnected();
-	void eventConnectFailed(const string& msg);
-	void eventConnectCancelled(Button* but = nullptr);
+	void eventConnectCancel(Button* but = nullptr);
+	void eventUpdateAddress(Button* but);
+	void eventUpdatePort(Button* but);
 
 	// game
-	void eventExitGame();
+	void eventOpenGame();
+	void eventPlaceTile(Button* but);
+	void eventExitGame(Button* but = nullptr);
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
@@ -55,5 +57,5 @@ inline ProgState* Program::getState() {
 }
 
 inline Game* Program::getGame() {
-	return game.get();
+	return &game;
 }

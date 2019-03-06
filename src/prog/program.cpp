@@ -4,37 +4,38 @@
 
 void Program::eventOpenMainMenu(Button*) {
 	setState(new ProgMenu);
+	World::scene()->setObjects(game.initObjects());
 }
 
 void Program::eventConnectServer(Button*) {
-	try {
-		ProgMenu* sm = static_cast<ProgMenu*>(state.get());
-		game.reset(new Game(sm->server->getText(), uint16(sstoul(sm->port->getText()))));
-		World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventConnectCancelled, "Cancel"));
-	} catch (const std::runtime_error& e) {
-		game.reset();
-		World::scene()->setPopup(ProgState::createPopupMessage(e.what(), &Program::eventClosePopup));
-	}
+	game.connect();
 }
 
-void Program::eventConnectConnected() {
-	setState(new ProgGame);
-}
-
-void Program::eventConnectFailed(const string& msg) {
-	game.reset();
-	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventClosePopup));
-}
-
-void Program::eventConnectCancelled(Button*) {
-	game.reset();
+void Program::eventConnectCancel(Button*) {
+	game.disconnect();
 	World::scene()->setPopup(nullptr);
+}
+
+void Program::eventUpdateAddress(Button* but) {
+	World::sets()->address = static_cast<LabelEdit*>(but)->getText();
+}
+
+void Program::eventUpdatePort(Button* but) {
+	World::sets()->port = uint16(sstoul(static_cast<LabelEdit*>(but)->getText()));
 }
 
 // GAME
 
-void Program::eventExitGame() {
-	game.reset();
+void Program::eventOpenGame() {
+	setState(new ProgGame);
+}
+
+void Program::eventPlaceTile(Button*) {
+	// TODO: place the tile
+}
+
+void Program::eventExitGame(Button*) {
+	game.disconnect();
 	eventOpenMainMenu();
 }
 

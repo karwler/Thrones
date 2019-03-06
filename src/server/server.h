@@ -1,3 +1,6 @@
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <SDL2/SDL_net.h>
 #include <cstddef>
 #include <cstdint>

@@ -1,9 +1,7 @@
 #pragma once
 
 #include "utils/utils.h"
-#ifdef _WIN32
-#include <windows.h>
-#else
+#ifndef _WIN32
 #include <dirent.h>
 #include <sys/stat.h>
 #endif
@@ -20,6 +18,8 @@ public:
 	bool maximized, fullscreen;
 	VSync vsync;
 	vec2i resolution;
+	string address;
+	uint16 port;
 
 public:
 	Settings();
@@ -91,6 +91,8 @@ private:
 	static constexpr char iniKeywordFullscreen[] = "fullscreen";
 	static constexpr char iniKeywordResolution[] = "resolution";
 	static constexpr char iniKeywordVsync[] = "vsync";
+	static constexpr char iniKeywordAddress[] = "address";
+	static constexpr char iniKeywordPort[] = "port";
 
 #ifdef _WIN32		// os's font directories
 	array<string, 2> dirFonts;

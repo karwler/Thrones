@@ -1,8 +1,14 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
 #include <string>
+
+using glm::mat4;
+using glm::vec2;
+using glm::vec3;
+using glm::vec4;
 
 using std::string;
 using std::wstring;
@@ -13,16 +19,13 @@ struct cvec2 {
 	union { T x, w, u, b; };
 	union { T y, h, v, t; };
 
-	cvec2();
+	cvec2() = default;
 	template <class A> cvec2(const A& n);
 	template <class A, class B> cvec2(const A& x, const B& y);
-	template <class A, class B> cvec2(const A& vx, const B& vy, bool swap);
 	template <class A> cvec2(const cvec2<A>& v);
-	template <class A> cvec2(const cvec2<A>& v, bool swap);
 #ifdef _MSC_VER
 	~cvec2() {}
 #endif
-
 	T& operator[](size_t i);
 	const T& operator[](size_t i) const;
 
@@ -41,21 +44,18 @@ struct cvec2 {
 	cvec2& operator--();
 	cvec2 operator--(int);
 
-	template <class F, class... A> cvec2& set(const string& str, F strtox, A... args);
+	template <class F, class... A> static cvec2 get(const string& str, F strtox, A... args);
 	string toString() const;
+	vec2 glm() const;
 	bool has(const T& n) const;
 	bool hasNot(const T& n) const;
 	T length() const;
+	T ratio() const;
 	cvec2 swap() const;
 	cvec2 swap(bool yes) const;
+	static cvec2 swap(const T& x, const T& y, bool swap);
 	cvec2 clamp(const cvec2& min, const cvec2& max) const;
 };
-
-template <class T>
-cvec2<T>::cvec2() :
-	x(T(0)),
-	y(T(0))
-{}
 
 template <class T> template <class A>
 cvec2<T>::cvec2(const A& n) :
@@ -69,33 +69,11 @@ cvec2<T>::cvec2(const A& x, const B& y) :
 	y(T(y))
 {}
 
-template <class T> template <class A, class B>
-cvec2<T>::cvec2(const A& vx, const B& vy, bool swap) {
-	if (swap) {
-		y = T(vx);
-		x = T(vy);
-	} else {
-		y = T(vy);
-		x = T(vx);
-	}
-}
-
 template <class T> template <class A>
 cvec2<T>::cvec2(const cvec2<A>& v) :
 	x(T(v.x)),
 	y(T(v.y))
 {}
-
-template <class T> template <class A>
-cvec2<T>::cvec2(const cvec2<A>& v, bool swap) {
-	if (swap) {
-		y = T(v.x);
-		x = T(v.y);
-	} else {
-		y = T(v.y);
-		x = T(v.x);
-	}
-}
 
 template <class T>
 T& cvec2<T>::operator[](size_t i) {
@@ -208,24 +186,30 @@ cvec2<T> cvec2<T>::operator--(int) {
 }
 
 template <class T> template <class F, class... A>
-cvec2<T>& cvec2<T>::set(const string& str, F strtox, A... args) {
+cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 	const char* pos = str.c_str();
 	for (; *pos > '\0' && *pos <= ' '; pos++);
 
-	for (unsigned int i = 0; *pos && i < 2; i++) {
+	cvec2<T> vec(T(0));
+	for (uint i = 0; *pos && i < 2; i++) {
 		char* end;
 		if (T num = T(strtox(pos, &end, args...)); end != pos) {
-			(*this)[i] = num;
+			vec[i] = num;
 			for (pos = end; *pos > '\0' && *pos <= ' '; pos++);
 		} else
 			pos++;
 	}
-	return *this;
+	return vec;
 }
 
 template<class T>
 inline string cvec2<T>::toString() const {
 	return to_string(x) + ' ' + to_string(y);
+}
+
+template<class T>
+vec2 cvec2<T>::glm() const {
+	return vec2(float(x), float(y));
 }
 
 template <class T>
@@ -243,6 +227,11 @@ T cvec2<T>::length() const {
 	return std::sqrt(x*x + y*y);
 }
 
+template<class T>
+T cvec2<T>::ratio() const {
+	return x / y;
+}
+
 template <class T>
 cvec2<T> cvec2<T>::swap() const {
 	return cvec2(y, x);
@@ -251,6 +240,11 @@ cvec2<T> cvec2<T>::swap() const {
 template <class T>
 cvec2<T> cvec2<T>::swap(bool yes) const {
 	return yes ? swap() : *this;
+}
+
+template <class T>
+cvec2<T> cvec2<T>::swap(const T& x, const T& y, bool swap) {
+	return swap ? cvec2<T>(y, x) : cvec2<T>(x, y);
 }
 
 template<class T>

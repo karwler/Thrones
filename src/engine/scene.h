@@ -27,7 +27,7 @@ private:
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
-	static constexpr SDL_Color colorPopupDim = {0, 0, 0, 127};
+	static constexpr GLbitfield clearSet = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
 
 public:
 	Scene();
@@ -43,6 +43,7 @@ public:
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
+	void setObjects(const vector<Object*>& objs);
 	void resetLayouts();
 	Layout* getLayout();
 	Popup* getPopup();
@@ -52,15 +53,22 @@ public:
 
 	sizet findSelectedID(Layout* box);	// get id of possibly select or select's parent in relation to box
 	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
-
 private:
-	void setSelected(const vec2i& mPos, Layout* box);
+	void mouseDownWidget(const vec2i& mPos, uint8 mBut, uint8 mCnt);
+	void mouseDownObject(const vec2i& mPos, uint8 mBut, uint8 mCnt);
+	Widget* setSelected(const vec2i& mPos, Layout* box);
 	ScrollArea* getSelectedScrollArea() const;
 	Layout* topLayout();
+	Object* rayCast(const vec3& ray) const;
+	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
 
 inline void Scene::onText(const string& str) {
 	capture->onText(str);
+}
+
+inline void Scene::setObjects(const vector<Object*>& objs) {
+	objects = objs;
 }
 
 inline Layout* Scene::getLayout() {

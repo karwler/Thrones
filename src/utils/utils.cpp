@@ -1,7 +1,4 @@
 #include "utils.h"
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 bool Rect::overlap(const Rect& rect, vec2i& sback, vec2i& rback) const {
 	if (w <= 0 || h <= 0 || rect.w <= 0 || rect.h <= 0)	// idfk
@@ -15,7 +12,7 @@ bool Rect::overlap(const Rect& rect, vec2i& sback, vec2i& rback) const {
 vec4 Rect::crop(const Rect& frame) {
 	vec2i rback, fback;
 	if (!overlap(frame, rback, fback)) {
-		*this = Rect();
+		*this = Rect(0);
 		return vec4(0.f);
 	}
 
@@ -50,7 +47,7 @@ Rect Rect::getOverlap(const Rect& frame) const {
 	Rect rect = *this;
 	vec2i rback, fback;
 	if (!rect.overlap(frame, rback, fback))
-		return Rect();
+		return Rect(0);
 
 	// crop rect if it's boundaries are out of frame
 	if (rect.x < frame.x) {	// left
@@ -101,97 +98,6 @@ void Texture::close() {
 	*this = Texture();
 }
 
-static inline int natCompareRight(const char* a, const char* b) {
-	for (int bias = 0;; a++, b++) {
-		bool nad = notDigit(*a), nbd = notDigit(*b);
-		if (nad && nbd)
-			return bias;
-		if (nad)
-			return -1;
-		if (nbd)
-			return 1;
-		if (*a < *b) {
-			if (!bias)
-				bias = -1;
-		} else if (*a > *b) {
-			if (!bias)
-				bias = 1;
-		} else if (!*a && !*b)
-			return bias;
-	}
-}
-
-static inline int natCompareLeft(const char* a, const char* b) {
-	for (;; a++, b++) {
-		bool nad = notDigit(*a), nbd = notDigit(*b);
-		if (nad && nbd)
-			return 0;
-		if (nad)
-			return -1;
-		if (nbd)
-			return 1;
-		if (*a < *b)
-			return -1;
-		if (*a > *b)
-			return 1;
-	}
-}
-
-int strnatcmp(const char* a, const char* b) {
-	for (;; a++, b++) {
-		char ca = *a, cb = *b;
-		for (; isSpace(ca); ca = *++a);
-		for (; isSpace(cb); cb = *++b);
-
-		if (isDigit(ca) && isDigit(cb)) {
-			if (ca == '0' || cb == '0') {
-				if (int result = natCompareLeft(a, b))
-					return result;
-			} else if (int result = natCompareRight(a, b))
-				return result;
-		}
-
-		if (!(ca || cb))
-			return 0;
-		if (ca < cb)
-			return -1;
-		if (ca > cb)
-			return 1;
-	}
-}
-
-static bool pathCompareLoop(const string& as, const string& bs, sizet& ai, sizet& bi) {
-	do {
-		// comparee names of next entry
-		sizet an = as.find_first_of(dsep, ai);
-		sizet bn = bs.find_first_of(dsep, bi);
-		if (as.compare(ai, an - ai, bs, bi, bn - bi))
-			return false;
-		ai = an;
-		bi = bn;
-
-		// skip directory separators
-		ai = as.find_first_not_of(dsep, ai);
-		bi = bs.find_first_not_of(dsep, bi);
-	} while (ai < as.length() && bi < bs.length());
-	return true;	// one has reached it's end so don't forget to check later which one (paths are equal if both have ended)
-}
-
-bool pathCmp(const string& as, const string& bs) {
-	if (sizet ai = 0, bi = 0; pathCompareLoop(as, bs, ai, bi))
-		return ai >= as.length() && bi >= bs.length();	// check if both paths have reached their ends simultaneously
-	return false;
-}
-
-bool isSubpath(const string& path, string parent) {
-	if (std::all_of(parent.begin(), parent.end(), [](char c) -> bool { return c == dsep; }))	// always true if parent is root
-		return true;
-
-	if (sizet ai = 0, bi = 0; pathCompareLoop(path, parent, ai, bi))
-		return bi >= parent.length();	// parent has to have reached it's end while path was still matching
-	return false;
-}
-
 string parentPath(const string& path) {
 #ifdef _WIN32
 	if (isDriveLetter(path))
@@ -207,15 +113,6 @@ string parentPath(const string& path) {
 
 	pos = path.find_last_not_of(dsep, pos);		// skip separators to get to the parent entry
 	return pos == string::npos ? dseps : path.substr(0, pos + 1);	// cut off child
-}
-
-string getChild(const string& path, const string& parent) {
-	if (std::all_of(parent.begin(), parent.end(), [](char c) -> bool { return c == dsep; }))
-		return path;
-
-	if (sizet ai = 0, bi = 0; pathCompareLoop(path, parent, ai, bi) && bi >= parent.length())
-		return path.substr(ai);
-	return emptyStr;
 }
 
 string filename(const string& path) {

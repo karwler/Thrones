@@ -11,7 +11,7 @@ struct Size {
 	bool usePix;
 
 	Size(int pixels);
-	Size(float percent = 1.f);
+	Size(float percent);
 
 	void set(int pxiels);
 	void set(float precent);
@@ -54,10 +54,10 @@ protected:
 	Size relSize;	// size relative to parent's parameters
 
 public:
-	Widget(const Size& relSize = Size(), Layout* parent = nullptr, sizet id = SIZE_MAX);	// parent and id should be set by Layout
+	Widget(const Size& relSize = 1.f, Layout* parent = nullptr, sizet id = SIZE_MAX);	// parent and id should be set by Layout
 	virtual ~Widget() = default;
 
-	virtual void draw() const {}	// calls appropriate drawing function(s) in DrawSys
+	virtual void draw() const {}
 	virtual void tick(float) {}
 	virtual void onResize() {}
 	virtual void postInit() {}	// gets called after parent is set and all set up
@@ -84,6 +84,7 @@ public:
 
 protected:
 	void drawRect(const Rect& rect, Color color) const;
+	void drawRect(const Rect& rect, SDL_Color color) const;
 	void drawTexture(const Texture* tex, Rect rect, const Rect& frame) const;
 };
 
@@ -103,6 +104,10 @@ inline Rect Widget::rect() const {
 	return Rect(position(), size());
 }
 
+inline void Widget::drawRect(const Rect& rect, Color color) const {
+	drawRect(rect, colors[uint8(color)]);
+}
+
 // visible widget with texture and background color
 class Picture : public Widget {
 public:
@@ -115,7 +120,7 @@ private:
 	bool showColor;
 
 public:
-	Picture(const Size& relSize = Size(), bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Picture(const Size& relSize = 1.f, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Picture() override = default;
 
 	virtual void draw() const override;
@@ -130,7 +135,7 @@ protected:
 	PCall lcall, rcall, dcall;
 
 public:
-	Button(const Size& relSize = Size(), PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Button(const Size& relSize = 1.f, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Button() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
@@ -140,13 +145,27 @@ public:
 	virtual bool selectable() const override;
 };
 
+class Draglet : public Button {
+private:
+	bool dragging;
+
+public:
+	Draglet(const Size& relSize = 1.f, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	virtual ~Draglet() override = default;
+
+	virtual void draw() const override;
+	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
+	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
+	virtual void onUndrag(uint8 mBut) override;
+};
+
 // if you don't know what a checkbox is then I don't know what to tell ya
 class CheckBox : public Button {
 public:
 	bool on;
 
 public:
-	CheckBox(const Size& relSize = Size(), bool on = false, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	CheckBox(const Size& relSize = 1.f, bool on = false, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~CheckBox() override = default;
 
 	virtual void draw() const override;
@@ -183,7 +202,7 @@ protected:
 	Alignment align;	// text alignment
 
 public:
-	Label(const Size& relSize = Size(), const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Label(const Size& relSize = 1.f, const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Label() override;
 
 	virtual void draw() const override;
@@ -219,7 +238,7 @@ private:
 	sizet curOpt;
 
 public:
-	SwitchBox(const Size& relSize = Size(), const string* opts = nullptr, sizet ocnt = 0, const string& curOption = emptyStr, PCall call = nullptr, Alignment alignment = Alignment::left, const Texture* tex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(const Size& relSize = 1.f, const string* opts = nullptr, sizet ocnt = 0, const string& curOption = emptyStr, PCall call = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
@@ -233,7 +252,7 @@ inline sizet SwitchBox::getCurOpt() const {
 	return curOpt;
 }
 
-// for editing a line of text (ignores Label's align), (calls Button's lcall on text confirm rather than on click)
+// for editing a line of text (ignores Label's align), (calls Button's lcall on text confirm rather than on click and dcall when enter is pressed)
 class LabelEdit : public Label {
 public:
 	enum class TextType : uint8 {
@@ -248,7 +267,6 @@ public:
 		uFloatSpaced
 	};
 
-	bool unfocusConfirm;
 private:
 	TextType textType;
 	string oldText;
@@ -258,17 +276,17 @@ private:
 	static constexpr int caretWidth = 4;
 
 public:
-	LabelEdit(const Size& relSize = Size(), const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, TextType type = TextType::text, bool unfocusConfirm = true, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(const Size& relSize = 1.f, const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, TextType type = TextType::text, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
+	virtual void onDoubleClick(const vec2i&, uint8) override {}
 	virtual void onKeypress(const SDL_Keysym& key) override;
 	virtual void onText(const string& str) override;
 
 	void drawCaret() const;
 	const string& getOldText() const;
 	virtual void setText(const string& str) override;
-	virtual bool selectable() const override;
 
 	void confirm();
 	void cancel();

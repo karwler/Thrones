@@ -72,35 +72,78 @@ void ProgMenu::eventEscape() {
 
 Layout* ProgMenu::createLayout() {
 	// server input
-	Text srvt("Server:", topHeight);
+	Text srvt("Server:", superHeight);
 	vector<Widget*> srv = {
 		new Label(srvt.length, srvt.text),
-		server = new LabelEdit(1.f, "127.0.0.1")
+		new LabelEdit(1.f, World::sets()->address, &Program::eventUpdateAddress, nullptr, &Program::eventConnectServer)
 	};
 
 	// port input and connect button
 	vector<Widget*> prt = {
 		new Label(srvt.length, "Port:"),
-		port = new LabelEdit(1.f, to_string(Server::defaultPort), nullptr, nullptr, nullptr, LabelEdit::TextType::uInt)
+		new LabelEdit(1.f, to_string(World::sets()->port), &Program::eventUpdatePort, nullptr, &Program::eventConnectServer, LabelEdit::TextType::uInt)
 	};
 
 	// middle buttons
 	vector<Widget*> buts = {
 		new Widget(),
-		new Layout(topHeight, srv, false),
-		new Layout(topHeight, prt, false),
-		new Label(topHeight, "Connect", &Program::eventConnectServer, nullptr, nullptr, Label::Alignment::center),
+		new Layout(superHeight, srv, false),
+		new Layout(superHeight, prt, false),
+		new Label(superHeight, "Connect", &Program::eventConnectServer, nullptr, nullptr, Label::Alignment::center),
 		new Widget(0),
-		new Label(topHeight, "Settings", &Program::eventOpenSettings, nullptr, nullptr, Label::Alignment::center),
-		new Label(topHeight, "Exit", &Program::eventExit, nullptr, nullptr, Label::Alignment::center),
+		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, nullptr, Label::Alignment::center),
+		new Label(superHeight, "Exit", &Program::eventExit, nullptr, nullptr, Label::Alignment::center),
 		new Widget()
 	};
 
 	// root layout
 	vector<Widget*> cont = {
 		new Widget(),
-		new Layout(World::winSys()->textLength(srvt.text + "999.999.999.999", topHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, false, topSpacing),
+		new Layout(World::winSys()->textLength(srvt.text + "999.999.999.999", superHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, false, superSpacing),
 		new Widget()
+	};
+	return new Layout(1.f, cont, false, false, 0);
+}
+
+// PROG GAME
+
+void ProgGame::eventEscape() {
+	if (!tryClosePopup())
+		World::program()->eventExitGame();
+}
+
+Layout* ProgGame::createLayout() {
+	// sidebar
+	vector<string> sidt {
+		"Exit"
+	};
+	int sideLength = findMaxLength(sidt.data(), sidt.size(), lineHeight);
+	vector<Widget*> left = {
+		new Label(lineHeight, popBack(sidt), &Program::eventExitGame)
+	};
+
+	// tile select
+	vector<Widget*> botm = {
+		new Widget(),
+		new Draglet(iconSize, nullptr),
+		new Draglet(iconSize, nullptr),
+		new Widget(0),
+		new Draglet(iconSize, nullptr),
+		new Draglet(iconSize, nullptr),
+		new Widget()
+	};
+
+	// center piece
+	vector<Widget*> midl = {
+		new Widget(),
+		new Layout(iconSize, botm)
+	};
+
+	// root layout
+	vector<Widget*> cont = {
+		new Layout(sideLength, left),
+		new Layout(1.f, midl, true, false, 0),
+		new Widget(sideLength)
 	};
 	return new Layout(1.f, cont, false, false, 0);
 }
@@ -123,7 +166,7 @@ Layout* ProgSettings::createLayout() {
 		"Back",
 		"Reset"
 	};
-	int optLength = findMaxLength(tps.data(), tps.size(), topHeight);
+	int optLength = findMaxLength(tps.data(), tps.size(), superHeight);
 	vector<Widget*> lft = {
 		new Label(lineHeight, popBack(tps), &Program::eventResetSettings),
 		new Widget(Layout::defaultItemSpacing),
@@ -147,7 +190,7 @@ Layout* ProgSettings::createLayout() {
 		resolution = new LabelEdit(1.f, World::sets()->resolution.toString(), &Program::eventSetResolution, nullptr, nullptr, LabelEdit::TextType::uIntSpaced)
 	}, {
 		new Label(descLength, popBack(txs)),
-		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), enumToStr(Settings::vsyncNames, World::sets()->vsync), &Program::eventSetVsync)
+		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(World::sets()->vsync)], &Program::eventSetVsync)
 	} };
 	vector<Widget*> lns(lnc);
 	for (sizet i = 0; i < lnc; i++)
@@ -158,16 +201,5 @@ Layout* ProgSettings::createLayout() {
 		new Layout(optLength, lft, true),
 		new ScrollArea(1.f, lns)
 	};
-	return new Layout(1.f, cont, false, false, topSpacing);
-}
-
-// PROG GAME
-
-void ProgGame::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventExitGame();
-}
-
-Layout* ProgGame::createLayout() {
-	return nullptr;
+	return new Layout(1.f, cont, false, false, superSpacing);
 }

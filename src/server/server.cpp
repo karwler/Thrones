@@ -1,5 +1,4 @@
 #include "server.h"
-#include <SDL2/SDL.h>
 #include <iostream>
 #include <string>
 #ifdef _WIN32
@@ -20,16 +19,14 @@ static int connectionFail(const char* msg, int ret = -1) {
 
 static bool quitting() {
 #ifdef _WIN32
-	if (_kbhit() && _getch() == 'q') {
+	return _kbhit() && _getch() == 'q';
 #else
 	fd_set fds;
 	FD_ZERO(&fds);
 	FD_SET(0, &fds);
-	if (timeval tv = {0, 0}; select(1, &fds, nullptr, nullptr, &tv) && getchar() == 'q') {
+	timeval tv = {0, 0};
+	return select(1, &fds, nullptr, nullptr, &tv) && getchar() == 'q';
 #endif
-		return true;
-	}
-	return false;
 }
 
 static sizet findFirstFree(const TCPsocket* sockets) {

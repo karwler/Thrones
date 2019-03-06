@@ -16,7 +16,7 @@ protected:
 	bool vertical;				// how to arrange widgets
 
 public:
-	Layout(const Size& relSize = Size(), const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Layout() override;
 
 	virtual void draw() const override;
@@ -57,10 +57,12 @@ inline Widget* Layout::getSelected() const {
 // layout with background with free position/size (shouldn't have a parent)
 class Popup : public Layout {
 private:
+	static constexpr SDL_Color colorDim = {0, 0, 0, 127};
+
 	Size sizeY;	// use Widget's relSize as sizeX
 
 public:
-	Popup(const vec2s& relSize = vec2s(), const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing);
+	Popup(const vec2s& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
@@ -83,7 +85,7 @@ private:
 	static constexpr float scrollThrottle = 10.f;
 
 public:
-	ScrollArea(const Size& relSize = Size(), const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	ScrollArea(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~ScrollArea() override = default;
 
 	virtual void draw() const override;
@@ -113,6 +115,7 @@ private:
 	int sliderSize() const;
 	int sliderPos() const;
 	int sliderLim() const;	// max slider position
+
 	static void throttleMotion(float& mov, float dSec);
 };
 

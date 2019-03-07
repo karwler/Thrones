@@ -15,7 +15,6 @@ void World::init(wchar* argstr) {
 	LocalFree(argv);
 }
 #endif
-
 #ifdef _WIN32
 void World::setArgs(int i, int argc, wchar** argv) {
 	for (; i < argc; i++) {

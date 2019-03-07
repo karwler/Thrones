@@ -8,6 +8,30 @@ ClickStamp::ClickStamp(Widget* widget, ScrollArea* area, const vec2i& mPos) :
 	mPos(mPos)
 {}
 
+// KEYFRAME
+
+Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, const glm::vec3& rot, SDL_Color color) :
+	pos(pos),
+	rot(rot),
+	color(color),
+	time(time),
+	change(change)
+{}
+
+// ANIMATION
+
+Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
+	keyframes(keyframes),
+	object(object),
+	progress(0.f)
+{}
+
+bool Animation::tick(float dSec) {
+	progress += dSec;
+	// TODO: figure this out
+	return keyframes.empty();
+}
+
 // SCENE
 
 Scene::Scene() :
@@ -26,18 +50,22 @@ void Scene::draw() {
 		it->draw();
 
 	// draw UI
-	Camera::updateUI();
+	/*Camera::updateUI();	// TODO: uncomment
 	layout->draw();
 	if (popup)
 		popup->draw();
 	if (LabelEdit* let = dynamic_cast<LabelEdit*>(capture))
-		let->drawCaret();
+		let->drawCaret();*/
 }
 
 void Scene::tick(float dSec) {
 	layout->tick(dSec);
 	if (popup)
 		popup->tick(dSec);
+
+	for (vector<Animation>::iterator it = animations.begin(); it != animations.end(); it++)
+		if (it->tick(dSec))
+			animations.erase(it);
 }
 
 void Scene::onResize() {
@@ -162,12 +190,15 @@ void Scene::mouseDownWidget(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 void Scene::mouseDownObject(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 	if (mCnt != 1 || mBut != SDL_BUTTON_LEFT)
 		return;
-	if (Object* obj = rayCast(camera.direction(mPos) * 10.f))
+	if (Object* obj = rayCast(camera.direction(mPos) * float(camera.zfar)))
 		std::cout << obj << std::endl;	// TODO: actual things
 }
 
 Object* Scene::rayCast(const vec3& ray) const {
 	for (Object* obj : objects) {
+		if (!(obj->mode & Object::INFO_RAYCAST))
+			continue;
+
 		mat4 trans = obj->getTransform();
 		for (sizet i = 0; i < obj->elems.size(); i += 3)
 			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t))

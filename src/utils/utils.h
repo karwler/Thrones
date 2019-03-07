@@ -8,6 +8,7 @@
 #include <array>
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -22,6 +23,7 @@
 
 // to make life easier
 using std::array;
+using std::queue;
 using std::pair;
 using std::vector;
 
@@ -31,7 +33,7 @@ template <class... T> using uset = std::unordered_set<T...>;
 
 using pairStr = pair<string, string>;
 
-using vec2b = cvec2<uchar>;
+using vec2b = cvec2<char>;
 using vec2i = cvec2<int>;
 using vec2f = cvec2<float>;
 using vec2d = cvec2<double>;

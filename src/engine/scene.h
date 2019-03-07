@@ -12,6 +12,35 @@ struct ClickStamp {
 	ClickStamp(Widget* widget = nullptr, ScrollArea* area = nullptr, const vec2i& mPos = 0);
 };
 
+struct Keyframe {
+	enum Change : uint8 {
+		CHG_NONE = 0x0,
+		CHG_POS  = 0x1,
+		CHG_ROT  = 0x2,
+		CHG_CLR  = 0x4
+	};
+
+	vec3 pos;
+	vec3 rot;
+	SDL_Color color;
+	float time;		// time difference between this and previous keyframe
+	Change change;	// what members get affected
+
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), SDL_Color color = {});
+};
+
+class Animation {
+private:
+	queue<Keyframe> keyframes;
+	Object* object;
+	float progress;
+
+public:
+	Animation(Object* object, const queue<Keyframe>& keyframes);
+
+	bool tick(float dSec);
+};
+
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
@@ -24,6 +53,7 @@ private:
 	uptr<Layout> layout;
 	uptr<Popup> popup;
 	array<ClickStamp, SDL_BUTTON_X2+1> stamps;	// data about last mouse click (indexes are mouse button numbers
+	vector<Animation> animations;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
@@ -49,6 +79,7 @@ public:
 	Popup* getPopup();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
+	void addAnimation(const Animation& anim);
 	const vec2i& getMouseMove() const;
 
 	sizet findSelectedID(Layout* box);	// get id of possibly select or select's parent in relation to box
@@ -81,6 +112,10 @@ inline Popup* Scene::getPopup() {
 
 inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
 	setPopup(popcap.first, popcap.second);
+}
+
+inline void Scene::addAnimation(const Animation& anim) {
+	animations.push_back(anim);
 }
 
 inline const vec2i& Scene::getMouseMove() const {

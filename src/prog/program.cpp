@@ -4,7 +4,7 @@
 
 void Program::eventOpenMainMenu(Button*) {
 	setState(new ProgMenu);
-	World::scene()->setObjects(game.initObjects());
+	World::scene()->setObjects(game.initObjects());	// TODO: move this to openGame
 }
 
 void Program::eventConnectServer(Button*) {

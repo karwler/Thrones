@@ -133,20 +133,20 @@ int main(int argc, char** argv) {
 #endif
 	// init server
 	if (SDL_Init(0)) {
-		std::cerr << "Failed to initialize SDL:\n" << SDL_GetError() << std::endl;
+		std::cerr << "failed to initialize SDL:\n" << SDL_GetError() << std::endl;
 		return -1;
 	}
 	if (SDLNet_Init()) {
-		std::cerr << "Failed to initialize networking:\n" << SDLNet_GetError() << std::endl;
+		std::cerr << "failed to initialize networking:\n" << SDLNet_GetError() << std::endl;
 		SDL_Quit();
 		return -1;
 	}
 	IPaddress address;
 	if (SDLNet_ResolveHost(&address, nullptr, port))
-		return connectionFail("Failed to resolve host:");
+		return connectionFail("failed to resolve host:");
 	TCPsocket server = SDLNet_TCP_Open(&address);
 	if (!server)
-		return connectionFail("Failed to resolve host:");
+		return connectionFail("failed to resolve host:");
 
 	TCPsocket players[2] = {nullptr, nullptr};
 	SDLNet_SocketSet sockets = SDLNet_AllocSocketSet(maxSockets);

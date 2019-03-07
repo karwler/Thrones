@@ -48,26 +48,30 @@ Vertex::Vertex(const vec3& pos, const vec2& tuv) :
 
 // OBJECT
 
-Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, Texture* tex, SDL_Color color) :
+Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, const Texture* tex, SDL_Color color, Info mode) :
 	pos(pos),
 	rot(rot),
 	scl(scl),
 	verts(verts),
 	elems(elems),
 	tex(tex),
-	color(color)
+	color(color),
+	mode(mode)
 {}
 
 void Object::draw() const {
-	setTransform();
-	if (tex) {
+	if (!(mode & INFO_SHOW))
+		return;
+
+	if (tex && (mode & INFO_TEXTURE)) {
 		glEnable(GL_TEXTURE_2D);
 		glBindTexture(GL_TEXTURE_2D, tex->getID());
 	} else
 		glDisable(GL_TEXTURE_2D);
 	glColor4ubv(reinterpret_cast<const GLubyte*>(&color));
 	
-	glBegin(GL_TRIANGLES);
+	setTransform();
+	glBegin(!(mode & INFO_WIREFRAME) ? GL_TRIANGLES : GL_LINE_STRIP);
 	for (ushort id : elems) {
 		glTexCoord2fv(glm::value_ptr(verts[id].tuv));
 		glVertex3fv(glm::value_ptr(verts[id].pos));
@@ -100,33 +104,54 @@ const vector<ushort> BoardObject::squareElements = {
 };
 
 const vector<Vertex> BoardObject::squareVertices = {
-	Vertex(vec3(-0.5f, 0.f, 0.5f), vec2(1.f, 0.f)),
-	Vertex(vec3(-0.5f, 0.f, -0.5f), vec2(1.f, 1.f)),
-	Vertex(vec3(0.5f, 0.f, -0.5f), vec2(0.f, 1.f)),
-	Vertex(vec3(0.5f, 0.f, 0.f), vec2(0.f, 0.f))
+	Vertex(vec3(-0.5f, 0.f, 0.5f), vec2(0.f, 1.f)),
+	Vertex(vec3(-0.5f, 0.f, -0.5f), vec2(0.f, 0.f)),
+	Vertex(vec3(0.5f, 0.f, -0.5f), vec2(1.f, 0.f)),
+	Vertex(vec3(0.5f, 0.f, 0.5f), vec2(1.f, 1.f))
 };
 
-BoardObject::BoardObject(vec2b pos, Texture* tex, SDL_Color color) :
-	Object(btop(pos), vec3(0.f), vec3(0.f), squareVertices, squareElements, tex, color)
+BoardObject::BoardObject(vec2b pos, float poz, const Texture* tex, SDL_Color color, Info mode) :
+	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode)
 {}
 
 // TILE
 
 const array<SDL_Color, Tile::colors.size()> Tile::colors = {
+	SDL_Color({60, 60, 60, 255}),
 	SDL_Color({40, 255, 40, 255}),
 	SDL_Color({0, 160, 0, 255}),
 	SDL_Color({120, 120, 120, 255}),
-	SDL_Color({80, 255, 255, 255})
+	SDL_Color({40, 200, 255, 255}),
+	SDL_Color({140, 70, 20, 255})
 };
 
-Tile::Tile(vec2b pos, Type type) :
-	BoardObject(pos, nullptr, colors[uint8(type)]),
+Tile::Tile(vec2b pos, float poz, Type type) :
+	BoardObject(pos, poz, nullptr, colors[uint8(type)], (type != Type::empty ? INFO_FILL : INFO_LINES) | INFO_RAYCAST),
 	type(type)
 {}
 
+void Tile::setType(Type newType) {
+	type = newType;
+	color = colors[uint8(type)];
+	mode = type != Type::empty ? INFO_FILL : INFO_LINES;
+}
+
 // PIECE
 
+const array<string, Piece::names.size()> Piece::names = {
+	"ranger",
+	"spearman",
+	"crossbowman",
+	"catapult",
+	"trebuchet",
+	"lancer",
+	"warhorse",
+	"elephant",
+	"dragon",
+	"throne"
+};
+
 Piece::Piece(vec2b pos, Type type) :
-	BoardObject(pos, nullptr, {255, 255, 255, 255}),
+	BoardObject(pos, 0.01f, World::winSys()->texture(names[uint8(type)])),
 	type(type)
 {}

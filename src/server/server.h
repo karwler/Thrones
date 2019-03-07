@@ -31,12 +31,14 @@ namespace Server {
 	constexpr sizet maxPlayers = 2;
 	constexpr sizet maxSockets = maxPlayers + 1;
 	constexpr uint32 checkTimeout = 500;
-	constexpr sizet bufSiz = 16;
+	constexpr sizet bufSiz = 128;
 }
 
 enum class NetCode : uint8 {
 	full,
-	start
+	start,
+	setup,
+	move
 };
 
 inline int sendSingle(TCPsocket socket, NetCode code) {

@@ -100,11 +100,12 @@ void World::run(C* obj, F func, A... args) {
 	if (func)
 		(obj->*func)(args...);
 }
-
 #if defined(_WIN32) && defined(_DEBUG)
 inline void World::init(int argc, wchar** argv) {
-#elif !defined(_WIN32)
-inline void World::init(int argc, char** argv) {
-#endif
 	setArgs(1, argc, argv);
 }
+#elif !defined(_WIN32)
+inline void World::init(int argc, char** argv) {
+	setArgs(1, argc, argv);
+}
+#endif

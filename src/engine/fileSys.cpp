@@ -27,14 +27,14 @@ FileSys::FileSys() {
 
 	// check if all (more or less) necessary files and directories exist
 	if (fileType(dirSavs) != FTYPE_DIR && !createDir(dirSavs))
-		std::cerr << "couldn't create save data directory" << std::endl;
+		std::cerr << "failed to create save data directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
-		std::cerr << "couldn't find texture directory" << std::endl;
+		std::cerr << "failed to find texture directory" << std::endl;
 }
 
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
-	for (const string& line : readFileLines(string(dirSavs) + fileSettings)) {
+	for (const string& line : readFileLines(string(dirSavs) + fileSettings, false)) {
 		if (pairStr il = splitIniLine(line); il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
 		else if (il.first == iniKeywordFullscreen)
@@ -64,9 +64,9 @@ bool FileSys::saveSettings(const Settings* sets) {
 
 vector<string> FileSys::readFileLines(const string& file, bool printMessage) {
 	vector<string> lines(1);
-	for (char ch : readTextFile(file, printMessage)) {
-		if (ch != '\n' && ch != '\r')
-			lines.back() += ch;
+	for (char c : readTextFile(file, printMessage)) {
+		if (c != '\n' && c != '\r')
+			lines.back() += c;
 		else if (!lines.back().empty())
 			lines.push_back(emptyStr);
 	}
@@ -79,7 +79,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 	FILE* ifh = fopen(file.c_str(), "rb");
 	if (!ifh) {
 		if (printMessage)
-			std::cerr << "couldn't open file " << file << std::endl;
+			std::cerr << "failed to open file " << file << std::endl;
 		return "";
 	}
 	fseek(ifh, 0, SEEK_END);
@@ -97,7 +97,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 bool FileSys::writeTextFile(const string& file, const string& text) {
 	FILE* ofh = fopen(file.c_str(), "wb");
 	if (!ofh) {
-		std::cerr << "couldn't write file " << file << std::endl;
+		std::cerr << "failed to write file " << file << std::endl;
 		return false;
 	}
 	fputs(text.c_str(), ofh);
@@ -148,11 +148,11 @@ void FileSys::setWorkingDir() {
 	while (len > 0 && buf[--len] != dsep);	// terminate path stirng at last dsep
 	buf[len] = '\0';
 	if (!len || _wchdir(buf))
-		std::cerr << "Couldn't set working directory" << std::endl;
+		std::cerr << "failed to set working directory" << std::endl;
 #else
 	char* buf = new char[PATH_MAX];
 	if (sizet len = sizet(readlink(linkExe, buf, PATH_MAX)); len > PATH_MAX || chdir(parentPath(string(buf, buf + len)).c_str()))
-		std::cerr << "couldn't set working directory" << std::endl;
+		std::cerr << "failed to set working directory" << std::endl;
 #endif
 	delete[] buf;
 }

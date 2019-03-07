@@ -68,7 +68,7 @@ Rect Rect::getOverlap(const Rect& frame) const {
 void Texture::load(SDL_Surface* img, const string& name) {
 	if (!img) {
 		*this = Texture();
-		throw std::runtime_error("Couldn't load texture " + name + '\n' + IMG_GetError());
+		throw std::runtime_error("failed to load texture " + name + '\n' + IMG_GetError());
 	}
 
 	switch (img->format->BytesPerPixel) {
@@ -81,7 +81,7 @@ void Texture::load(SDL_Surface* img, const string& name) {
 	default:
 		SDL_FreeSurface(img);
 		*this = Texture();
-		throw std::runtime_error(string("Invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + name);
+		throw std::runtime_error(string("invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + name);
 	}
 	res = vec2i(img->w, img->h);
 	glGenTextures(1, &id);

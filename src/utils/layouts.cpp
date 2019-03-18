@@ -39,7 +39,7 @@ void Layout::onResize() {
 	}
 
 	// calculate positions for each widget and set last poss element to end position of the last widget
-	vec2i pos = 0;	// TODO: revert
+	vec2i pos = 0;
 	for (sizet i = 0; i < widgets.size(); i++) {
 		positions[i] = pos;
 		pos[vertical] += (widgets[i]->getRelSize().usePix ? widgets[i]->getRelSize().pix : int(widgets[i]->getRelSize().prc * space / total)) + spacing;
@@ -124,7 +124,7 @@ Popup::Popup(const vec2s& relSize, const vector<Widget*>& children, bool vertica
 
 void Popup::draw() const {
 	drawRect(Rect(0, World::winSys()->windowSize()), colorDim);	// dim other widgets
-	drawRect(rect(), Color::normal);	// draw background
+	drawRect(rect(), colors[uint8(Color::normal)]);	// draw background
 	Layout::draw();
 }
 
@@ -156,8 +156,8 @@ void ScrollArea::draw() const {
 	for (sizet i = vis.b; i < vis.t; i++)
 		widgets[i]->draw();
 
-	drawRect(barRect(), Color::dark);		// draw scroll bar
-	drawRect(sliderRect(), Color::light);	// draw scroll slider
+	drawRect(barRect(), colors[uint8(Color::dark)]);		// draw scroll bar
+	drawRect(sliderRect(), colors[uint8(Color::light)]);	// draw scroll slider
 }
 
 void ScrollArea::tick(float dSec) {

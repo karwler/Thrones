@@ -40,12 +40,14 @@ using vec2d = cvec2<double>;
 using vec2t = cvec2<sizet>;
 
 // forward declaraions
+class BoardObject;
 class Button;
 class Layout;
 class Program;
 class ProgState;
 
-using PCall = void (Program::*)(Button*);
+using BCall = void (Program::*)(Button*);
+using OCall = void (Program::*)(BoardObject*);
 
 // global constants
 #ifdef _WIN32
@@ -64,6 +66,10 @@ inline vec2i mousePos() {
 	vec2i p;
 	SDL_GetMouseState(&p.x, &p.y);
 	return p;
+}
+
+inline bool operator==(SDL_Color a, SDL_Color b) {
+	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
 // SDL_Rect wrapper
@@ -134,19 +140,21 @@ private:
 	GLuint id;
 	vec2i res;
 	GLenum format;
+	string name;
 
 public:
 	Texture(GLuint id = GLuint(-1), const vec2i& res = 0, GLenum format = 0);
 	Texture(const string& file);
-	Texture(SDL_Surface* img, const string& name);
+	Texture(SDL_Surface* img, const string& file, bool setFilename = true);
 
 	void load(const string& file);
-	void load(SDL_Surface* img, const string& name);
+	void load(SDL_Surface* img, const string& file, bool setFilename = true);
 	void close();
 
 	GLuint getID() const;
 	const vec2i getRes() const;
 	bool valid() const;
+	const string& getName() const;
 };
 
 inline Texture::Texture(GLuint tex, const vec2i& res, GLenum format) :
@@ -159,8 +167,8 @@ inline Texture::Texture(const string& file) {
 	load(file);
 }
 
-inline Texture::Texture(SDL_Surface* img, const string& name) {
-	load(img, name);
+inline Texture::Texture(SDL_Surface* img, const string& file, bool setFilename) {
+	load(img, file, setFilename);
 }
 
 inline void Texture::load(const string& file) {
@@ -178,6 +186,25 @@ inline const vec2i Texture::getRes() const {
 inline bool Texture::valid() const {
 	return format;
 }
+
+inline const string& Texture::getName() const {
+	return name;
+}
+
+// for Object and Widget
+
+class Interactable {
+public:
+	virtual ~Interactable() = default;
+
+	virtual void onClick(const vec2i&, uint8) {}
+	virtual void onDoubleClick(const vec2i&, uint8) {}
+	virtual void onMouseMove(const vec2i&, const vec2i&) {}
+	virtual void onHold(const vec2i&, uint8) {}
+	virtual void onDrag(const vec2i&, const vec2i&) {}	// mouse move while left button down
+	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
+	virtual void onScroll(const vec2i&) {}				// on mouse wheel y movement
+};
 
 // files and strings
 
@@ -220,6 +247,11 @@ inline bool notDigit(char c) {
 	return c < '0' || c > '9';
 }
 
+inline string firstUpper(string str) {
+	str[0] = char(toupper(str[0]));
+	return str;
+}
+
 inline string trim(const string& str) {
 	string::const_iterator pos = std::find_if(str.begin(), str.end(), [](char c) -> bool { return uchar(c) > ' '; });
 	return string(pos, std::find_if(str.rbegin(), std::make_reverse_iterator(pos), [](char c) -> bool { return uchar(c) > ' '; }).base());
@@ -256,6 +288,25 @@ bool isDotName(const T& str) {
 	return str[0] == '.' && (str[1] == '\0' || (str[1] == '.' && str[2] == '\0'));
 }
 
+template <class T, class F, class... A>
+vector<T> stov(const char* str, sizet len, F strtox, T fill = T(0), A... args) {
+	for (; isSpace(*str); str++);
+
+	sizet i = 0;
+	vector<T> vec(len);
+	while (*str && i < len) {
+		char* end;
+		if (T num = T(strtox(str, &end, args...)); end != str) {
+			vec[i++] = num;
+			for (str = end; isSpace(*str); str++);
+		} else
+			str++;
+	}
+	while (i < len)
+		vec[i++] = fill;
+	return vec;
+}
+
 // geometry?
 
 template <class T>
@@ -264,13 +315,33 @@ bool outRange(const T& val, const T& min, const T& max) {
 }
 
 template <class T>
+bool outRange(const cvec2<T>& val, const cvec2<T>& min, const cvec2<T>& max) {
+	return outRange(val.x, min.x, min.y) || outRange(val.y, min.y, max.y);
+}
+
+template <class T>
 const T& clampLow(const T& val, const T& min) {
-	return (val < min) ? min : val;
+	return (val >= min) ? val : min;
 }
 
 template <class T>
 cvec2<T> clampLow(const cvec2<T>& val, const cvec2<T>& min) {
 	return cvec2<T>(clampLow(val.x, min.x), clampLow(val.y, min.y));
+}
+
+template <class T>
+const T& clampHigh(const T& val, const T& max) {
+	return (val <= max) ? val : max;
+}
+
+template <class T>
+cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
+	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
+}
+
+inline SDL_Color dimColor(SDL_Color color, float factor, float afac = 1.f) {
+	vec3 clr = vec3(color.r, color.g, color.b) * factor;
+	return {uint8(clampHigh(clr.r, float(UINT8_MAX))), uint8(clampHigh(clr.g, float(UINT8_MAX))), uint8(clampHigh(clr.b, float(UINT8_MAX))), uint8(clampHigh(float(color.a) * afac, float(UINT8_MAX)))};
 }
 
 // conversions
@@ -292,6 +363,11 @@ inline string btos(bool b) {
 template <class T, sizet N>
 T strToEnum(const array<string, N>& names, const string& str) {
 	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str); }) - names.begin());
+}
+
+template <class T, sizet N, class V>
+T valToEnum(const array<V, N>& arr, const V& val) {
+	return T(std::find(arr.begin(), arr.end(), val) - arr.begin());
 }
 
 inline long sstol(const string& str, int base = 0) {
@@ -320,6 +396,14 @@ inline double sstod(const string& str) {
 
 inline ldouble sstold(const string& str) {
 	return strtold(str.c_str(), nullptr);
+}
+
+template <class V, class T>
+V vtog(const vector<T>& vec) {
+	V gvn;
+	for (sizet i = 0, end = gvn.length() <= vec.size() ? gvn.length() : vec.size(); i < end; i++)
+		gvn[int(i)] = vec[i];
+	return gvn;
 }
 
 // container stuff

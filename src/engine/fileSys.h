@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/utils.h"
+#include "utils/objects.h"
 #ifndef _WIN32
 #include <dirent.h>
 #include <sys/stat.h>
@@ -40,31 +40,31 @@ enum FileType : uint8 {
 	FTYPE_STD = 0x3
 };
 
-inline FileType operator~(FileType a) {
+inline constexpr FileType operator~(FileType a) {
 	return FileType(~uint8(a));
 }
 
-inline FileType operator&(FileType a, FileType b) {
+inline constexpr FileType operator&(FileType a, FileType b) {
 	return FileType(uint8(a) & uint8(b));
 }
 
-inline FileType operator&=(FileType& a, FileType b) {
+inline constexpr FileType operator&=(FileType& a, FileType b) {
 	return a = FileType(uint8(a) & uint8(b));
 }
 
-inline FileType operator^(FileType a, FileType b) {
+inline constexpr FileType operator^(FileType a, FileType b) {
 	return FileType(uint8(a) ^ uint8(b));
 }
 
-inline FileType operator^=(FileType& a, FileType b) {
+inline constexpr FileType operator^=(FileType& a, FileType b) {
 	return a = FileType(uint8(a) ^ uint8(b));
 }
 
-inline FileType operator|(FileType a, FileType b) {
+inline constexpr FileType operator|(FileType a, FileType b) {
 	return FileType(uint8(a) | uint8(b));
 }
 
-inline FileType operator|=(FileType& a, FileType b) {
+inline constexpr FileType operator|=(FileType& a, FileType b) {
 	return a = FileType(uint8(a) | uint8(b));
 }
 
@@ -104,6 +104,7 @@ public:
 
 	Settings* loadSettings();
 	bool saveSettings(const Settings* sets);
+	static Object loadObj(const string& file);
 
 	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD);
 	static bool createDir(const string& path);
@@ -115,6 +116,8 @@ private:
 	static bool writeTextFile(const string& file, const string& lines);
 	static pairStr splitIniLine(const string& line);
 	static string makeIniLine(const string& key, const string& val);
+	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * {vertex, uv, normal}
+	template <class T> static T resolveObjId(int id, const vector<T>& vec);
 
 	static void setWorkingDir();
 #ifdef _WIN32
@@ -125,6 +128,15 @@ private:
 	static bool dtycmp(const string& drc, const dirent* entry, FileType filter, bool readLink);
 #endif
 };
+
+template <class T>
+T FileSys::resolveObjId(int id, const vector<T>& vec) {
+	if (sizet pid = sizet(id - 1); id > 0 && pid < vec.size())
+		return vec[pid];
+	if (sizet eid = vec.size() + sizet(id); id < 0 && eid < vec.size())
+		return vec[eid];
+	return T(0.f);
+}
 
 inline bool FileSys::createDir(const string& path) {
 #ifdef _WIN32

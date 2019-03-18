@@ -4,6 +4,8 @@
 #include <SDL2/SDL_net.h>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
+#include <random>
 
 using uchar = unsigned char;
 using ushort = unsigned short;
@@ -36,11 +38,22 @@ namespace Server {
 
 enum class NetCode : uint8 {
 	full,
-	start,
 	setup,
+	ready,
 	move
 };
 
 inline int sendSingle(TCPsocket socket, NetCode code) {
 	return SDLNet_TCP_Send(socket, &code, sizeof(code));
+}
+
+inline std::default_random_engine createRandomEngine() {
+	std::default_random_engine randGen;
+	try {
+		std::random_device rd;
+		randGen.seed(rd());
+	} catch (...) {
+		randGen.seed(std::random_device::result_type(std::time(nullptr)));
+	}
+	return randGen;
 }

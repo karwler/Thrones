@@ -43,7 +43,7 @@ struct cvec2 {
 	cvec2 operator--(int);
 
 	template <class F, class... A> static cvec2 get(const string& str, F strtox, A... args);
-	string toString() const;
+	string toString(char sep = ' ') const;
 	constexpr vec2 glm() const;
 	constexpr bool has(const T& n) const;
 	constexpr bool hasNot(const T& n) const;
@@ -202,8 +202,8 @@ cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 }
 
 template<class T>
-inline string cvec2<T>::toString() const {
-	return to_string(x) + ' ' + to_string(y);
+inline string cvec2<T>::toString(char sep) const {
+	return to_string(x) + sep + to_string(y);
 }
 
 template<class T>
@@ -318,7 +318,7 @@ constexpr cvec2<T> operator/(const cvec2<T>& a, const T& b) {
 
 template <class T>
 constexpr cvec2<T> operator/(const T& a, const cvec2<T>& b) {
-	return cvec2<T>(a % b.x, a % b.y);
+	return cvec2<T>(a / b.x, a / b.y);
 }
 
 template <class T>

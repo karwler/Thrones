@@ -1,4 +1,5 @@
 #include "fileSys.h"
+#include <map>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -42,7 +43,7 @@ Settings* FileSys::loadSettings() {
 		else if (il.first == iniKeywordResolution)
 			sets->resolution = vec2i::get(il.second, strtoul, 0);
 		else if (il.first == iniKeywordVsync)
-			sets->vsync = strToEnum<Settings::VSync>(Settings::vsyncNames, il.second);
+			sets->vsync = valToEnum<Settings::VSync>(Settings::vsyncNames, il.second);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -60,6 +61,61 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
 	return writeTextFile(string(dirSavs) + fileSettings, text);
+}
+
+Object FileSys::loadObj(const string& file) {
+	vector<string> lines = readFileLines(file);
+	if (lines.empty())
+		return Object();
+
+	// collect vertex positions, uv data, normals and face v/u/n-indices
+	vector<array<int, 9>> faces;
+	vector<vec3> poss;
+	vector<vec2> uvs;
+	vector<vec3> norms;
+	for (const string& line : lines) {
+		if (!line.compare(0, 1, "v"))
+			poss.emplace_back(vtog<vec3>(stov(&line[1], vec3::length(), strtof, 0.f)));
+		else if (!line.compare(0, 2, "vt"))
+			uvs.emplace_back(vtog<vec2>(stov(&line[2], vec2::length(), strtof, 0.f)));
+		else if (!line.compare(0, 2, "vn"))
+			norms.emplace_back(vtog<vec3>(stov(&line[1], vec3::length(), strtof, 0.f)));
+		else if (!line.compare(0, 1, "f"))
+			faces.emplace_back(readFace(&line[1]));
+	}
+
+	// convert collected data to interleaved vertex information format
+	vector<Vertex> verts;
+	vector<ushort> elems;
+	std::map<array<int, 3>, ushort> vmap;
+	for (array<int, 9>& it : faces)
+		for (sizet i = 0; i < 3; i++) {
+			if (array<int, 3>& vp = reinterpret_cast<array<int, 3>*>(it.data())[i]; !vmap.count(vp)) {
+				vmap.emplace(vp, verts.size());
+				elems.push_back(ushort(verts.size()));
+				verts.emplace_back(resolveObjId(vp[0], poss), glm::normalize(resolveObjId(vp[2], norms)), resolveObjId(vp[1], uvs));
+			} else
+				elems.push_back(vmap[vp]);
+		}
+	return Object(vec3(0.f), vec3(0.f), vec3(1.f), verts, elems);
+}
+
+array<int, 9> FileSys::readFace(const char* str) {
+	array<int, 9> face;
+	for (uint i = 0; i < 3; i++)
+		for (uint j = 0; j < 3; j++) {
+			char* end;
+			face[i * 3 + j] = int(strtol(str, &end, 0));
+			str = str != end ? end : str + 1;
+
+			if (*str == '/')
+				str++;
+			if (isSpace(*str) && j < 2) {
+				memset(face.data() + i * 3 + j, 0, (3 - j) * sizeof(*face.data()));
+				break;
+			}
+		}
+	return face;
 }
 
 vector<string> FileSys::readFileLines(const string& file, bool printMessage) {

@@ -39,7 +39,7 @@ inline void Size::set(float percent) {
 }
 
 // can be used as spacer
-class Widget {
+class Widget : public Interactable {
 protected:
 	enum class Color : uint8 {
 		normal,
@@ -55,19 +55,12 @@ protected:
 
 public:
 	Widget(const Size& relSize = 1.f, Layout* parent = nullptr, sizet id = SIZE_MAX);	// parent and id should be set by Layout
-	virtual ~Widget() = default;
+	virtual ~Widget() override = default;
 
 	virtual void draw() const {}
 	virtual void tick(float) {}
 	virtual void onResize() {}
 	virtual void postInit() {}	// gets called after parent is set and all set up
-	virtual void onClick(const vec2i&, uint8) {}
-	virtual void onDoubleClick(const vec2i&, uint8) {}
-	virtual void onMouseMove(const vec2i&, const vec2i&) {}
-	virtual void onHold(const vec2i&, uint8) {}
-	virtual void onDrag(const vec2i&, const vec2i&) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}			// get's called on mouse button up if instance is Scene's capture
-	virtual void onScroll(const vec2i&) {}	// on mouse wheel y movement
 	virtual void onKeypress(const SDL_Keysym&) {}
 	virtual void onText(const string&) {}
 
@@ -83,7 +76,6 @@ public:
 	virtual bool selectable() const;
 
 protected:
-	void drawRect(const Rect& rect, Color color) const;
 	void drawRect(const Rect& rect, SDL_Color color) const;
 	void drawTexture(const Texture* tex, Rect rect, const Rect& frame) const;
 };
@@ -104,17 +96,13 @@ inline Rect Widget::rect() const {
 	return Rect(position(), size());
 }
 
-inline void Widget::drawRect(const Rect& rect, Color color) const {
-	drawRect(rect, colors[uint8(color)]);
-}
-
 // visible widget with texture and background color
 class Picture : public Widget {
 public:
 	static constexpr int defaultIconMargin = 2;
 
-protected:
 	const Texture* bgTex;	// managed by WindowSys
+protected:
 	int bgMargin;
 private:
 	bool showColor;
@@ -125,38 +113,47 @@ public:
 
 	virtual void draw() const override;
 
-	virtual Color color() const;
+	virtual SDL_Color color() const;
 	virtual Rect texRect() const;
 };
 
 // clickable widget with function calls for left and right click (it's rect is drawn so you can use it like a spacer with color)
 class Button : public Picture {
 protected:
-	PCall lcall, rcall, dcall;
+	BCall lcall, rcall, dcall;
 
 public:
-	Button(const Size& relSize = 1.f, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Button(const Size& relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Button() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onDoubleClick(const vec2i& mPos, uint8 mBut) override;
 	
-	virtual Color color() const override;
+	virtual SDL_Color color() const override;
 	virtual bool selectable() const override;
+	void setLcall(BCall pcl);
 };
 
+inline void Button::setLcall(BCall pcl) {
+	lcall = pcl;
+}
+
 class Draglet : public Button {
+public:
+	SDL_Color cusColor;
 private:
 	bool dragging;
 
 public:
-	Draglet(const Size& relSize = 1.f, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(const Size& relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, SDL_Color cusColor = {255, 255, 255, 255}, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
+
+	virtual SDL_Color color() const override;
 };
 
 // if you don't know what a checkbox is then I don't know what to tell ya
@@ -165,19 +162,19 @@ public:
 	bool on;
 
 public:
-	CheckBox(const Size& relSize = 1.f, bool on = false, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	CheckBox(const Size& relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, bool showColor = true, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~CheckBox() override = default;
 
 	virtual void draw() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 
 	Rect boxRect() const;
-	Color boxColor() const;
+	SDL_Color boxColor() const;
 	bool toggle();
 };
 
-inline Widget::Color CheckBox::boxColor() const {
-	return on ? Color::light : Color::dark;
+inline SDL_Color CheckBox::boxColor() const {
+	return colors[uint8(on ? Color::light : Color::dark)];
 }
 
 inline bool CheckBox::toggle() {
@@ -202,7 +199,7 @@ protected:
 	Alignment align;	// text alignment
 
 public:
-	Label(const Size& relSize = 1.f, const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Label(const Size& relSize = 1.f, const string& text = emptyStr, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Label() override;
 
 	virtual void draw() const override;
@@ -238,7 +235,7 @@ private:
 	sizet curOpt;
 
 public:
-	SwitchBox(const Size& relSize = 1.f, const string* opts = nullptr, sizet ocnt = 0, const string& curOption = emptyStr, PCall call = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(const Size& relSize = 1.f, const string* opts = nullptr, sizet ocnt = 0, const string& curOption = emptyStr, BCall call = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
@@ -276,7 +273,7 @@ private:
 	static constexpr int caretWidth = 4;
 
 public:
-	LabelEdit(const Size& relSize = 1.f, const string& text = emptyStr, PCall leftCall = nullptr, PCall rightCall = nullptr, PCall doubleCall = nullptr, TextType type = TextType::text, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(const Size& relSize = 1.f, const string& text = emptyStr, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, TextType type = TextType::text, const Texture* bgTex = nullptr, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;

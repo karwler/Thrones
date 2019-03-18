@@ -21,9 +21,19 @@ public:
 	void eventUpdateAddress(Button* but);
 	void eventUpdatePort(Button* but);
 
-	// game
-	void eventOpenGame();
+	// game setup
+	void eventOpenSetup();
 	void eventPlaceTile(Button* but);
+	void eventPlacePiece(Button* but);
+	void eventClearTile(BoardObject* obj);
+	void eventClearPiece(BoardObject* obj);
+	void eventSetupNext(Button* but = nullptr);
+	void eventSetupBack(Button* but = nullptr);
+	void eventShowWaitPopup(Button* but = nullptr);
+
+	// game match
+	void eventOpenMatch();
+	void eventPlaceDragon(Button* but);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings

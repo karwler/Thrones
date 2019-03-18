@@ -2,8 +2,8 @@
 
 // CLICK STAMP
 
-ClickStamp::ClickStamp(Widget* widget, ScrollArea* area, const vec2i& mPos) :
-	widget(widget),
+ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos) :
+	inter(inter),
 	area(area),
 	mPos(mPos)
 {}
@@ -20,15 +20,30 @@ Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, co
 
 // ANIMATION
 
-Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
+Animation::Animation(Object* object, const std::initializer_list<Keyframe>& keyframes) :
 	keyframes(keyframes),
-	object(object),
-	progress(0.f)
+	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot, object->color),
+	object(object)
 {}
 
 bool Animation::tick(float dSec) {
-	progress += dSec;
-	// TODO: figure this out
+	begin.time += dSec;
+
+	float td = clampHigh(begin.time / keyframes.front().time, 1.f);
+	if (keyframes.front().change & Keyframe::CHG_POS)
+		object->pos = linearTransition(begin.pos, keyframes.front().pos, td);
+	if (keyframes.front().change & Keyframe::CHG_ROT)
+		object->rot = linearTransition(begin.rot, keyframes.front().rot, td);
+	if (keyframes.front().change & Keyframe::CHG_CLR) {
+		vec4 clr = linearTransition(vec4(begin.color.r, begin.color.g, begin.color.b, begin.color.a), vec4(keyframes.front().color.r, keyframes.front().color.g, keyframes.front().color.b, keyframes.front().color.a), td);
+		object->color = {uint8(clr.r), uint8(clr.g), uint8(clr.b), uint8(clr.a)};
+	}
+
+	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f) {
+		begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
+		keyframes.pop();
+		return tick(ovhead);
+	}
 	return keyframes.empty();
 }
 
@@ -50,12 +65,12 @@ void Scene::draw() {
 		it->draw();
 
 	// draw UI
-	/*Camera::updateUI();	// TODO: uncomment
+	Camera::updateUI();
 	layout->draw();
 	if (popup)
 		popup->draw();
 	if (LabelEdit* let = dynamic_cast<LabelEdit*>(capture))
-		let->drawCaret();*/
+		let->drawCaret();
 }
 
 void Scene::tick(float dSec) {
@@ -99,15 +114,23 @@ void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	setSelected(mPos, topLayout()) ? mouseDownWidget(mPos, mBut, mCnt) : mouseDownObject(mPos, mBut, mCnt);	// update in case selection has changed through keys while cursor remained at the old position
+	setSelected(mPos, topLayout());
+	if (mCnt == 1) {
+		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
+		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
+			stamps[mBut].area->onHold(mPos, mBut);
+		if (stamps[mBut].inter != stamps[mBut].area)
+			stamps[mBut].inter->onHold(mPos, mBut);
+	} else if (mCnt == 2 && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
+		select->onDoubleClick(mPos, mBut);
 }
 
 void Scene::onMouseUp(const vec2i& mPos, uint8 mBut) {
 	if (capture)
 		capture->onUndrag(mBut);
 
-	if (select && stamps[mBut].widget == select && cursorInClickRange(mPos, mBut))
-		stamps[mBut].widget->onClick(mPos, mBut);
+	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
+		stamps[mBut].inter->onClick(mPos, mBut);
 }
 
 void Scene::onMouseWheel(const vec2i& wMov) {
@@ -119,7 +142,7 @@ void Scene::onMouseWheel(const vec2i& wMov) {
 
 void Scene::onMouseLeave() {
 	for (ClickStamp& it : stamps) {
-		it.widget = nullptr;
+		it.inter = nullptr;
 		it.area = nullptr;
 	}
 }
@@ -149,49 +172,32 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	onMouseMove(mousePos(), 0);
 }
 
-Widget* Scene::setSelected(const vec2i& mPos, Layout* box) {
-	Rect frame = box->frame();
-	if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().getOverlap(frame).overlap(mPos); }); it != box->getWidgets().end()) {
-		if (Layout* lay = dynamic_cast<Layout*>(*it))
-			return setSelected(mPos, lay);
-		return select = (*it)->selectable() ? *it : nullptr;
+Interactable* Scene::setSelected(const vec2i& mPos, Layout* box) {
+	for (;;) {
+		Rect frame = box->frame();
+		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().getOverlap(frame).overlap(mPos); }); it != box->getWidgets().end()) {
+			if (Layout* lay = dynamic_cast<Layout*>(*it))
+				box = lay;
+			else
+				return select = (*it)->selectable() ? *it : nullptr;
+		} else if (dynamic_cast<ScrollArea*>(box))
+			return select = box;
+		else
+			return select = rayCast(cursorDirection(mPos));
 	}
-	return select = dynamic_cast<ScrollArea*>(box);
 }
 
 ScrollArea* Scene::getSelectedScrollArea() const {
+	if (dynamic_cast<Object*>(select))
+		return nullptr;
+
 	Layout* parent = dynamic_cast<Layout*>(select);
 	if (select && !parent)
-		parent = select->getParent();
+		parent = static_cast<Widget*>(select)->getParent();
 
 	while (parent && !dynamic_cast<ScrollArea*>(parent))
 		parent = parent->getParent();
 	return dynamic_cast<ScrollArea*>(parent);
-}
-
-sizet Scene::findSelectedID(Layout* box) {
-	Widget* child = select;
-	while (child->getParent() && child->getParent() != box)
-		child = child->getParent();
-	return child->getParent() ? child->getID() : SIZE_MAX;
-}
-
-void Scene::mouseDownWidget(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
-	if (mCnt == 1) {
-		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
-		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
-			stamps[mBut].area->onHold(mPos, mBut);
-		if (stamps[mBut].widget != stamps[mBut].area)
-			stamps[mBut].widget->onHold(mPos, mBut);
-	} else if (mCnt == 2 && stamps[mBut].widget == select && cursorInClickRange(mPos, mBut))
-		select->onDoubleClick(mPos, mBut);
-}
-
-void Scene::mouseDownObject(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
-	if (mCnt != 1 || mBut != SDL_BUTTON_LEFT)
-		return;
-	if (Object* obj = rayCast(camera.direction(mPos) * float(camera.zfar)))
-		std::cout << obj << std::endl;	// TODO: actual things
 }
 
 Object* Scene::rayCast(const vec3& ray) const {

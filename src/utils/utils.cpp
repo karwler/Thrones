@@ -65,10 +65,10 @@ Rect Rect::getOverlap(const Rect& frame) const {
 	return rect;
 }
 
-void Texture::load(SDL_Surface* img, const string& name) {
+void Texture::load(SDL_Surface* img, const string& file, bool setFilename) {
 	if (!img) {
 		*this = Texture();
-		throw std::runtime_error("failed to load texture " + name + '\n' + IMG_GetError());
+		throw std::runtime_error("failed to load texture " + file + '\n' + IMG_GetError());
 	}
 
 	switch (img->format->BytesPerPixel) {
@@ -81,9 +81,11 @@ void Texture::load(SDL_Surface* img, const string& name) {
 	default:
 		SDL_FreeSurface(img);
 		*this = Texture();
-		throw std::runtime_error(string("invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + name);
+		throw std::runtime_error(string("invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + file);
 	}
+	name = setFilename ? delExt(file) : "";
 	res = vec2i(img->w, img->h);
+
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
@@ -123,7 +125,6 @@ string filename(const string& path) {
 	sizet pos = path.find_last_of(dsep, end - 1);
 	return pos == string::npos ? path.substr(0, end) : path.substr(pos + 1, end-pos - 1);
 }
-
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

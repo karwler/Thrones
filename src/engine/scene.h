@@ -5,11 +5,11 @@
 
 // saves what widget is being clicked on with what button at what position
 struct ClickStamp {
-	Widget* widget;
+	Interactable* inter;
 	ScrollArea* area;
 	vec2i mPos;
 
-	ClickStamp(Widget* widget = nullptr, ScrollArea* area = nullptr, const vec2i& mPos = 0);
+	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, const vec2i& mPos = 0);
 };
 
 struct Keyframe {
@@ -32,20 +32,28 @@ struct Keyframe {
 class Animation {
 private:
 	queue<Keyframe> keyframes;
-	Object* object;
-	float progress;
+	Keyframe begin;		// initial state of the object
+	Object* object;		// cannot be null
 
 public:
-	Animation(Object* object, const queue<Keyframe>& keyframes);
+	Animation(Object* object, const std::initializer_list<Keyframe>& keyframes);
 
 	bool tick(float dSec);
+
+private:
+	template <class T> static T linearTransition(const T& start, const T& end, float factor);
 };
+
+template <class T>
+T Animation::linearTransition(const T& start, const T& end, float factor) {
+	return start + (end - start) * factor;
+}
 
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
 	vec2i mouseMove;
-	Widget* select;		// currently selected widget
+	Interactable* select;		// currently selected widget
 	Widget* capture;	// either pointer to widget currently hogging all keyboard input or ScrollArea whichs slider is currently being dragged. nullptr if nothing is being captured or dragged
 private:
 	Camera camera;
@@ -82,15 +90,13 @@ public:
 	void addAnimation(const Animation& anim);
 	const vec2i& getMouseMove() const;
 
-	sizet findSelectedID(Layout* box);	// get id of possibly select or select's parent in relation to box
 	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
+	vec3 cursorDirection(const vec2i& mPos) const;
+	Object* rayCast(const vec3& ray) const;
 private:
-	void mouseDownWidget(const vec2i& mPos, uint8 mBut, uint8 mCnt);
-	void mouseDownObject(const vec2i& mPos, uint8 mBut, uint8 mCnt);
-	Widget* setSelected(const vec2i& mPos, Layout* box);
+	Interactable* setSelected(const vec2i& mPos, Layout* box);
 	ScrollArea* getSelectedScrollArea() const;
 	Layout* topLayout();
-	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
 
@@ -124,6 +130,10 @@ inline const vec2i& Scene::getMouseMove() const {
 
 inline bool Scene::cursorInClickRange(const vec2i& mPos, uint8 mBut) {
 	return vec2f(mPos - stamps[mBut].mPos).length() <= clickThreshold;
+}
+
+inline vec3 Scene::cursorDirection(const vec2i& mPos) const {
+	return camera.direction(mPos) * float(camera.zfar);
 }
 
 inline Layout* Scene::topLayout() {

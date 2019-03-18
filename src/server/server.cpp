@@ -10,6 +10,8 @@
 using namespace Server;
 using std::string;
 
+static uint8 rcvBuf[bufSiz];
+
 static int connectionFail(const char* msg, int ret = -1) {
 	std::cerr << msg << '\n' << SDLNet_GetError() << std::endl;
 	SDLNet_Quit();
@@ -70,11 +72,11 @@ static void checkWaitingPlayer(SDLNet_SocketSet sockets, TCPsocket* players, siz
 	if (!SDLNet_SocketReady(players[i]))
 		return;
 
-	if (uint8 buff[bufSiz]; SDLNet_TCP_Recv(players[i], buff, bufSiz) <= 0) {
+	if (int len; (len = SDLNet_TCP_Recv(players[i], rcvBuf, bufSiz)) <= 0) {
 		disconnectSocket(sockets, players[i]);
 		std::cout << "player " << pc-- << " disconnected" << std::endl;
 	} else
-		std::cerr << "invalid net code " << uint(*buff) << " from player " << i << std::endl;
+		std::cerr << "invalid net code " << uint(*rcvBuf) << " from player " << i << std::endl;
 }
 
 static bool waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server) {
@@ -90,18 +92,29 @@ static bool waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsock
 		for (sizet i = 0; i < maxPlayers; i++)
 			checkWaitingPlayer(sockets, players, i, pc);
 	}
-	for (sizet i = 0; i < maxPlayers; i++)
-		sendSingle(players[i], NetCode::start);
+	// decide which player goes first and send information about
+	std::default_random_engine randGen = createRandomEngine();
+	sizet first = sizet(std::uniform_int_distribution<uint>(0, 1)(randGen));
+	uint8 buff[2] = {uint8(NetCode::setup)};
+	for (sizet i = 0; i < maxPlayers; i++) {
+		buff[1] = i == first;
+		SDLNet_TCP_Send(players[i], buff, sizeof(buff));
+	}
 	std::cout << "all players ready" << std::endl;
 	return true;
 }
 
 static bool checkPlayer(TCPsocket* players, sizet i) {
-	if (uint8 buff[bufSiz]; SDLNet_SocketReady(players[i]) && SDLNet_TCP_Recv(players[i], buff, bufSiz) <= 0) {
+	int len;
+	if (SDLNet_SocketReady(players[i]) && (len = SDLNet_TCP_Recv(players[i], rcvBuf, bufSiz)) <= 0) {
 		std::cout << "player " << i << " disconnected" << std::endl;
 		return false;
 	}
-	// TODO: transferring data
+
+	if (NetCode ncd = NetCode(*rcvBuf); ncd >= NetCode::ready && ncd <= NetCode::move)
+		SDLNet_TCP_Send(players[(i + 1) % maxPlayers], rcvBuf, len);	// forward data to other player
+	else
+		std::cerr << "invalid net code " << uint(*rcvBuf) << " from player " << i << std::endl;
 	return true;
 }
 

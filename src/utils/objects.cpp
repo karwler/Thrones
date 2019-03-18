@@ -41,8 +41,9 @@ vec3 Camera::direction(const vec2i& mPos) const {
 
 // VERTEX
 
-Vertex::Vertex(const vec3& pos, const vec2& tuv) :
+Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
 	pos(pos),
+	nrm(nrm),
 	tuv(tuv)
 {}
 
@@ -52,10 +53,10 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<V
 	pos(pos),
 	rot(rot),
 	scl(scl),
+	color(color),
+	tex(tex),
 	verts(verts),
 	elems(elems),
-	tex(tex),
-	color(color),
 	mode(mode)
 {}
 
@@ -74,6 +75,7 @@ void Object::draw() const {
 	glBegin(!(mode & INFO_WIREFRAME) ? GL_TRIANGLES : GL_LINE_STRIP);
 	for (ushort id : elems) {
 		glTexCoord2fv(glm::value_ptr(verts[id].tuv));
+		glNormal3fv(glm::value_ptr(verts[id].nrm));
 		glVertex3fv(glm::value_ptr(verts[id].pos));
 	}
 	glEnd();
@@ -104,36 +106,69 @@ const vector<ushort> BoardObject::squareElements = {
 };
 
 const vector<Vertex> BoardObject::squareVertices = {
-	Vertex(vec3(-0.5f, 0.f, 0.5f), vec2(0.f, 1.f)),
-	Vertex(vec3(-0.5f, 0.f, -0.5f), vec2(0.f, 0.f)),
-	Vertex(vec3(0.5f, 0.f, -0.5f), vec2(1.f, 0.f)),
-	Vertex(vec3(0.5f, 0.f, 0.5f), vec2(1.f, 1.f))
+	Vertex(vec3(-0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 1.f)),
+	Vertex(vec3(-0.5f, 0.f, -0.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 0.f)),
+	Vertex(vec3(0.5f, 0.f, -0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 0.f)),
+	Vertex(vec3(0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
 };
 
-BoardObject::BoardObject(vec2b pos, float poz, const Texture* tex, SDL_Color color, Info mode) :
-	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode)
+BoardObject::BoardObject(vec2b pos, float poz, OCall lcall, const Texture* tex, SDL_Color color, Info mode) :
+	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
+	lcall(lcall)
 {}
+
+void BoardObject::onClick(const vec2i&, uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT)
+		World::prun(lcall, this);
+}
 
 // TILE
 
 const array<SDL_Color, Tile::colors.size()> Tile::colors = {
-	SDL_Color({60, 60, 60, 255}),
 	SDL_Color({40, 255, 40, 255}),
 	SDL_Color({0, 160, 0, 255}),
 	SDL_Color({120, 120, 120, 255}),
 	SDL_Color({40, 200, 255, 255}),
-	SDL_Color({140, 70, 20, 255})
+	SDL_Color({140, 70, 20, 255}),
+	SDL_Color({60, 60, 60, 255})
 };
 
-Tile::Tile(vec2b pos, float poz, Type type) :
-	BoardObject(pos, poz, nullptr, colors[uint8(type)], (type != Type::empty ? INFO_FILL : INFO_LINES) | INFO_RAYCAST),
+const array<string, Tile::names.size()> Tile::names = {
+	"plains",
+	"forest",
+	"mountain",
+	"water",
+	"fortress",
+	"empty"
+};
+
+const array<uint8, Tile::amounts.size()> Tile::amounts = {
+	11,
+	10,
+	7,
+	7
+};
+
+Tile::Tile(vec2b pos, Type type, OCall lcall, Info mode) :
+	BoardObject(pos, 0.f, lcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
 	type(type)
 {}
 
 void Tile::setType(Type newType) {
 	type = newType;
 	color = colors[uint8(type)];
-	mode = type != Type::empty ? INFO_FILL : INFO_LINES;
+	mode = getModeByType(mode, type);
+}
+
+Object::Info Tile::getModeByType(Info mode, Type type) {
+	if (type != Type::empty) {
+		mode &= ~INFO_LINES;
+		mode |= INFO_FILL;
+	} else {
+		mode &= ~INFO_FILL;
+		mode |= INFO_LINES;
+	}
+	return mode;
 }
 
 // PIECE
@@ -151,7 +186,25 @@ const array<string, Piece::names.size()> Piece::names = {
 	"throne"
 };
 
-Piece::Piece(vec2b pos, Type type) :
-	BoardObject(pos, 0.01f, World::winSys()->texture(names[uint8(type)])),
+const array<uint8, Piece::amounts.size()> Piece::amounts = {
+	2,
+	2,
+	2,
+	1,
+	1,
+	2,
+	1,
+	2,
+	1,
+	1
+};
+
+Piece::Piece(vec2b pos, Type type, OCall lcall, Info mode) :
+	BoardObject(pos, 0.01f, lcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
 	type(type)
 {}
+
+void Piece::setType(Piece::Type newType) {
+	type = newType;
+	tex = World::winSys()->texture(names[uint8(type)]);
+}

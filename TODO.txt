@@ -1,4 +1,6 @@
-- data exchange between players
-- game states
-- game rules
-- object creation
+- piece information exchange between players
+- game match rules
+
+- test setup phase
+- test match phase
+- test obj loading

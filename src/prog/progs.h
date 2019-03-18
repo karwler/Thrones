@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "utils/layouts.h"
+#include "utils/objects.h"
 
 // for handling program state specific things that occur in all states
 class ProgState {
@@ -27,8 +28,8 @@ public:
 	virtual void eventResized() {}
 
 	virtual Layout* createLayout();
-	static Popup* createPopupMessage(const string& msg, PCall ccal, const string& ctxt = "Ok");
-	static Popup* createPopupChoice(const string& msg, PCall kcal, PCall ccal);
+	static Popup* createPopupMessage(const string& msg, BCall ccal, const string& ctxt = "Ok");
+	static Popup* createPopupChoice(const string& msg, BCall kcal, BCall ccal);
 
 protected:
 	bool tryClosePopup();
@@ -43,9 +44,44 @@ public:
 	virtual Layout* createLayout() override;
 };
 
-class ProgGame : public ProgState {
+class ProgSetup : public ProgState {
 public:
-	virtual ~ProgGame() override = default;
+	enum class Stage : uint8 {
+		tiles,
+		middles,
+		pieces,
+		ready
+	} stage;
+	bool amFirst, enemyReady;
+	array<Tile::Type, 9> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	array<uint8, sizet(Tile::Type::fortress)> tileCnt, midCnt;
+	array<uint8, sizet(Piece::Type::empty)> pieceCnt;
+	Layout* ticons;
+	Layout* micons;
+	Layout* picons;
+	Label* message;
+
+public:
+	ProgSetup();
+	virtual ~ProgSetup() override = default;
+
+	virtual void eventEscape() override;
+
+	virtual Layout* createLayout() override;
+	void setTicons();
+	void setMicons();
+	void setPicons();
+
+private:
+	Layout* createSidebar(int& sideLength) const;
+};
+
+class ProgMatch : public ProgState {
+public:
+	Layout* dragonIcon;
+
+public:
+	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
 

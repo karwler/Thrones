@@ -46,11 +46,8 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	
 	link_directories(${LIB_DIR})
 	set(DLL_FILES
-		"glew32.dll"
 		"libfreetype-6.dll"
-		"libpng16-16.dll"
 		"SDL2.dll"
-		"SDL2_image.dll"
 		"SDL2_net.dll"
 		"SDL2_ttf.dll"
 		"zlib1.dll")	
@@ -69,11 +66,11 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 include_directories("${CMAKE_SOURCE_DIR}/src")
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	include_directories("${CMAKE_SOURCE_DIR}/lib/include")
-	target_link_libraries(${PROJECT_NAME} glew32 glu32 opengl32)
+	target_link_libraries(${PROJECT_NAME} glew32s glu32 opengl32)
 else()
 	target_link_libraries(${PROJECT_NAME} GLEW GLU GL)
 endif()
-target_link_libraries(${PROJECT_NAME} SDL2 SDL2_image SDL2_net SDL2_ttf)
+target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf)
 
 # target properties
 set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")

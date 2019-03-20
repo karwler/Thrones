@@ -94,7 +94,7 @@ public:
 	vec3 cursorDirection(const vec2i& mPos) const;
 	Object* rayCast(const vec3& ray) const;
 private:
-	Interactable* setSelected(const vec2i& mPos, Layout* box);
+	Interactable* getSelected(const vec2i& mPos, Layout* box);
 	ScrollArea* getSelectedScrollArea() const;
 	Layout* topLayout();
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);

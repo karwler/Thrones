@@ -6,19 +6,21 @@
 // for handling program state specific things that occur in all states
 class ProgState {
 protected:
-	struct Text {
-		string text;
-		int length, height;
-
-		Text(const string& str, int height, int margin = Label::defaultTextMargin);
-	};
-	static int findMaxLength(const string* strs, sizet scnt, int height, int margin = Label::defaultTextMargin);
-
-	static constexpr int popupLineHeight = 40;
 	static constexpr int lineHeight = 30;
 	static constexpr int superHeight = 40;
 	static constexpr int superSpacing = 10;
 	static constexpr int iconSize = 30;
+
+	struct Text {
+		string text;
+		int length, height;
+
+		Text(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
+
+		static int strLength(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
+	};
+	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight, int margin = Label::defaultTextMargin);
+	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight, int margin = Label::defaultTextMargin);
 
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
@@ -34,6 +36,15 @@ public:
 protected:
 	bool tryClosePopup();
 };
+
+template<class T>
+int ProgState::findMaxLength(T pos, T end, int height, int margin) {
+	int width = 0;
+	for (; pos != end; pos++)
+		if (int len = Text::strLength(*pos, height, margin); len > width)
+			width = len;
+	return width;
+}
 
 class ProgMenu : public ProgState {
 public:
@@ -99,4 +110,30 @@ public:
 	virtual void eventResized() override;
 	
 	virtual Layout* createLayout() override;
+};
+
+class ProgInfo : public ProgState {
+private:
+	static const array<string, SDL_POWERSTATE_CHARGED+1> powerNames;
+	static const string infinity;
+
+public:
+	virtual ~ProgInfo() override = default;
+
+	virtual void eventEscape() override;
+
+	virtual Layout* createLayout() override;
+
+private:
+	static void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	static void appendCPU(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	static void appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	static void appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)());
+	static void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
+	static void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
+	static void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	static void appendDevices(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(int), const char* (*value)(int, int), int arg);
+	static void appendDrivers(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(), const char* (*value)(int));
+	static void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
+	static void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
 };

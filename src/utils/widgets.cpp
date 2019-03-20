@@ -78,7 +78,7 @@ Picture::Picture(const Size& relSize, bool showColor, const Texture* bgTex, int 
 void Picture::draw() const {
 	Rect frm = frame();
 	if (showColor)
-		drawRect(rect().getOverlap(frm), color());
+		drawRect(rect().intersect(frm), color());
 	if (bgTex)
 		drawTexture(bgTex, texRect(), frm);
 }
@@ -177,7 +177,7 @@ CheckBox::CheckBox(const Size& relSize, bool on, BCall leftCall, BCall rightCall
 
 void CheckBox::draw() const {
 	Picture::draw();										// draw background
-	drawRect(boxRect().getOverlap(frame()), boxColor());	// draw checkbox
+	drawRect(boxRect().intersect(frame()), boxColor());	// draw checkbox
 }
 
 void CheckBox::onClick(const vec2i& mPos, uint8 mBut) {
@@ -202,14 +202,17 @@ Label::Label(const Size& relSize, const string& text, BCall leftCall, BCall righ
 {}
 
 Label::~Label() {
-	if (textTex.valid())
-		textTex.close();
+	closeTextTex();
 }
 
 void Label::draw() const {
 	Picture::draw();
 	if (textTex.valid())
 		drawTexture(&textTex, textRect(), textFrame());
+}
+
+void Label::onResize() {
+	updateTextTex();
 }
 
 void Label::postInit() {
@@ -224,7 +227,7 @@ void Label::setText(const string& str) {
 Rect Label::textFrame() const {
 	Rect rct = rect();
 	int ofs = textIconOffset();
-	return Rect(rct.x + ofs + textMargin, rct.y, rct.w - ofs - textMargin * 2, rct.h).getOverlap(frame());
+	return Rect(rct.x + ofs + textMargin, rct.y, rct.w - ofs - textMargin * 2, rct.h).intersect(frame());
 }
 
 Rect Label::texRect() const {
@@ -247,9 +250,13 @@ vec2i Label::textPos() const {
 }
 
 void Label::updateTextTex() {
+	closeTextTex();
+	textTex = World::winSys()->renderText(text, size().y);
+}
+
+void Label::closeTextTex() {
 	if (textTex.valid())
 		textTex.close();
-	textTex = World::winSys()->renderText(text, size().y);
 }
 
 // SWITCH BOX

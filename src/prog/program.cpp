@@ -168,7 +168,7 @@ void Program::eventOpenMatch() {
 	World::scene()->addAnimation(Animation(game.getScreen(), {Keyframe(0.5f, Keyframe::CHG_POS, game.getScreen()->pos += vec3(0.f, -2.f, 0.f))}));
 }
 
-void Program::eventPlaceDragon(Button* but) {
+void Program::eventPlaceDragon(Button*) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->rayCast(World::scene()->cursorDirection(mousePos())));
 	if (!bob)
 		return;
@@ -211,6 +211,10 @@ void Program::eventSetVsync(Button* but) {
 
 void Program::eventResetSettings(Button*) {
 	World::winSys()->resetSettings();
+}
+
+void Program::eventOpenInfo(Button*) {
+	setState(new ProgInfo);
 }
 
 // OTHER

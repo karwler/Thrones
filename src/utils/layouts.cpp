@@ -180,7 +180,7 @@ void ScrollArea::onHold(const vec2i& mPos, uint8 mBut) {
 
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
 		World::scene()->capture = this;
-		if ((draggingSlider = barRect().overlap(mPos))) {
+		if ((draggingSlider = barRect().contain(mPos))) {
 			if (int sp = sliderPos(), ss = sliderSize(); outRange(mPos[vertical], sp, sp + ss))	// if mouse outside of slider but inside bar
 				setSlider(mPos[vertical] - ss /2);
 			diffSliderMouse = mPos.y - sliderPos();	// get difference between mouse y and slider y
@@ -213,7 +213,7 @@ void ScrollArea::onScroll(const vec2i& wMov) {
 }
 
 Rect ScrollArea::frame() const {
-	return parent ? rect().getOverlap(parent->frame()) : rect();
+	return parent ? rect().intersect(parent->frame()) : rect();
 }
 
 vec2i ScrollArea::wgtPosition(sizet id) const {

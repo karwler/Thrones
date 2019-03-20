@@ -279,7 +279,7 @@ void Game::receiveSetup() {
 	sizet bi = 1;
 	for (sizet i = 0; i < enemyTiles.size(); i++, bi++)
 		enemyTiles[i].setType(Tile::Type(rcvBuf[bi]));
-	for (sizet i = 0; i < boardSize.x; i++, bi++)
+	for (int i = 0; i < boardSize.x; i++, bi++)
 		static_cast<ProgSetup*>(World::state())->rcvMidBuffer[i] = Tile::Type(rcvBuf[bi]);
 	for (sizet i = 0; i < enemyPieces.size(); i++, bi += 2)
 		enemyPieces[i].setPos(*reinterpret_cast<vec2b*>(rcvBuf + bi));

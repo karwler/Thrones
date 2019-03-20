@@ -3,8 +3,8 @@
 // stuff that's used pretty much everywhere
 #include "server/server.h"
 #include "utils/cvec2.h"
+#define GLEW_STATIC
 #include <GL/glew.h>
-#include <SDL2/SDL_image.h>
 #include <array>
 #include <iostream>
 #include <memory>
@@ -72,36 +72,38 @@ inline bool operator==(SDL_Color a, SDL_Color b) {
 	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
+inline const char* pixelformatName(uint32 format) {
+	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
+}
+
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
 	Rect() = default;
-	Rect(int n);
-	Rect(int x, int y, int w, int h);
-	Rect(const vec2i& pos, const vec2i& size);
+	constexpr Rect(int n);
+	constexpr Rect(int x, int y, int w, int h);
+	constexpr Rect(const vec2i& pos, const vec2i& size);
 
 	vec2i& pos();
-	const vec2i& pos() const;
+	constexpr vec2i pos() const;
 	vec2i& size();
-	const vec2i& size() const;
-	vec2i end() const;
-	vec2i back() const;
+	constexpr vec2i size() const;
+	constexpr vec2i end() const;
 
-	bool overlap(const vec2i& point) const;
-	bool overlap(const Rect& rect, vec2i& sback, vec2i& rback) const;
-	vec4 crop(const Rect& frame);				// crop rect so it fits in the frame (aka set rect to the area where they overlap) and return how much was cut off (left, top, right, bottom)
-	Rect getOverlap(const Rect& frame) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
+	bool contain(const vec2i& point) const;
+	vec4 crop(const Rect& rect);				// crop rect so it fits in the frame (aka set rect to the area where they overlap) and return how much was cut off (left, top, right, bottom)
+	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
-inline Rect::Rect(int n) :
+inline constexpr Rect::Rect(int n) :
 	SDL_Rect({n, n, n, n})
 {}
 
-inline Rect::Rect(int x, int y, int w, int h) :
+inline constexpr Rect::Rect(int x, int y, int w, int h) :
 	SDL_Rect({x, y, w, h})
 {}
 
-inline Rect::Rect(const vec2i& pos, const vec2i& size) :
+inline constexpr Rect::Rect(const vec2i& pos, const vec2i& size) :
 	SDL_Rect({pos.x, pos.y, size.w, size.h})
 {}
 
@@ -109,28 +111,29 @@ inline vec2i& Rect::pos() {
 	return *reinterpret_cast<vec2i*>(this);
 }
 
-inline const vec2i& Rect::pos() const {
-	return *reinterpret_cast<const vec2i*>(this);
+inline constexpr vec2i Rect::pos() const {
+	return vec2i(x, y);
 }
 
 inline vec2i& Rect::size() {
 	return reinterpret_cast<vec2i*>(this)[1];
 }
 
-inline const vec2i& Rect::size() const {
-	return reinterpret_cast<const vec2i*>(this)[1];
+inline constexpr vec2i Rect::size() const {
+	return vec2i(w, h);
 }
 
-inline vec2i Rect::end() const {
+inline constexpr vec2i Rect::end() const {
 	return pos() + size();
 }
 
-inline vec2i Rect::back() const {
-	return end() - 1;
+inline bool Rect::contain(const vec2i& point) const {
+	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
 
-inline bool Rect::overlap(const vec2i& point) const {
-	return point.x >= x && point.x < x + w && point.y >= y && point.y < y + h;
+inline Rect Rect::intersect(const Rect& rect) const {
+	Rect isct;
+	return SDL_IntersectRect(this, &rect, &isct) ? isct : Rect(0);
 }
 
 // OpenGL texture wrapper
@@ -172,7 +175,7 @@ inline Texture::Texture(SDL_Surface* img, const string& file, bool setFilename) 
 }
 
 inline void Texture::load(const string& file) {
-	load(IMG_Load(file.c_str()), file);
+	load(SDL_LoadBMP(file.c_str()), file);
 }
 
 inline GLuint Texture::getID() const {
@@ -228,9 +231,6 @@ inline bool isDriveLetter(const string& path) {
 	return path.length() >= 2 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && std::all_of(path.begin() + 2, path.end(), [](char c) -> bool { return c == dsep; });
 }
 #endif
-string parentPath(const string& path);
-string filename(const string& path);	// get filename from path
-
 inline bool isSpace(char c) {
 	return c > '\0' && c <= ' ';
 }
@@ -348,7 +348,6 @@ inline SDL_Color dimColor(SDL_Color color, float factor, float afac = 1.f) {
 
 #ifdef _WIN32
 string wtos(const wchar* wstr);
-string wtos(const wstring& wstr);
 wstring stow(const string& str);
 #endif
 
@@ -401,7 +400,7 @@ inline ldouble sstold(const string& str) {
 template <class V, class T>
 V vtog(const vector<T>& vec) {
 	V gvn;
-	for (sizet i = 0, end = gvn.length() <= vec.size() ? gvn.length() : vec.size(); i < end; i++)
+	for (sizet i = 0, end = sizet(gvn.length()) <= vec.size() ? sizet(gvn.length()) : vec.size(); i < end; i++)
 		gvn[int(i)] = vec[i];
 	return gvn;
 }

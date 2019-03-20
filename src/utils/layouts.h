@@ -30,6 +30,7 @@ public:
 	void setWidgets(const vector<Widget*>& wgts);	// not suitable for using on a ReaderBox, use the overload
 	void deleteWidget(sizet id);
 	Widget* getSelected() const;
+	bool getVertical() const;
 	virtual vec2i position() const override;
 	virtual vec2i size() const override;
 	virtual Rect frame() const override;
@@ -52,6 +53,10 @@ inline const vector<Widget*>& Layout::getWidgets() const {
 
 inline Widget* Layout::getSelected() const {
 	return selected;
+}
+
+inline bool Layout::getVertical() const {
+	return vertical;
 }
 
 // layout with background with free position/size (shouldn't have a parent)

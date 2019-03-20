@@ -34,7 +34,7 @@ class WindowSys {
 public:
 	static constexpr char title[] = "Thrones";
 private:
-	static constexpr char fileFont[] = "font.otf";
+	static constexpr char fileFont[] = "Merriweather.otf";
 	static constexpr char fileIcon[] = "icon.ico";
 	static constexpr vec2i defaultWindowPos = {SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED};
 	static constexpr vec2i minWindowSize = {640, 480};
@@ -60,6 +60,8 @@ private:
 public:
 	WindowSys();
 
+	SDL_Window* getWindow() {return window;}
+
 	int start();
 	void close();
 
@@ -70,6 +72,7 @@ public:
 	float getDSec() const;
 	const Texture* texture(const string& name) const;
 	vec2i windowSize() const;
+	int displayID() const;
 	void setFullscreen(bool on);
 	void setResolution(const string& line);
 	void setVsync(Settings::VSync vsync);
@@ -138,6 +141,10 @@ inline vec2i WindowSys::windowSize() const {
 	vec2i res;
 	SDL_GetWindowSize(window, &res.x, &res.y);
 	return res;
+}
+
+inline int WindowSys::displayID() const {
+	return SDL_GetWindowDisplayIndex(window);
 }
 
 inline vec2i WindowSys::displayResolution() const {

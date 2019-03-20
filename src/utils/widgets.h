@@ -203,6 +203,7 @@ public:
 	virtual ~Label() override;
 
 	virtual void draw() const override;
+	virtual void onResize() override;
 	virtual void postInit() override;
 
 	const string& getText() const;
@@ -214,6 +215,7 @@ public:
 protected:
 	virtual vec2i textPos() const;
 	virtual void updateTextTex();
+	void closeTextTex();
 };
 
 inline const string& Label::getText() const {

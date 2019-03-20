@@ -78,9 +78,7 @@ void WindowSys::init() {
 	if (SDL_Init(SDL_INIT_VIDEO))
 		throw std::runtime_error(string("failed to initialize video:\n") + SDL_GetError());
 	if (TTF_Init())
-		throw std::runtime_error(string("failed to initialize fonts:\n") + SDL_GetError());
-	if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
-		std::cerr << "failed to initialize PNG:\n" << IMG_GetError() << std::endl;
+		throw std::runtime_error(string("failed to initialize fonts:\n") + TTF_GetError());
 	if (SDLNet_Init())
 		throw std::runtime_error(string("failed to initialize networking:\n") + SDLNet_GetError());
 	SDL_StopTextInput();	// for some reason TextInput is on
@@ -122,7 +120,6 @@ void WindowSys::cleanup() {
 	fileSys.reset();
 
 	SDLNet_Quit();
-	IMG_Quit();
 	TTF_Quit();
 	SDL_Quit();
 }
@@ -145,7 +142,7 @@ void WindowSys::createWindow() {
 		throw std::runtime_error(string("failed to create window:\n") + SDL_GetError());
 
 	SDL_SetWindowMinimumSize(window, minWindowSize.x, minWindowSize.y);
-	if (SDL_Surface* icon = IMG_Load(fileIcon)) {
+	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
@@ -248,7 +245,7 @@ void WindowSys::setSwapInterval() {
 
 Texture WindowSys::renderText(const string& text, int height) {
 	try {
-		return Texture(TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText), text, false);
+		return !text.empty() ? Texture(TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText), text, false) : Texture();
 	} catch (const std::runtime_error& e) {
 		std::cerr << e.what() << std::endl;
 	}

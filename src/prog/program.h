@@ -33,7 +33,7 @@ public:
 
 	// game match
 	void eventOpenMatch();
-	void eventPlaceDragon(Button* but);
+	void eventPlaceDragon(Button*);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -42,6 +42,7 @@ public:
 	void eventSetResolution(Button* but);
 	void eventSetVsync(Button* but);
 	void eventResetSettings(Button* but);
+	void eventOpenInfo(Button* but = nullptr);
 
 	// other
 	void eventClosePopup(Button* but = nullptr);

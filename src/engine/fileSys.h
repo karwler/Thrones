@@ -80,12 +80,10 @@ public:
 #endif
 	static constexpr char extIni[] = ".ini";
 private:
-#ifdef _WIN32
-	static constexpr sizet pathMax = 32767;
-#else
-	static constexpr char linkExe[] = "/proc/self/exe";
-#endif
 	static constexpr char fileSettings[] = "settings.ini";
+
+	static constexpr char defaultFrMode[] = "rb";
+	static constexpr char defaultFwMode[] = "wb";
 
 	static constexpr char iniKeywordMaximized[] = "maximized";
 	static constexpr char iniKeywordFullscreen[] = "fullscreen";
@@ -121,7 +119,6 @@ private:
 
 	static void setWorkingDir();
 #ifdef _WIN32
-	static string wgetenv(const string& name);
 	static bool atrcmp(DWORD attrs, FileType filter);
 #else
 	static FileType stmtoft(const string& file, int (*statfunc)(const char*, struct stat*));

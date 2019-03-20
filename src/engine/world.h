@@ -6,9 +6,6 @@
 class World {
 private:
 	static WindowSys windowSys;			// the thing on which everything runs
-	static vector<string> argVals;
-	static uset<string> argFlags;
-	static umap<string, string> argOpts;
 
 public:
 	static FileSys* fileSys();
@@ -19,30 +16,9 @@ public:
 	static Game* game();
 	static Settings* sets();
 
-	static const vector<string>& getArgVals();
-	static const uset<string>& getArgFlags();
-	static const umap<string, string>& getArgOpts();
-
-#ifdef _WIN32
-#ifdef _DEBUG
-	static void init(int argc, wchar** argv);
-#else
-	static void init(wchar* argstr);
-#endif
-#else
-	static void init(int argc, char** argv);
-#endif
-
 	template <class F, class... A> static void prun(F func, A... args);
-	template <class F, class... A> static void srun(F func, A... args);
 private:
 	template <class C, class F, class... A> static void run(C* obj, F func, A... args);
-
-#ifdef _WIN32
-	static void setArgs(int i, int argc, wchar** argv);
-#else
-	static void setArgs(int i, int argc, char** argv);
-#endif
 };
 
 inline FileSys* World::fileSys() {
@@ -73,26 +49,9 @@ inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
-inline const vector<string>&World::getArgVals() {
-	return argVals;
-}
-
-inline const uset<string>&World::getArgFlags() {
-	return argFlags;
-}
-
-inline const umap<string, string>&World::getArgOpts() {
-	return argOpts;
-}
-
 template <class F, class... A>
 void World::prun(F func, A... args) {
 	run(program(), func, args...);
-}
-
-template <class F, class... A>
-void World::srun(F func, A... args) {
-	run(state(), func, args...);
 }
 
 template <class C, class F, class... A>
@@ -100,12 +59,3 @@ void World::run(C* obj, F func, A... args) {
 	if (func)
 		(obj->*func)(args...);
 }
-#if defined(_WIN32) && defined(_DEBUG)
-inline void World::init(int argc, wchar** argv) {
-	setArgs(1, argc, argv);
-}
-#elif !defined(_WIN32)
-inline void World::init(int argc, char** argv) {
-	setArgs(1, argc, argv);
-}
-#endif

@@ -132,7 +132,7 @@ vector<string> FileSys::readFileLines(const string& file, bool printMessage) {
 }
 
 string FileSys::readTextFile(const string& file, bool printMessage) {
-	FILE* ifh = fopen(file.c_str(), "rb");
+	FILE* ifh = fopen(file.c_str(), defaultFrMode);
 	if (!ifh) {
 		if (printMessage)
 			std::cerr << "failed to open file " << file << std::endl;
@@ -151,7 +151,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 }
 
 bool FileSys::writeTextFile(const string& file, const string& text) {
-	FILE* ofh = fopen(file.c_str(), "wb");
+	FILE* ofh = fopen(file.c_str(), defaultFwMode);
 	if (!ofh) {
 		std::cerr << "failed to write file " << file << std::endl;
 		return false;
@@ -193,38 +193,20 @@ vector<string> FileSys::listDir(const string& drc, FileType filter) {
 }
 
 void FileSys::setWorkingDir() {
-#ifdef _WIN32
-	wchar* buf = new wchar[MAX_PATH];
-	DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-	if (!len || len == MAX_PATH) {
-		delete[] buf;
-		buf = new wchar[pathMax];
-		len = GetModuleFileNameW(nullptr, buf, pathMax);
+	char* path = SDL_GetBasePath();
+	if (!path) {
+		std::cerr << SDL_GetError() << std::endl;
+		return;
 	}
-	while (len > 0 && buf[--len] != dsep);	// terminate path stirng at last dsep
-	buf[len] = '\0';
-	if (!len || _wchdir(buf))
-		std::cerr << "failed to set working directory" << std::endl;
+#ifdef _WIN32
+	if (_wchdir(stow(path).c_str()))
 #else
-	char* buf = new char[PATH_MAX];
-	if (sizet len = sizet(readlink(linkExe, buf, PATH_MAX)); len > PATH_MAX || chdir(parentPath(string(buf, buf + len)).c_str()))
-		std::cerr << "failed to set working directory" << std::endl;
+	if (chdir(path))
 #endif
-	delete[] buf;
+		std::cerr << "failed to set working directory" << std::endl;
+	SDL_free(path);
 }
 #ifdef _WIN32
-string FileSys::wgetenv(const string& name) {
-	wstring var = stow(name);
-	DWORD len = GetEnvironmentVariableW(var.c_str(), nullptr, 0);
-	if (len <= 1)
-		return emptyStr;
-
-	wstring str;
-	str.resize(len - 1);
-	GetEnvironmentVariableW(var.c_str(), str.data(), len);
-	return wtos(str);
-}
-
 FileType FileSys::fileType(const string& file, bool readLink) {
 	DWORD attrib = GetFileAttributesW(stow(file).c_str());
 	if (attrib == INVALID_FILE_ATTRIBUTES)

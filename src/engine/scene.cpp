@@ -101,7 +101,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 
 void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
 	mouseMove = mMov;
-	setSelected(mPos, topLayout());
+	select = getSelected(mPos, topLayout());
 
 	if (capture)
 		capture->onDrag(mPos, mMov);
@@ -114,7 +114,7 @@ void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	setSelected(mPos, topLayout());
+	select = getSelected(mPos, topLayout());
 	if (mCnt == 1) {
 		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
 		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
@@ -172,18 +172,18 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	onMouseMove(mousePos(), 0);
 }
 
-Interactable* Scene::setSelected(const vec2i& mPos, Layout* box) {
+Interactable* Scene::getSelected(const vec2i& mPos, Layout* box) {
 	for (;;) {
 		Rect frame = box->frame();
-		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().getOverlap(frame).overlap(mPos); }); it != box->getWidgets().end()) {
+		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
-				return select = (*it)->selectable() ? *it : nullptr;
+				return (*it)->selectable() ? *it : box;
 		} else if (dynamic_cast<ScrollArea*>(box))
-			return select = box;
+			return box;
 		else
-			return select = rayCast(cursorDirection(mPos));
+			return rayCast(cursorDirection(mPos));
 	}
 }
 

@@ -49,7 +49,7 @@ Popup* ProgState::createPopupMessage(const string& msg, BCall ccal, const string
 	};
 	vector<Widget*> con = {
 		new Label(1.f, ms.text, nullptr, nullptr, nullptr, Label::Alignment::center),
-		new Layout(1.f, bot, false, false, 0)
+		new Layout(1.f, bot, false, 0)
 	};
 	return new Popup(vec2s(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con);
 }
@@ -62,7 +62,7 @@ Popup* ProgState::createPopupChoice(const string& msg, BCall kcal, BCall ccal) {
 	};
 	vector<Widget*> con = {
 		new Label(1.f, ms.text, nullptr, nullptr, nullptr, Label::Alignment::center),
-		new Layout(1.f, bot, false, false, 0)
+		new Layout(1.f, bot, false, 0)
 	};
 	return new Popup(vec2s(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con);
 }
@@ -103,10 +103,10 @@ Layout* ProgMenu::createLayout() {
 	// root layout
 	vector<Widget*> cont = {
 		new Widget(),
-		new Layout(World::winSys()->textLength(srvt.text + "999.999.999.999", superHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, false, superSpacing),
+		new Layout(World::winSys()->textLength(srvt.text + "999.999.999.999", superHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, superSpacing),
 		new Widget()
 	};
-	return new Layout(1.f, cont, false, false, 0);
+	return new Layout(1.f, cont, false, 0);
 }
 
 // PROG SETUP
@@ -133,7 +133,7 @@ Layout* ProgSetup::createLayout() {
 	// center piece
 	vector<Widget*> midl = {
 		new Widget(),
-		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, false, 0),
+		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
 		new Widget(),
 		stage == Stage::tiles ? ticons : stage == Stage::middles ? micons : picons
 	};
@@ -142,19 +142,19 @@ Layout* ProgSetup::createLayout() {
 	int sideLength;
 	vector<Widget*> cont = {
 		createSidebar(sideLength),
-		new Layout(1.f, midl, true, false, 0),
+		new Layout(1.f, midl, true, 0),
 		new Widget(sideLength)
 	};
-	return new Layout(1.f, cont, false, false, 0);
+	return new Layout(1.f, cont, false, 0);
 }
 
 void ProgSetup::setTicons() {
 	vector<Widget*> tbot = {
 		new Widget(),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::plains)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::forest)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::mountain)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::water)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::plains)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::forest)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::mountain)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::water)]),
 		new Widget()
 	};
 	ticons = new Layout(iconSize, tbot);
@@ -163,10 +163,10 @@ void ProgSetup::setTicons() {
 void ProgSetup::setMicons() {
 	vector<Widget*> mbot = {
 		new Widget(),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::plains)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::forest)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::mountain)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, Tile::colors[uint8(Tile::Type::water)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::plains)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::forest)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::mountain)]),
+		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::water)]),
 		new Widget()
 	};
 	micons = new Layout(iconSize, mbot);
@@ -175,16 +175,16 @@ void ProgSetup::setMicons() {
 void ProgSetup::setPicons() {
 	vector<Widget*> pbot = {
 		new Widget(),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::ranger)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::spearman)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::crossbowman)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::catapult)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::trebuchet)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::lancer)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::warhorse)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::elephant)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::throne)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::ranger)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::spearman)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::crossbowman)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::catapult)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::trebuchet)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::lancer)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::warhorse)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::elephant)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])),
+		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::throne)])),
 		new Widget()
 	};
 	picons = new Layout(iconSize, pbot);
@@ -211,11 +211,11 @@ Layout* ProgMatch::createLayout() {
 	};
 
 	// dragon icon
-	if (World::game()->getPieces(Piece::Type::dragon)->getPos().has(INT8_MIN)) {
+	if (World::game()->getOwnPieces(Piece::Type::dragon)->getPos().has(INT8_MIN)) {
 		vector<Widget*> dora = {
-			new Draglet(iconSize, &Program::eventPlaceDragon, nullptr, nullptr, {128, 128, 128, 255}, false, World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)]))
+			new Draglet(iconSize, &Program::eventPlaceDragon, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)]))
 		};
-		left.push_back(dragonIcon = new Layout(iconSize, dora, false, false, 0));
+		left.push_back(dragonIcon = new Layout(iconSize, dora, false, 0));
 	}
 
 	// root layout
@@ -223,7 +223,7 @@ Layout* ProgMatch::createLayout() {
 		new Layout(exit.length, left, true),
 		new Widget()
 	};
-	return new Layout(1.f, cont, false, false, 0);
+	return new Layout(1.f, cont, false, 0);
 }
 
 // PROG SETTINGS
@@ -279,7 +279,7 @@ Layout* ProgSettings::createLayout() {
 		new Layout(optLength, lft, true),
 		new ScrollArea(1.f, lns)
 	};
-	return new Layout(1.f, cont, false, false, superSpacing);
+	return new Layout(1.f, cont, false, superSpacing);
 }
 
 // PROG INFO
@@ -291,7 +291,7 @@ const array<string, ProgInfo::powerNames.size()> ProgInfo::powerNames = {
 	"CHARGING",
 	"CHARGED"
 };
-const string ProgInfo::infinity = "\u221E";
+const string ProgInfo::infinity = u8"\u221E";
 
 void ProgInfo::eventEscape() {
 	if (!tryClosePopup())
@@ -381,7 +381,7 @@ Layout* ProgInfo::createLayout() {
 		new Layout(optLength, lft, true),
 		new ScrollArea(1.f, lines)
 	};
-	return new Layout(1.f, cont, false, false, superSpacing);
+	return new Layout(1.f, cont, false, superSpacing);
 }
 
 void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {

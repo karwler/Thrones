@@ -25,6 +25,8 @@ public:
 	void eventOpenSetup();
 	void eventPlaceTile(Button* but);
 	void eventPlacePiece(Button* but);
+	void eventMoveTile(BoardObject* obj);
+	void eventMovePiece(BoardObject* obj);
 	void eventClearTile(BoardObject* obj);
 	void eventClearPiece(BoardObject* obj);
 	void eventSetupNext(Button* but = nullptr);
@@ -33,7 +35,9 @@ public:
 
 	// game match
 	void eventOpenMatch();
-	void eventPlaceDragon(Button*);
+	void eventPlaceDragon(Button* but = nullptr);
+	void eventMove(BoardObject* obj);
+	void eventAttack(BoardObject* obj);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -53,6 +57,8 @@ public:
 
 private:
 	void setState(ProgState* newState);
+
+	BoardObject* pickBob(vec2b& pos, Piece*& pce);
 };
 
 inline Program::Program() :

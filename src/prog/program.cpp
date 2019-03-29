@@ -31,7 +31,7 @@ void Program::eventOpenSetup() {
 }
 
 void Program::eventPlaceTile(Button* but) {
-	Tile* til = dynamic_cast<Tile*>(World::scene()->rayCast(World::scene()->cursorDirection(mousePos())));
+	Tile* til = World::scene()->pickObject<Tile>();
 	if (!til)
 		return;
 
@@ -39,31 +39,32 @@ void Program::eventPlaceTile(Button* but) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	if (til->getType() != Tile::Type::empty) {
 		Draglet* ico = static_cast<Draglet*>(ps->ticons->getWidget(uint8(til->getType()) + 1));
-		ico->cusColor = til->color;
+		ico->setColor(til->color);
 		ico->setLcall(&Program::eventPlaceTile);
 		ps->tileCnt[uint8(til->getType())]++;
 	}
 
 	// place the tile
 	Draglet* dlt = static_cast<Draglet*>(but);
-	til->setType(valToEnum<Tile::Type>(Tile::colors, dlt->cusColor));
+	til->setType(valToEnum<Tile::Type>(Tile::colors, dlt->color));
 	if (--ps->tileCnt[uint8(til->getType())] == 0) {
-		dlt->cusColor = dimColor(dlt->cusColor, 0.5f, 0.5f);
+		dlt->setColor(dlt->color * 0.5f);
 		dlt->setLcall(nullptr);
 	}
 }
 
 void Program::eventPlacePiece(Button* but) {
-	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->rayCast(World::scene()->cursorDirection(mousePos())));
+	vec2b pos;
+	Piece* pce;
+	BoardObject* bob = pickBob(pos, pce);
 	if (!bob)
 		return;
 
 	// remove any piece that may be occupying that tile already
-	vec2b pos = bob->getPos();
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (Piece* pce = dynamic_cast<Piece*>(bob); pce || (pce = game.findPiece(pos))) {
+	if (pce) {
 		Draglet* ico = static_cast<Draglet*>(ps->picons->getWidget(uint8(pce->getType()) + 1));
-		ico->cusColor = BoardObject::defaultColor;
+		ico->setColor(BoardObject::defaultColor);
 		ico->setLcall(&Program::eventPlacePiece);
 		ps->pieceCnt[uint8(pce->getType())]++;
 	}
@@ -71,7 +72,7 @@ void Program::eventPlacePiece(Button* but) {
 	// find the first not placed piece of the specified type
 	Draglet* dlt = static_cast<Draglet*>(but);
 	Piece::Type ptyp = strToEnum<Piece::Type>(Piece::names, dlt->bgTex->getName());
-	Piece* pieces = game.getPieces(ptyp);
+	Piece* pieces = game.getOwnPieces(ptyp);
 	sizet id = 0;
 	while (id < Piece::amounts[uint8(ptyp)] && pieces[id].getPos().hasNot(-1))
 		id++;
@@ -80,9 +81,30 @@ void Program::eventPlacePiece(Button* but) {
 	if (id < Piece::amounts[uint8(ptyp)]) {
 		pieces[id].setPos(pos);
 		if (--ps->pieceCnt[uint8(pieces[id].getType())] == 0) {
-			dlt->cusColor = dimColor(dlt->cusColor, 0.5f, 0.5f);
+			dlt->setColor(dlt->color * 0.5f);
 			dlt->setLcall(nullptr);
 		}
+	}
+}
+
+void Program::eventMoveTile(BoardObject* obj) {
+	// switch types with destination tile
+	if (Tile* dst = World::scene()->pickObject<Tile>()) {
+		Tile* src = static_cast<Tile*>(obj);
+		Tile::Type desType = dst->getType();
+		dst->setType(src->getType());
+		src->setType(desType);
+	}
+}
+
+void Program::eventMovePiece(BoardObject* obj) {
+	// get new position and set or swap positions with possibly already occupying piece
+	vec2b pos;
+	if (Piece* dst; BoardObject* bob = pickBob(pos, dst)) {
+		Piece* src = static_cast<Piece*>(obj);
+		if (dst)
+			dst->setPos(src->getPos());
+		src->setPos(pos);
 	}
 }
 
@@ -150,7 +172,6 @@ void Program::eventSetupBack(Button*) {
 		game.setOwnTilesInteract(false);
 		game.setMidTilesInteract(true);
 		game.setOwnPiecesInteract(false);
-		break;
 	}
 	ps->stage = ProgSetup::Stage(uint8(ps->stage) - 1);
 	World::scene()->resetLayouts();
@@ -169,21 +190,35 @@ void Program::eventOpenMatch() {
 }
 
 void Program::eventPlaceDragon(Button*) {
-	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->rayCast(World::scene()->cursorDirection(mousePos())));
-	if (!bob)
+	vec2b pos;
+	Piece* pce;
+	BoardObject* bob = pickBob(pos, pce);
+	if (!bob || game.getTile(pos)->getType() != Tile::Type::fortress)	// tile needs to be a fortress
 		return;
 
-	vec2b pos = bob->getPos();	// check if pos is in homeland
-	if (outRange(pos, vec2b(0, 1), vec2b(Game::boardSize.x, Game::homeHeight)))
-		return;
-
-	if (Piece* pce = dynamic_cast<Piece*>(bob); pce || (pce = game.findPiece(pos)))	// kill any piece that might be occupying the tile
+	// kill any piece that might be occupying the tile
+	if (pce)
 		game.killPiece(pce);
-	game.getPieces(Piece::Type::dragon)->setPos(pos);	// place the dragon
-	// TODO: send piece update
 
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());	// get rid of button
+	// place the dragon
+	Piece* maid = game.getOwnPieces(Piece::Type::dragon);
+	maid->mode |= Object::INFO_SHOW;
+	game.placePiece(maid, pos);
+
+	// get rid of button
+	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
 	pm->dragonIcon->getParent()->deleteWidget(pm->dragonIcon->getID());
+}
+
+void Program::eventMove(BoardObject* obj) {
+	vec2b pos;
+	if (Piece* pce; BoardObject* bob = pickBob(pos, pce))
+		game.movePiece(static_cast<Piece*>(obj), pos, pce);
+}
+
+void Program::eventAttack(BoardObject* obj) {
+	if (Piece* pce = World::scene()->pickObject<Piece>())
+		game.attackPiece(static_cast<Piece*>(obj), pce);
 }
 
 void Program::eventExitGame(Button*) {
@@ -230,4 +265,15 @@ void Program::eventExit(Button*) {
 void Program::setState(ProgState* newState) {
 	state.reset(newState);
 	World::scene()->resetLayouts();
+}
+
+BoardObject* Program::pickBob(vec2b& pos, Piece*& pce) {
+	BoardObject* bob = World::scene()->pickObject<BoardObject>();
+	if (bob) {
+		pos = bob->getPos();
+		if (!(pce = dynamic_cast<Piece*>(bob)))
+			pce = game.findPiece(pos);
+	}
+	return bob;
+
 }

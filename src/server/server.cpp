@@ -10,6 +10,12 @@
 using namespace Server;
 using std::string;
 
+enum class WaitResult : uint8 {
+	ready,
+	retry,
+	exit
+};
+
 static uint8 rcvBuf[bufSiz];
 
 static int connectionFail(const char* msg, int ret = -1) {
@@ -79,11 +85,11 @@ static void checkWaitingPlayer(SDLNet_SocketSet sockets, TCPsocket* players, siz
 		std::cerr << "invalid net code " << uint(*rcvBuf) << " from player " << i << std::endl;
 }
 
-static bool waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server) {
+static WaitResult waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server) {
 	std::cout << "waiting for players" << std::endl;
 	for (sizet pc = 0; pc < maxPlayers;) {
 		if (quitting())
-			return false;
+			return WaitResult::exit;
 		if (SDLNet_CheckSockets(sockets, checkTimeout) <= 0)
 			continue;
 
@@ -98,10 +104,13 @@ static bool waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsock
 	uint8 buff[2] = {uint8(NetCode::setup)};
 	for (sizet i = 0; i < maxPlayers; i++) {
 		buff[1] = i == first;
-		SDLNet_TCP_Send(players[i], buff, sizeof(buff));
+		if (SDLNet_TCP_Send(players[i], buff, sizeof(buff)) != sizeof(buff)) {
+			std::cerr << SDLNet_GetError() << std::endl;
+			return WaitResult::retry;
+		}
 	}
 	std::cout << "all players ready" << std::endl;
-	return true;
+	return WaitResult::ready;
 }
 
 static bool checkPlayer(TCPsocket* players, sizet i) {
@@ -111,10 +120,12 @@ static bool checkPlayer(TCPsocket* players, sizet i) {
 		return false;
 	}
 
-	if (NetCode ncd = NetCode(*rcvBuf); ncd >= NetCode::ready && ncd <= NetCode::move)
-		SDLNet_TCP_Send(players[(i + 1) % maxPlayers], rcvBuf, len);	// forward data to other player
-	else
+	if (NetCode ncd = NetCode(*rcvBuf); ncd < NetCode::ready)
 		std::cerr << "invalid net code " << uint(*rcvBuf) << " from player " << i << std::endl;
+	else if (SDLNet_TCP_Send(players[(i + 1) % maxPlayers], rcvBuf, len) != len) {	// forward data to other player
+		std::cerr << SDLNet_GetError() << std::endl;
+		return false;
+	}
 	return true;
 }
 
@@ -166,8 +177,9 @@ int main(int argc, char** argv) {
 	SDLNet_TCP_AddSocket(sockets, server);
 
 	// run game server
-	for (bool cont = true; cont;) {
-		cont = waitForPlayers(sockets, players, server) && runGame(sockets, players, server);
+	for (WaitResult cont = WaitResult::retry; cont != WaitResult::exit;) {
+		if (cont = waitForPlayers(sockets, players, server); cont == WaitResult::ready)
+			cont = WaitResult(runGame(sockets, players, server) + 1);
 		disconnectPlayers(sockets, players);
 	};
 	SDLNet_TCP_DelSocket(sockets, server);

@@ -49,15 +49,17 @@ Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
 
 // OBJECT
 
-Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, const Texture* tex, SDL_Color color, Info mode) :
+const vec4 Object::defaultColor(1.f);
+
+Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, const Texture* tex, const vec4& color, Info mode) :
 	pos(pos),
 	rot(rot),
 	scl(scl),
 	color(color),
+	mode(mode),
 	tex(tex),
 	verts(verts),
-	elems(elems),
-	mode(mode)
+	elems(elems)
 {}
 
 void Object::draw() const {
@@ -69,7 +71,7 @@ void Object::draw() const {
 		glBindTexture(GL_TEXTURE_2D, tex->getID());
 	} else
 		glDisable(GL_TEXTURE_2D);
-	glColor4ubv(reinterpret_cast<const GLubyte*>(&color));
+	glColor4fv(glm::value_ptr(color));
 	
 	setTransform();
 	glBegin(!(mode & INFO_WIREFRAME) ? GL_TRIANGLES : GL_LINE_STRIP);
@@ -112,25 +114,50 @@ const vector<Vertex> BoardObject::squareVertices = {
 	Vertex(vec3(0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
 };
 
-BoardObject::BoardObject(vec2b pos, float poz, OCall lcall, const Texture* tex, SDL_Color color, Info mode) :
+BoardObject::BoardObject(vec2b pos, float poz, OCall lcall, OCall rcall, OCall ucall, const Texture* tex, const vec4& color, Info mode) :
 	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
-	lcall(lcall)
+	lcall(lcall),
+	rcall(rcall),
+	ucall(ucall)
 {}
 
 void BoardObject::onClick(const vec2i&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
 		World::prun(lcall, this);
+	else if (mBut == SDL_BUTTON_RIGHT)
+		World::prun(rcall, this);
+}
+
+void BoardObject::onHold(const vec2i&, uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT)
+		World::scene()->capture = this;
+}
+
+void BoardObject::onDrag(const vec2i& mPos, const vec2i&) {
+	// TODO: update position to mouse pos
+}
+
+void BoardObject::onUndrag(uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT) {
+		World::scene()->capture = nullptr;
+		World::prun(ucall, this);
+	}
+}
+
+void BoardObject::disable() {
+	setPos(INT8_MIN);
+	mode &= ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
 }
 
 // TILE
 
-const array<SDL_Color, Tile::colors.size()> Tile::colors = {
-	SDL_Color({40, 255, 40, 255}),
-	SDL_Color({0, 160, 0, 255}),
-	SDL_Color({120, 120, 120, 255}),
-	SDL_Color({40, 200, 255, 255}),
-	SDL_Color({140, 70, 20, 255}),
-	SDL_Color({60, 60, 60, 255})
+const array<vec4, Tile::colors.size()> Tile::colors = {
+	vec4(0.157f, 1.f, 0.157f, 1.f),
+	vec4(0.f, 0.627f, 0.f, 1.f),
+	vec4(0.471f, 0.471f, 0.471f, 1.f),
+	vec4(0.157f, 0.784f, 1.f, 1.f),
+	vec4(0.549f, 0.275f, 0.078f, 1.f),
+	vec4(0.235f, 0.235f, 0.235f, 1.f)
 };
 
 const array<string, Tile::names.size()> Tile::names = {
@@ -149,8 +176,9 @@ const array<uint8, Tile::amounts.size()> Tile::amounts = {
 	7
 };
 
-Tile::Tile(vec2b pos, Type type, OCall lcall, Info mode) :
-	BoardObject(pos, 0.f, lcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+Tile::Tile(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode) :
+	BoardObject(pos, 0.f, lcall, rcall, ucall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+	ruined(false),
 	type(type)
 {}
 
@@ -158,17 +186,6 @@ void Tile::setType(Type newType) {
 	type = newType;
 	color = colors[uint8(type)];
 	mode = getModeByType(mode, type);
-}
-
-Object::Info Tile::getModeByType(Info mode, Type type) {
-	if (type != Type::empty) {
-		mode &= ~INFO_LINES;
-		mode |= INFO_FILL;
-	} else {
-		mode &= ~INFO_FILL;
-		mode |= INFO_LINES;
-	}
-	return mode;
 }
 
 // PIECE
@@ -199,8 +216,8 @@ const array<uint8, Piece::amounts.size()> Piece::amounts = {
 	1
 };
 
-Piece::Piece(vec2b pos, Type type, OCall lcall, Info mode) :
-	BoardObject(pos, 0.01f, lcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
+Piece::Piece(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode) :
+	BoardObject(pos, 0.01f, lcall, rcall, ucall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
 	type(type)
 {}
 

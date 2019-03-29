@@ -151,3 +151,7 @@ inline vec2i WindowSys::displayResolution() const {
 	SDL_DisplayMode mode;
 	return !SDL_GetDesktopDisplayMode(window ? SDL_GetWindowDisplayIndex(window) : 0, &mode) ? vec2i(mode.w, mode.h) : INT_MAX;
 }
+
+inline void WindowSys::setResolution(const vec2i& res) {
+	sets->resolution = res.clamp(minWindowSize, displayResolution());
+}

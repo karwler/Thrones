@@ -22,11 +22,11 @@ struct Keyframe {
 
 	vec3 pos;
 	vec3 rot;
-	SDL_Color color;
+	vec4 color;
 	float time;		// time difference between this and previous keyframe
 	Change change;	// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), SDL_Color color = {});
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec4 color = vec4());
 };
 
 class Animation {
@@ -53,8 +53,8 @@ T Animation::linearTransition(const T& start, const T& end, float factor) {
 class Scene {
 public:
 	vec2i mouseMove;
-	Interactable* select;		// currently selected widget
-	Widget* capture;	// either pointer to widget currently hogging all keyboard input or ScrollArea whichs slider is currently being dragged. nullptr if nothing is being captured or dragged
+	Interactable* select;	// currently selected widget
+	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
 	Camera camera;
 	vector<Object*> objects;
@@ -76,7 +76,7 @@ public:
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onMouseMove(const vec2i& mPos, const vec2i& mMov);
 	void onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt);
-	void onMouseUp(const vec2i& mPos, uint8 mBut);
+	void onMouseUp(const vec2i& mPos, uint8 mBut, uint8 mCnt);
 	void onMouseWheel(const vec2i& wMov);
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
@@ -89,14 +89,17 @@ public:
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(const Animation& anim);
 	const vec2i& getMouseMove() const;
-
 	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
-	vec3 cursorDirection(const vec2i& mPos) const;
-	Object* rayCast(const vec3& ray) const;
+	template <class T> T* pickObject() const;
+
 private:
 	Interactable* getSelected(const vec2i& mPos, Layout* box);
 	ScrollArea* getSelectedScrollArea() const;
 	Layout* topLayout();
+
+	Object* pickObject(const vec2i& mPos) const;
+	vec3 pickerRay(const vec2i& mPos) const;
+	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
 
@@ -132,10 +135,19 @@ inline bool Scene::cursorInClickRange(const vec2i& mPos, uint8 mBut) {
 	return vec2f(mPos - stamps[mBut].mPos).length() <= clickThreshold;
 }
 
-inline vec3 Scene::cursorDirection(const vec2i& mPos) const {
-	return camera.direction(mPos) * float(camera.zfar);
-}
-
 inline Layout* Scene::topLayout() {
 	return popup ? popup.get() : layout.get();
+}
+
+inline Object* Scene::pickObject(const vec2i& mPos) const {
+	return rayCast(pickerRay(mPos));
+}
+
+template <class T>
+T* Scene::pickObject() const {
+	return dynamic_cast<T*>(pickObject(mousePos()));
+}
+
+inline vec3 Scene::pickerRay(const vec2i& mPos) const {
+	return camera.direction(mPos) * float(camera.zfar);
 }

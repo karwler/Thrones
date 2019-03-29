@@ -24,9 +24,9 @@ Settings::Settings() :
 // FILE SYS
 
 FileSys::FileSys() {
-	setWorkingDir();
-
 	// check if all (more or less) necessary files and directories exist
+	if (setWorkingDir())
+		std::cerr << "failed to set working directory" << std::endl;
 	if (fileType(dirSavs) != FTYPE_DIR && !createDir(dirSavs))
 		std::cerr << "failed to create save data directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
@@ -91,7 +91,7 @@ Object FileSys::loadObj(const string& file) {
 	for (array<int, 9>& it : faces)
 		for (sizet i = 0; i < 3; i++) {
 			if (array<int, 3>& vp = reinterpret_cast<array<int, 3>*>(it.data())[i]; !vmap.count(vp)) {
-				vmap.emplace(vp, verts.size());
+				vmap.emplace(vp, ushort(verts.size()));
 				elems.push_back(ushort(verts.size()));
 				verts.emplace_back(resolveObjId(vp[0], poss), glm::normalize(resolveObjId(vp[2], norms)), resolveObjId(vp[1], uvs));
 			} else
@@ -136,7 +136,7 @@ string FileSys::readTextFile(const string& file, bool printMessage) {
 	if (!ifh) {
 		if (printMessage)
 			std::cerr << "failed to open file " << file << std::endl;
-		return "";
+		return emptyStr;
 	}
 	fseek(ifh, 0, SEEK_END);
 	sizet len = sizet(ftell(ifh));
@@ -169,42 +169,36 @@ vector<string> FileSys::listDir(const string& drc, FileType filter) {
 	vector<string> entries;
 #ifdef _WIN32
 	WIN32_FIND_DATAW data;
-	HANDLE hFind = FindFirstFileW(stow(appDsep(drc) + "*").c_str(), &data);
-	if (hFind == INVALID_HANDLE_VALUE)
-		return entries;
-
-	do {
-		if (!isDotName(data.cFileName) && atrcmp(data.dwFileAttributes, filter))
-			entries.emplace_back(wtos(data.cFileName));
-	} while (FindNextFileW(hFind, &data));
-	FindClose(hFind);
+	if (HANDLE hFind = FindFirstFileW(stow(appDsep(drc) + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (!isDotName(data.cFileName) && atrcmp(data.dwFileAttributes, filter))
+				entries.emplace_back(wtos(data.cFileName));
+		} while (FindNextFileW(hFind, &data));
+		FindClose(hFind);
+	}
 #else
-	DIR* directory = opendir(drc.c_str());
-	if (!directory)
-		return entries;
-
-	while (dirent* entry = readdir(directory))
-		if (!isDotName(entry->d_name) && dtycmp(drc, entry, filter, true))
-			entries.emplace_back(entry->d_name);
-	closedir(directory);
+	if (DIR* directory = opendir(drc.c_str())) {
+		while (dirent* entry = readdir(directory))
+			if (!isDotName(entry->d_name) && dtycmp(drc, entry, filter, true))
+				entries.emplace_back(entry->d_name);
+		closedir(directory);
+	}
 #endif
 	std::sort(entries.begin(), entries.end());
 	return entries;
 }
 
-void FileSys::setWorkingDir() {
+int FileSys::setWorkingDir() {
 	char* path = SDL_GetBasePath();
-	if (!path) {
-		std::cerr << SDL_GetError() << std::endl;
-		return;
-	}
+	if (!path)
+		return 1;
 #ifdef _WIN32
-	if (_wchdir(stow(path).c_str()))
+	int err = _wchdir(stow(path).c_str());
 #else
-	if (chdir(path))
+	int err = chdir(path);
 #endif
-		std::cerr << "failed to set working directory" << std::endl;
 	SDL_free(path);
+	return err;
 }
 #ifdef _WIN32
 FileType FileSys::fileType(const string& file, bool readLink) {

@@ -36,7 +36,7 @@ void Texture::load(SDL_Surface* img, const string& file, bool setFilename) {
 		*this = Texture();
 		throw std::runtime_error(string("invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + file);
 	}
-	name = setFilename ? delExt(file) : "";
+	name = setFilename ? delExt(file) : emptyStr;
 	res = vec2i(img->w, img->h);
 
 	glGenTextures(1, &id);

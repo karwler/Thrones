@@ -10,13 +10,11 @@ public:
 protected:
 	vector<Widget*> widgets;
 	vector<vec2i> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
-	Widget* selected;
 	int spacing;				// space between widgets
-	bool canSelect;				// wheter selected can be set
 	bool vertical;				// how to arrange widgets
 
 public:
-	Layout(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Layout() override;
 
 	virtual void draw() const override;
@@ -29,14 +27,12 @@ public:
 	const vector<Widget*>& getWidgets() const;
 	void setWidgets(const vector<Widget*>& wgts);	// not suitable for using on a ReaderBox, use the overload
 	void deleteWidget(sizet id);
-	Widget* getSelected() const;
 	bool getVertical() const;
 	virtual vec2i position() const override;
 	virtual vec2i size() const override;
 	virtual Rect frame() const override;
 	virtual vec2i wgtPosition(sizet id) const;
 	virtual vec2i wgtSize(sizet id) const;
-	void selectWidget(sizet id);
 
 protected:
 	void initWidgets(const vector<Widget*>& wgts);
@@ -51,10 +47,6 @@ inline const vector<Widget*>& Layout::getWidgets() const {
 	return widgets;
 }
 
-inline Widget* Layout::getSelected() const {
-	return selected;
-}
-
 inline bool Layout::getVertical() const {
 	return vertical;
 }
@@ -62,7 +54,7 @@ inline bool Layout::getVertical() const {
 // layout with background with free position/size (shouldn't have a parent)
 class Popup : public Layout {
 private:
-	static constexpr SDL_Color colorDim = {0, 0, 0, 127};
+	static const vec4 colorDim;
 
 	Size sizeY;	// use Widget's relSize as sizeX
 
@@ -90,7 +82,7 @@ private:
 	static constexpr float scrollThrottle = 10.f;
 
 public:
-	ScrollArea(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, bool canSelect = false, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	ScrollArea(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~ScrollArea() override = default;
 
 	virtual void draw() const override;

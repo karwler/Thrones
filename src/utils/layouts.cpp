@@ -2,11 +2,9 @@
 
 // LAYOUT
 
-Layout::Layout(const Size& relSize, const vector<Widget*>& children, bool vertical, bool canSelect, int spacing, Layout* parent, sizet id) :
+Layout::Layout(const Size& relSize, const vector<Widget*>& children, bool vertical, int spacing, Layout* parent, sizet id) :
 	Widget(relSize, parent, id),
-	selected(nullptr),
 	spacing(spacing),
-	canSelect(canSelect),
 	vertical(vertical)
 {
 	initWidgets(children);
@@ -110,21 +108,18 @@ vec2i Layout::listSize() const {
 	return positions.back() - spacing;
 }
 
-void Layout::selectWidget(sizet id) {
-	if (canSelect)
-		selected = widgets[id];
-}
-
 // POPUP
 
+const vec4 Popup::colorDim(0.f, 0.f, 0.f, 0.5f);
+
 Popup::Popup(const vec2s& relSize, const vector<Widget*>& children, bool vertical, int spacing) :
-	Layout(relSize.x, children, vertical, false, spacing, nullptr, SIZE_MAX),
+	Layout(relSize.x, children, vertical, spacing, nullptr, SIZE_MAX),
 	sizeY(relSize.y)
 {}
 
 void Popup::draw() const {
 	drawRect(Rect(0, World::winSys()->windowSize()), colorDim);	// dim other widgets
-	drawRect(rect(), colors[uint8(Color::normal)]);	// draw background
+	drawRect(rect(), colorNormal);	// draw background
 	Layout::draw();
 }
 
@@ -143,8 +138,8 @@ Rect Popup::frame() const {
 
 // SCROLL AREA
 
-ScrollArea::ScrollArea(const Size& relSize, const vector<Widget*>& children, bool vertical, bool canSelect, int spacing, Layout* parent, sizet id) :
-	Layout(relSize, children, vertical, canSelect, spacing, parent, id),
+ScrollArea::ScrollArea(const Size& relSize, const vector<Widget*>& children, bool vertical, int spacing, Layout* parent, sizet id) :
+	Layout(relSize, children, vertical, spacing, parent, id),
 	draggingSlider(false),
 	listPos(0),
 	motion(0.f),
@@ -156,8 +151,8 @@ void ScrollArea::draw() const {
 	for (sizet i = vis.b; i < vis.t; i++)
 		widgets[i]->draw();
 
-	drawRect(barRect(), colors[uint8(Color::dark)]);		// draw scroll bar
-	drawRect(sliderRect(), colors[uint8(Color::light)]);	// draw scroll slider
+	drawRect(barRect(), colorDark);		// draw scroll bar
+	drawRect(sliderRect(), colorLight);	// draw scroll slider
 }
 
 void ScrollArea::tick(float dSec) {

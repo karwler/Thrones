@@ -10,7 +10,7 @@ ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos)
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, const glm::vec3& rot, SDL_Color color) :
+Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, const glm::vec3& rot, const vec4 color) :
 	pos(pos),
 	rot(rot),
 	color(color),
@@ -34,10 +34,8 @@ bool Animation::tick(float dSec) {
 		object->pos = linearTransition(begin.pos, keyframes.front().pos, td);
 	if (keyframes.front().change & Keyframe::CHG_ROT)
 		object->rot = linearTransition(begin.rot, keyframes.front().rot, td);
-	if (keyframes.front().change & Keyframe::CHG_CLR) {
-		vec4 clr = linearTransition(vec4(begin.color.r, begin.color.g, begin.color.b, begin.color.a), vec4(keyframes.front().color.r, keyframes.front().color.g, keyframes.front().color.b, keyframes.front().color.a), td);
-		object->color = {uint8(clr.r), uint8(clr.g), uint8(clr.b), uint8(clr.a)};
-	}
+	if (keyframes.front().change & Keyframe::CHG_CLR)
+		object->color = linearTransition(begin.color, keyframes.front().color, td);
 
 	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f) {
 		begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
@@ -125,10 +123,12 @@ void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 		select->onDoubleClick(mPos, mBut);
 }
 
-void Scene::onMouseUp(const vec2i& mPos, uint8 mBut) {
+void Scene::onMouseUp(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
+	if (mCnt != 1)
+		return;
+
 	if (capture)
 		capture->onUndrag(mBut);
-
 	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
 		stamps[mBut].inter->onClick(mPos, mBut);
 }
@@ -183,7 +183,7 @@ Interactable* Scene::getSelected(const vec2i& mPos, Layout* box) {
 		} else if (dynamic_cast<ScrollArea*>(box))
 			return box;
 		else
-			return rayCast(cursorDirection(mPos));
+			return pickObject(mPos);
 	}
 }
 

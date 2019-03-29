@@ -193,7 +193,7 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button, event.button.clicks);
 		break;
 	case SDL_MOUSEBUTTONUP:
-		scene->onMouseUp(vec2i(event.button.x, event.button.y), event.button.button);
+		scene->onMouseUp(vec2i(event.button.x, event.button.y), event.button.button, event.button.clicks);
 		break;
 	case SDL_MOUSEWHEEL:
 		scene->onMouseWheel(vec2i(event.wheel.x, -event.wheel.y));
@@ -269,11 +269,6 @@ void WindowSys::setFullscreen(bool on) {
 void WindowSys::setResolution(const string& line) {
 	setResolution(vec2i::get(line, strtoul, 0));
 	SDL_SetWindowSize(window, sets->resolution.x, sets->resolution.y);
-}
-
-void WindowSys::setResolution(const vec2i& res) {
-	sets->resolution = res.clamp(minWindowSize, displayResolution());
-	sets->resolution.x = clampLow(sets->resolution.x, sets->resolution.y);
 }
 
 void WindowSys::setVsync(Settings::VSync vsync) {

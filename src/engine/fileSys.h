@@ -117,7 +117,7 @@ private:
 	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * {vertex, uv, normal}
 	template <class T> static T resolveObjId(int id, const vector<T>& vec);
 
-	static void setWorkingDir();
+	static int setWorkingDir();
 #ifdef _WIN32
 	static bool atrcmp(DWORD attrs, FileType filter);
 #else

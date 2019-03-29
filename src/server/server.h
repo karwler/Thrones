@@ -40,7 +40,9 @@ enum class NetCode : uint8 {
 	full,
 	setup,
 	ready,
-	move
+	move,
+	kill,
+	fortress
 };
 
 inline int sendSingle(TCPsocket socket, NetCode code) {

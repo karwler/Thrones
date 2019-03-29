@@ -207,6 +207,8 @@ public:
 	virtual void onDrag(const vec2i&, const vec2i&) {}	// mouse move while left button down
 	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
 	virtual void onScroll(const vec2i&) {}				// on mouse wheel y movement
+	virtual void onKeypress(const SDL_Keysym&) {}
+	virtual void onText(const string&) {}
 };
 
 // files and strings
@@ -232,11 +234,11 @@ inline bool isDriveLetter(const string& path) {
 }
 #endif
 inline bool isSpace(char c) {
-	return c > '\0' && c <= ' ';
+	return (c > '\0' && c <= ' ') || c == 0x7F;
 }
 
 inline bool notSpace(char c) {
-	return c <= '\0' || c > ' ';
+	return uchar(c) > ' ' && c != 0x7F;
 }
 
 inline bool isDigit(char c) {
@@ -337,11 +339,6 @@ const T& clampHigh(const T& val, const T& max) {
 template <class T>
 cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
 	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
-}
-
-inline SDL_Color dimColor(SDL_Color color, float factor, float afac = 1.f) {
-	vec3 clr = vec3(color.r, color.g, color.b) * factor;
-	return {uint8(clampHigh(clr.r, float(UINT8_MAX))), uint8(clampHigh(clr.g, float(UINT8_MAX))), uint8(clampHigh(clr.b, float(UINT8_MAX))), uint8(clampHigh(float(color.a) * afac, float(UINT8_MAX)))};
 }
 
 // conversions

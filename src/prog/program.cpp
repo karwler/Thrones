@@ -100,7 +100,7 @@ void Program::eventMoveTile(BoardObject* obj) {
 void Program::eventMovePiece(BoardObject* obj) {
 	// get new position and set or swap positions with possibly already occupying piece
 	vec2b pos;
-	if (Piece* dst; BoardObject* bob = pickBob(pos, dst)) {
+	if (Piece* dst; pickBob(pos, dst)) {
 		Piece* src = static_cast<Piece*>(obj);
 		if (dst)
 			dst->setPos(src->getPos());
@@ -191,34 +191,22 @@ void Program::eventOpenMatch() {
 
 void Program::eventPlaceDragon(Button*) {
 	vec2b pos;
-	Piece* pce;
-	BoardObject* bob = pickBob(pos, pce);
-	if (!bob || game.getTile(pos)->getType() != Tile::Type::fortress)	// tile needs to be a fortress
-		return;
-
-	// kill any piece that might be occupying the tile
-	if (pce)
-		game.killPiece(pce);
-
-	// place the dragon
-	Piece* maid = game.getOwnPieces(Piece::Type::dragon);
-	maid->mode |= Object::INFO_SHOW;
-	game.placePiece(maid, pos);
-
-	// get rid of button
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
-	pm->dragonIcon->getParent()->deleteWidget(pm->dragonIcon->getID());
+	if (Piece* pce; pickBob(pos, pce) && game.placeDragon(pos, pce)) {
+		ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+		pm->dragonIcon->getParent()->deleteWidget(pm->dragonIcon->getID());	// get rid of button
+	}
 }
 
 void Program::eventMove(BoardObject* obj) {
 	vec2b pos;
-	if (Piece* pce; BoardObject* bob = pickBob(pos, pce))
+	if (Piece* pce; pickBob(pos, pce))
 		game.movePiece(static_cast<Piece*>(obj), pos, pce);
 }
 
 void Program::eventAttack(BoardObject* obj) {
-	if (Piece* pce = World::scene()->pickObject<Piece>())
-		game.attackPiece(static_cast<Piece*>(obj), pce);
+	vec2b pos;
+	if (Piece* pce; pickBob(pos, pce))
+		game.attackPiece(static_cast<Piece*>(obj), pos, pce);
 }
 
 void Program::eventExitGame(Button*) {

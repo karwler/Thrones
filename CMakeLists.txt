@@ -19,6 +19,7 @@ set(SRC_FILES
 	"src/prog/program.h"
 	"src/prog/progs.cpp"
 	"src/prog/progs.h"
+	"src/server/server.cpp"
 	"src/server/server.h"
 	"src/utils/cvec2.h"
 	"src/utils/layouts.cpp"
@@ -132,8 +133,12 @@ foreach(source IN LISTS SRC_FILES)
 	source_group("${filter_path}" FILES ${source})
 endforeach()
 
-# set server target
-set(SERVER_SRC "src/server/server.cpp" "src/server/server.h")
+# set server program target
+set(SERVER_SRC
+	"src/server/server.cpp"
+	"src/server/server.h"
+	"src/server/serverProg.cpp")
+
 string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
 add_executable(${SERVER_NAME} ${SERVER_SRC})
 target_compile_features(${SERVER_NAME} PUBLIC cxx_std_17)

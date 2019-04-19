@@ -1,12 +1,27 @@
 #include "utils/objects.h"
 
+struct DataBatch {
+	uint8 size;		// shall not exceed data size, is never actually checked though
+	uint8 data[Server::bufSiz];
+
+	DataBatch();
+
+	void push(NetCode code);
+	void push(NetCode code, const vector<uint8>& info);
+	bool send(TCPsocket sock);
+};
+
+inline void DataBatch::push(NetCode code) {
+	data[size++] = uint8(code);
+}
+
 class Game {
 public:
 	static constexpr int8 boardSize = 9;
 	static constexpr int8 homeHeight = 4;
 private:
-	static constexpr sizet numTiles = boardSize * homeHeight;	// amount of tiles on homeland (should equate to the sum of num<tile_type> + 1)
-	static constexpr sizet numPieces = 15;						// amount of one player's pieces
+	static constexpr uint8 numTiles = boardSize * homeHeight;	// amount of tiles on homeland (should equate to the sum of num<tile_type> + 1)
+	static constexpr uint8 numPieces = 15;						// amount of one player's pieces
 
 	struct TileCol {
 		array<Tile, numTiles> ene;
@@ -33,12 +48,21 @@ private:
 
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
-	uint8 rcvBuf[Server::bufSiz];
-	void (Game::*conn)();
+	uint8 (Game::*conn)(const uint8*);
+	uint8 recvb[Server::bufSiz];
+	DataBatch sendb;
 
 	TileCol tiles;
 	PieceCol pieces;
 	Object screen, board;
+
+	struct Record {
+		Piece* piece;
+		bool attack, swap;
+
+		Record(Piece* piece = nullptr, bool attack = false, bool swap = false);
+	} record;	// what happened the previous turn
+	bool myTurn;
 
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
@@ -56,6 +80,7 @@ public:
 	Piece* getOwnPieces(Piece::Type type);
 	Piece* findPiece(vec2b pos);
 	Object* getScreen();
+	bool getMyTurn() const;
 
 	vector<Object*> initObjects();
 	void prepareMatch();
@@ -68,15 +93,14 @@ public:
 	void fillInFortress();
 	void takeOutFortress();
 
-	void movePiece(Piece* piece, vec2b pos, Piece* occupant);
-	void attackPiece(Piece* piece, Piece* occupant);
-	void placePiece(Piece* piece, vec2b pos);	// just set the position
-	void killPiece(Piece* piece);				// remove from board
+	bool movePiece(Piece* piece, vec2b pos, Piece* occupant);	// returns true on end turn
+	bool attackPiece(Piece* killer, vec2b pos, Piece* piece);	// ^
+	bool placeDragon(vec2b pos, Piece* occupant);
 
 private:
-	void connectionWait();
-	void connectionSetup();
-	void connectionMatch();
+	uint8 connectionWait(const uint8* data);
+	uint8 connectionSetup(const uint8* data);
+	uint8 connectionMatch(const uint8* data);
 
 	void setScreen();
 	void setBoard();
@@ -86,23 +110,28 @@ private:
 	static void setTilesInteract(Tile* tiles, sizet num, bool on);
 	static void setPiecesInteract(array<Piece, numPieces> pieces, bool on);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
-
-	void receiveSetup();
-	bool sendData(const uint8* data, int size);
+	void prepareTurn();
 
 	bool survivalCheck(Piece* piece, vec2b pos);
-	vector<Tile*> collectMoveTiles(Piece* piece);
+	vector<Tile*> collectMoveTiles(Piece* piece, bool attacking);
 	vector<Tile*> collectTilesBySingle(vec2b pos);
 	vector<Tile*> collectTilesByArea(vec2b pos, int8 dist);
 	vector<Tile*> collectTilesByType(vec2b pos);
 	void appAdjacentTilesByType(uint8 pos, bool* visits, Tile**& out, Tile::Type type);
 	vector<Tile*> collectAttackTiles(Piece* piece);
 	vector<Tile*> collectTilesByDistance(vec2b pos, int8 dist);
+	bool checkAttack(Piece* killer, Piece* victim);
+
+	void sendData();
+	void placePiece(Piece* piece, vec2b pos);	// just set the position
+	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool ruined);
+	void updateRecord(Piece* piece, bool attack, bool swap);
 
 	bool connectFail();
 	void disconnectMessage(const string& msg);
-	void printInvalidCode() const;
+	static void printInvalidCode(uint8 code);
+	static vector<Tile*> mergeTiles(vector<Tile*> a, const vector<Tile*>& b);
 };
 
 inline Tile* Game::TileCol::begin() {
@@ -149,12 +178,12 @@ inline Tile* Game::getTile(vec2b pos) {
 	return &tiles.mid[sizet(pos.y * boardSize + pos.x)];
 }
 
-inline Piece* Game::getOwnPieces(Piece::Type type) {
-	return pieces.own.data() + Piece::amounts[uint8(type)];
-}
-
 inline Object* Game::getScreen() {
 	return &screen;
+}
+
+inline bool Game::getMyTurn() const {
+	return myTurn;
 }
 
 inline void Game::setOwnTilesInteract(bool on) {
@@ -177,9 +206,9 @@ void Game::setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id) 
 }
 
 inline bool Game::survivalCheck(Piece* piece, vec2b pos) {
-	return (piece->getType() == Piece::Type::ranger && getTile(pos)->getType() == Tile::Type::mountain) || (piece->getType() == Piece::Type::spearman && getTile(pos)->getType() == Tile::Type::water) || randDist(randGen);
+	return piece->getType() == Piece::Type::dragon || (piece->getType() == Piece::Type::ranger && getTile(pos)->getType() == Tile::Type::mountain) || (piece->getType() == Piece::Type::spearman && getTile(pos)->getType() == Tile::Type::water) || randDist(randGen);
 }
 
-inline void Game::printInvalidCode() const {
-	std::cerr << "invalid net code " << uint(*rcvBuf) << std::endl;
+inline void Game::printInvalidCode(uint8 code) {
+	std::cerr << "invalid net code " << uint(code) << std::endl;
 }

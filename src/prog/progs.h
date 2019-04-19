@@ -63,7 +63,7 @@ public:
 		pieces,
 		ready
 	} stage;
-	bool amFirst, enemyReady;
+	bool enemyReady;
 	array<Tile::Type, 9> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
 	array<uint8, sizet(Tile::Type::fortress)> tileCnt, midCnt;
 	array<uint8, sizet(Piece::Type::empty)> pieceCnt;

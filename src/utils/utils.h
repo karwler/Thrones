@@ -5,24 +5,17 @@
 #include "utils/cvec2.h"
 #define GLEW_STATIC
 #include <GL/glew.h>
-#include <array>
-#include <iostream>
 #include <memory>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
 #ifndef _WIN32
 #include <strings.h>
 #endif
 
-// get rid of SDL's main
-#ifdef main
-#undef main
-#endif
-
 // to make life easier
-using std::array;
 using std::queue;
 using std::pair;
 using std::vector;
@@ -51,11 +44,11 @@ using OCall = void (Program::*)(BoardObject*);
 
 // global constants
 #ifdef _WIN32
-const char dsep = '\\';
-const char dseps[] = "\\";
+constexpr char dsep = '\\';
+constexpr char dseps[] = "\\";
 #else
-const char dsep = '/';
-const char dseps[] = "/";
+constexpr char dsep = '/';
+constexpr char dseps[] = "/";
 #endif
 const string emptyStr = "";
 const string invalidStr = "invalid";
@@ -66,10 +59,6 @@ inline vec2i mousePos() {
 	vec2i p;
 	SDL_GetMouseState(&p.x, &p.y);
 	return p;
-}
-
-inline bool operator==(SDL_Color a, SDL_Color b) {
-	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
 inline const char* pixelformatName(uint32 format) {

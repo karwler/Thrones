@@ -1,5 +1,35 @@
 #include "engine/world.h"
 
+// DATA BATCH
+
+DataBatch::DataBatch() :
+	size(0)
+{}
+
+void DataBatch::push(NetCode code, const vector<uint8>& info) {
+	push(code);
+	memcpy(data + size, info.data(), info.size());
+	size += uint8(info.size());
+}
+
+bool DataBatch::send(TCPsocket sock) {
+	if (SDLNet_TCP_Send(sock, data, size) == size) {
+		size = 0;
+		return true;
+	}
+	return false;
+}
+
+// RECORD
+
+Game::Record::Record(Piece* piece, bool attack, bool swap) :
+	piece(piece),
+	attack(attack),
+	swap(swap)
+{}
+
+// GAME
+
 Game::Game() :
 	socks(nullptr),
 	socket(nullptr),
@@ -38,31 +68,42 @@ void Game::disconnect() {
 }
 
 void Game::tick() {
-	if (socket && SDLNet_CheckSockets(socks, 0) > 0 && SDLNet_SocketReady(socket))
-		SDLNet_TCP_Recv(socket, rcvBuf, sizeof(rcvBuf)) > 0 ? (this->*conn)() : disconnectMessage("Connection lost");
-}
-
-void Game::connectionWait() {
-	switch (NetCode(*rcvBuf)) {
-	case NetCode::full:
-		disconnectMessage("Server full");
-		break;
-	case NetCode::setup:
-		conn = &Game::connectionSetup;
-		World::program()->eventOpenSetup();
-		static_cast<ProgSetup*>(World::state())->amFirst = rcvBuf[1];
-		break;
-	default:
-		printInvalidCode();
+	if (socket && SDLNet_CheckSockets(socks, 0) > 0 && SDLNet_SocketReady(socket)) {
+		if (int len = SDLNet_TCP_Recv(socket, recvb, Server::bufSiz); len > 0)
+			for (int i = 0; i < len; i += (this->*conn)(recvb + i));
+		else
+			disconnectMessage("Connection lost");
 	}
 }
 
-void Game::connectionSetup() {
-	switch (NetCode(*rcvBuf)) {
-	case NetCode::ready:
-		receiveSetup();
-		conn = &Game::connectionMatch;
+uint8 Game::connectionWait(const uint8* data) {
+	switch (NetCode(*data)) {
+	case NetCode::full:
+		disconnectMessage("Server full");
+		return 1;
+	case NetCode::setup:
+		conn = &Game::connectionSetup;
+		myTurn = data[1];
+		World::program()->eventOpenSetup();
+		return 2;
+	default:
+		printInvalidCode(*data);
+	}
+	return 1;
+}
 
+uint8 Game::connectionSetup(const uint8* data) {
+	switch (NetCode(*data)) {
+	case NetCode::ready: {
+		uint8 bi = 1;
+		for (uint8 i = 0; i < numTiles; i++, bi++)
+			tiles.ene[i].setType(Tile::Type(data[bi]));
+		for (int8 i = 0; i < boardSize; i++, bi++)
+			static_cast<ProgSetup*>(World::state())->rcvMidBuffer[sizet(i)] = Tile::Type(data[bi]);
+		for (uint8 i = 0; i < numPieces; i++, bi += 2)
+			pieces.ene[i].setPos(*reinterpret_cast<const vec2b*>(data + bi));
+
+		conn = &Game::connectionMatch;
 		if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); ps->stage == ProgSetup::Stage::ready)
 			World::program()->eventOpenMatch();
 		else {
@@ -71,27 +112,36 @@ void Game::connectionSetup() {
 			if (ps->stage < ProgSetup::Stage::pieces)
 				World::scene()->setPopup(ProgState::createPopupMessage("Hurry the fuck up!", &Program::eventClosePopup));
 		}
-		break;
+		return bi; }
 	default:
-		printInvalidCode();
+		printInvalidCode(*data);
 	}
+	return 1;
 }
 
-void Game::connectionMatch() {
-	switch (NetCode(*rcvBuf)) {
+uint8 Game::connectionMatch(const uint8* data) {
+	switch (NetCode(*data)) {
 	case NetCode::move:
-		pieces.ene[rcvBuf[1]].setPos(*reinterpret_cast<vec2b*>(rcvBuf + 2));
-		break;
+		pieces.ene[data[1]].setPos(*reinterpret_cast<const vec2b*>(data + 2));
+		return 4;
 	case NetCode::kill: {
-		array<Piece, numPieces>& pcs = rcvBuf[1] ? pieces.ene : pieces.own;
-		pcs[rcvBuf[2]].disable();
-		break; }
-	case NetCode::fortress:
-		(tiles.begin() + rcvBuf[1])->ruined = rcvBuf[2];
-		break;
+		(data[1] ? pieces.ene : pieces.own)[data[2]].disable();
+		return 3; }
+	case NetCode::ruin:
+		(tiles.begin() + data[1])->ruined = data[2];
+		return 3;
+	case NetCode::record:
+		record = Record(pieces.ene.data() + data[1], data[2], data[3]);
+		myTurn = !myTurn;
+		prepareTurn();
+		return 4;
+	case NetCode::win:
+		disconnectMessage("You lose.");
+		return 1;
 	default:
-		printInvalidCode();
+		printInvalidCode(*data);
 	}
+	return 1;
 }
 
 Piece* Game::findPiece(vec2b pos) {
@@ -120,26 +170,20 @@ vector<Object*> Game::initObjects() {
 }
 
 void Game::prepareMatch() {
-	// make everything interactable
-	setOwnTilesInteract(true);
-	setMidTilesInteract(true);
-	setTilesInteract(tiles.ene.data(), tiles.ene.size(), true);
-	setOwnPiecesInteract(true);
-	setPiecesInteract(pieces.ene, true);
+	prepareTurn();
 
 	// rearange middle tiles
-	if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); ps->amFirst) {
+	if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); myTurn) {
 		for (sizet i = 0; i < tiles.mid.size(); i++)
 			if ((tiles.mid[i].getType() != Tile::Type::empty) && (ps->rcvMidBuffer[i] != Tile::Type::empty))
 				std::find_if(tiles.mid.begin(), tiles.mid.end(), [](const Tile& it) -> bool { return it.getType() == Tile::Type::empty; })->setType(ps->rcvMidBuffer[i]);
-	} else {
+	} else
 		for (sizet i = 0; i < tiles.mid.size(); i++)
 			if (ps->rcvMidBuffer[i] != Tile::Type::empty) {
 				if (tiles.mid[i].getType() != Tile::Type::empty)
 					tiles.mid[sizet(std::find(ps->rcvMidBuffer.begin(), ps->rcvMidBuffer.end(), Tile::Type::empty) - ps->rcvMidBuffer.begin())].setType(tiles.mid[i].getType());
 				tiles.mid[i].setType(ps->rcvMidBuffer[i]);
 			}
-	}
 	std::find_if(tiles.mid.begin(), tiles.mid.end(), [](const Tile& it) -> bool { return it.getType() == Tile::Type::empty; })->setType(Tile::Type::fortress);
 }
 
@@ -194,39 +238,89 @@ void Game::takeOutFortress() {
 		fit->setType(Tile::Type::empty);
 }
 
-void Game::movePiece(Piece* piece, vec2b pos, Piece* occupant) {
-	vec2b spos = piece->getPos();
-	vector<Tile*> moves = collectMoveTiles(piece);	// TODO: consider blocking pieces
-	if (vector<Tile*>::iterator it = std::find_if(moves.begin(), moves.end(), [pos](Tile* til) -> bool { return til->getPos() == pos; }); it == moves.end() || spos == pos)
-		return;
+bool Game::movePiece(Piece* piece, vec2b pos, Piece* occupant) {
+	bool attacking = occupant >= pieces.ene.data();
+	if (attacking ? !checkAttack(piece, occupant) : occupant && occupant->getType() == piece->getType())
+		return false;
 
-	if (occupant) {
-		if (occupant < pieces.ene.data())
-			killPiece(occupant);			// TODO: attack conditions
-		else if (survivalCheck(piece, pos))
-			placePiece(occupant, spos);		// if swapping with ally and survival check passed
-		else
-			killPiece(occupant);			// swapped piece failed check
+	vec2b spos = piece->getPos();
+	vector<Tile*> moves = collectMoveTiles(piece, attacking);	// TODO: consider blocking pieces
+	if (vector<Tile*>::iterator it = std::find_if(moves.begin(), moves.end(), [pos](Tile* til) -> bool { return til->getPos() == pos; }); it == moves.end() || spos == pos)
+		return false;
+
+	if (!survivalCheck(piece, spos)) {
+		removePiece(piece);
+		sendData();
+		return false;
 	}
-	if (survivalCheck(piece, spos)) {
-		if (Tile* til = getTile(pos); til->getType() == Tile::Type::fortress)
-			updateFortress(til, false);		// restore possibly ruined fortress
-		placePiece(piece, pos);
+
+	// handle movement
+	if (occupant && !attacking) {
+		placePiece(occupant, spos);	// switch ally
+		updateRecord(piece, false, true);
+	} else {
+		if (attacking) {
+			removePiece(occupant);	// execute attack
+			updateRecord(piece, true, false);
+		}
+		if (Tile* til = getTile(spos); til->getType() == Tile::Type::fortress && til->ruined)
+			updateFortress(til, false);	// restore fortress
+	}
+	placePiece(piece, pos);
+
+	if (Tile* til = getTile(pos); (attacking && occupant->getType() == Piece::Type::throne) || (piece->getType() == Piece::Type::throne && til->getType() == Tile::Type::fortress && til < tiles.mid.data())) {
+		sendb.push(NetCode::win);
+		sendData();
+		disconnectMessage("You win.");
 	} else
-		killPiece(piece);		// piece failed check
+		sendData();
+	return true;
 }
 
-void Game::attackPiece(Piece* piece, Piece* occupant) {
-	if (sizet(occupant - pieces.own.data()) < pieces.size())	// no friendly fire
-		return;
+bool Game::attackPiece(Piece* killer, vec2b pos, Piece* piece) {
+	vec2b kpos = killer->getPos();
+	vector<Tile*> attacks = collectAttackTiles(killer);
+	if (std::find_if(attacks.begin(), attacks.end(), [pos](Tile* til) -> bool { return til->getPos() == pos; }) == attacks.end() || kpos == pos)
+		return false;
 
-	vec2b pos = occupant->getPos();
-	vector<Tile*> attacks = collectAttackTiles(piece);
-	if (vector<Tile*>::iterator it = std::find_if(attacks.begin(), attacks.end(), [pos](Tile* til) -> bool { return til->getPos() == pos; }); it != attacks.end()) {
-		if ((*it)->getType() == Tile::Type::fortress)
-			updateFortress(*it, true);
-		killPiece(occupant);	// TODO: attack conditions
+	// specific behaviour for firing on fortress
+	bool succ = survivalCheck(killer, kpos);
+	if (Tile* til = getTile(pos); til->getType() == Tile::Type::fortress && !til->ruined) {	// TODO: separate check for adjacent pieces
+		if (succ) {
+			updateFortress(til, true);
+			updateRecord(killer, true, false);
+		} else
+			removePiece(killer);
+
+		sendData();
+		return succ;
 	}
+	// no piece, no friendly fire and unmet conditions
+	if (!piece || piece < pieces.ene.data() || !checkAttack(killer, piece))
+		return false;
+
+	if (succ) {
+		removePiece(piece);
+		updateRecord(killer, true, false);
+	} else
+		removePiece(killer);
+	sendData();
+	return succ;
+}
+
+bool Game::placeDragon(vec2b pos, Piece* occupant) {
+	if (getTile(pos)->getType() != Tile::Type::fortress)	// tile needs to be a fortress
+		return false;
+
+	// kill any piece that might be occupying the tile
+	if (occupant)
+		removePiece(occupant);
+
+	// place the dragon
+	Piece* maid = getOwnPieces(Piece::Type::dragon);
+	maid->mode |= Object::INFO_SHOW;
+	placePiece(maid, pos);
+	return true;
 }
 
 void Game::setScreen() {
@@ -290,39 +384,27 @@ void Game::setPiecesInteract(array<Piece, Game::numPieces> pieces, bool on) {
 		it.mode = on ? it.mode | Object::INFO_SHOW | Object::INFO_RAYCAST : it.mode & ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
 }
 
-void Game::receiveSetup() {
-	sizet bi = 1;
-	for (sizet i = 0; i < numTiles; i++, bi++)
-		tiles.ene[i].setType(Tile::Type(rcvBuf[bi]));
-	for (int8 i = 0; i < boardSize; i++, bi++)
-		static_cast<ProgSetup*>(World::state())->rcvMidBuffer[sizet(i)] = Tile::Type(rcvBuf[bi]);
-	for (sizet i = 0; i < numPieces; i++, bi += 2)
-		pieces.ene[i].setPos(*reinterpret_cast<vec2b*>(rcvBuf + bi));
+void Game::prepareTurn() {
+	setOwnTilesInteract(myTurn);
+	setMidTilesInteract(myTurn);
+	setTilesInteract(tiles.ene.data(), tiles.ene.size(), myTurn);
+	setOwnPiecesInteract(myTurn);
+	setPiecesInteract(pieces.ene, myTurn);
 }
 
-void Game::sendSetup() {
-	uint8 buff[1 + boardSize + numTiles + numPieces * 2] = {uint8(NetCode::ready)};	// size should be 121
-	for (sizet i = 0; i < boardSize + numTiles; i++)
-		buff[boardSize + numTiles - i] = uint8(tiles.mid[i].getType());
-	for (sizet i = 0, bi = boardSize + numTiles + 1; i < numPieces; i++, bi += 2)
-		*reinterpret_cast<vec2b*>(buff + bi) = pieces.own[i].getPos();
-	sendData(buff, sizeof(buff));
+Piece* Game::getOwnPieces(Piece::Type type) {
+	Piece* it = pieces.own.data();
+	for (uint8 t = 0; t < uint8(type); t++)
+		it += Piece::amounts[t];
+	return it;
 }
 
-bool Game::sendData(const uint8* data, int size) {
-	if (SDLNet_TCP_Send(socket, data, size) != size) {
-		disconnectMessage(SDLNet_GetError());
-		return false;
-	}
-	return true;
-}
-
-vector<Tile*> Game::collectMoveTiles(Piece* piece) {
+vector<Tile*> Game::collectMoveTiles(Piece* piece, bool attacking) {
 	vec2b pos = piece->getPos();
 	if (piece->getType() == Piece::Type::spearman)
-		return getTile(pos)->getType() == Tile::Type::water ? collectTilesByType(pos) : collectTilesBySingle(pos);	// TODO: single or any water
+		return getTile(pos)->getType() == Tile::Type::water ? mergeTiles(collectTilesByType(pos), collectTilesBySingle(pos)) : collectTilesBySingle(pos);
 	if (piece->getType() == Piece::Type::lancer)
-		return getTile(pos)->getType() == Tile::Type::plains && true ? collectTilesByType(pos) : collectTilesBySingle(pos);	// TOOD: single or any plains if no attack
+		return getTile(pos)->getType() == Tile::Type::plains && attacking ? collectTilesBySingle(pos) : mergeTiles(collectTilesByType(pos), collectTilesBySingle(pos));
 	if (piece->getType() == Piece::Type::dragon)
 		return collectTilesByArea(pos, 4);
 	return collectTilesBySingle(pos);
@@ -332,10 +414,9 @@ vector<Tile*> Game::collectTilesBySingle(vec2b pos) {
 	vector<Tile*> ret;
 	int8 xs = pos.x != 0 ? pos.x - 1 : 0;
 	int8 xe = pos.x != boardSize - 1 ? pos.x + 2 : boardSize;
-	for (int8 y = pos.y != -homeHeight ? pos.y - 1 : -homeHeight, ye = pos.y != homeHeight ? pos.y + 1 : homeHeight, ofs = y * boardSize; y <= ye; y++) {
+	for (int8 y = pos.y != -homeHeight ? pos.y - 1 : -homeHeight, ye = pos.y != homeHeight ? pos.y + 1 : homeHeight, ofs = y * boardSize; y <= ye; y++)
 		for (int8 x = xs; x < xe; x++)
 			ret.push_back(tiles.begin() + ofs + x);
-	}
 	return ret;
 }
 
@@ -392,7 +473,6 @@ vector<Tile*> Game::collectAttackTiles(Piece* piece) {
 		return collectTilesByDistance(piece->getPos(), 2);
 	if (piece->getType() == Piece::Type::trebuchet)
 		return collectTilesByDistance(piece->getPos(), 3);
-	// TODO: dragon and throne
 	return {};
 }
 
@@ -429,23 +509,60 @@ vector<Tile*> Game::collectTilesByDistance(vec2b pos, int8 dist) {
 	return ret;
 }
 
-void Game::placePiece(Piece* piece, vec2b pos) {
-	piece->setPos(pos);
-	uint8 buff[4] = {uint8(NetCode::kill), uint8(piece - pieces.own.data()), uint8(boardSize - pos.x - 1), uint8(-pos.y)};	// rotate position 180
-	sendData(buff, sizeof(buff));
+bool Game::checkAttack(Piece* killer, Piece* victim) {
+	Tile* dtil = getTile(victim->getPos());
+	if (killer->getType() != Piece::Type::throne && dtil->getType() == Tile::Type::fortress && !dtil->ruined)
+		return false;
+	if (victim->getType() == Piece::Type::ranger && dtil->getType() == Tile::Type::mountain)
+		return false;
+	if (killer->getType() == Piece::Type::crossbowman && (dtil->getType() == Tile::Type::forest || dtil->getType() == Tile::Type::mountain))
+		return false;
+	if (killer->getType() == Piece::Type::catapult && dtil->getType() == Tile::Type::forest)
+		return false;
+	if (victim->getType() == Piece::Type::warhorse && victim == record.piece && (record.attack || record.swap))
+		return false;
+	if (killer->getType() != Piece::Type::dragon) {
+		if (victim->getType() == Piece::Type::elephant && dtil->getType() == Tile::Type::plains)
+			return false;
+	} else if (dtil->getType() == Tile::Type::forest)
+		return false;
+	return true;
 }
 
-void Game::killPiece(Piece* piece) {
+void Game::sendSetup() {
+	sendb.size = 1 + boardSize + numTiles + numPieces * sizeof(vec2b);
+	sendb.data[0] = uint8(NetCode::ready);
+	for (sizet i = 0; i < boardSize + numTiles; i++)
+		sendb.data[boardSize + numTiles - i] = uint8(tiles.mid[i].getType());
+	for (sizet i = 0, e = boardSize + numTiles + 1; i < numPieces; i++)
+		*reinterpret_cast<vec2b*>(sendb.data + e + i * sizeof(vec2b)) = pieces.own[i].getPos();
+	sendData();
+}
+
+void Game::sendData() {
+	if (!sendb.send(socket))
+		disconnectMessage(SDLNet_GetError());
+}
+
+void Game::placePiece(Piece* piece, vec2b pos) {
+	piece->setPos(pos);
+	sendb.push(NetCode::move, {uint8(piece - pieces.own.data()), uint8(boardSize - pos.x - 1), uint8(-pos.y)});	// rotate position 180
+}
+
+void Game::removePiece(Piece* piece) {
 	piece->disable();
 	bool mine = piece < pieces.ene.data();
-	uint8 buff[3] = {uint8(NetCode::kill), uint8(mine), uint8(piece - (mine ? pieces.own.data() : pieces.ene.data()))};	// index doesn't need to be modified
-	sendData(buff, sizeof(buff));
+	sendb.push(NetCode::kill, {uint8(mine), uint8(piece - (mine ? pieces.own.data() : pieces.ene.data()))});	// index doesn't need to be modified
 }
 
 void Game::updateFortress(Tile* fort, bool ruined) {
 	fort->ruined = ruined;
-	uint8 buff[3] = {uint8(NetCode::fortress), uint8(tiles.end() - fort - 1), ruined};	// invert index of fort
-	sendData(buff, sizeof(buff));
+	sendb.push(NetCode::ruin, {uint8(tiles.end() - fort - 1), ruined});	// invert index of fort
+}
+
+void Game::updateRecord(Piece* piece, bool attack, bool swap) {
+	record = Record(piece, attack, swap);
+	sendb.push(NetCode::record, {uint8(piece - pieces.own.data()), attack, swap});
 }
 
 bool Game::connectFail() {
@@ -456,4 +573,12 @@ bool Game::connectFail() {
 void Game::disconnectMessage(const string& msg) {
 	disconnect();
 	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventClosePopup));
+}
+
+vector<Tile*> Game::mergeTiles(vector<Tile*> a, const vector<Tile*>& b) {
+	pdift osiz = pdift(a.size());
+	for (Tile* it : b)
+		if (vector<Tile*>::iterator end = a.begin() + osiz; std::find(a.begin(), end, it) == end)
+			a.push_back(it);
+	return a;
 }

@@ -133,7 +133,7 @@ void BoardObject::onHold(const vec2i&, uint8 mBut) {
 		World::scene()->capture = this;
 }
 
-void BoardObject::onDrag(const vec2i& mPos, const vec2i&) {
+void BoardObject::onDrag(const vec2i&, const vec2i&) {
 	// TODO: update position to mouse pos
 }
 

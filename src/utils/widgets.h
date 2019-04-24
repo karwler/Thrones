@@ -72,7 +72,7 @@ public:
 	virtual bool selectable() const;
 
 protected:
-	static void drawRect(const Rect& rect, const vec4& color);
+	static void drawRect(const Rect& rect, const vec4& color, int z = 0);
 	static void drawTexture(const Texture* tex, Rect rect, const Rect& frame);
 };
 
@@ -219,7 +219,6 @@ public:
 protected:
 	virtual vec2i textPos() const;
 	virtual void updateTextTex();
-	void closeTextTex();
 };
 
 inline const string& Label::getText() const {
@@ -282,12 +281,12 @@ public:
 	LabelEdit(const Size& relSize = 1.f, const string& text = emptyStr, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, TextType type = TextType::text, const Texture* bgTex = nullptr, const vec4& color = colorNormal, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
+	virtual void draw() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onDoubleClick(const vec2i&, uint8) override {}
 	virtual void onKeypress(const SDL_Keysym& key) override;
 	virtual void onText(const string& str) override;
 
-	void drawCaret() const;
 	const string& getOldText() const;
 	virtual void setText(const string& str) override;
 

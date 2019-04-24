@@ -36,21 +36,15 @@ void Program::eventPlaceTile(Button* but) {
 		return;
 
 	// remove any piece that may already be there
+	bool home = game.isHomeTile(til);
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (til->getType() != Tile::Type::empty) {
-		Draglet* ico = static_cast<Draglet*>(ps->ticons->getWidget(uint8(til->getType()) + 1));
-		ico->setColor(til->color);
-		ico->setLcall(&Program::eventPlaceTile);
-		ps->tileCnt[uint8(til->getType())]++;
-	}
+	if (til->getType() != Tile::Type::empty)
+		ps->addTile(til->getType(), 1, home);
 
 	// place the tile
 	Draglet* dlt = static_cast<Draglet*>(but);
 	til->setType(valToEnum<Tile::Type>(Tile::colors, dlt->color));
-	if (--ps->tileCnt[uint8(til->getType())] == 0) {
-		dlt->setColor(dlt->color * 0.5f);
-		dlt->setLcall(nullptr);
-	}
+	ps->addTile(til->getType(), -1, home);
 }
 
 void Program::eventPlacePiece(Button* but) {
@@ -62,12 +56,8 @@ void Program::eventPlacePiece(Button* but) {
 
 	// remove any piece that may be occupying that tile already
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (pce) {
-		Draglet* ico = static_cast<Draglet*>(ps->picons->getWidget(uint8(pce->getType()) + 1));
-		ico->setColor(BoardObject::defaultColor);
-		ico->setLcall(&Program::eventPlacePiece);
-		ps->pieceCnt[uint8(pce->getType())]++;
-	}
+	if (pce)
+		ps->addPiece(pce->getType(), 1);
 
 	// find the first not placed piece of the specified type
 	Draglet* dlt = static_cast<Draglet*>(but);
@@ -80,10 +70,7 @@ void Program::eventPlacePiece(Button* but) {
 	// place it if exists
 	if (id < Piece::amounts[uint8(ptyp)]) {
 		pieces[id].setPos(pos);
-		if (--ps->pieceCnt[uint8(pieces[id].getType())] == 0) {
-			dlt->setColor(dlt->color * 0.5f);
-			dlt->setLcall(nullptr);
-		}
+		ps->addPiece(pieces[id].getType(), -1);
 	}
 }
 
@@ -111,22 +98,22 @@ void Program::eventMovePiece(BoardObject* obj) {
 void Program::eventClearTile(BoardObject* obj) {
 	Tile* til = static_cast<Tile*>(obj);
 
-	static_cast<ProgSetup*>(state.get())->tileCnt[uint8(til->getType())]++;
+	static_cast<ProgSetup*>(state.get())->addTile(til->getType(), 1, game.isHomeTile(til));
 	til->setType(Tile::Type::empty);
 }
 
 void Program::eventClearPiece(BoardObject* obj) {
 	Piece* pce = static_cast<Piece*>(obj);
 
-	static_cast<ProgSetup*>(state.get())->pieceCnt[uint8(pce->getType())]++;
-	pce->setType(Piece::Type::empty);
+	static_cast<ProgSetup*>(state.get())->addPiece(pce->getType(), 1);
+	pce->setPos(INT8_MIN);
 }
 
 void Program::eventSetupNext(Button*) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	switch (ps->stage) {
 	case ProgSetup::Stage::tiles:
-		if (string err = game.checkOwnTiles(); err.empty()) {
+		if (string err = game.checkOwnTiles(); !err.empty()) {
 			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
 			return;
 		}
@@ -135,7 +122,7 @@ void Program::eventSetupNext(Button*) {
 		game.setMidTilesInteract(true);
 		break;
 	case ProgSetup::Stage::middles:
-		if (string err = game.checkMidTiles(); err.empty()) {
+		if (string err = game.checkMidTiles(); !err.empty()) {
 			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
 			return;
 		}
@@ -144,7 +131,7 @@ void Program::eventSetupNext(Button*) {
 		game.setOwnPiecesInteract(true);
 		break;
 	case ProgSetup::Stage::pieces:
-		if (string err = game.checkOwnPieces(); err.empty()) {
+		if (string err = game.checkOwnPieces(); !err.empty()) {
 			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
 			return;
 		}

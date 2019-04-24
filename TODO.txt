@@ -1,7 +1,0 @@
-- adjacent piece fortress ruin
-- handle movement blocking pieces
-- icon display while dragging widget
-
-- test setup phase
-- test match phase
-- test obj loading

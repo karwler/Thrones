@@ -1,43 +1,4 @@
 #include "engine/world.h"
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
-// CAMERA
-
-Camera::Camera(const vec3& pos, const vec3& lat, double fov, double znear, double zfar) :
-	pos(pos),
-	lat(lat),
-	fov(fov),
-	znear(znear),
-	zfar(zfar)
-{}
-
-void Camera::update() const {
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(fov, vec2d(World::winSys()->windowSize()).ratio(), znear, zfar);
-	gluLookAt(double(pos.x), double(pos.y), double(pos.z), double(lat.x), double(lat.y), double(lat.z), 0.0, 1.0, 0.0);
-	glMatrixMode(GL_MODELVIEW);
-}
-
-void Camera::updateUI() {
-	vec2d res = World::winSys()->windowSize();
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0, res.x, res.y, 0.0, 0.0, 1.0);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-}
-
-vec3 Camera::direction(const vec2i& mPos) const {
-	vec2 res = World::winSys()->windowSize().glm();
-	vec2 mouse = mPos.glm() / (res / 2.f) - 1.f;
-
-	mat4 proj = glm::perspective(glm::radians(float(fov)), res.x / res.y, float(znear), float(zfar));
-	mat4 view = glm::lookAt(pos, lat, vec3(0.f, 1.f, 0.f));
-	return glm::normalize(glm::inverse(proj * view) * vec4(mouse.x, -mouse.y, 1.f, 1.f));
-}
 
 // VERTEX
 
@@ -52,14 +13,14 @@ Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
 const vec4 Object::defaultColor(1.f);
 
 Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, const Texture* tex, const vec4& color, Info mode) :
+	verts(verts),
+	elems(elems),
+	tex(tex),
 	pos(pos),
 	rot(rot),
 	scl(scl),
 	color(color),
-	mode(mode),
-	tex(tex),
-	verts(verts),
-	elems(elems)
+	mode(mode)
 {}
 
 void Object::draw() const {
@@ -114,33 +75,72 @@ const vector<Vertex> BoardObject::squareVertices = {
 	Vertex(vec3(0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
 };
 
-BoardObject::BoardObject(vec2b pos, float poz, OCall lcall, OCall rcall, OCall ucall, const Texture* tex, const vec4& color, Info mode) :
+const vec4 BoardObject::moveIconColor(1.f, 1.f, 0.f, 1.f);
+const vec4 BoardObject::fireIconColor(1.f, 0.f, 0.f, 1.f);
+
+BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
 	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
-	lcall(lcall),
-	rcall(rcall),
-	ucall(ucall)
+	dragState(DragState::none),
+	clcall(clcall),
+	ulcall(ulcall),
+	urcall(urcall)
 {}
+
+void BoardObject::draw() const {
+	if (dragState == DragState::none)
+		Object::draw();
+	else {
+		vec3 ray = World::scene()->pickerRay(mousePos());
+		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::self)
+			drawRect(loc, rot, scl, color, mode & INFO_TEXTURE ? tex : nullptr);
+		else {
+			Object::draw();
+			drawRect(loc, rot, scl, dragState == DragState::move ? moveIconColor : fireIconColor, nullptr);	// TODO: icon textures
+		}
+	}
+}
+
+void BoardObject::drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex) {
+	if (tex) {
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, tex->getID());
+	} else
+		glDisable(GL_TEXTURE_2D);
+	glColor4fv(glm::value_ptr(color));
+
+	glLoadIdentity();
+	glTranslatef(pos.x, pos.y, pos.z);
+	glRotatef(rot.x, 1.f, 0.f, 0.f);
+	glRotatef(rot.y, 0.f, 1.f, 0.f);
+	glRotatef(rot.z, 0.f, 0.f, 1.f);
+	glScalef(scl.x, scl.y, scl.z);
+
+	glBegin(GL_QUADS);
+	for (Vertex it : squareVertices) {
+		glTexCoord2fv(glm::value_ptr(it.tuv));
+		glNormal3fv(glm::value_ptr(it.nrm));
+		glVertex3fv(glm::value_ptr(it.pos));
+	}
+	glEnd();
+}
 
 void BoardObject::onClick(const vec2i&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
-		World::prun(lcall, this);
-	else if (mBut == SDL_BUTTON_RIGHT)
-		World::prun(rcall, this);
+		World::prun(clcall, this);
 }
 
 void BoardObject::onHold(const vec2i&, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT)
+	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
+		dragState = mBut == SDL_BUTTON_LEFT ? ulcall == &Program::eventMove ? DragState::move : DragState::self : DragState::fire;
 		World::scene()->capture = this;
-}
-
-void BoardObject::onDrag(const vec2i&, const vec2i&) {
-	// TODO: update position to mouse pos
+	}
 }
 
 void BoardObject::onUndrag(uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT) {
+	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
+		dragState = DragState::none;
 		World::scene()->capture = nullptr;
-		World::prun(ucall, this);
+		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this);
 	}
 }
 
@@ -176,8 +176,8 @@ const array<uint8, Tile::amounts.size()> Tile::amounts = {
 	7
 };
 
-Tile::Tile(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode) :
-	BoardObject(pos, 0.f, lcall, rcall, ucall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+Tile::Tile(vec2b pos, Type type, OCall clcall, OCall ulcall, OCall urcall, Info mode) :
+	BoardObject(pos, 0.f, clcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
 	ruined(false),
 	type(type)
 {}

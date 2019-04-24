@@ -2,18 +2,6 @@
 
 #include "utils.h"
 
-// additional data for rendering objects
-struct Camera {
-	vec3 pos, lat;
-	double fov, znear, zfar;
-
-	Camera(const vec3& pos = vec3(0.f, 8.f, 8.f), const vec3& lat = vec3(0.f, 0.f, 2.f), double fov = 45.0, double znear = 0.01, double zfar = 20.0);
-
-	void update() const;
-	static void updateUI();
-	vec3 direction(const vec2i& mPos) const;
-};
-
 // exactly what it sounds like
 struct Vertex {
 	vec3 pos;
@@ -38,18 +26,18 @@ public:
 
 	static const vec4 defaultColor;
 
+	vector<Vertex> verts;
+	vector<ushort> elems;	// size must be a multiple of 3
+	const Texture* tex;
 	vec3 pos, rot, scl;
 	vec4 color;
 	Info mode;
-	const Texture* tex;
-	vector<Vertex> verts;
-	vector<ushort> elems;	// size must be a multiple of 3
 
 public:
 	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const vector<Vertex>& verts = {}, const vector<ushort>& elems = {}, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL);
 	virtual ~Object() override = default;
 
-	void draw() const;
+	virtual void draw() const;
 
 	mat4 getTransform() const;
 private:
@@ -90,29 +78,49 @@ public:
 	static const vector<ushort> squareElements;
 private:
 	static const vector<Vertex> squareVertices;
+	static const vec4 moveIconColor, fireIconColor;
 
-	OCall lcall, rcall, ucall;
+	enum class DragState : uint8 {
+		none,
+		self,
+		move,
+		fire
+	};
+
+	DragState dragState;
+	OCall clcall, ulcall, urcall;
 
 public:
-	BoardObject(vec2b pos = 0, float poz = 0.f, OCall lcall = nullptr, OCall rcall = nullptr, OCall ucall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
+	BoardObject(vec2b pos = 0, float poz = 0.f, OCall clcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
 	virtual ~BoardObject() override = default;
 
+	virtual void draw() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
-	virtual void onDrag(const vec2i& mPos, const vec2i& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
 
 	vec2b getPos() const;
 	void setPos(vec2b gpos);
-	void setLcall(OCall pcl);
+	void setClcall(OCall pcl);
+	void setUlcall(OCall pcl);
+	void setUrcall(OCall pcl);
 	void disable();
 
 private:
+	static void drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex);
 	static vec3 btop(vec2b bpos, float poz);
 };
 
-inline void BoardObject::setLcall(OCall pcl) {
-	lcall = pcl;
+inline void BoardObject::setClcall(OCall pcl) {
+	clcall = pcl;
+}
+
+inline void BoardObject::setUlcall(OCall pcl) {
+	ulcall = pcl;
+}
+
+inline void BoardObject::setUrcall(OCall pcl) {
+	urcall = pcl;
 }
 
 inline vec2b BoardObject::getPos() const {
@@ -148,7 +156,7 @@ private:
 
 public:
 	Tile() = default;
-	Tile(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode);
+	Tile(vec2b pos, Type type, OCall clcall, OCall ulcall, OCall urcall, Info mode);
 	virtual ~Tile() override = default;
 
 	Type getType() const;
@@ -178,17 +186,16 @@ public:
 		warhorse,
 		elephant,
 		dragon,
-		throne,
-		empty
+		throne
 	};
-	static const array<string, sizet(Type::empty)> names;	// for textures	
-	static const array<uint8, sizet(Type::empty)> amounts;
+	static const array<string, sizet(Type::throne)+1> names;	// for textures
+	static const array<uint8, sizet(Type::throne)+1> amounts;
 private:
 	Type type;
 
 public:
 	Piece() = default;
-	Piece(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode);
+	Piece(vec2b pos, Type type, OCall clcall, OCall urcall, OCall ulcall, Info mode);
 	virtual ~Piece() override = default;
 
 	Type getType() const;

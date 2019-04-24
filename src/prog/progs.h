@@ -9,7 +9,7 @@ protected:
 	static constexpr int lineHeight = 30;
 	static constexpr int superHeight = 40;
 	static constexpr int superSpacing = 10;
-	static constexpr int iconSize = 30;
+	static constexpr int iconSize = 64;
 
 	struct Text {
 		string text;
@@ -56,7 +56,15 @@ public:
 };
 
 class ProgSetup : public ProgState {
+private:
+	array<uint8, sizet(Tile::Type::fortress)> tileCnt, midCnt;
+	array<uint8, sizet(Piece::Type::throne)+1> pieceCnt;
+	Layout* ticons;
+	Layout* micons;
+	Layout* picons;
 public:
+	Label* message;
+
 	enum class Stage : uint8 {
 		tiles,
 		middles,
@@ -65,12 +73,6 @@ public:
 	} stage;
 	bool enemyReady;
 	array<Tile::Type, 9> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
-	array<uint8, sizet(Tile::Type::fortress)> tileCnt, midCnt;
-	array<uint8, sizet(Piece::Type::empty)> pieceCnt;
-	Layout* ticons;
-	Layout* micons;
-	Layout* picons;
-	Label* message;
 
 public:
 	ProgSetup();
@@ -78,14 +80,25 @@ public:
 
 	virtual void eventEscape() override;
 
-	virtual Layout* createLayout() override;
-	void setTicons();
-	void setMicons();
-	void setPicons();
+	void addTile(Tile::Type type, int8 mov, bool home);
+	void addPiece(Piece::Type type, int8 mov);
 
+	virtual Layout* createLayout() override;
 private:
+	static Layout* getTicons();
+	Layout* setPicons();
 	Layout* createSidebar(int& sideLength) const;
+
+	void incdecIcon(Layout* icns, uint8* cntr, sizet tid, int8 mov, bool isTile);	// mov has to be either -1 or 1
 };
+
+inline void ProgSetup::addTile(Tile::Type type, int8 mov, bool home) {
+	incdecIcon(home ? ticons : micons, (home ? tileCnt : midCnt).data(), sizet(type), mov, true);
+}
+
+inline void ProgSetup::addPiece(Piece::Type type, int8 mov) {
+	incdecIcon(picons, pieceCnt.data(), sizet(type), mov, false);
+}
 
 class ProgMatch : public ProgState {
 public:

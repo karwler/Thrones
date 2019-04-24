@@ -1,5 +1,7 @@
 #include "utils.h"
 
+// RECT
+
 vec4 Rect::crop(const Rect& rect) {
 	Rect isct;
 	if (!SDL_IntersectRect(this, &rect, &isct)) {
@@ -18,40 +20,54 @@ vec4 Rect::crop(const Rect& rect) {
 	return crop;
 }
 
-void Texture::load(SDL_Surface* img, const string& file, bool setFilename) {
-	if (!img) {
-		*this = Texture();
+// TEXTURE
+
+void Texture::loadFile(const string& file) {
+	SDL_Surface* img = SDL_LoadBMP(file.c_str());
+	if (!img || img->format->format != SDL_PIXELFORMAT_ARGB8888) {
+		SDL_FreeSurface(img);
+		res = 0;
 		throw std::runtime_error("failed to load texture " + file + '\n' + SDL_GetError());
 	}
 
-	switch (img->format->BytesPerPixel) {
-	case 3:
-		format = GL_RGB;
-		break;
-	case 4:
-		format = GL_RGBA;
-		break;
-	default:
-		SDL_FreeSurface(img);
-		*this = Texture();
-		throw std::runtime_error(string("invalid texture pixel format ") + SDL_GetPixelFormatName(img->format->format) + ' ' + file);
+	for (int i = 0, s = img->w * img->h; i < s; i++) {
+		uint32* pix = static_cast<uint32*>(img->pixels) + i;
+		*pix = (*pix << 8) | (*pix >> 24);
 	}
-	name = setFilename ? delExt(file) : emptyStr;
+	loadGl(img, delExt(file), GL_RGBA);
+}
+
+void Texture::loadText(SDL_Surface* img) {
+	if (img && img->format->format == SDL_PIXELFORMAT_BGRA32)
+		loadGl(img, emptyStr, GL_BGRA);
+	else {
+		SDL_FreeSurface(img);
+		res = 0;
+	}
+}
+
+void Texture::loadGl(SDL_Surface* img, const string& text, GLenum format) {
+	name = text;
 	res = vec2i(img->w, img->h);
 
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GLint(format), img->w, img->h, 0, format, GL_UNSIGNED_BYTE, img->pixels);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->w, img->h, 0, format, GL_UNSIGNED_BYTE, img->pixels);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
 	SDL_FreeSurface(img);
 }
 
 void Texture::close() {
-	glDeleteTextures(1, &id);
-	*this = Texture();
+	if (valid()) {
+		glDeleteTextures(1, &id);
+		res = 0;
+	}
 }
+
+// STRINGS
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

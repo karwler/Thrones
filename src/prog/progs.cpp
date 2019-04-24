@@ -112,30 +112,26 @@ Layout* ProgMenu::createLayout() {
 // PROG SETUP
 
 ProgSetup::ProgSetup() :
+	midCnt({1, 1, 1, 1}),
 	stage(Stage::tiles),
-	enemyReady(false),
-	midCnt({1, 1, 1, 1})
+	enemyReady(false)
 {
-	memcpy(tileCnt.data(), Tile::amounts.data(), tileCnt.size());
-	memcpy(pieceCnt.data(), Piece::amounts.data(), pieceCnt.size());
-
-	setTicons();
-	setMicons();
-	setPicons();
+	std::copy(Tile::amounts.begin(), Tile::amounts.begin() + tileCnt.size(), tileCnt.begin());
+	std::copy(Piece::amounts.begin(), Piece::amounts.begin() + pieceCnt.size(), pieceCnt.begin());
 }
 
 void ProgSetup::eventEscape() {
 	if (!tryClosePopup())
-		stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventShowWaitPopup));
+		stage > Stage::tiles && stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventClosePopup));
 }
 
 Layout* ProgSetup::createLayout() {
 	// center piece
 	vector<Widget*> midl = {
-		new Widget(),
+		new Widget(1.f),
 		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
-		new Widget(),
-		stage == Stage::tiles ? ticons : stage == Stage::middles ? micons : picons
+		new Widget(5.f),
+		stage == Stage::tiles ? ticons = getTicons() : stage == Stage::middles ? micons = getTicons() : setPicons()
 	};
 
 	// root layout
@@ -148,52 +144,37 @@ Layout* ProgSetup::createLayout() {
 	return new Layout(1.f, cont, false, 0);
 }
 
-void ProgSetup::setTicons() {
-	vector<Widget*> tbot = {
-		new Widget(),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::plains)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::forest)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::mountain)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::water)]),
-		new Widget()
-	};
-	ticons = new Layout(iconSize, tbot);
+Layout* ProgSetup::getTicons() {
+	vector<Widget*> tbot = {new Widget()};
+	for (sizet i = 0; i < 4; i++)
+		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[i]));
+	tbot.push_back(new Widget());
+	return new Layout(iconSize, tbot, false);
 }
 
-void ProgSetup::setMicons() {
-	vector<Widget*> mbot = {
-		new Widget(),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::plains)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::forest)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::mountain)]),
-		new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[uint8(Tile::Type::water)]),
-		new Widget()
-	};
-	micons = new Layout(iconSize, mbot);
-}
-
-void ProgSetup::setPicons() {
-	vector<Widget*> pbot = {
-		new Widget(),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::ranger)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::spearman)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::crossbowman)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::catapult)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::trebuchet)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::lancer)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::warhorse)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::elephant)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])),
-		new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::throne)])),
-		new Widget()
-	};
-	picons = new Layout(iconSize, pbot);
+Layout* ProgSetup::setPicons() {
+	vector<Widget*> pbot = {new Widget()};
+	for (const string& it : Piece::names)
+		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
+	pbot.push_back(new Widget());
+	return picons = new Layout(iconSize, pbot, false);
 }
 
 Layout* ProgSetup::createSidebar(int& sideLength) const {
 	vector<string> sidt = stage == Stage::tiles ? vector<string>({"Exit", "Next"}) : vector<string>({"Exit", "Back", "Next"});
 	sideLength = findMaxLength(sidt.begin(), sidt.end());
-	return new Layout(sideLength, stage == Stage::tiles ? vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventExitGame), new Label(lineHeight, popBack(sidt), &Program::eventSetupNext)}) : vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventExitGame), new Label(lineHeight, popBack(sidt), &Program::eventSetupBack), new Label(lineHeight, popBack(sidt), &Program::eventSetupNext)}));
+	return new Layout(sideLength, stage == Stage::tiles ? vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventExitGame)}) : vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventSetupBack), new Label(lineHeight, popBack(sidt), &Program::eventExitGame)}));
+}
+
+void ProgSetup::incdecIcon(Layout* icns, uint8* cntr, sizet tid, int8 mov, bool isTile) {
+	if (Draglet* ico = static_cast<Draglet*>(icns->getWidget(tid + 1)); mov < 0 && cntr[tid] == 1) {
+		ico->setColor(ico->color * 0.5f);
+		ico->setLcall(nullptr);
+	} else if (mov > 0 && cntr[tid] == 0) {
+		ico->setColor(isTile ? Tile::colors[tid] : BoardObject::defaultColor);
+		ico->setLcall(isTile ? &Program::eventPlaceTile : &Program::eventPlacePiece);
+	}
+	cntr[tid] += mov;
 }
 
 // PROG MATCH

@@ -131,40 +131,36 @@ class Texture {
 private:
 	GLuint id;
 	vec2i res;
-	GLenum format;
 	string name;
 
 public:
-	Texture(GLuint id = GLuint(-1), const vec2i& res = 0, GLenum format = 0);
+	Texture();
 	Texture(const string& file);
-	Texture(SDL_Surface* img, const string& file, bool setFilename = true);
+	Texture(SDL_Surface* img);
 
-	void load(const string& file);
-	void load(SDL_Surface* img, const string& file, bool setFilename = true);
+	void loadFile(const string& file);
+	void loadText(SDL_Surface* img);
 	void close();
 
 	GLuint getID() const;
 	const vec2i getRes() const;
 	bool valid() const;
 	const string& getName() const;
+
+private:
+	void loadGl(SDL_Surface* img, const string& text, GLenum format);
 };
 
-inline Texture::Texture(GLuint tex, const vec2i& res, GLenum format) :
-	id(tex),
-	res(res),
-	format(format)
+inline Texture::Texture() :
+	res(0)
 {}
 
 inline Texture::Texture(const string& file) {
-	load(file);
+	loadFile(file);
 }
 
-inline Texture::Texture(SDL_Surface* img, const string& file, bool setFilename) {
-	load(img, file, setFilename);
-}
-
-inline void Texture::load(const string& file) {
-	load(SDL_LoadBMP(file.c_str()), file);
+inline Texture::Texture(SDL_Surface* img) {
+	loadText(img);
 }
 
 inline GLuint Texture::getID() const {
@@ -176,7 +172,7 @@ inline const vec2i Texture::getRes() const {
 }
 
 inline bool Texture::valid() const {
-	return format;
+	return res.hasNot(0);
 }
 
 inline const string& Texture::getName() const {

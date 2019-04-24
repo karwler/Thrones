@@ -77,8 +77,10 @@ public:
 	void sendSetup();
 
 	Tile* getTile(vec2b pos);
+	bool isHomeTile(Tile* til) const;
 	Piece* getOwnPieces(Piece::Type type);
 	Piece* findPiece(vec2b pos);
+	bool isOwnPiece(Piece* pce) const;
 	Object* getScreen();
 	bool getMyTurn() const;
 
@@ -105,10 +107,12 @@ private:
 	void setScreen();
 	void setBoard();
 	void setMidTiles();
-	static void setTiles(array<Tile, numTiles>& tiles, int8 yofs, OCall call, Object::Info mode);
-	static void setPieces(array<Piece, numPieces>& pieces, OCall call, Object::Info mode);
+	static void setTiles(array<Tile, numTiles>& tiles, int8 yofs, OCall lcall, OCall ucall, Object::Info mode);
+	static void setPieces(array<Piece, numPieces>& pieces, OCall lcall, OCall ucall, Object::Info mode);
 	static void setTilesInteract(Tile* tiles, sizet num, bool on);
 	static void setPiecesInteract(array<Piece, numPieces> pieces, bool on);
+	static Object::Info getTileInfoInteract(Object::Info mode, bool on);
+	static Object::Info getPieceInfoInteract(Object::Info mode, bool on);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 	void prepareTurn();
 
@@ -178,6 +182,14 @@ inline Tile* Game::getTile(vec2b pos) {
 	return &tiles.mid[sizet(pos.y * boardSize + pos.x)];
 }
 
+inline bool Game::isHomeTile(Tile* til) const {
+	return til >= tiles.own.data();
+}
+
+inline bool Game::isOwnPiece(Piece* pce) const {
+	return pce < pieces.ene.data();
+}
+
 inline Object* Game::getScreen() {
 	return &screen;
 }
@@ -196,6 +208,14 @@ inline void Game::setMidTilesInteract(bool on) {
 
 inline void Game::setOwnPiecesInteract(bool on) {
 	setPiecesInteract(pieces.own, on);
+}
+
+inline Object::Info Game::getTileInfoInteract(Object::Info mode, bool on) {
+	return on ? mode | Object::INFO_RAYCAST : mode & ~Object::INFO_RAYCAST;
+}
+
+inline Object::Info Game::getPieceInfoInteract(Object::Info mode, bool on) {
+	return on ? mode | Object::INFO_SHOW | Object::INFO_RAYCAST : mode & ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
 }
 
 template <class T>

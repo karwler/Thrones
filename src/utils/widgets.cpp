@@ -1,5 +1,4 @@
 #include "engine/world.h"
-#include <glm/gtc/type_ptr.hpp>
 
 // WIDGET
 
@@ -35,15 +34,15 @@ bool Widget::selectable() const {
 	return false;
 }
 
-void Widget::drawRect(const Rect& rect, const vec4& color) {
+void Widget::drawRect(const Rect& rect, const vec4& color, int z) {
 	glDisable(GL_TEXTURE_2D);
 	glColor4fv(glm::value_ptr(color));
 
 	glBegin(GL_QUADS);
-	glVertex2i(rect.x, rect.y);
-	glVertex2i(rect.x + rect.w, rect.y);
-	glVertex2i(rect.x + rect.w, rect.y + rect.h);
-	glVertex2i(rect.x, rect.y + rect.h);
+	glVertex3i(rect.x, rect.y, z);
+	glVertex3i(rect.x + rect.w, rect.y, z);
+	glVertex3i(rect.x + rect.w, rect.y + rect.h, z);
+	glVertex3i(rect.x, rect.y + rect.h, z);
 	glEnd();
 }
 
@@ -55,13 +54,13 @@ void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame) {
 
 	glBegin(GL_QUADS);
 	glTexCoord2f(crop.x, crop.y);
-	glVertex2i(rect.x, rect.y);
+	glVertex3i(rect.x, rect.y, 0);
 	glTexCoord2f(crop.z, crop.y);
-	glVertex2i(rect.x + rect.w, rect.y);
+	glVertex3i(rect.x + rect.w, rect.y, 0);
 	glTexCoord2f(crop.z, crop.a);
-	glVertex2i(rect.x + rect.w, rect.y + rect.h);
+	glVertex3i(rect.x + rect.w, rect.y + rect.h, 0);
 	glTexCoord2f(crop.x, crop.a);
-	glVertex2i(rect.x, rect.y + rect.h);
+	glVertex3i(rect.x, rect.y + rect.h, 0);
 	glEnd();
 }
 
@@ -129,7 +128,7 @@ Draglet::Draglet(const Size& relSize, BCall leftCall, BCall rightCall, BCall dou
 void Draglet::draw() const {
 	Picture::draw();
 	if (dragging)
-		drawRect(Rect(mousePos(), size() / 2), color);
+		drawRect(Rect(mousePos(), size() / 2), color, 1);
 }
 
 void Draglet::onClick(const vec2i&, uint8 mBut) {
@@ -138,7 +137,7 @@ void Draglet::onClick(const vec2i&, uint8 mBut) {
 }
 
 void Draglet::onHold(const vec2i&, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT) {
+	if (mBut == SDL_BUTTON_LEFT && lcall) {
 		World::scene()->capture = this;
 		dragging = true;
 	}
@@ -195,7 +194,7 @@ Label::Label(const Size& relSize, const string& text, BCall leftCall, BCall righ
 {}
 
 Label::~Label() {
-	closeTextTex();
+	textTex.close();
 }
 
 void Label::draw() const {
@@ -243,13 +242,8 @@ vec2i Label::textPos() const {
 }
 
 void Label::updateTextTex() {
-	closeTextTex();
+	textTex.close();
 	textTex = World::winSys()->renderText(text, size().y);
-}
-
-void Label::closeTextTex() {
-	if (textTex.valid())
-		textTex.close();
 }
 
 // SWITCH BOX
@@ -286,6 +280,15 @@ LabelEdit::LabelEdit(const Size& relSize, const string& text, BCall leftCall, BC
 	textOfs(0)
 {
 	cleanText();
+}
+
+void LabelEdit::draw() const {
+	Label::draw();
+
+	if (World::scene()->capture == this) {	// caret
+		vec2i ps = position();
+		drawRect({caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y}, colorLight, 1);
+	}
 }
 
 void LabelEdit::onClick(const vec2i&, uint8 mBut) {
@@ -382,11 +385,6 @@ void LabelEdit::onText(const string& str) {
 	cleanText();
 	updateTextTex();
 	setCPos(cpos + (text.length() - olen));
-}
-
-void LabelEdit::drawCaret() const {
-	vec2i ps = position();
-	drawRect({caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y}, colorLight);
 }
 
 vec2i LabelEdit::textPos() const {

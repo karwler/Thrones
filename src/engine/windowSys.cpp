@@ -245,7 +245,7 @@ void WindowSys::setSwapInterval() {
 
 Texture WindowSys::renderText(const string& text, int height) {
 	try {
-		return !text.empty() ? Texture(TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText), text, false) : Texture();
+		return TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText);
 	} catch (const std::runtime_error& e) {
 		std::cerr << e.what() << std::endl;
 	}

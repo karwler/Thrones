@@ -108,9 +108,7 @@ uint8 Game::connectionSetup(const uint8* data) {
 			World::program()->eventOpenMatch();
 		else {
 			ps->enemyReady = true;
-			ps->message->setText("Player ready");
-			if (ps->stage < ProgSetup::Stage::pieces)
-				World::scene()->setPopup(ProgState::createPopupMessage("Hurry the fuck up!", &Program::eventClosePopup));
+			ps->message->setText(ps->stage == ProgSetup::Stage::pieces ? "Player ready." : "Hurry the fuck up!");
 		}
 		return bi; }
 	default:
@@ -151,11 +149,11 @@ Piece* Game::findPiece(vec2b pos) {
 
 vector<Object*> Game::initObjects() {
 	// prepare objects for setup
-	setTiles(tiles.ene, -homeHeight, nullptr, Object::INFO_LINES);
+	setTiles(tiles.ene, -homeHeight, nullptr, nullptr, Object::INFO_LINES);
 	setMidTiles();
-	setTiles(tiles.own, 1, &Program::eventClearTile, Object::INFO_LINES | Object::INFO_RAYCAST);
-	setPieces(pieces.own, &Program::eventClearPiece, Object::INFO_TEXTURE);
-	setPieces(pieces.ene, nullptr, Object::INFO_TEXTURE);
+	setTiles(tiles.own, 1, &Program::eventClearTile, &Program::eventMoveTile, Object::INFO_LINES | Object::INFO_RAYCAST);
+	setPieces(pieces.own, &Program::eventClearPiece, &Program::eventMovePiece, Object::INFO_TEXTURE);
+	setPieces(pieces.ene, nullptr, nullptr, Object::INFO_TEXTURE);
 	setScreen();
 	setBoard();
 
@@ -170,7 +168,19 @@ vector<Object*> Game::initObjects() {
 }
 
 void Game::prepareMatch() {
-	prepareTurn();
+	// set interactivity and reassign callback events
+	for (Tile* it = tiles.begin(); it != tiles.end(); it++) {
+		it->mode = getTileInfoInteract(it->mode, myTurn);
+		it->setClcall(nullptr);
+		it->setUlcall(nullptr);
+	}
+	for (Piece& it : pieces.own) {
+		it.mode = getPieceInfoInteract(it.mode, myTurn);
+		it.setClcall(nullptr);
+		it.setUlcall(&Program::eventMove);
+		it.setUrcall(&Program::eventAttack);
+	}
+	setPiecesInteract(pieces.ene, myTurn);
 
 	// rearange middle tiles
 	if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); myTurn) {
@@ -195,13 +205,13 @@ string Game::checkOwnTiles() const {
 		for (int8 x = 0; x < boardSize; x++) {
 			if (Tile::Type type = tiles.mid[sizet(y * boardSize + x)].getType(); type < Tile::Type::fortress)
 				cnt[sizet(type)]++;
-			else if (vec2b pos(x, y); outRange(pos, vec2b(1, 2), vec2b(boardSize - 2, homeHeight - 1)))
+			else if (vec2b pos(x, y); outRange(pos, vec2b(1, 2), vec2b(boardSize - 2, homeHeight - 1)))	// TODO: this is wrong
 				return firstUpper(Tile::names[uint8(Tile::Type::fortress)]) + " at " + pos.toString('|') + " not allowed";
 			else
 				empties++;
 		}
 		// check diversity in each row
-		for (uint8 i = 0; i < sizet(Tile::Type::fortress); i++)
+		for (uint8 i = 0; i < uint8(Tile::Type::fortress); i++)
 			if (!cnt[i])
 				return firstUpper(Tile::names[i]) + " missing in row " + to_string(i);
 	}
@@ -239,7 +249,7 @@ void Game::takeOutFortress() {
 }
 
 bool Game::movePiece(Piece* piece, vec2b pos, Piece* occupant) {
-	bool attacking = occupant >= pieces.ene.data();
+	bool attacking = !isOwnPiece(occupant);
 	if (attacking ? !checkAttack(piece, occupant) : occupant && occupant->getType() == piece->getType())
 		return false;
 
@@ -296,7 +306,7 @@ bool Game::attackPiece(Piece* killer, vec2b pos, Piece* piece) {
 		return succ;
 	}
 	// no piece, no friendly fire and unmet conditions
-	if (!piece || piece < pieces.ene.data() || !checkAttack(killer, piece))
+	if (!piece || isOwnPiece(piece) || !checkAttack(killer, piece))
 		return false;
 
 	if (succ) {
@@ -330,7 +340,7 @@ void Game::setScreen() {
 		Vertex(vec3(4.7f, 2.6f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 0.f)),
 		Vertex(vec3(4.7f, 0.f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 1.f))
 	};
-	screen = Object(vec3(0.f, 0.f, -0.5f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, {120, 120, 120, 255}, Object::INFO_FILL);
+	screen = Object(vec3(0.f, 0.f, -0.5f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, {0.2f, 0.13f, 0.062f, 1.f}, Object::INFO_FILL);
 }
 
 void Game::setBoard() {
@@ -340,48 +350,48 @@ void Game::setBoard() {
 		Vertex(vec3(5.5f, 0.f, -5.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 0.f)),
 		Vertex(vec3(5.5f, 0.f, 5.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
 	};
-	board = Object(vec3(0.f, -0.01f, 0.f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, {30, 5, 5, 255}, Object::INFO_FILL);
+	board = Object(vec3(0.f, -0.01f, 0.f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, {0.166f, 0.068f, 0.019f, 1.f}, Object::INFO_FILL);
 }
 
-void Game::setTiles(array<Tile, numTiles>& tiles, int8 yofs, OCall call, Object::Info mode) {
+void Game::setTiles(array<Tile, numTiles>& tiles, int8 yofs, OCall lcall, OCall ucall, Object::Info mode) {
 	sizet id = 0;
 	for (int8 y = yofs, yend = homeHeight + yofs; y < yend; y++)
 		for (int8 x = 0; x < boardSize; x++)
-			tiles[id++] = Tile(vec2b(x, y), Tile::Type::empty, call, nullptr, nullptr, mode);
+			tiles[id++] = Tile(vec2b(x, y), Tile::Type::empty, lcall, ucall, nullptr, mode);
 }
 
 void Game::setMidTiles() {
 	for (int8 i = 0; i < boardSize; i++)
-		tiles.mid[sizet(i)] = Tile(vec2b(i, 0), Tile::Type::empty, &Program::eventClearTile, nullptr, nullptr, Object::INFO_LINES);
+		tiles.mid[sizet(i)] = Tile(vec2b(i, 0), Tile::Type::empty, &Program::eventClearTile, &Program::eventMoveTile, nullptr, Object::INFO_LINES);
 }
 
-void Game::setPieces(array<Piece, numPieces>& pieces, OCall call, Object::Info mode) {
+void Game::setPieces(array<Piece, numPieces>& pieces, OCall lcall, OCall ucall, Object::Info mode) {
 	sizet id = 0;
 	for (sizet c = 0; c < 2; c++)
-		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::ranger, call, nullptr, nullptr, mode);
+		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::ranger, lcall, ucall, nullptr, mode);
 	for (sizet c = 0; c < 2; c++)
-		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::spearman, call, nullptr, nullptr, mode);
+		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::spearman, lcall, ucall, nullptr, mode);
 	for (sizet c = 0; c < 2; c++)
-		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::crossbowman, call, nullptr, nullptr, mode);
-	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::catapult, call, nullptr, nullptr, mode);
-	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::trebuchet, call, nullptr, nullptr, mode);
+		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::crossbowman, lcall, ucall, nullptr, mode);
+	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::catapult, lcall, ucall, nullptr, mode);
+	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::trebuchet, lcall, ucall, nullptr, mode);
 	for (sizet c = 0; c < 2; c++)
-		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::lancer, call, nullptr, nullptr, mode);
-	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::warhorse, call, nullptr, nullptr, mode);
+		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::lancer, lcall, ucall, nullptr, mode);
+	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::warhorse, lcall, ucall, nullptr, mode);
 	for (sizet c = 0; c < 2; c++)
-		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::elephant, call, nullptr, nullptr, mode);
-	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::dragon, call, nullptr, nullptr, mode);
-	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::throne, call, nullptr, nullptr, mode);
+		pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::elephant, lcall, ucall, nullptr, mode);
+	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::dragon, lcall, ucall, nullptr, mode);
+	pieces[id++] = Piece(vec2b(INT8_MIN), Piece::Type::throne, lcall, ucall, nullptr, mode);
 }
 
 void Game::setTilesInteract(Tile* tiles, sizet num, bool on) {
 	for (sizet i = 0; i < num; i++)
-		tiles[i].mode = on ? tiles[i].mode | Object::INFO_RAYCAST : tiles[i].mode & ~Object::INFO_RAYCAST;
+		tiles[i].mode = getTileInfoInteract(tiles[i].mode, on);
 }
 
 void Game::setPiecesInteract(array<Piece, Game::numPieces> pieces, bool on) {
 	for (Piece& it : pieces)
-		it.mode = on ? it.mode | Object::INFO_SHOW | Object::INFO_RAYCAST : it.mode & ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
+		it.mode = getPieceInfoInteract(it.mode, on);
 }
 
 void Game::prepareTurn() {
@@ -551,7 +561,7 @@ void Game::placePiece(Piece* piece, vec2b pos) {
 
 void Game::removePiece(Piece* piece) {
 	piece->disable();
-	bool mine = piece < pieces.ene.data();
+	bool mine = isOwnPiece(piece);
 	sendb.push(NetCode::kill, {uint8(mine), uint8(piece - (mine ? pieces.own.data() : pieces.ene.data()))});	// index doesn't need to be modified
 }
 
@@ -572,7 +582,7 @@ bool Game::connectFail() {
 
 void Game::disconnectMessage(const string& msg) {
 	disconnect();
-	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventClosePopup));
+	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventExitGame));
 }
 
 vector<Tile*> Game::mergeTiles(vector<Tile*> a, const vector<Tile*>& b) {

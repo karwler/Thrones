@@ -45,6 +45,49 @@ bool Animation::tick(float dSec) {
 	return keyframes.empty();
 }
 
+// CAMERA
+
+const vec3 Camera::up(0.f, 1.f, 0.f);
+
+Camera::Camera(const vec3& pos, const vec3& lat, float fov, float znear, float zfar) :
+	pos(pos),
+	lat(lat),
+	fov(fov),
+	znear(znear),
+	zfar(zfar)
+{}
+
+void Camera::update() const {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(double(fov), vec2d(World::winSys()->windowSize()).ratio(), double(znear), double(zfar));
+	gluLookAt(double(pos.x), double(pos.y), double(pos.z), double(lat.x), double(lat.y), double(lat.z), double(up.x), double(up.y), double(up.z));
+	glMatrixMode(GL_MODELVIEW);
+}
+
+void Camera::updateUI() {
+	vec2d res = World::winSys()->windowSize();
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0.0, res.x, res.y, 0.0, -1.0, 1.0);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+vec3 Camera::direction(const vec2i& mPos) const {
+	vec2 res = World::winSys()->windowSize().glm();
+	vec3 dir = glm::normalize(lat - pos);
+	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
+	float hl = vl * (res.x / res.y);
+	vec3 h = glm::normalize(glm::cross(dir, up)) * hl;
+	vec3 v = glm::normalize(glm::cross(h, dir)) * vl;
+
+	res /= 2.f;
+	vec2 m((float(mPos.x) - res.x) / res.x, -(float(mPos.y) - res.y) / res.y);
+	return glm::normalize(dir * znear + h * m.x + v * m.y);
+}
+
 // SCENE
 
 Scene::Scene() :
@@ -67,8 +110,6 @@ void Scene::draw() {
 	layout->draw();
 	if (popup)
 		popup->draw();
-	if (LabelEdit* let = dynamic_cast<LabelEdit*>(capture))
-		let->drawCaret();
 }
 
 void Scene::tick(float dSec) {
@@ -179,21 +220,22 @@ Interactable* Scene::getSelected(const vec2i& mPos, Layout* box) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
-				return (*it)->selectable() ? *it : box;
-		} else if (dynamic_cast<ScrollArea*>(box))
-			return box;
-		else
-			return pickObject(mPos);
+				return (*it)->selectable() ? *it : getScrollAreaOrObject(mPos, *it);
+		} else
+			return getScrollAreaOrObject(mPos, box);
 	}
 }
 
-ScrollArea* Scene::getSelectedScrollArea() const {
-	if (dynamic_cast<Object*>(select))
-		return nullptr;
+Interactable* Scene::getScrollAreaOrObject(const vec2i& mPos, Widget* wgt) const {
+	if (ScrollArea* lay = findFirstScrollArea(wgt))
+		return lay;
+	return pickObject(mPos);
+}
 
-	Layout* parent = dynamic_cast<Layout*>(select);
-	if (select && !parent)
-		parent = static_cast<Widget*>(select)->getParent();
+ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
+	Layout* parent = dynamic_cast<Layout*>(wgt);
+	if (wgt && !parent)
+		parent = wgt->getParent();
 
 	while (parent && !dynamic_cast<ScrollArea*>(parent))
 		parent = parent->getParent();

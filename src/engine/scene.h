@@ -49,6 +49,22 @@ T Animation::linearTransition(const T& start, const T& end, float factor) {
 	return start + (end - start) * factor;
 }
 
+// additional data for rendering objects
+class Camera {
+public:
+	vec3 pos, lat;
+	float fov, znear, zfar;
+private:
+	static const vec3 up;
+
+public:
+	Camera(const vec3& pos = vec3(0.f, 8.f, 8.f), const vec3& lat = vec3(0.f, 0.f, 2.f), float fov = 45.f, float znear = 0.01f, float zfar = 20.f);
+
+	void update() const;
+	static void updateUI();
+	vec3 direction(const vec2i& mPos) const;
+};
+
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
@@ -81,6 +97,7 @@ public:
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
+	const Camera& getCamera() const;
 	void setObjects(const vector<Object*>& objs);
 	void resetLayouts();
 	Layout* getLayout();
@@ -91,20 +108,26 @@ public:
 	const vec2i& getMouseMove() const;
 	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
 	template <class T> T* pickObject() const;
+	vec3 pickerRay(const vec2i& mPos) const;
 
 private:
 	Interactable* getSelected(const vec2i& mPos, Layout* box);
+	Interactable* getScrollAreaOrObject(const vec2i& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
+	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	Layout* topLayout();
 
 	Object* pickObject(const vec2i& mPos) const;
-	vec3 pickerRay(const vec2i& mPos) const;
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
 
 inline void Scene::onText(const string& str) {
 	capture->onText(str);
+}
+
+inline const Camera& Scene::getCamera() const {
+	return camera;
 }
 
 inline void Scene::setObjects(const vector<Object*>& objs) {
@@ -133,6 +156,10 @@ inline const vec2i& Scene::getMouseMove() const {
 
 inline bool Scene::cursorInClickRange(const vec2i& mPos, uint8 mBut) {
 	return vec2f(mPos - stamps[mBut].mPos).length() <= clickThreshold;
+}
+
+inline ScrollArea* Scene::getSelectedScrollArea() const {
+	return dynamic_cast<Widget*>(select) ? findFirstScrollArea(static_cast<Widget*>(select)) : nullptr;
 }
 
 inline Layout* Scene::topLayout() {

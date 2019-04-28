@@ -75,13 +75,14 @@ const vector<Vertex> BoardObject::squareVertices = {
 	Vertex(vec3(0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
 };
 
-const vec4 BoardObject::moveIconColor(1.f, 1.f, 0.f, 1.f);
-const vec4 BoardObject::fireIconColor(1.f, 0.f, 0.f, 1.f);
+const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
+const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
-BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
+BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
 	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
 	dragState(DragState::none),
 	clcall(clcall),
+	crcall(crcall),
 	ulcall(ulcall),
 	urcall(urcall)
 {}
@@ -91,11 +92,11 @@ void BoardObject::draw() const {
 		Object::draw();
 	else {
 		vec3 ray = World::scene()->pickerRay(mousePos());
-		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::self)
-			drawRect(loc, rot, scl, color, mode & INFO_TEXTURE ? tex : nullptr);
+		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::move)
+			drawRect(loc, rot, scl, color * moveIconColor, mode & INFO_TEXTURE ? tex : nullptr);
 		else {
 			Object::draw();
-			drawRect(loc, rot, scl, dragState == DragState::move ? moveIconColor : fireIconColor, nullptr);	// TODO: icon textures
+			drawRect(loc, rot, scl, color * fireIconColor, mode & INFO_TEXTURE ? tex : nullptr);	// TODO: fire icon
 		}
 	}
 }
@@ -127,11 +128,13 @@ void BoardObject::drawRect(const vec3& pos, const vec3& rot, const vec3& scl, co
 void BoardObject::onClick(const vec2i&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
 		World::prun(clcall, this);
+	else if (mBut == SDL_BUTTON_RIGHT)
+		World::prun(crcall, this);
 }
 
 void BoardObject::onHold(const vec2i&, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
-		dragState = mBut == SDL_BUTTON_LEFT ? ulcall == &Program::eventMove ? DragState::move : DragState::self : DragState::fire;
+		dragState = mBut == SDL_BUTTON_LEFT ? DragState::move : DragState::fire;
 		World::scene()->capture = this;
 	}
 }
@@ -176,11 +179,13 @@ const array<uint8, Tile::amounts.size()> Tile::amounts = {
 	7
 };
 
-Tile::Tile(vec2b pos, Type type, OCall clcall, OCall ulcall, OCall urcall, Info mode) :
-	BoardObject(pos, 0.f, clcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+Tile::Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
+	BoardObject(pos, 0.f, clcall, crcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
 	ruined(false),
 	type(type)
 {}
+
+void Tile::onText(const string&) {}
 
 void Tile::setType(Type newType) {
 	type = newType;
@@ -216,10 +221,12 @@ const array<uint8, Piece::amounts.size()> Piece::amounts = {
 	1
 };
 
-Piece::Piece(vec2b pos, Type type, OCall lcall, OCall rcall, OCall ucall, Info mode) :
-	BoardObject(pos, 0.01f, lcall, rcall, ucall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
+Piece::Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
+	BoardObject(pos, 0.01f, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
 	type(type)
 {}
+
+void Piece::onText(const string&) {}
 
 void Piece::setType(Piece::Type newType) {
 	type = newType;

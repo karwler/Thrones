@@ -18,7 +18,7 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	resolution(800, 600),
 	address("127.0.0.1"),
-	port(Server::defaultPort)
+	port(Com::defaultPort)
 {}
 
 // FILE SYS

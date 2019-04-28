@@ -36,15 +36,14 @@ public:
 private:
 	static constexpr char fileFont[] = "Merriweather.otf";
 	static constexpr char fileIcon[] = "icon.ico";
-	static constexpr vec2i defaultWindowPos = {SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED};
-	static constexpr vec2i minWindowSize = {640, 480};
+	static constexpr vec2i defaultWindowPos = { SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED };
+	static constexpr vec2i minWindowSize = { 640, 480 };
 	static constexpr uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
-	static constexpr GLclampf colorClear[4] = {0.f, 0.f, 0.f, 1.f};
-	static constexpr SDL_Color colorText = {220, 220, 220, 255};
+	static constexpr GLclampf colorClear[4] = { 0.f, 0.f, 0.f, 1.f };
+	static constexpr SDL_Color colorText = { 220, 220, 220, 255 };
 	
-
 	uptr<FileSys> fileSys;
 	uptr<Program> program;
 	uptr<Scene> scene;
@@ -59,8 +58,6 @@ private:
 
 public:
 	WindowSys();
-
-	SDL_Window* getWindow() {return window;}
 
 	int start();
 	void close();
@@ -91,7 +88,7 @@ private:
 	void createWindow();
 	void destroyWindow();
 	void handleEvent(const SDL_Event& event);	// pass events to their specific handlers
-	void eventWindow(const SDL_WindowEvent& window);
+	void eventWindow(const SDL_WindowEvent& winEvent);
 	void setDSec(uint32& oldTicks);
 	void setSwapInterval();
 

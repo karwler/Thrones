@@ -27,6 +27,7 @@ public:
 
 	void eventEnter();
 	virtual void eventEscape() {}
+	virtual void eventWheel(int) {}
 	virtual void eventResized() {}
 
 	virtual Layout* createLayout();
@@ -56,48 +57,59 @@ public:
 };
 
 class ProgSetup : public ProgState {
-private:
-	array<uint8, sizet(Tile::Type::fortress)> tileCnt, midCnt;
-	array<uint8, sizet(Piece::Type::throne)+1> pieceCnt;
-	Layout* ticons;
-	Layout* micons;
-	Layout* picons;
 public:
-	Label* message;
-
 	enum class Stage : uint8 {
 		tiles,
 		middles,
 		pieces,
 		ready
-	} stage;
+	};
+
 	bool enemyReady;
-	array<Tile::Type, 9> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	array<Tile::Type, Com::boardLength> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	Label* message;
+private:
+	Layout* icons;
+	vector<uint8> counters;
+	uint8 selected;
+	Stage stage;
 
 public:
 	ProgSetup();
 	virtual ~ProgSetup() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventWheel(int ymov) override;
 
-	void addTile(Tile::Type type, int8 mov, bool home);
-	void addPiece(Piece::Type type, int8 mov);
+	Stage getStage() const;
+	void setStage(Stage stg);
+	Draglet* getIcon(uint8 type) const;
+	void incdecIcon(uint8 type, bool inc, bool isTile);
+	uint8 getCount(uint8 type) const;
+	uint8 getSelected() const;
 
 	virtual Layout* createLayout() override;
 private:
-	static Layout* getTicons();
+	Layout* setTicons();
 	Layout* setPicons();
 	Layout* createSidebar(int& sideLength) const;
-
-	void incdecIcon(Layout* icns, uint8* cntr, sizet tid, int8 mov, bool isTile);	// mov has to be either -1 or 1
+	void setSelected(uint8 sel);
 };
 
-inline void ProgSetup::addTile(Tile::Type type, int8 mov, bool home) {
-	incdecIcon(home ? ticons : micons, (home ? tileCnt : midCnt).data(), sizet(type), mov, true);
+inline ProgSetup::Stage ProgSetup::getStage() const {
+	return stage;
 }
 
-inline void ProgSetup::addPiece(Piece::Type type, int8 mov) {
-	incdecIcon(picons, pieceCnt.data(), sizet(type), mov, false);
+inline Draglet* ProgSetup::getIcon(uint8 type) const {
+	return static_cast<Draglet*>(icons->getWidget(type + 1));
+}
+
+inline uint8 ProgSetup::getCount(uint8 type) const {
+	return counters[type];
+}
+
+inline uint8 ProgSetup::getSelected() const {
+	return selected;
 }
 
 class ProgMatch : public ProgState {

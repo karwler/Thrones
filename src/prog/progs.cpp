@@ -112,17 +112,37 @@ Layout* ProgMenu::createLayout() {
 // PROG SETUP
 
 ProgSetup::ProgSetup() :
-	midCnt({1, 1, 1, 1}),
-	stage(Stage::tiles),
-	enemyReady(false)
-{
-	std::copy(Tile::amounts.begin(), Tile::amounts.begin() + tileCnt.size(), tileCnt.begin());
-	std::copy(Piece::amounts.begin(), Piece::amounts.begin() + pieceCnt.size(), pieceCnt.begin());
-}
+	enemyReady(false),
+	selected(0)
+{}
 
 void ProgSetup::eventEscape() {
 	if (!tryClosePopup())
 		stage > Stage::tiles && stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventClosePopup));
+}
+
+void ProgSetup::eventWheel(int ymov) {
+	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
+}
+
+void ProgSetup::setStage(ProgSetup::Stage stg) {
+	switch (stage = stg) {
+	case Stage::tiles:
+		counters = vector<uint8>(Tile::amounts.begin(), Tile::amounts.begin() + pdift(Tile::Type::fortress));
+		break;
+	case Stage::middles:
+		counters = vector<uint8>(sizet(Tile::Type::fortress), 1);
+		break;
+	case Stage::pieces:
+		counters = vector<uint8>(Piece::amounts.begin(), Piece::amounts.end());
+	}
+	setSelected(0);
+}
+
+void ProgSetup::setSelected(uint8 sel) {
+	static_cast<Draglet*>(icons->getWidget(selected + 1))->setSelected(false);
+	selected = sel;
+	static_cast<Draglet*>(icons->getWidget(selected + 1))->setSelected(true);
 }
 
 Layout* ProgSetup::createLayout() {
@@ -131,7 +151,7 @@ Layout* ProgSetup::createLayout() {
 		new Widget(1.f),
 		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
 		new Widget(5.f),
-		stage == Stage::tiles ? ticons = getTicons() : stage == Stage::middles ? micons = getTicons() : setPicons()
+		stage == Stage::tiles ? icons = setTicons() : stage == Stage::middles ? icons = setTicons() : setPicons()
 	};
 
 	// root layout
@@ -144,37 +164,37 @@ Layout* ProgSetup::createLayout() {
 	return new Layout(1.f, cont, false, 0);
 }
 
-Layout* ProgSetup::getTicons() {
-	vector<Widget*> tbot = {new Widget()};
+Layout* ProgSetup::setTicons() {
+	vector<Widget*> tbot = { new Widget() };
 	for (sizet i = 0; i < 4; i++)
-		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTile, nullptr, nullptr, true, Tile::colors[i]));
+		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, nullptr, true, Tile::colors[i]));
 	tbot.push_back(new Widget());
-	return new Layout(iconSize, tbot, false);
+	return icons = new Layout(iconSize, tbot, false);
 }
 
 Layout* ProgSetup::setPicons() {
-	vector<Widget*> pbot = {new Widget()};
+	vector<Widget*> pbot = { new Widget() };
 	for (const string& it : Piece::names)
 		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
 	pbot.push_back(new Widget());
-	return picons = new Layout(iconSize, pbot, false);
+	return icons = new Layout(iconSize, pbot, false);
 }
 
 Layout* ProgSetup::createSidebar(int& sideLength) const {
-	vector<string> sidt = stage == Stage::tiles ? vector<string>({"Exit", "Next"}) : vector<string>({"Exit", "Back", "Next"});
+	vector<string> sidt = stage == Stage::tiles ? vector<string>({ "Exit", "Next" }) : vector<string>({ "Exit", "Back", "Next" });
 	sideLength = findMaxLength(sidt.begin(), sidt.end());
-	return new Layout(sideLength, stage == Stage::tiles ? vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventExitGame)}) : vector<Widget*>({new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventSetupBack), new Label(lineHeight, popBack(sidt), &Program::eventExitGame)}));
+	return new Layout(sideLength, stage == Stage::tiles ? vector<Widget*>({ new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventExitGame) }) : vector<Widget*>({ new Label(lineHeight, popBack(sidt), &Program::eventSetupNext), new Label(lineHeight, popBack(sidt), &Program::eventSetupBack), new Label(lineHeight, popBack(sidt), &Program::eventExitGame) }));
 }
 
-void ProgSetup::incdecIcon(Layout* icns, uint8* cntr, sizet tid, int8 mov, bool isTile) {
-	if (Draglet* ico = static_cast<Draglet*>(icns->getWidget(tid + 1)); mov < 0 && cntr[tid] == 1) {
+void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
+	if (Draglet* ico = getIcon(type); !inc && counters[type] == 1) {
 		ico->setColor(ico->color * 0.5f);
 		ico->setLcall(nullptr);
-	} else if (mov > 0 && cntr[tid] == 0) {
-		ico->setColor(isTile ? Tile::colors[tid] : BoardObject::defaultColor);
-		ico->setLcall(isTile ? &Program::eventPlaceTile : &Program::eventPlacePiece);
+	} else if (inc && counters[type] == 0) {
+		ico->setColor(isTile ? Tile::colors[type] : BoardObject::defaultColor);
+		ico->setLcall(isTile ? &Program::eventPlaceTileD : &Program::eventPlacePiece);
 	}
-	cntr[tid] += mov;
+	counters[type] += btom<uint8>(inc);
 }
 
 // PROG MATCH
@@ -340,7 +360,7 @@ Layout* ProgInfo::createLayout() {
 		"Max tex size",
 		"Tex formats"
 	};
-	int argWidth = findMaxLength({&args, &dispArgs, &rendArgs});
+	int argWidth = findMaxLength({ &args, &dispArgs, &rendArgs });
 
 	vector<Widget*> lines;
 	appendProgram(lines, argWidth, args, titles);
@@ -368,11 +388,11 @@ Layout* ProgInfo::createLayout() {
 void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, SDL_GetPlatform())}, false)
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, SDL_GetPlatform()) }, false)
 	});
 
 	if (char* basePath = SDL_GetBasePath()) {
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, args.back()), new Label(1.f, basePath)}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, args.back()), new Label(1.f, basePath) }, false));
 		SDL_free(basePath);
 	}
 	args.pop_back();
@@ -383,7 +403,7 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 	Text revnum(to_string(SDL_GetRevisionNumber()));
 
 	lines.insert(lines.end(), {
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(vernum.length, vernum.text), new Label(revnum.length, revnum.text), new Label(1.f, SDL_GetRevision())}, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(vernum.length, vernum.text), new Label(revnum.length, revnum.text), new Label(1.f, SDL_GetRevision()) }, false),
 		new Widget(lineHeight)
 	});
 }
@@ -415,16 +435,16 @@ void ProgInfo::appendCPU(vector<Widget*>& lines, int width, vector<string>& args
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetCPUCount()))}, false),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetCPUCacheLineSize()) + 'B')}, false)
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetCPUCount())) }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetCPUCacheLineSize()) + 'B') }, false)
 	});
 	if (!features.empty()) {
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, args.back()), new Label(1.f, features[0])}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, args.back()), new Label(1.f, features[0]) }, false));
 		for (sizet i = 1; i < features.size(); i++)
-			lines.emplace_back(new Layout(lineHeight, {new Widget(width), new Label(1.f, features[i])}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Widget(width), new Label(1.f, features[i]) }, false));
 		features.clear();
 	} else
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, args.back()), new Widget()}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, args.back()), new Widget() }, false));
 	lines.emplace_back(new Widget(lineHeight));
 	args.pop_back();
 }
@@ -432,7 +452,7 @@ void ProgInfo::appendCPU(vector<Widget*>& lines, int width, vector<string>& args
 void ProgInfo::appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetSystemRAM()) + "MB")}, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, to_string(SDL_GetSystemRAM()) + "MB") }, false),
 		new Widget(lineHeight)
 	});
 }
@@ -440,9 +460,9 @@ void ProgInfo::appendRAM(vector<Widget*>& lines, int width, vector<string>& args
 void ProgInfo::appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)()) {
 	lines.emplace_back(new Label(superHeight, popBack(titles)));
 	if (const char* name = value())
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, name)}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, name) }, false));
 	else
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, popBack(args)), new Button()}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, popBack(args)), new Button() }, false));
 	lines.emplace_back(new Widget(lineHeight));
 }
 
@@ -454,20 +474,20 @@ void ProgInfo::appendCurrentDisplay(vector<Widget*>& lines, int width, const vec
 }
 
 void ProgInfo::appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args) {
-	lines.emplace_back(new Layout(lineHeight, {new Label(width, args[0]), new Label(1.f, to_string(i))}, false));
+	lines.emplace_back(new Layout(lineHeight, { new Label(width, args[0]), new Label(1.f, to_string(i)) }, false));
 	if (const char* name = SDL_GetDisplayName(i))
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, args[1]), new Label(1.f, name)}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, args[1]), new Label(1.f, name) }, false));
 	if (SDL_DisplayMode mode; !SDL_GetDesktopDisplayMode(i, &mode))
 		lines.insert(lines.end(), {
-			new Layout(lineHeight, {new Label(width, args[2]), new Label(1.f, to_string(mode.w) + " x " + to_string(mode.h))}, false),
-			new Layout(lineHeight, {new Label(width, args[3]), new Label(1.f, to_string(mode.refresh_rate) + "Hz")}, false),
-			new Layout(lineHeight, {new Label(width, args[4]), new Label(1.f, pixelformatName(mode.format))}, false)
+			new Layout(lineHeight, { new Label(width, args[2]), new Label(1.f, to_string(mode.w) + " x " + to_string(mode.h)) }, false),
+			new Layout(lineHeight, { new Label(width, args[3]), new Label(1.f, to_string(mode.refresh_rate) + "Hz") }, false),
+			new Layout(lineHeight, { new Label(width, args[4]), new Label(1.f, pixelformatName(mode.format)) }, false)
 		});
 	if (float ddpi, hdpi, vdpi; !SDL_GetDisplayDPI(i, &ddpi, &hdpi, &vdpi))
 		lines.insert(lines.end(), {
-			new Layout(lineHeight, {new Label(width, args[5]), new Label(1.f, to_string(ddpi))}, false),
-			new Layout(lineHeight, {new Label(width, args[6]), new Label(1.f, to_string(hdpi))}, false),
-			new Layout(lineHeight, {new Label(width, args[7]), new Label(1.f, to_string(vdpi))}, false)
+			new Layout(lineHeight, { new Label(width, args[5]), new Label(1.f, to_string(ddpi)) }, false),
+			new Layout(lineHeight, { new Label(width, args[6]), new Label(1.f, to_string(hdpi)) }, false),
+			new Layout(lineHeight, { new Label(width, args[7]), new Label(1.f, to_string(vdpi)) }, false)
 		});
 }
 
@@ -478,8 +498,8 @@ void ProgInfo::appendPower(vector<Widget*>& lines, int width, vector<string>& ar
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(1.f, powerNames[power])}, false),
-		new Layout(lineHeight, {new Label(width, popBack(args)), new Label(tprc.length, tprc.text), new Label(1.f, (secs >= 0 ? to_string(secs) : infinity) + 's')}, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, powerNames[power]) }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(tprc.length, tprc.text), new Label(1.f, (secs >= 0 ? to_string(secs) : infinity) + 's') }, false),
 		new Widget(lineHeight)
 	});
 }
@@ -488,7 +508,7 @@ void ProgInfo::appendDevices(vector<Widget*>& lines, int width, vector<string>& 
 	lines.emplace_back(new Label(superHeight, popBack(titles)));
 	for (int i = 0; i < limit(arg); i++)
 		if (const char* name = value(i, arg))
-			lines.emplace_back(new Layout(lineHeight, {new Label(width, to_string(i)), new Label(1.f, name)}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Label(width, to_string(i)), new Label(1.f, name) }, false));
 	lines.emplace_back(new Widget(lineHeight));
 }
 
@@ -496,7 +516,7 @@ void ProgInfo::appendDrivers(vector<Widget*>& lines, int width, vector<string>& 
 	lines.emplace_back(new Label(superHeight, popBack(titles)));
 	for (int i = 0; i < limit(); i++)
 		if (const char* name = value(i))
-			lines.emplace_back(new Layout(lineHeight, {new Label(width, to_string(i)), new Label(1.f, name)}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Label(width, to_string(i)), new Label(1.f, name) }, false));
 	lines.emplace_back(new Widget(lineHeight));
 }
 
@@ -505,14 +525,14 @@ void ProgInfo::appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidt
 	for (int i = 0; i < SDL_GetNumVideoDisplays(); i++) {
 		appendDisplay(lines, i, argWidth, args);
 
-		lines.emplace_back(new Layout(lineHeight, {new Label(1.f, args[8])}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(1.f, args[8]) }, false));
 		for (int j = 0; j < SDL_GetNumDisplayModes(i); j++) {
-			lines.emplace_back(new Layout(lineHeight, {new Widget(argWidth / 2), new Label(dispWidth, args[0]), new Label(1.f, to_string(j))}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Widget(argWidth / 2), new Label(dispWidth, args[0]), new Label(1.f, to_string(j)) }, false));
 			if (SDL_DisplayMode mode; !SDL_GetDisplayMode(i, j, &mode))
 				lines.insert(lines.end(), {
-					new Layout(lineHeight, {new Widget(argWidth / 2), new Label(dispWidth, args[2]), new Label(1.f, to_string(mode.w) + " x " + to_string(mode.h))}, false),
-					new Layout(lineHeight, {new Widget(argWidth / 2), new Label(dispWidth, args[3]), new Label(1.f, to_string(mode.refresh_rate))}, false),
-					new Layout(lineHeight, {new Widget(argWidth / 2), new Label(dispWidth, args[4]), new Label(1.f, pixelformatName(mode.format))}, false)
+					new Layout(lineHeight, { new Widget(argWidth / 2), new Label(dispWidth, args[2]), new Label(1.f, to_string(mode.w) + " x " + to_string(mode.h)) }, false),
+					new Layout(lineHeight, { new Widget(argWidth / 2), new Label(dispWidth, args[3]), new Label(1.f, to_string(mode.refresh_rate)) }, false),
+					new Layout(lineHeight, { new Widget(argWidth / 2), new Label(dispWidth, args[4]), new Label(1.f, pixelformatName(mode.format)) }, false)
 				});
 			if (j < SDL_GetNumDisplayModes(i) - 1)
 				lines.emplace_back(new Widget(lineHeight / 2));
@@ -526,9 +546,9 @@ void ProgInfo::appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidt
 void ProgInfo::appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles) {
 	lines.emplace_back(new Label(superHeight, popBack(titles)));
 	for (int i = 0; i < SDL_GetNumRenderDrivers(); i++) {
-		lines.emplace_back(new Layout(lineHeight, {new Label(width, args[0]), new Label(1.f, to_string(i))}, false));
+		lines.emplace_back(new Layout(lineHeight, { new Label(width, args[0]), new Label(1.f, to_string(i)) }, false));
 		if (SDL_RendererInfo info; !SDL_GetRenderDriverInfo(i, &info)) {
-			lines.emplace_back(new Layout(lineHeight, {new Label(width, args[1]), new Label(1.f, info.name)}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Label(width, args[1]), new Label(1.f, info.name) }, false));
 
 			vector<string> flags;
 			if (info.flags & SDL_RENDERER_SOFTWARE)
@@ -541,19 +561,19 @@ void ProgInfo::appendRenderers(vector<Widget*>& lines, int width, const vector<s
 				flags.emplace_back("TARGETTEXTURE");
 
 			if (!flags.empty()) {
-				lines.emplace_back(new Layout(lineHeight, {new Label(width, args[2]), new Label(1.f, flags[0])}, false));
+				lines.emplace_back(new Layout(lineHeight, { new Label(width, args[2]), new Label(1.f, flags[0]) }, false));
 				for (sizet j = 1; j < flags.size(); j++)
-					lines.emplace_back(new Layout(lineHeight, {new Widget(width), new Label(1.f, flags[j])}, false));
+					lines.emplace_back(new Layout(lineHeight, { new Widget(width), new Label(1.f, flags[j]) }, false));
 			} else
-				lines.emplace_back(new Layout(lineHeight, {new Label(width, args[2]), new Widget()}, false));
+				lines.emplace_back(new Layout(lineHeight, { new Label(width, args[2]), new Widget() }, false));
 
-			lines.emplace_back(new Layout(lineHeight, {new Label(width, args[3]), new Label(1.f, to_string(info.max_texture_width) + " x " + to_string(info.max_texture_height))}, false));
+			lines.emplace_back(new Layout(lineHeight, { new Label(width, args[3]), new Label(1.f, to_string(info.max_texture_width) + " x " + to_string(info.max_texture_height)) }, false));
 			if (info.num_texture_formats) {
-				lines.emplace_back(new Layout(lineHeight, {new Label(width, args[4]), new Label(1.f, pixelformatName(info.texture_formats[0]))}, false));
+				lines.emplace_back(new Layout(lineHeight, { new Label(width, args[4]), new Label(1.f, pixelformatName(info.texture_formats[0])) }, false));
 				for (uint32 i = 1; i < info.num_texture_formats; i++)
-					lines.emplace_back(new Layout(lineHeight, {new Widget(width), new Label(1.f, pixelformatName(info.texture_formats[i]))}, false));
+					lines.emplace_back(new Layout(lineHeight, { new Widget(width), new Label(1.f, pixelformatName(info.texture_formats[i])) }, false));
 			} else
-				lines.emplace_back(new Layout(lineHeight, {new Label(width, args[4]), new Label(1.f, to_string(i))}, false));
+				lines.emplace_back(new Layout(lineHeight, { new Label(width, args[4]), new Label(1.f, to_string(i)) }, false));
 		}
 		if (i < SDL_GetNumRenderDrivers() - 1)
 			lines.emplace_back(new Widget(lineHeight / 2));

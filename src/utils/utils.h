@@ -7,6 +7,7 @@
 #include <GL/glew.h>
 #include <memory>
 #include <queue>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,6 +24,7 @@ using std::vector;
 template <class... T> using umap = std::unordered_map<T...>;
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using uset = std::unordered_set<T...>;
+template <class... T> using sset = std::set<T...>;
 
 using pairStr = pair<string, string>;
 
@@ -85,15 +87,15 @@ struct Rect : SDL_Rect {
 };
 
 inline constexpr Rect::Rect(int n) :
-	SDL_Rect({n, n, n, n})
+	SDL_Rect({ n, n, n, n })
 {}
 
 inline constexpr Rect::Rect(int x, int y, int w, int h) :
-	SDL_Rect({x, y, w, h})
+	SDL_Rect({ x, y, w, h })
 {}
 
 inline constexpr Rect::Rect(const vec2i& pos, const vec2i& size) :
-	SDL_Rect({pos.x, pos.y, size.w, size.h})
+	SDL_Rect({ pos.x, pos.y, size.w, size.h })
 {}
 
 inline vec2i& Rect::pos() {
@@ -185,16 +187,53 @@ class Interactable {
 public:
 	virtual ~Interactable() = default;
 
-	virtual void onClick(const vec2i&, uint8) {}
+	virtual void onClick(const vec2i& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onDoubleClick(const vec2i&, uint8) {}
 	virtual void onMouseMove(const vec2i&, const vec2i&) {}
 	virtual void onHold(const vec2i&, uint8) {}
-	virtual void onDrag(const vec2i&, const vec2i&) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
-	virtual void onScroll(const vec2i&) {}				// on mouse wheel y movement
+	virtual void onDrag(const vec2i&, const vec2i&) {}		// mouse move while left button down
+	virtual void onUndrag(uint8) {}							// get's called on mouse button up if instance is Scene's capture
 	virtual void onKeypress(const SDL_Keysym&) {}
 	virtual void onText(const string&) {}
 };
+
+// a star for the game's grid
+
+class Astar {
+public:
+	struct Node {
+		uint8 id;
+		uint8 parent;
+		uint16 gCost;
+		float fCost;
+
+		Node() = default;
+		Node(uint8 id, uint8 parent, uint16 gCost, float fCost);
+	};
+
+private:
+	array<Node, Com::boardSize> grid;
+	bool (*stepable)(uint8, void*);
+	void* data;
+
+public:
+	Astar(bool (*stepable)(uint8, void*), void* data);
+
+	vector<uint8> travelPath(uint8 src, uint8 dst);
+	int travelDist(uint8 src, uint8 dst);	// returns distance or -1 on error
+
+private:
+	bool isValid(uint8 id);
+	static float distance(uint8 id, uint8 dst);
+};
+
+inline bool operator<(const Astar::Node& l, const Astar::Node& r) {
+	return l.fCost < r.fCost;
+}
+
+inline bool Astar::isValid(uint8 id) {
+	return id < Com::boardSize && stepable(id, data);
+}
 
 // files and strings
 
@@ -303,7 +342,7 @@ bool outRange(const T& val, const T& min, const T& max) {
 
 template <class T>
 bool outRange(const cvec2<T>& val, const cvec2<T>& min, const cvec2<T>& max) {
-	return outRange(val.x, min.x, min.y) || outRange(val.y, min.y, max.y);
+	return outRange(val.x, min.x, max.x) || outRange(val.y, min.y, max.y);
 }
 
 template <class T>
@@ -324,6 +363,14 @@ const T& clampHigh(const T& val, const T& max) {
 template <class T>
 cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
 	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
+}
+
+template <class U, class S>	// U has to be an unsigned type and S has to be the signed equivalent of U
+U cycle(U pos, U siz, S mov) {
+	U rst = pos + U(mov);
+	if (rst < siz)
+		return rst;
+	return mov >= S(0) ? (rst - siz) % siz : (siz - U(-mov)) % siz;
 }
 
 // conversions
@@ -379,10 +426,15 @@ inline ldouble sstold(const string& str) {
 	return strtold(str.c_str(), nullptr);
 }
 
+template <class T>
+T btom(bool fwd) {
+	return T(fwd) * 2 - 1;
+}
+
 template <class V, class T>
 V vtog(const vector<T>& vec) {
-	V gvn;
-	for (sizet i = 0, end = sizet(gvn.length()) <= vec.size() ? sizet(gvn.length()) : vec.size(); i < end; i++)
+	V gvn(T(0));
+	for (sizet i = 0, end = sizet(V::length()) <= vec.size() ? sizet(V::length()) : vec.size(); i < end; i++)
 		gvn[int(i)] = vec[i];
 	return gvn;
 }

@@ -67,6 +67,82 @@ void Texture::close() {
 	}
 }
 
+// INTERACTABLE
+
+void Interactable::onClick(const vec2i&, uint8) {}
+
+// A STAR
+
+Astar::Node::Node(uint8 id, uint8 parent, uint16 gCost, float fCost) :
+	id(id),
+	parent(parent),
+	gCost(gCost),
+	fCost(fCost)
+{}
+
+Astar::Astar(bool (*stepable)(uint8, void*), void* data) :
+	stepable(stepable),
+	data(data)
+{}
+
+float Astar::distance(uint8 id, uint8 dst) {
+	int dx = id % Com::boardLength - dst % Com::boardLength;
+	int dy = id / Com::boardLength - dst / Com::boardLength;
+	return std::sqrt(float(dx * dx + dy * dy));
+}
+
+vector<uint8> Astar::travelPath(uint8 src, uint8 dst) {
+	int ret = travelDist(src, dst);
+	if (ret == -1)
+		return {};
+
+	vector<uint8> path(sizet(ret) + 1);
+	for (uint8 id = dst; ret; id = grid[id].parent, ret--)
+		path[sizet(ret)] = id;
+	path[sizet(ret)] = src;
+	return path;
+}
+
+int Astar::travelDist(uint8 src, uint8 dst) {
+	if (src == dst)
+		return 0;
+	if (!isValid(dst))
+		return -1;
+
+	for (uint8 i = 0; i < Com::boardSize; i++)
+		grid[i] = Node(i, UINT8_MAX, UINT16_MAX, FLT_MAX);
+	grid[src] = Node(src, src, 0, 0.f);
+
+	bool closed[Com::boardSize];
+	memset(closed, 0, Com::boardSize * sizeof(*closed));
+	for (sset<Node> open = { grid[src] }; !open.empty() && open.size() < Com::boardSize;) {
+		sset<Node>::iterator nid = std::find_if(open.begin(), open.end(), [this](const Node& it) -> bool { return isValid(it.id); });
+		Node node = *nid;
+		open.erase(open.begin(), next(nid));
+		closed[node.id] = true;
+
+		for (uint8 (*mov)(uint8) : Com::adjacentStraight)	// TODO: test
+			if (uint8 ni = mov(node.id); isValid(ni)) {
+				if (ni == dst) {
+					grid[ni].parent = node.id;
+					return node.gCost + 1;
+				}
+				if (!closed[ni]) {
+					uint16 g = node.gCost + 1;
+					float f = float(g) + distance(ni, dst);
+
+					if (grid[ni].fCost > f) {
+						grid[ni].parent = node.id;
+						grid[ni].gCost = g;
+						grid[ni].fCost = f;
+						open.insert(grid[ni]);
+					}
+				}
+			}
+	}
+	return -1;
+}
+
 // STRINGS
 #ifdef _WIN32
 string wtos(const wchar* src) {

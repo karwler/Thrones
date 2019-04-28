@@ -111,10 +111,10 @@ public:
 private:
 	static vector<string> readFileLines(const string& file, bool printMessage = true);
 	static string readTextFile(const string& file, bool printMessage = true);
-	static bool writeTextFile(const string& file, const string& lines);
+	static bool writeTextFile(const string& file, const string& text);
 	static pairStr splitIniLine(const string& line);
 	static string makeIniLine(const string& key, const string& val);
-	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * {vertex, uv, normal}
+	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * { vertex, uv, normal }
 	template <class T> static T resolveObjId(int id, const vector<T>& vec);
 
 	static int setWorkingDir();

@@ -1,12 +1,12 @@
 #include "server.h"
-#include <signal.h>
+#include <csignal>
 #ifdef _WIN32
 #include <conio.h>
 #else
 #include <termios.h>
 #include <unistd.h>
 #endif
-using namespace Server;
+using namespace Com;
 
 enum class WaitResult : uint8 {
 	ready,
@@ -30,7 +30,7 @@ static bool quitting() {
 	fd_set fds;
 	FD_ZERO(&fds);
 	FD_SET(0, &fds);
-	timeval tv = {0, 0};
+	timeval tv = { 0, 0 };
 	return select(1, &fds, nullptr, nullptr, &tv) && getchar() == 'q';
 #endif
 }
@@ -58,7 +58,7 @@ static void disconnectPlayers(SDLNet_SocketSet sockets, TCPsocket* players) {
 
 static void sendRejection(TCPsocket server) {
 	TCPsocket tmps = SDLNet_TCP_Accept(server);
-	NetCode code = NetCode::full;
+	Code code = Code::full;
 	SDLNet_TCP_Send(tmps, &code, sizeof(code));
 	SDLNet_TCP_Close(tmps);
 	std::cout << "rejected incoming connection" << std::endl;
@@ -77,8 +77,8 @@ static void checkWaitingPlayer(SDLNet_SocketSet sockets, TCPsocket* players, siz
 	if (!SDLNet_SocketReady(players[i]))
 		return;
 
-	uint8 rcvBuf[bufSiz];
-	if (int len; (len = SDLNet_TCP_Recv(players[i], rcvBuf, bufSiz)) <= 0) {
+	uint8 rcvBuf[recvSize];
+	if (int len; (len = SDLNet_TCP_Recv(players[i], rcvBuf, recvSize)) <= 0) {
 		disconnectSocket(sockets, players[i]);
 		std::cout << "player " << pc-- << " disconnected" << std::endl;
 	} else
@@ -101,7 +101,7 @@ static WaitResult waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, T
 	// decide which player goes first and send information about
 	std::default_random_engine randGen = createRandomEngine();
 	sizet first = sizet(std::uniform_int_distribution<uint>(0, 1)(randGen));
-	uint8 buff[2] = {uint8(NetCode::setup)};
+	uint8 buff[2] = { uint8(Code::setup) };
 	for (sizet i = 0; i < maxPlayers; i++) {
 		buff[1] = i == first;
 		if (SDLNet_TCP_Send(players[i], buff, sizeof(buff)) != sizeof(buff)) {
@@ -114,14 +114,17 @@ static WaitResult waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, T
 }
 
 static bool checkPlayer(TCPsocket* players, sizet i) {
-	int len;
-	uint8 rcvBuf[bufSiz];
-	if (SDLNet_SocketReady(players[i]) && (len = SDLNet_TCP_Recv(players[i], rcvBuf, bufSiz)) <= 0) {
+	if (!SDLNet_SocketReady(players[i]))
+		return true;
+
+	uint8 rcvBuf[recvSize];
+	int len = SDLNet_TCP_Recv(players[i], rcvBuf, recvSize);
+	if (len <= 0) {
 		std::cout << "player " << i + 1 << " disconnected" << std::endl;
 		return false;
 	}
 
-	if (NetCode(*rcvBuf) < NetCode::ready)
+	if (Code(*rcvBuf) < Code::ready)
 		std::cerr << "invalid net code " << uint(*rcvBuf) << " from player " << i + 1 << std::endl;
 	else if (SDLNet_TCP_Send(players[(i + 1) % maxPlayers], rcvBuf, len) != len) {	// forward data to other player
 		std::cerr << SDLNet_GetError() << std::endl;
@@ -178,7 +181,7 @@ int main(int argc, char** argv) {
 	if (!server)
 		return connectionFail("failed to resolve host:");
 
-	TCPsocket players[2] = {nullptr, nullptr};
+	TCPsocket players[2] = { nullptr, nullptr };
 	SDLNet_SocketSet sockets = SDLNet_AllocSocketSet(maxSockets);
 	SDLNet_TCP_AddSocket(sockets, server);
 	std::cout << "press 'q' to exit" << std::endl;

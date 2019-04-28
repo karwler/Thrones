@@ -15,16 +15,12 @@ The game starts with the setup, which consists of the following phases in order:
 - placing your pieces  
 
 Press "Next" or "Prev" to switch between phases, but note that by going back changes may be lost.  
-You can place tiles/pieces by dragging them from the icon bar onto the board, switch their positions by dragging them using the left mouse button or clear them by left clicking on them. Fortress tiles will be places automatically, where no tiles were placed.  
+You can place tiles/pieces by dragging them from the icon bar or using the mouse wheel to select one and left clicking on the board, switch their positions by dragging them using the left mouse button or clear them by right clicking on them. Fortress tiles will be places automatically, where no tiles were placed.  
 After the setup the server program determines the first player, the middle row tiles will be rearranged accordingly and the actual match starts.  
 You can move pieces by dragging them using the left mouse button and fire by dragging a piece using the right mouse button.  
 
 ## To do
-- adjacent piece fortress ruin  
-- handle movement blocking pieces  
-- icon display while dragging piece  
 - alternate game modes  
-- maybe a couch multiplayer  
 - test setup phase  
 - test match phase  
 - test obj loading  

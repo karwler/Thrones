@@ -20,7 +20,7 @@ Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, co
 
 // ANIMATION
 
-Animation::Animation(Object* object, const std::initializer_list<Keyframe>& keyframes) :
+Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
 	keyframes(keyframes),
 	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot, object->color),
 	object(object)
@@ -78,6 +78,7 @@ void Camera::updateUI() {
 vec3 Camera::direction(const vec2i& mPos) const {
 	vec2 res = World::winSys()->windowSize().glm();
 	vec3 dir = glm::normalize(lat - pos);
+
 	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
 	float hl = vl * (res.x / res.y);
 	vec3 h = glm::normalize(glm::cross(dir, up)) * hl;
@@ -91,9 +92,9 @@ vec3 Camera::direction(const vec2i& mPos) const {
 // SCENE
 
 Scene::Scene() :
-	mouseMove(0),
 	select(nullptr),
 	capture(nullptr),
+	mouseMove(0),
 	layout(new Layout)	// dummy layout in case a function gets called preemptively
 {}
 
@@ -132,10 +133,11 @@ void Scene::onResize() {
 void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 	if (capture)
 		capture->onKeypress(key.keysym);
-	else switch (key.keysym.scancode) {
-	case SDL_SCANCODE_ESCAPE:
-		World::state()->eventEscape();
-	}
+	else if (!key.repeat)
+		switch (key.keysym.scancode) {
+		case SDL_SCANCODE_ESCAPE:
+			World::state()->eventEscape();
+		}
 }
 
 void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
@@ -177,8 +179,8 @@ void Scene::onMouseUp(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 void Scene::onMouseWheel(const vec2i& wMov) {
 	if (ScrollArea* box = getSelectedScrollArea())
 		box->onScroll(wMov * scrollFactorWheel);
-	else if (select)
-		select->onScroll(wMov * scrollFactorWheel);
+	else if (wMov.y)
+		World::state()->eventWheel(wMov.y);
 }
 
 void Scene::onMouseLeave() {
@@ -229,7 +231,7 @@ Interactable* Scene::getSelected(const vec2i& mPos, Layout* box) {
 Interactable* Scene::getScrollAreaOrObject(const vec2i& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
-	return pickObject(mPos);
+	return rayCast(pickerRay(mPos));
 }
 
 ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {

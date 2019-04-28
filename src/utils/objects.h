@@ -72,7 +72,7 @@ inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
 	return a = Object::Info(uint8(a) | uint8(b));
 }
 
-// square object on a single plane with coordinates {(0, 0) ... (8, 3)}
+// square object on a single plane with coordinates { (0, 0) ... (8, 3) }
 class BoardObject : public Object {
 public:
 	static const vector<ushort> squareElements;
@@ -82,16 +82,15 @@ private:
 
 	enum class DragState : uint8 {
 		none,
-		self,
 		move,
 		fire
 	};
 
 	DragState dragState;
-	OCall clcall, ulcall, urcall;
+	OCall clcall, crcall, ulcall, urcall;
 
 public:
-	BoardObject(vec2b pos = 0, float poz = 0.f, OCall clcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
+	BoardObject(vec2b pos = 0, float poz = 0.f, OCall clcall = nullptr, OCall crcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
 	virtual ~BoardObject() override = default;
 
 	virtual void draw() const override;
@@ -102,6 +101,7 @@ public:
 	vec2b getPos() const;
 	void setPos(vec2b gpos);
 	void setClcall(OCall pcl);
+	void setCrcall(OCall pcl);
 	void setUlcall(OCall pcl);
 	void setUrcall(OCall pcl);
 	void disable();
@@ -113,6 +113,10 @@ private:
 
 inline void BoardObject::setClcall(OCall pcl) {
 	clcall = pcl;
+}
+
+inline void BoardObject::setCrcall(OCall pcl) {
+	crcall = pcl;
 }
 
 inline void BoardObject::setUlcall(OCall pcl) {
@@ -156,8 +160,10 @@ private:
 
 public:
 	Tile() = default;
-	Tile(vec2b pos, Type type, OCall clcall, OCall ulcall, OCall urcall, Info mode);
+	Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
 	virtual ~Tile() override = default;
+
+	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
 	Type getType() const;
 	void setType(Type newType);
@@ -171,6 +177,42 @@ inline Tile::Type Tile::getType() const {
 
 inline Object::Info Tile::getModeByType(Info mode, Type type) {
 	return type != Type::empty ? mode & ~INFO_LINES | INFO_FILL : mode & ~INFO_FILL | INFO_LINES;
+}
+
+// tiles on a board
+struct TileCol {
+	Tile ene[Com::numTiles], mid[Com::boardLength], own[Com::numTiles];
+	// TODO: need more logic in here to simplify game.cpp
+	Tile& operator[](sizet i);
+	const Tile& operator[](sizet i) const;
+	Tile* begin();
+	const Tile* begin() const;
+	Tile* end();
+	const Tile* end() const;
+};
+
+inline Tile& TileCol::operator[](sizet i) {
+	return reinterpret_cast<Tile*>(this)[i];
+}
+
+inline const Tile& TileCol::operator[](sizet i) const {
+	return reinterpret_cast<const Tile*>(this)[i];
+}
+
+inline Tile* TileCol::begin() {
+	return reinterpret_cast<Tile*>(this);
+}
+
+inline const Tile* TileCol::begin() const {
+	return reinterpret_cast<const Tile*>(this);
+}
+
+inline Tile* TileCol::end() {
+	return begin() + Com::boardSize;
+}
+
+inline const Tile* TileCol::end() const {
+	return begin() + Com::boardSize;
 }
 
 // player on tiles
@@ -195,8 +237,10 @@ private:
 
 public:
 	Piece() = default;
-	Piece(vec2b pos, Type type, OCall clcall, OCall urcall, OCall ulcall, Info mode);
+	Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
 	virtual ~Piece() override = default;
+
+	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
 	Type getType() const;
 	void setType(Type newType);
@@ -204,4 +248,40 @@ public:
 
 inline Piece::Type Piece::getType() const {
 	return type;
+}
+
+// pieces on a board
+struct PieceCol {
+	Piece own[Com::numPieces], ene[Com::numPieces];
+	// TODO: need more logic in here to simplify game.cpp
+	Piece& operator[](sizet i);
+	const Piece& operator[](sizet i) const;
+	Piece* begin();
+	const Piece* begin() const;
+	Piece* end();
+	const Piece* end() const;
+};
+
+inline Piece& PieceCol::operator[](sizet i) {
+	return reinterpret_cast<Piece*>(this)[i];
+}
+
+inline const Piece& PieceCol::operator[](sizet i) const {
+	return reinterpret_cast<const Piece*>(this)[i];
+}
+
+inline Piece* PieceCol::begin() {
+	return reinterpret_cast<Piece*>(this);
+}
+
+inline const Piece* PieceCol::begin() const {
+	return reinterpret_cast<const Piece*>(this);
+}
+
+inline Piece* PieceCol::end() {
+	return begin() + Com::piecesSize;
+}
+
+inline const Piece* PieceCol::end() const {
+	return begin() + Com::piecesSize;
 }

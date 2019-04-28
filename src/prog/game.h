@@ -2,54 +2,28 @@
 
 struct DataBatch {
 	uint8 size;		// shall not exceed data size, is never actually checked though
-	uint8 data[Server::bufSiz];
+	uint8 data[Com::recvSize];
 
 	DataBatch();
 
-	void push(NetCode code);
-	void push(NetCode code, const vector<uint8>& info);
-	bool send(TCPsocket sock);
+	void push(Com::Code code);
+	void push(Com::Code code, const vector<uint8>& info);
 };
 
-inline void DataBatch::push(NetCode code) {
+inline DataBatch::DataBatch() :
+	size(0)
+{}
+
+inline void DataBatch::push(Com::Code code) {
 	data[size++] = uint8(code);
 }
 
 class Game {
-public:
-	static constexpr int8 boardSize = 9;
-	static constexpr int8 homeHeight = 4;
 private:
-	static constexpr uint8 numTiles = boardSize * homeHeight;	// amount of tiles on homeland (should equate to the sum of num<tile_type> + 1)
-	static constexpr uint8 numPieces = 15;						// amount of one player's pieces
-
-	struct TileCol {
-		array<Tile, numTiles> ene;
-		array<Tile, boardSize> mid;
-		array<Tile, numTiles> own;
-
-		Tile* begin();
-		const Tile* begin() const;
-		Tile* end();
-		const Tile* end() const;
-		constexpr sizet size() const;
-	};
-
-	struct PieceCol {
-		array<Piece, numPieces> own;
-		array<Piece, numPieces> ene;
-
-		Piece* begin();
-		const Piece* begin() const;
-		Piece* end();
-		const Piece* end() const;
-		constexpr sizet size() const;
-	};
-
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
 	uint8 (Game::*conn)(const uint8*);
-	uint8 recvb[Server::bufSiz];
+	uint8 recvb[Com::recvSize];
 	DataBatch sendb;
 
 	TileCol tiles;
@@ -62,7 +36,7 @@ private:
 
 		Record(Piece* piece = nullptr, bool attack = false, bool swap = false);
 	} record;	// what happened the previous turn
-	bool myTurn;
+	bool myTurn, firstTurn;
 
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
@@ -95,9 +69,9 @@ public:
 	void fillInFortress();
 	void takeOutFortress();
 
-	bool movePiece(Piece* piece, vec2b pos, Piece* occupant);	// returns true on end turn
-	bool attackPiece(Piece* killer, vec2b pos, Piece* piece);	// ^
-	bool placeDragon(vec2b pos, Piece* occupant);
+	void pieceMove(Piece* piece, vec2b pos, Piece* occupant);
+	void pieceFire(Piece* killer, vec2b pos, Piece* piece);
+	void placeDragon(vec2b pos, Piece* occupant);
 
 private:
 	uint8 connectionWait(const uint8* data);
@@ -107,87 +81,50 @@ private:
 	void setScreen();
 	void setBoard();
 	void setMidTiles();
-	static void setTiles(array<Tile, numTiles>& tiles, int8 yofs, OCall lcall, OCall ucall, Object::Info mode);
-	static void setPieces(array<Piece, numPieces>& pieces, OCall lcall, OCall ucall, Object::Info mode);
+	static void setTiles(Tile* tiles, int8 yofs, OCall lcall, Object::Info mode);
+	static void setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode);
 	static void setTilesInteract(Tile* tiles, sizet num, bool on);
-	static void setPiecesInteract(array<Piece, numPieces> pieces, bool on);
+	static void setPiecesInteract(Piece* pieces, bool on);
 	static Object::Info getTileInfoInteract(Object::Info mode, bool on);
 	static Object::Info getPieceInfoInteract(Object::Info mode, bool on);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
-	void prepareTurn();
 
 	bool survivalCheck(Piece* piece, vec2b pos);
-	vector<Tile*> collectMoveTiles(Piece* piece, bool attacking);
-	vector<Tile*> collectTilesBySingle(vec2b pos);
-	vector<Tile*> collectTilesByArea(vec2b pos, int8 dist);
-	vector<Tile*> collectTilesByType(vec2b pos);
-	void appAdjacentTilesByType(uint8 pos, bool* visits, Tile**& out, Tile::Type type);
-	vector<Tile*> collectAttackTiles(Piece* piece);
-	vector<Tile*> collectTilesByDistance(vec2b pos, int8 dist);
-	bool checkAttack(Piece* killer, Piece* victim);
+	bool checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool attacking);
+	bool checkMoveBySingle(vec2b pos, vec2b dst);
+	bool checkMoveByArea(Piece* piece, vec2b pos, vec2b dst, uint dist);
+	static bool spaceAvailible(uint8 pos, void* data);
+	bool checkMoveByType(vec2b pos, vec2b dst);
+	bool checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type);
+	bool checkFire(Piece* killer, vec2b pos, Piece* victim, vec2b dst);
+	bool checkTilesByDistance(vec2b pos, vec2b dst, int8 dist);
+	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
+	bool tryWin(Piece* piece, Piece* victim, Tile* dest);
 
+	void prepareTurn();
+	void endTurn();
 	void sendData();
 	void placePiece(Piece* piece, vec2b pos);	// just set the position
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool ruined);
-	void updateRecord(Piece* piece, bool attack, bool swap);
 
 	bool connectFail();
 	void disconnectMessage(const string& msg);
 	static void printInvalidCode(uint8 code);
-	static vector<Tile*> mergeTiles(vector<Tile*> a, const vector<Tile*>& b);
+	static uint8 posToGid(vec2b p);
+	static vec2b gidToPos(uint8 i);
 };
 
-inline Tile* Game::TileCol::begin() {
-	return reinterpret_cast<Tile*>(this);
-}
-
-inline const Tile* Game::TileCol::begin() const {
-	return reinterpret_cast<const Tile*>(this);
-}
-
-inline Tile* Game::TileCol::end() {
-	return begin() + size();
-}
-
-inline const Tile* Game::TileCol::end() const {
-	return begin() + size();
-}
-
-inline constexpr sizet Game::TileCol::size() const {
-	return ene.size() + mid.size() + own.size();
-}
-
-inline Piece* Game::PieceCol::begin() {
-	return reinterpret_cast<Piece*>(this);
-}
-
-inline const Piece* Game::PieceCol::begin() const {
-	return reinterpret_cast<const Piece*>(this);
-}
-
-inline Piece* Game::PieceCol::end() {
-	return begin() + size();
-}
-
-inline const Piece* Game::PieceCol::end() const {
-	return begin() + size();
-}
-
-inline constexpr sizet Game::PieceCol::size() const {
-	return own.size() + ene.size();
-}
-
 inline Tile* Game::getTile(vec2b pos) {
-	return &tiles.mid[sizet(pos.y * boardSize + pos.x)];
+	return &tiles.mid[sizet(pos.y * Com::boardLength + pos.x)];
 }
 
 inline bool Game::isHomeTile(Tile* til) const {
-	return til >= tiles.own.data();
+	return til >= tiles.own;
 }
 
 inline bool Game::isOwnPiece(Piece* pce) const {
-	return pce < pieces.ene.data();
+	return pce < pieces.ene;
 }
 
 inline Object* Game::getScreen() {
@@ -199,11 +136,11 @@ inline bool Game::getMyTurn() const {
 }
 
 inline void Game::setOwnTilesInteract(bool on) {
-	setTilesInteract(tiles.own.data(), tiles.own.size(), on);
+	setTilesInteract(tiles.own, Com::numTiles, on);
 }
 
 inline void Game::setMidTilesInteract(bool on) {
-	setTilesInteract(tiles.mid.data(), tiles.mid.size(), on);
+	setTilesInteract(tiles.mid, Com::boardLength, on);
 }
 
 inline void Game::setOwnPiecesInteract(bool on) {
@@ -231,4 +168,12 @@ inline bool Game::survivalCheck(Piece* piece, vec2b pos) {
 
 inline void Game::printInvalidCode(uint8 code) {
 	std::cerr << "invalid net code " << uint(code) << std::endl;
+}
+
+inline uint8 Game::posToGid(vec2b p) {
+	return uint8((p.y + Com::homeHeight) * Com::boardLength + p.x);
+}
+
+inline vec2b Game::gidToPos(uint8 i) {
+	return vec2b(int8(i % Com::boardLength), int8(i / Com::boardLength) - Com::homeHeight);
 }

@@ -36,7 +36,7 @@ private:
 	Object* object;		// cannot be null
 
 public:
-	Animation(Object* object, const std::initializer_list<Keyframe>& keyframes);
+	Animation(Object* object, const queue<Keyframe>& keyframes);
 
 	bool tick(float dSec);
 
@@ -68,10 +68,10 @@ public:
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
-	vec2i mouseMove;
-	Interactable* select;	// currently selected widget
+	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
+	vec2i mouseMove;
 	Camera camera;
 	vector<Object*> objects;
 	uptr<Layout> layout;
@@ -107,7 +107,6 @@ public:
 	void addAnimation(const Animation& anim);
 	const vec2i& getMouseMove() const;
 	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
-	template <class T> T* pickObject() const;
 	vec3 pickerRay(const vec2i& mPos) const;
 
 private:
@@ -117,7 +116,6 @@ private:
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	Layout* topLayout();
 
-	Object* pickObject(const vec2i& mPos) const;
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
@@ -164,15 +162,6 @@ inline ScrollArea* Scene::getSelectedScrollArea() const {
 
 inline Layout* Scene::topLayout() {
 	return popup ? popup.get() : layout.get();
-}
-
-inline Object* Scene::pickObject(const vec2i& mPos) const {
-	return rayCast(pickerRay(mPos));
-}
-
-template <class T>
-T* Scene::pickObject() const {
-	return dynamic_cast<T*>(pickObject(mousePos()));
 }
 
 inline vec3 Scene::pickerRay(const vec2i& mPos) const {

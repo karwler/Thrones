@@ -107,7 +107,7 @@ protected:
 	int wgtREnd(sizet id) const;
 
 private:
-	void setSlider(int ypos);
+	void setSlider(int spos);
 	int barSize() const;	// returns 0 if slider isn't needed
 	int sliderSize() const;
 	int sliderPos() const;

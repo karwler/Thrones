@@ -13,8 +13,8 @@ struct Size {
 	Size(int pixels);
 	Size(float percent);
 
-	void set(int pxiels);
-	void set(float precent);
+	void set(int pixels);
+	void set(float percent);
 };
 using vec2s = cvec2<Size>;
 
@@ -59,6 +59,7 @@ public:
 	virtual void tick(float) {}
 	virtual void onResize() {}
 	virtual void postInit() {}	// gets called after parent is set and all set up
+	virtual void onScroll(const vec2i&) {}
 
 	sizet getID() const;
 	Layout* getParent() const;
@@ -101,7 +102,6 @@ public:
 	vec4 color;
 protected:
 	int bgMargin;
-private:
 	bool showColor;
 
 public:
@@ -137,8 +137,11 @@ inline void Button::setLcall(BCall pcl) {
 
 class Draglet : public Button {
 private:
+	static const vec4 borderColor;
+
 	vec4 selectColor;
 	bool dragging;
+	bool selected;
 
 public:
 	Draglet(const Size& relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
@@ -149,12 +152,17 @@ public:
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
+	void setSelected(bool on);
 	void setColor(const vec4& clr);
 protected:
 	virtual const vec4& bgColor() const override;
 private:
 	void updateSelectColor();
 };
+
+inline void Draglet::setSelected(bool on) {
+	selected = on;
+}
 
 inline void Draglet::updateSelectColor() {
 	selectColor = glm::clamp(color * 1.2f, vec4(0.f), vec4(1.f));

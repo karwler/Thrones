@@ -118,17 +118,33 @@ bool Button::selectable() const {
 
 // DRAGLET
 
+const vec4 Draglet::borderColor(0.804f, 0.522f, 0.247f, 1.f);
+
 Draglet::Draglet(const Size& relSize, BCall leftCall, BCall rightCall, BCall doubleCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
 	Button(relSize, leftCall, rightCall, doubleCall, showColor, color, bgTex, bgMargin, parent, id),
-	dragging(false)
+	dragging(false),
+	selected(false)
 {
 	updateSelectColor();
 }
 
 void Draglet::draw() const {
 	Picture::draw();
-	if (dragging)
-		drawRect(Rect(mousePos(), size() / 2), color, 1);
+
+	if (selected) {
+		Rect rbg = rect();
+		drawRect(Rect(rbg.pos(), vec2i(rbg.w, bgMargin)), borderColor, 1);
+		drawRect(Rect(rbg.x, rbg.y + rbg.h - bgMargin, rbg.w, bgMargin), borderColor, 1);
+		drawRect(Rect(rbg.x, rbg.y + bgMargin, bgMargin, rbg.h - bgMargin * 2), borderColor, 1);
+		drawRect(Rect(rbg.x + rbg.w - bgMargin, rbg.y + bgMargin, bgMargin, rbg.h - bgMargin * 2), borderColor, 1);
+	}
+	if (dragging) {
+		Rect rbg(mousePos(), size() / 2);
+		if (showColor)
+			drawRect(rbg, color, 1);
+		if (bgTex)
+			drawTexture(bgTex, Rect(rbg.pos() + bgMargin / 2, rbg.size() - bgMargin), Rect(0, World::winSys()->windowSize()));
+	}
 }
 
 void Draglet::onClick(const vec2i&, uint8 mBut) {
@@ -287,7 +303,7 @@ void LabelEdit::draw() const {
 
 	if (World::scene()->capture == this) {	// caret
 		vec2i ps = position();
-		drawRect({caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y}, colorLight, 1);
+		drawRect({ caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y }, colorLight, 1);
 	}
 }
 

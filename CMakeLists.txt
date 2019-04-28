@@ -92,7 +92,7 @@ if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-padded")
 	endif()
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-deprecated -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")

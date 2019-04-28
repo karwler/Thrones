@@ -23,7 +23,8 @@ public:
 
 	// game setup
 	void eventOpenSetup();
-	void eventPlaceTile(Button* but);
+	void eventPlaceTileC(BoardObject* obj);
+	void eventPlaceTileD(Button* but);
 	void eventPlacePiece(Button* but);
 	void eventMoveTile(BoardObject* obj);
 	void eventMovePiece(BoardObject* obj);
@@ -57,8 +58,10 @@ public:
 
 private:
 	void setState(ProgState* newState);
-
 	BoardObject* pickBob(vec2b& pos, Piece*& pce);
+
+	void placeTile(Tile* tile, uint8 type);
+	void updateTile(Tile* tile, OCall rcall, OCall ucall);
 };
 
 inline Program::Program() :

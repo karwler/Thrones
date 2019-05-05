@@ -103,7 +103,7 @@ Layout* ProgMenu::createLayout() {
 	// root layout
 	vector<Widget*> cont = {
 		new Widget(),
-		new Layout(World::winSys()->textLength(srvt.text + "999.999.999.999", superHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, superSpacing),
+		new Layout(World::winSys()->textLength(srvt.text + "000.000.000.000", superHeight) + Layout::defaultItemSpacing + Label::defaultTextMargin * 4, buts, true, superSpacing),
 		new Widget()
 	};
 	return new Layout(1.f, cont, false, 0);
@@ -125,18 +125,38 @@ void ProgSetup::eventWheel(int ymov) {
 	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
 }
 
-void ProgSetup::setStage(ProgSetup::Stage stg) {
+bool ProgSetup::setStage(ProgSetup::Stage stg) {
 	switch (stage = stg) {
 	case Stage::tiles:
-		counters = vector<uint8>(Tile::amounts.begin(), Tile::amounts.begin() + pdift(Tile::Type::fortress));
+		World::game()->setOwnTilesInteract(Tile::Interactivity::tiling);
+		World::game()->setMidTilesInteract(false);
+		World::game()->setOwnPiecesVisible(false);
+		counters = World::game()->countOwnTiles();
 		break;
 	case Stage::middles:
-		counters = vector<uint8>(sizet(Tile::Type::fortress), 1);
+		World::game()->setOwnTilesInteract(Tile::Interactivity::none);
+		World::game()->setMidTilesInteract(true);
+		World::game()->setOwnPiecesVisible(false);
+		counters = World::game()->countMidTiles();
 		break;
 	case Stage::pieces:
-		counters = vector<uint8>(Piece::amounts.begin(), Piece::amounts.end());
+		World::game()->setOwnTilesInteract(Tile::Interactivity::piecing);
+		World::game()->setMidTilesInteract(false);
+		World::game()->setOwnPiecesVisible(true);
+		counters = World::game()->countOwnPieces();
+		break;
+	case Stage::ready:
+		World::game()->setOwnTilesInteract(Tile::Interactivity::none);
+		World::game()->setMidTilesInteract(false);
+		World::game()->setOwnPiecesInteract(false);
+		counters.clear();
+		return true;
 	}
+	World::scene()->resetLayouts();
 	setSelected(0);
+	for (uint8 i = 0; i < counters.size(); i++)
+		switchIcon(i, counters[i], stage != Stage::pieces);
+	return false;
 }
 
 void ProgSetup::setSelected(uint8 sel) {
@@ -147,11 +167,12 @@ void ProgSetup::setSelected(uint8 sel) {
 
 Layout* ProgSetup::createLayout() {
 	// center piece
+	icons = stage == Stage::pieces ? getPicons() : getTicons();
 	vector<Widget*> midl = {
 		new Widget(1.f),
 		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
 		new Widget(5.f),
-		stage == Stage::tiles ? icons = setTicons() : stage == Stage::middles ? icons = setTicons() : setPicons()
+		icons
 	};
 
 	// root layout
@@ -164,20 +185,20 @@ Layout* ProgSetup::createLayout() {
 	return new Layout(1.f, cont, false, 0);
 }
 
-Layout* ProgSetup::setTicons() {
+Layout* ProgSetup::getTicons() {
 	vector<Widget*> tbot = { new Widget() };
-	for (sizet i = 0; i < 4; i++)
+	for (uint8 i = 0; i < 4; i++)
 		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, nullptr, true, Tile::colors[i]));
 	tbot.push_back(new Widget());
-	return icons = new Layout(iconSize, tbot, false);
+	return new Layout(iconSize, tbot, false);
 }
 
-Layout* ProgSetup::setPicons() {
+Layout* ProgSetup::getPicons() {
 	vector<Widget*> pbot = { new Widget() };
 	for (const string& it : Piece::names)
-		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePiece, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
+		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePieceD, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
 	pbot.push_back(new Widget());
-	return icons = new Layout(iconSize, pbot, false);
+	return new Layout(iconSize, pbot, false);
 }
 
 Layout* ProgSetup::createSidebar(int& sideLength) const {
@@ -187,14 +208,21 @@ Layout* ProgSetup::createSidebar(int& sideLength) const {
 }
 
 void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
-	if (Draglet* ico = getIcon(type); !inc && counters[type] == 1) {
+	if (!inc && counters[type] == 1)
+		switchIcon(type, false, isTile);
+	else if (inc && !counters[type])
+		switchIcon(type, true, isTile);
+	counters[type] += btom<uint8>(inc);
+}
+
+void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
+	if (Draglet* ico = getIcon(type); on) {
+		ico->setColor(isTile ? Tile::colors[type] : BoardObject::defaultColor);
+		ico->setLcall(isTile ? &Program::eventPlaceTileD : &Program::eventPlacePieceD);
+	} else {
 		ico->setColor(ico->color * 0.5f);
 		ico->setLcall(nullptr);
-	} else if (inc && counters[type] == 0) {
-		ico->setColor(isTile ? Tile::colors[type] : BoardObject::defaultColor);
-		ico->setLcall(isTile ? &Program::eventPlaceTileD : &Program::eventPlacePiece);
 	}
-	counters[type] += btom<uint8>(inc);
 }
 
 // PROG MATCH
@@ -212,12 +240,8 @@ Layout* ProgMatch::createLayout() {
 	};
 
 	// dragon icon
-	if (World::game()->getOwnPieces(Piece::Type::dragon)->getPos().has(INT8_MIN)) {
-		vector<Widget*> dora = {
-			new Draglet(iconSize, &Program::eventPlaceDragon, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)]))
-		};
-		left.push_back(dragonIcon = new Layout(iconSize, dora, false, 0));
-	}
+	if (!World::game()->getOwnPieces(Piece::Type::dragon)->getPos().hasNot(INT8_MIN))
+		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, &Program::eventPlaceDragon, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])) }, false, 0));
 
 	// root layout
 	vector<Widget*> cont = {

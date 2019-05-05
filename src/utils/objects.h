@@ -18,10 +18,9 @@ public:
 		INFO_NONE      = 0x0,
 		INFO_SHOW      = 0x1,	// draw at all
 		INFO_TEXTURE   = 0x2,	// draw texture
-		INFO_WIREFRAME = 0x4,	// draw lines
+		INFO_LINES     = 0x4,	// draw lines
 		INFO_RAYCAST   = 0x8,	// be detected by raycast
-		INFO_FILL      = INFO_SHOW | INFO_TEXTURE,
-		INFO_LINES     = INFO_SHOW | INFO_WIREFRAME,
+		INFO_FILL      = INFO_SHOW | INFO_TEXTURE
 	};
 
 	static const vec4 defaultColor;
@@ -40,8 +39,9 @@ public:
 	virtual void draw() const;
 
 	mat4 getTransform() const;
-private:
-	void setTransform() const;
+protected:
+	static void setTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+	static void setColorization(const Texture* tex, const vec4& color, Info mode);
 };
 
 inline constexpr Object::Info operator~(Object::Info a) {
@@ -75,6 +75,9 @@ inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
 // square object on a single plane with coordinates { (0, 0) ... (8, 3) }
 class BoardObject : public Object {
 public:
+	static constexpr float upperPoz = 0.001f;
+	static constexpr float halfSize = 0.5f;
+	static const vec3 defaultNormal;
 	static const vector<ushort> squareElements;
 private:
 	static const vector<Vertex> squareVertices;
@@ -84,9 +87,8 @@ private:
 		none,
 		move,
 		fire
-	};
-
-	DragState dragState;
+	} dragState;
+protected:
 	OCall clcall, crcall, ulcall, urcall;
 
 public:
@@ -104,11 +106,10 @@ public:
 	void setCrcall(OCall pcl);
 	void setUlcall(OCall pcl);
 	void setUrcall(OCall pcl);
-	void disable();
+	void setModeByInteract(bool on);
 
 private:
 	static void drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex);
-	static vec3 btop(vec2b bpos, float poz);
 };
 
 inline void BoardObject::setClcall(OCall pcl) {
@@ -128,15 +129,15 @@ inline void BoardObject::setUrcall(OCall pcl) {
 }
 
 inline vec2b BoardObject::getPos() const {
-	return vec2b(uint8(pos.x) + 4, pos.z);	// game field starts at (-4, 0)
+	return ptog(pos);
 }
 
 inline void BoardObject::setPos(vec2b gpos) {
-	pos = btop(gpos, pos.y);
+	pos = gtop(gpos, pos.y);
 }
 
-inline vec3 BoardObject::btop(vec2b bpos, float poz = 0.f) {
-	return vec3(bpos.x - 4, poz, bpos.y);
+inline void BoardObject::setModeByInteract(bool on) {
+	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
 }
 
 // piece of terrain
@@ -150,8 +151,16 @@ public:
 		fortress,
 		empty
 	};
+
+	enum class Interactivity : uint8 {
+		none,
+		raycast,
+		tiling,
+		piecing
+	};
+
 	static const array<vec4, sizet(Type::empty)+1> colors;
-	static const array<string, sizet(Type::empty)+1> names;
+	static const array<string, sizet(Type::empty)> names;
 	static const array<uint8, sizet(Type::empty)> amounts;
 
 	bool ruined;	// only for fortress
@@ -167,6 +176,7 @@ public:
 
 	Type getType() const;
 	void setType(Type newType);
+	void setCalls(Interactivity lvl);
 private:
 	static Info getModeByType(Info mode, Type type);
 };
@@ -176,13 +186,13 @@ inline Tile::Type Tile::getType() const {
 }
 
 inline Object::Info Tile::getModeByType(Info mode, Type type) {
-	return type != Type::empty ? mode & ~INFO_LINES | INFO_FILL : mode & ~INFO_FILL | INFO_LINES;
+	return type != Type::empty ? mode | INFO_SHOW : mode & ~INFO_SHOW;
 }
 
 // tiles on a board
 struct TileCol {
 	Tile ene[Com::numTiles], mid[Com::boardLength], own[Com::numTiles];
-	// TODO: need more logic in here to simplify game.cpp
+
 	Tile& operator[](sizet i);
 	const Tile& operator[](sizet i) const;
 	Tile* begin();
@@ -244,16 +254,28 @@ public:
 
 	Type getType() const;
 	void setType(Type newType);
+	void setModeByOn(bool on);
+	bool active() const;
+	void enable(vec2b bpos);
+	void disable();
 };
 
 inline Piece::Type Piece::getType() const {
 	return type;
 }
 
+inline void Piece::setModeByOn(bool on) {
+	on ? mode |= INFO_SHOW | INFO_RAYCAST : mode &= ~(INFO_SHOW | INFO_RAYCAST);
+}
+
+inline bool Piece::active() const {
+	return getPos().hasNot(INT8_MIN) && (mode & (INFO_SHOW | INFO_RAYCAST));
+}
+
 // pieces on a board
 struct PieceCol {
 	Piece own[Com::numPieces], ene[Com::numPieces];
-	// TODO: need more logic in here to simplify game.cpp
+
 	Piece& operator[](sizet i);
 	const Piece& operator[](sizet i) const;
 	Piece* begin();

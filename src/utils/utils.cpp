@@ -34,22 +34,19 @@ void Texture::loadFile(const string& file) {
 		uint32* pix = static_cast<uint32*>(img->pixels) + i;
 		*pix = (*pix << 8) | (*pix >> 24);
 	}
-	loadGl(img, delExt(file), GL_RGBA);
+	loadGl(img, GL_RGBA);
 }
 
 void Texture::loadText(SDL_Surface* img) {
 	if (img && img->format->format == SDL_PIXELFORMAT_BGRA32)
-		loadGl(img, emptyStr, GL_BGRA);
+		loadGl(img, GL_BGRA);
 	else {
 		SDL_FreeSurface(img);
 		res = 0;
 	}
 }
 
-void Texture::loadGl(SDL_Surface* img, const string& text, GLenum format) {
-	name = text;
-	res = vec2i(img->w, img->h);
-
+void Texture::loadGl(SDL_Surface* img, GLenum format) {
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
@@ -57,6 +54,7 @@ void Texture::loadGl(SDL_Surface* img, const string& text, GLenum format) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+	res = vec2i(img->w, img->h);
 	SDL_FreeSurface(img);
 }
 
@@ -144,6 +142,15 @@ int Astar::travelDist(uint8 src, uint8 dst) {
 }
 
 // STRINGS
+
+string filename(const string& path) {
+	if (path.empty() || path == dseps)
+		return emptyStr;
+
+	sizet end = path.back() == dsep ? path.length() - 1 : path.length();
+	sizet pos = path.find_last_of(dsep, end - 1);
+	return pos == string::npos ? path.substr(0, end) : path.substr(pos + 1, end-pos - 1);
+}
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

@@ -10,7 +10,7 @@ ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos)
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Keyframe::Change change, const glm::vec3& pos, const glm::vec3& rot, const vec4 color) :
+Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec4& color) :
 	pos(pos),
 	rot(rot),
 	color(color),
@@ -37,12 +37,12 @@ bool Animation::tick(float dSec) {
 	if (keyframes.front().change & Keyframe::CHG_CLR)
 		object->color = linearTransition(begin.color, keyframes.front().color, td);
 
-	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f) {
-		begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
-		keyframes.pop();
-		return tick(ovhead);
-	}
-	return keyframes.empty();
+	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f)
+		if (keyframes.pop(); !keyframes.empty()) {
+			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
+			return tick(ovhead);
+		}
+	return !keyframes.empty();
 }
 
 // CAMERA
@@ -118,9 +118,12 @@ void Scene::tick(float dSec) {
 	if (popup)
 		popup->tick(dSec);
 
-	for (vector<Animation>::iterator it = animations.begin(); it != animations.end(); it++)
-		if (it->tick(dSec))
-			animations.erase(it);
+	for (sizet i = 0; i < animations.size();) {
+		if (animations[i].tick(dSec))
+			i++;
+		else
+			animations.erase(animations.begin() + i);
+	}
 }
 
 void Scene::onResize() {
@@ -245,16 +248,20 @@ ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
 }
 
 Object* Scene::rayCast(const vec3& ray) const {
+	float min = FLT_MAX;
+	Object* mob = nullptr;
 	for (Object* obj : objects) {
 		if (!(obj->mode & Object::INFO_RAYCAST))
 			continue;
 
 		mat4 trans = obj->getTransform();
 		for (sizet i = 0; i < obj->elems.size(); i += 3)
-			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t))
-				return obj;
+			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t) && t < min) {
+				min = t;
+				mob = obj;
+			}
 	}
-	return nullptr;
+	return mob;
 }
 
 bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t) {

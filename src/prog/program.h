@@ -6,6 +6,11 @@
 // handles the frontend
 class Program {
 private:
+	static const string argAddress;
+	static const string argPort;
+	static const string argConnect;
+	static const string argSetup;
+
 	uptr<ProgState> state;
 	Game game;
 
@@ -25,7 +30,8 @@ public:
 	void eventOpenSetup();
 	void eventPlaceTileC(BoardObject* obj);
 	void eventPlaceTileD(Button* but);
-	void eventPlacePiece(Button* but);
+	void eventPlacePieceC(BoardObject* obj);
+	void eventPlacePieceD(Button* but);
 	void eventMoveTile(BoardObject* obj);
 	void eventMovePiece(BoardObject* obj);
 	void eventClearTile(BoardObject* obj);
@@ -38,7 +44,7 @@ public:
 	void eventOpenMatch();
 	void eventPlaceDragon(Button* but = nullptr);
 	void eventMove(BoardObject* obj);
-	void eventAttack(BoardObject* obj);
+	void eventFire(BoardObject* obj);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -57,20 +63,17 @@ public:
 	Game* getGame();
 
 private:
+	void placeTile(Tile* tile, uint8 type);
+	void placePiece(vec2b pos, uint8 type, Piece* occupant);
+
 	void setState(ProgState* newState);
 	BoardObject* pickBob(vec2b& pos, Piece*& pce);
-
-	void placeTile(Tile* tile, uint8 type);
-	void updateTile(Tile* tile, OCall rcall, OCall ucall);
+	Piece* extractPiece(BoardObject* bob, vec2b pos);
 };
 
 inline Program::Program() :
 	state(new ProgState)	// necessary as a placeholder to prevent nullptr exceptions
 {}
-
-inline void Program::start() {
-	eventOpenMainMenu();
-}
 
 inline ProgState* Program::getState() {
 	return state.get();
@@ -78,4 +81,8 @@ inline ProgState* Program::getState() {
 
 inline Game* Program::getGame() {
 	return &game;
+}
+
+inline Piece* Program::extractPiece(BoardObject* bob, vec2b pos) {
+	return dynamic_cast<Piece*>(bob) ? static_cast<Piece*>(bob) : game.findPiece(pos);
 }

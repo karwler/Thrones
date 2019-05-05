@@ -133,7 +133,6 @@ class Texture {
 private:
 	GLuint id;
 	vec2i res;
-	string name;
 
 public:
 	Texture();
@@ -147,10 +146,9 @@ public:
 	GLuint getID() const;
 	const vec2i getRes() const;
 	bool valid() const;
-	const string& getName() const;
 
 private:
-	void loadGl(SDL_Surface* img, const string& text, GLenum format);
+	void loadGl(SDL_Surface* img, GLenum format);
 };
 
 inline Texture::Texture() :
@@ -175,10 +173,6 @@ inline const vec2i Texture::getRes() const {
 
 inline bool Texture::valid() const {
 	return res.hasNot(0);
-}
-
-inline const string& Texture::getName() const {
-	return name;
 }
 
 // for Object and Widget
@@ -336,8 +330,18 @@ vector<T> stov(const char* str, sizet len, F strtox, T fill = T(0), A... args) {
 // geometry?
 
 template <class T>
+bool inRange(const T& val, const T& min, const T& max) {
+	return val >= min && val <= max;
+}
+
+template <class T>
 bool outRange(const T& val, const T& min, const T& max) {
 	return val < min || val > max;
+}
+
+template <class T>
+bool inRange(const cvec2<T>& val, const cvec2<T>& min, const cvec2<T>& max) {
+	return inRange(val.x, min.x, max.x) && inRange(val.y, min.y, max.y);
 }
 
 template <class T>
@@ -378,6 +382,10 @@ U cycle(U pos, U siz, S mov) {
 #ifdef _WIN32
 string wtos(const wchar* wstr);
 wstring stow(const string& str);
+#else
+inline string wtos(const char* str) {	// dummy function for World::setArgs
+	return str;
+}
 #endif
 
 inline bool stob(const string& str) {
@@ -437,6 +445,14 @@ V vtog(const vector<T>& vec) {
 	for (sizet i = 0, end = sizet(V::length()) <= vec.size() ? sizet(V::length()) : vec.size(); i < end; i++)
 		gvn[int(i)] = vec[i];
 	return gvn;
+}
+
+inline vec2b ptog(const vec3& p) {
+	return vec2b(uint8(p.x) + 4, p.z);	// game field starts at (-4, 0)
+}
+
+inline vec3 gtop(vec2b p, float z = 0.f) {
+	return vec3(p.x - 4, z, p.y);
 }
 
 // container stuff

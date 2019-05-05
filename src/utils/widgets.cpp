@@ -139,11 +139,12 @@ void Draglet::draw() const {
 		drawRect(Rect(rbg.x + rbg.w - bgMargin, rbg.y + bgMargin, bgMargin, rbg.h - bgMargin * 2), borderColor, 1);
 	}
 	if (dragging) {
-		Rect rbg(mousePos(), size() / 2);
+		vec2i siz = size() / 2;
+		vec2i pos = mousePos() - siz / 2;
 		if (showColor)
-			drawRect(rbg, color, 1);
+			drawRect(Rect(pos, siz), color, 1);
 		if (bgTex)
-			drawTexture(bgTex, Rect(rbg.pos() + bgMargin / 2, rbg.size() - bgMargin), Rect(0, World::winSys()->windowSize()));
+			drawTexture(bgTex, Rect(pos + bgMargin / 2, siz - bgMargin), Rect(0, World::winSys()->windowSize()));
 	}
 }
 

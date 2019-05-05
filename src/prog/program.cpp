@@ -1,8 +1,32 @@
 #include "engine/world.h"
+#include <cassert>
+
+const string Program::argAddress = "s";
+const string Program::argPort = "p";
+const string Program::argConnect = "c";
+const string Program::argSetup = "d";
+
+void Program::start() {
+	if (const string& addr = World::getOpt(argAddress); !addr.empty())
+		World::sets()->address = addr;
+	else if (World::hasFlag(argAddress))
+		World::sets()->address = Com::loopback;
+
+	if (const string& port = World::getOpt(argPort); !port.empty())
+		World::sets()->port = uint16(sstoul(port));
+	else if (World::hasFlag(argPort))
+		World::sets()->port = Com::defaultPort;
+
+	World::scene()->setObjects(game.initObjects());	// doesn't need to be here but I like having the game board in the background
+	eventOpenMainMenu();
+	if (World::hasFlag(argConnect))
+		eventConnectServer(nullptr);
+}
 
 // MAIN MENU
 
 void Program::eventOpenMainMenu(Button*) {
+	game.uninitObjects();	// either do this or reset objects
 	setState(new ProgMenu);
 }
 
@@ -26,8 +50,12 @@ void Program::eventUpdatePort(Button* but) {
 // GAME SETUP
 
 void Program::eventOpenSetup() {
+	state.reset(new ProgSetup);
+#ifdef NDEBUG
 	World::scene()->setObjects(game.initObjects());
-	setState(new ProgSetup);
+#else
+	World::scene()->setObjects(World::hasFlag(argSetup) ? game.initDummyObjects() : game.initObjects());
+#endif
 	static_cast<ProgSetup*>(state.get())->setStage(ProgSetup::Stage::tiles);
 }
 
@@ -39,7 +67,7 @@ void Program::eventPlaceTileC(BoardObject* obj) {
 
 void Program::eventPlaceTileD(Button* but) {
 	if (Tile* tile = dynamic_cast<Tile*>(World::scene()->select))
-		placeTile(tile, valToEnum<uint8>(Tile::colors, static_cast<Draglet*>(but)->color));
+		placeTile(tile, uint8(but->getID() - 1));
 }
 
 void Program::placeTile(Tile* tile, uint8 type) {
@@ -50,40 +78,40 @@ void Program::placeTile(Tile* tile, uint8 type) {
 
 	// place the tile
 	tile->setType(Tile::Type(type));
-	updateTile(tile, &Program::eventClearTile, &Program::eventMoveTile);
+	tile->setCalls(Tile::Interactivity::tiling);
 	ps->incdecIcon(type, false, true);
 }
 
-void Program::updateTile(Tile* tile, OCall rcall, OCall ucall) {
-	tile->setCrcall(rcall);
-	tile->setUlcall(ucall);
+void Program::eventPlacePieceC(BoardObject* obj) {
+	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	if (uint8 tid = ps->getSelected(); ps->getCount(tid)) {
+		vec2b pos = obj->getPos();
+		placePiece(pos, tid, extractPiece(obj, pos));
+	}
 }
 
-void Program::eventPlacePiece(Button* but) {
+void Program::eventPlacePieceD(Button* but) {
 	vec2b pos;
-	Piece* pce;
-	BoardObject* bob = pickBob(pos, pce);
-	if (!bob)
-		return;
+	if (Piece* pce; pickBob(pos, pce))
+		placePiece(pos, uint8(but->getID() - 1), pce);
+}
 
+void Program::placePiece(vec2b pos, uint8 type, Piece* occupant) {
 	// remove any piece that may be occupying that tile already
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (pce)
-		ps->incdecIcon(uint8(pce->getType()), true, false);
-
-	// find the first not placed piece of the specified type
-	Draglet* dlt = static_cast<Draglet*>(but);
-	Piece::Type ptyp = strToEnum<Piece::Type>(Piece::names, dlt->bgTex->getName());
-	Piece* pieces = game.getOwnPieces(ptyp);
-	sizet id = 0;
-	while (id < Piece::amounts[uint8(ptyp)] && pieces[id].getPos().hasNot(-1))
-		id++;
-
-	// place it if exists
-	if (id < Piece::amounts[uint8(ptyp)]) {
-		pieces[id].setPos(pos);
-		ps->incdecIcon(uint8(pce->getType()), false, false);
+	if (occupant) {
+		occupant->disable();
+		ps->incdecIcon(uint8(occupant->getType()), true, false);
 	}
+
+	// find the first not placed piece of the specified type and place it if it exists
+	Piece* pieces = game.getOwnPieces(Piece::Type(type));
+	for (uint8 i = 0; i < Piece::amounts[type]; i++)
+		if (!pieces[i].active()) {
+			pieces[i].enable(pos);
+			ps->incdecIcon(type, false, false);
+			break;
+		}
 }
 
 void Program::eventMoveTile(BoardObject* obj) {
@@ -91,11 +119,9 @@ void Program::eventMoveTile(BoardObject* obj) {
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
 		Tile::Type desType = dst->getType();
 		dst->setType(src->getType());
+		dst->setCalls(Tile::Interactivity::tiling);
 		src->setType(desType);
-
-		updateTile(dst, &Program::eventClearTile, &Program::eventMoveTile);
-		if (desType == Tile::Type::empty)
-			updateTile(src, nullptr, nullptr);
+		src->setCalls(Tile::Interactivity::tiling);
 	}
 }
 
@@ -115,69 +141,44 @@ void Program::eventClearTile(BoardObject* obj) {
 
 	static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
 	til->setType(Tile::Type::empty);
-	updateTile(til, nullptr, nullptr);
+	til->setCalls(Tile::Interactivity::tiling);
 }
 
 void Program::eventClearPiece(BoardObject* obj) {
-	Piece* pce = static_cast<Piece*>(obj);
-
-	static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
-	pce->setPos(INT8_MIN);
+	if (Piece* pce = extractPiece(obj, obj->getPos())) {
+		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
+		pce->disable();
+	}
 }
 
 void Program::eventSetupNext(Button*) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	switch (ps->getStage()) {
-	case ProgSetup::Stage::tiles:
-		if (string err = game.checkOwnTiles(); !err.empty()) {
-			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
-			return;
+	try {
+		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+		switch (ps->getStage()) {
+		case ProgSetup::Stage::tiles:
+			game.checkOwnTiles();
+			game.fillInFortress();
+			break;
+		case ProgSetup::Stage::middles:
+			game.checkMidTiles();
+			break;
+		case ProgSetup::Stage::pieces:
+			game.checkOwnPieces();
 		}
-		game.fillInFortress();
-		game.setOwnTilesInteract(false);
-		game.setMidTilesInteract(true);
-		break;
-	case ProgSetup::Stage::middles:
-		if (string err = game.checkMidTiles(); !err.empty()) {
-			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
-			return;
+		if (ps->setStage(ProgSetup::Stage(uint8(ps->getStage()) + 1))) {
+			game.sendSetup();
+			ps->enemyReady ? eventOpenMatch() : eventShowWaitPopup();
 		}
-		game.setOwnTilesInteract(true);
-		game.setMidTilesInteract(false);
-		game.setOwnPiecesInteract(true);
-		break;
-	case ProgSetup::Stage::pieces:
-		if (string err = game.checkOwnPieces(); !err.empty()) {
-			World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
-			return;
-		}
-		game.setOwnTilesInteract(false);
-		game.setOwnPiecesInteract(false);
-	}
-
-	if (ps->setStage(ProgSetup::Stage(uint8(ps->getStage()) + 1)); ps->getStage() < ProgSetup::Stage::ready)
-		World::scene()->resetLayouts();
-	else {
-		game.sendSetup();
-		ps->enemyReady ? eventOpenMatch() : eventShowWaitPopup();
+	} catch (const string& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 
 void Program::eventSetupBack(Button*) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	switch (ps->getStage()) {
-	case ProgSetup::Stage::middles:
-		game.setOwnTilesInteract(true);
-		game.setMidTilesInteract(false);
+	if (ps->getStage() == ProgSetup::Stage::middles)
 		game.takeOutFortress();
-		break;
-	case ProgSetup::Stage::pieces:
-		game.setOwnTilesInteract(false);
-		game.setMidTilesInteract(true);
-		game.setOwnPiecesInteract(false);
-	}
 	ps->setStage(ProgSetup::Stage(uint8(ps->getStage()) - 1));
-	World::scene()->resetLayouts();
 }
 
 void Program::eventShowWaitPopup(Button*) {
@@ -189,7 +190,7 @@ void Program::eventShowWaitPopup(Button*) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
-	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, game.getScreen()->pos += vec3(0.f, -2.f, 0.f)) })));
+	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, game.getScreen()->pos + vec3(0.f, -3.f, 0.f)) })));
 }
 
 void Program::eventPlaceDragon(Button*) {
@@ -204,7 +205,7 @@ void Program::eventMove(BoardObject* obj) {
 		game.pieceMove(static_cast<Piece*>(obj), pos, pce);
 }
 
-void Program::eventAttack(BoardObject* obj) {
+void Program::eventFire(BoardObject* obj) {
 	vec2b pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.pieceFire(static_cast<Piece*>(obj), pos, pce);
@@ -260,8 +261,7 @@ BoardObject* Program::pickBob(vec2b& pos, Piece*& pce) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
 	if (bob) {
 		pos = bob->getPos();
-		if (!(pce = dynamic_cast<Piece*>(bob)))
-			pce = game.findPiece(pos);
+		pce = extractPiece(bob, pos);
 	}
 	return bob;
 

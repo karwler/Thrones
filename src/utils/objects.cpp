@@ -27,15 +27,10 @@ void Object::draw() const {
 	if (!(mode & INFO_SHOW))
 		return;
 
-	if (tex && (mode & INFO_TEXTURE)) {
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, tex->getID());
-	} else
-		glDisable(GL_TEXTURE_2D);
-	glColor4fv(glm::value_ptr(color));
-	
-	setTransform();
-	glBegin(!(mode & INFO_WIREFRAME) ? GL_TRIANGLES : GL_LINE_STRIP);
+	setColorization(tex, color, mode);
+	setTransform(pos, rot, scl);
+
+	glBegin(!(mode & INFO_LINES) ? GL_TRIANGLES : GL_LINES);
 	for (ushort id : elems) {
 		glTexCoord2fv(glm::value_ptr(verts[id].tuv));
 		glNormal3fv(glm::value_ptr(verts[id].nrm));
@@ -52,13 +47,22 @@ mat4 Object::getTransform() const {
 	return glm::scale(trans, scl);
 }
 
-void Object::setTransform() const {
+void Object::setTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
 	glLoadIdentity();
 	glTranslatef(pos.x, pos.y, pos.z);
 	glRotatef(rot.x, 1.f, 0.f, 0.f);
 	glRotatef(rot.y, 0.f, 1.f, 0.f);
 	glRotatef(rot.z, 0.f, 0.f, 1.f);
 	glScalef(scl.x, scl.y, scl.z);
+}
+
+void Object::setColorization(const Texture* tex, const vec4& color, Info mode) {
+	if (tex && (mode & INFO_TEXTURE)) {
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, tex->getID());
+	} else
+		glDisable(GL_TEXTURE_2D);
+	glColor4fv(glm::value_ptr(color));
 }
 
 // GAME OBJECT
@@ -69,17 +73,18 @@ const vector<ushort> BoardObject::squareElements = {
 };
 
 const vector<Vertex> BoardObject::squareVertices = {
-	Vertex(vec3(-0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 1.f)),
-	Vertex(vec3(-0.5f, 0.f, -0.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 0.f)),
-	Vertex(vec3(0.5f, 0.f, -0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 0.f)),
-	Vertex(vec3(0.5f, 0.f, 0.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
+	Vertex(vec3(-halfSize, 0.f, halfSize), defaultNormal, vec2(0.f, 1.f)),
+	Vertex(vec3(-halfSize, 0.f, -halfSize), defaultNormal, vec2(0.f, 0.f)),
+	Vertex(vec3(halfSize, 0.f, -halfSize), defaultNormal, vec2(1.f, 0.f)),
+	Vertex(vec3(halfSize, 0.f, halfSize), defaultNormal, vec2(1.f, 1.f))
 };
 
+const vec3 BoardObject::defaultNormal(0.f, 1.f, 0.f);
 const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
 const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
 BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
-	Object(btop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
+	Object(gtop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
 	dragState(DragState::none),
 	clcall(clcall),
 	crcall(crcall),
@@ -92,7 +97,7 @@ void BoardObject::draw() const {
 		Object::draw();
 	else {
 		vec3 ray = World::scene()->pickerRay(mousePos());
-		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::move)
+		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - upperPoz - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::move)
 			drawRect(loc, rot, scl, color * moveIconColor, mode & INFO_TEXTURE ? tex : nullptr);
 		else {
 			Object::draw();
@@ -102,19 +107,8 @@ void BoardObject::draw() const {
 }
 
 void BoardObject::drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex) {
-	if (tex) {
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, tex->getID());
-	} else
-		glDisable(GL_TEXTURE_2D);
-	glColor4fv(glm::value_ptr(color));
-
-	glLoadIdentity();
-	glTranslatef(pos.x, pos.y, pos.z);
-	glRotatef(rot.x, 1.f, 0.f, 0.f);
-	glRotatef(rot.y, 0.f, 1.f, 0.f);
-	glRotatef(rot.z, 0.f, 0.f, 1.f);
-	glScalef(scl.x, scl.y, scl.z);
+	setColorization(tex, color, INFO_TEXTURE);
+	setTransform(pos, rot, scl);
 
 	glBegin(GL_QUADS);
 	for (Vertex it : squareVertices) {
@@ -147,11 +141,6 @@ void BoardObject::onUndrag(uint8 mBut) {
 	}
 }
 
-void BoardObject::disable() {
-	setPos(INT8_MIN);
-	mode &= ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
-}
-
 // TILE
 
 const array<vec4, Tile::colors.size()> Tile::colors = {
@@ -160,7 +149,7 @@ const array<vec4, Tile::colors.size()> Tile::colors = {
 	vec4(0.471f, 0.471f, 0.471f, 1.f),
 	vec4(0.157f, 0.784f, 1.f, 1.f),
 	vec4(0.549f, 0.275f, 0.078f, 1.f),
-	vec4(0.235f, 0.235f, 0.235f, 1.f)
+	vec4(0.3f, 0.3f, 0.3f, 1.f)
 };
 
 const array<string, Tile::names.size()> Tile::names = {
@@ -168,15 +157,15 @@ const array<string, Tile::names.size()> Tile::names = {
 	"forest",
 	"mountain",
 	"water",
-	"fortress",
-	"empty"
+	"fortress"
 };
 
 const array<uint8, Tile::amounts.size()> Tile::amounts = {
 	11,
 	10,
 	7,
-	7
+	7,
+	1
 };
 
 Tile::Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
@@ -191,6 +180,26 @@ void Tile::setType(Type newType) {
 	type = newType;
 	color = colors[uint8(type)];
 	mode = getModeByType(mode, type);
+}
+
+void Tile::setCalls(Interactivity lvl) {
+	setModeByInteract(lvl != Interactivity::none);
+	switch (lvl) {
+	case Interactivity::tiling:
+		clcall = &Program::eventPlaceTileC;
+		crcall = type != Type::empty ? &Program::eventClearTile : nullptr;
+		ulcall = type != Type::empty ? &Program::eventMoveTile : nullptr;
+		break;
+	case Interactivity::piecing:
+		clcall = &Program::eventPlacePieceC;
+		crcall = &Program::eventClearPiece;
+		ulcall = nullptr;
+		break;
+	default:
+		clcall = nullptr;
+		crcall = nullptr;
+		ulcall = nullptr;
+	}
 }
 
 // PIECE
@@ -222,7 +231,7 @@ const array<uint8, Piece::amounts.size()> Piece::amounts = {
 };
 
 Piece::Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
-	BoardObject(pos, 0.01f, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
+	BoardObject(pos, upperPoz, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
 	type(type)
 {}
 
@@ -231,4 +240,14 @@ void Piece::onText(const string&) {}
 void Piece::setType(Piece::Type newType) {
 	type = newType;
 	tex = World::winSys()->texture(names[uint8(type)]);
+}
+
+void Piece::enable(vec2b bpos) {
+	setPos(bpos);
+	setModeByOn(true);
+}
+
+void Piece::disable() {
+	setPos(INT8_MIN);
+	setModeByOn(false);
 }

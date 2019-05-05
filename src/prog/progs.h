@@ -82,7 +82,7 @@ public:
 	virtual void eventWheel(int ymov) override;
 
 	Stage getStage() const;
-	void setStage(Stage stg);
+	bool setStage(Stage stg);	// returns true if match is ready to load
 	Draglet* getIcon(uint8 type) const;
 	void incdecIcon(uint8 type, bool inc, bool isTile);
 	uint8 getCount(uint8 type) const;
@@ -90,10 +90,11 @@ public:
 
 	virtual Layout* createLayout() override;
 private:
-	Layout* setTicons();
-	Layout* setPicons();
+	static Layout* getTicons();
+	static Layout* getPicons();
 	Layout* createSidebar(int& sideLength) const;
 	void setSelected(uint8 sel);
+	void switchIcon(uint8 type, bool on, bool isTile);
 };
 
 inline ProgSetup::Stage ProgSetup::getStage() const {

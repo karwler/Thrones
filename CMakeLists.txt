@@ -1,7 +1,9 @@
 # project properties
 cmake_minimum_required(VERSION 3.10.2)
 project(Thrones LANGUAGES CXX)
-set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
+if(CMAKE_CONFIGURATION_TYPES)
+	set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
+endif()
 
 # source files
 set(SRC_FILES
@@ -58,6 +60,8 @@ endif()
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	add_definitions(-D_UNICODE -D_CRT_SECURE_NO_WARNINGS)
 endif()
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -D_DEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 
 # set main target
 add_executable(${PROJECT_NAME} ${SRC_FILES})
@@ -98,8 +102,7 @@ endif()
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	set_target_properties(${PROJECT_NAME} PROPERTIES
 									OUTPUT_NAME ${PROJECT_NAME}
-									LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
-									LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS")
+									LINK_FLAGS "/SUBSYSTEM:WINDOWS")
 else()
 	string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
 	set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -112,6 +115,11 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIB_DIR}/${dll_file}" ${EXECUTABLE_OUTPUT_PATH})
 	endforeach()
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/debug_run.bat" ${EXECUTABLE_OUTPUT_PATH})
+else()
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/debug_run.sh" ${EXECUTABLE_OUTPUT_PATH})
 endif()
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 #					COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/icon.ico" ${EXECUTABLE_OUTPUT_PATH}

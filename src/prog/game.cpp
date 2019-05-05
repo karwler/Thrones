@@ -2,9 +2,9 @@
 
 // DATA BATCH
 
-void DataBatch::push(Com::Code code, const vector<uint8>& info) {
+void DataBatch::push(Com::Code code, const initializer_list<uint8>& info) {
 	push(code);
-	memcpy(data + size, info.data(), info.size());
+	std::copy(info.begin(), info.end(), data + size);
 	size += uint8(info.size());	// there should probably be some exception handling here, but I don't feel like it
 }
 
@@ -136,22 +136,28 @@ Piece* Game::findPiece(vec2b pos) {
 
 vector<Object*> Game::initObjects() {
 	// prepare objects for setup
-	setTiles(tiles.ene, -Com::homeHeight, nullptr, Object::INFO_LINES);
+	setTiles(tiles.ene, -Com::homeHeight, nullptr, Object::INFO_TEXTURE);
 	setMidTiles();
-	setTiles(tiles.own, 1, &Program::eventPlaceTileC, Object::INFO_LINES | Object::INFO_RAYCAST);
+	setTiles(tiles.own, 1, &Program::eventPlaceTileC, Object::INFO_TEXTURE | Object::INFO_RAYCAST);
 	setPieces(pieces.own, &Program::eventClearPiece, &Program::eventMovePiece, Object::INFO_TEXTURE);
 	setPieces(pieces.ene, nullptr, nullptr, Object::INFO_TEXTURE);
 	setScreen();
 	setBoard();
+	setBgrid();
 
 	// collect array of references to all objects
-	sizet oi = 0;
-	vector<Object*> objs(Com::boardSize + Com::piecesSize + 2);
+	initializer_list<Object*> others = { &board, &bgrid, &screen };
+	sizet oi = others.size();
+	vector<Object*> objs(others.size() + Com::boardSize + Com::piecesSize);
+	std::copy(others.begin(), others.end(), objs.begin());
 	setObjectAddrs(tiles.begin(), Com::boardSize, objs, oi);
 	setObjectAddrs(pieces.begin(), Com::piecesSize, objs, oi);
-	objs[oi] = &screen;
-	objs[oi+1] = &board;
 	return objs;
+}
+
+void Game::uninitObjects() {
+	setTilesInteract(tiles.begin(), Com::boardSize, false);
+	setPiecesInteract(pieces.begin(), Com::piecesSize, false);
 }
 
 void Game::prepareMatch() {
@@ -159,17 +165,21 @@ void Game::prepareMatch() {
 
 	// set interactivity and reassign callback events
 	for (Tile& it : tiles) {
-		it.mode = getTileInfoInteract(it.mode, myTurn);
+		it.setModeByInteract(myTurn);
 		it.setClcall(nullptr);
+		it.setCrcall(nullptr);
 		it.setUlcall(nullptr);
 	}
 	for (Piece& it : pieces.own) {
-		it.mode = getPieceInfoInteract(it.mode, myTurn);
+		it.setModeByInteract(myTurn);
 		it.setClcall(nullptr);
 		it.setUlcall(&Program::eventMove);
-		it.setUrcall(&Program::eventAttack);
+		it.setUrcall(&Program::eventFire);
 	}
-	setPiecesInteract(pieces.ene, myTurn);
+	for (Piece& it : pieces.ene) {
+		it.mode |= Object::INFO_SHOW;
+		it.setModeByInteract(myTurn);
+	}
 
 	// rearange middle tiles
 	if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); myTurn) {
@@ -186,7 +196,7 @@ void Game::prepareMatch() {
 	std::find_if(tiles.mid, tiles.mid + Com::boardLength, [](const Tile& it) -> bool { return it.getType() == Tile::Type::empty; })->setType(Tile::Type::fortress);
 }
 
-string Game::checkOwnTiles() const {
+void Game::checkOwnTiles() const {
 	uint8 empties = 0;
 	for (int8 y = 1; y <= Com::homeHeight; y++) {
 		// collect information and check if the fortress isn't touching a border
@@ -195,36 +205,50 @@ string Game::checkOwnTiles() const {
 			if (Tile::Type type = tiles.mid[uint8(y * Com::boardLength + x)].getType(); type < Tile::Type::fortress)
 				cnt[uint8(type)]++;
 			else if (vec2b pos(x, y); outRange(pos, vec2b(1), vec2b(Com::boardLength - 2, Com::homeHeight - 1)))
-				return firstUpper(Tile::names[uint8(Tile::Type::fortress)]) + " at " + pos.toString('|') + " not allowed";
+				throw firstUpper(Tile::names[uint8(Tile::Type::fortress)]) + " at " + pos.toString('|') + " not allowed";
 			else
 				empties++;
 		}
 		// check diversity in each row
 		for (uint8 i = 0; i < uint8(Tile::Type::fortress); i++)
 			if (!cnt[i])
-				return firstUpper(Tile::names[i]) + " missing in row " + to_string(y);
+				throw firstUpper(Tile::names[i]) + " missing in row " + to_string(y);
 	}
-	return empties == 1 ? emptyStr : "Not all tiles were placed";
+	if (empties > 1)
+		throw "Not all tiles were placed";
 }
 
-string Game::checkMidTiles() const {
+void Game::checkMidTiles() const {
 	// collect information
-	uint8 cnt[sizet(Tile::Type::fortress)] = { 0, 0, 0, 0 };
+	uint8 cnt[uint8(Tile::Type::fortress)] = { 0, 0, 0, 0 };
 	for (int8 i = 0; i < Com::boardLength; i++)
-		if (Tile::Type type = tiles.mid[sizet(i)].getType(); type < Tile::Type::fortress)
-			cnt[sizet(type)]++;
+		if (Tile::Type type = tiles.mid[uint8(i)].getType(); type < Tile::Type::fortress)
+			cnt[uint8(type)]++;
 	// check if all pieces except for dragon were placed
-	for (uint8 i = 0; i < sizet(Tile::Type::fortress); i++)
+	for (uint8 i = 0; i < uint8(Tile::Type::fortress); i++)
 		if (cnt[i] != 1)
-			return firstUpper(Tile::names[i]) + " wasn't placed";
-	return emptyStr;
+			throw firstUpper(Tile::names[i]) + " wasn't placed";
 }
 
-string Game::checkOwnPieces() const {
+void Game::checkOwnPieces() const {
 	for (const Piece& it : pieces.own)
-		if (outRange(it.getPos(), vec2b(0, Com::boardLength), vec2b(1, Com::homeHeight)) && it.getType() != Piece::Type::dragon)
-			return firstUpper(Piece::names[uint8(it.getType())]) + " wasn't placed";
-	return emptyStr;
+		if (!it.active() && it.getType() != Piece::Type::dragon)
+			throw firstUpper(Piece::names[uint8(it.getType())]) + " wasn't placed";
+}
+
+vector<uint8> Game::countTiles(const Tile* tiles, sizet num, vector<uint8> cnt) {
+	for (sizet i = 0; i < num; i++)
+		if (sizet(tiles[i].getType()) < cnt.size())
+			cnt[sizet(tiles[i].getType())]--;
+	return cnt;
+}
+
+vector<uint8> Game::countOwnPieces() const {
+	vector<uint8> cnt(Piece::amounts.begin(), Piece::amounts.end());
+	for (const Piece& it : pieces.own)
+		if (inRange(it.getPos(), vec2b(0, 1), vec2b(Com::boardLength - 1, Com::homeHeight)))
+			cnt[sizet(it.getType())]--;
+	return cnt;
 }
 
 void Game::fillInFortress() {
@@ -330,17 +354,37 @@ void Game::setScreen() {
 		Vertex(vec3(4.7f, 2.6f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 0.f)),
 		Vertex(vec3(4.7f, 0.f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 1.f))
 	};
-	screen = Object(vec3(0.f, 0.f, -0.5f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, { 0.2f, 0.13f, 0.062f, 1.f }, Object::INFO_FILL);
+	screen = Object(vec3(0.f, 0.f, -BoardObject::halfSize), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.2f, 0.13f, 0.062f, 1.f), Object::INFO_FILL);
 }
 
 void Game::setBoard() {
 	vector<Vertex> verts = {
-		Vertex(vec3(-5.5f, 0.f, 5.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 1.f)),
-		Vertex(vec3(-5.5f, 0.f, -5.5f), vec3(0.f, 1.f, 0.f), vec2(0.f, 0.f)),
-		Vertex(vec3(5.5f, 0.f, -5.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 0.f)),
-		Vertex(vec3(5.5f, 0.f, 5.5f), vec3(0.f, 1.f, 0.f), vec2(1.f, 1.f))
+		Vertex(vec3(-5.5f, 0.f, 5.5f), BoardObject::defaultNormal, vec2(0.f, 1.f)),
+		Vertex(vec3(-5.5f, 0.f, -5.5f), BoardObject::defaultNormal, vec2(0.f, 0.f)),
+		Vertex(vec3(5.5f, 0.f, -5.5f), BoardObject::defaultNormal, vec2(1.f, 0.f)),
+		Vertex(vec3(5.5f, 0.f, 5.5f), BoardObject::defaultNormal, vec2(1.f, 1.f))
 	};
-	board = Object(vec3(0.f, -0.01f, 0.f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, { 0.166f, 0.068f, 0.019f, 1.f }, Object::INFO_FILL);
+	board = Object(vec3(0.f, -BoardObject::upperPoz, 0.f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.166f, 0.068f, 0.019f, 1.f), Object::INFO_FILL);
+}
+
+void Game::setBgrid() {
+	sizet i = 0;
+	vector<Vertex> verts((Com::boardLength + 1) * 4);
+	for (int8 y = -Com::homeHeight; y <= Com::homeHeight + 1; y += Com::boardLength)
+		for (int8 x = 0; x <= Com::boardLength; x++)
+			verts[i++] = Vertex(gtop(vec2b(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize), BoardObject::defaultNormal);
+	for (int8 x = 0; x <= Com::boardLength; x += Com::boardLength)
+		for (int8 y = -Com::homeHeight; y <= Com::homeHeight + 1; y++)
+			verts[i++] = Vertex(gtop(vec2b(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize), BoardObject::defaultNormal);
+
+	i = 0;
+	vector<ushort> elems((Com::boardLength + 1) * 4);
+	for (uint8 ofs = 0; ofs <= uint8(verts.size()) / 2; ofs += uint8(verts.size()) / 2)
+		for (uint8 c = 0; c <= Com::boardLength; c++) {
+			elems[i++] = ofs + c;
+			elems[i++] = ofs + c + Com::boardLength + 1;
+		}
+	bgrid = Object(vec3(0.f), vec3(0.f), vec3(1.f), verts, elems, nullptr, Tile::colors[uint8(Tile::Type::empty)], Object::INFO_SHOW | Object::INFO_LINES);
 }
 
 void Game::setTiles(Tile* tiles, int8 yofs, OCall lcall, Object::Info mode) {
@@ -352,7 +396,7 @@ void Game::setTiles(Tile* tiles, int8 yofs, OCall lcall, Object::Info mode) {
 
 void Game::setMidTiles() {
 	for (int8 i = 0; i < Com::boardLength; i++)
-		tiles.mid[sizet(i)] = Tile(vec2b(i, 0), Tile::Type::empty, &Program::eventPlaceTileC, &Program::eventClearTile, &Program::eventMoveTile, nullptr, Object::INFO_LINES);
+		tiles.mid[sizet(i)] = Tile(vec2b(i, 0), Tile::Type::empty, &Program::eventPlaceTileC, &Program::eventClearTile, &Program::eventMoveTile, nullptr, Object::INFO_TEXTURE);
 }
 
 void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode) {
@@ -365,14 +409,24 @@ void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode)
 	}
 }
 
-void Game::setTilesInteract(Tile* tiles, sizet num, bool on) {
-	for (sizet i = 0; i < num; i++)
-		tiles[i].mode = getTileInfoInteract(tiles[i].mode, on);
+void Game::setOwnTilesInteract(Tile::Interactivity lvl) {
+	for (Tile& it : tiles.own)
+		it.setCalls(lvl);
 }
 
-void Game::setPiecesInteract(Piece* pieces, bool on) {
+void Game::setTilesInteract(Tile* tiles, sizet num, bool on) {
+	for (sizet i = 0; i < num; i++)
+		tiles[i].setModeByInteract(on);
+}
+
+void Game::setPiecesInteract(Piece* pieces, sizet num, bool on) {
+	for (sizet i = 0; i < num; i++)
+		pieces[i].setModeByInteract(on);
+}
+
+void Game::setPiecesVisible(Piece* pieces, bool on) {
 	for (uint8 i = 0; i < Com::numPieces; i++)
-		pieces[i].mode = getPieceInfoInteract(pieces[i].mode, on);
+		pieces[i].setModeByOn(on);
 }
 
 Piece* Game::getOwnPieces(Piece::Type type) {
@@ -479,12 +533,14 @@ bool Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) {
 	if (killer->getType() == Piece::Type::throne)
 		return true;
 
-	if (victim->getType() == Piece::Type::warhorse && victim == record.piece && (record.attack || record.swap))
-		return false;
-	if (victim->getType() == Piece::Type::elephant && dtil->getType() == Tile::Type::plains && killer->getType() != Piece::Type::dragon)
-		return false;
-	if (killer->getType() == Piece::Type::dragon && dtil->getType() == Tile::Type::forest)
-		return false;
+	switch (victim->getType()) {
+	case Piece::Type::warhorse:
+		return victim != record.piece || !(record.attack || record.swap);
+	case Piece::Type::elephant:
+		return dtil->getType() != Tile::Type::plains || killer->getType() == Piece::Type::dragon;
+	case Piece::Type::dragon:
+		return dtil->getType() != Tile::Type::forest;
+	}
 	return true;
 }
 
@@ -499,11 +555,10 @@ bool Game::tryWin(Piece* piece, Piece* victim, Tile* dest) {
 }
 
 void Game::prepareTurn() {
-	setOwnTilesInteract(myTurn);
+	setOwnTilesInteract(myTurn ? Tile::Interactivity::raycast : Tile::Interactivity::none);
 	setMidTilesInteract(myTurn);
 	setTilesInteract(tiles.ene, Com::numTiles, myTurn);
-	setOwnPiecesInteract(myTurn);
-	setPiecesInteract(pieces.ene, myTurn);
+	setPiecesInteract(pieces.begin(), Com::piecesSize, myTurn);
 }
 
 void Game::endTurn() {
@@ -520,7 +575,7 @@ void Game::sendSetup() {
 	for (sizet i = 0; i < Com::boardLength + Com::numTiles; i++)
 		sendb.data[Com::boardLength + Com::numTiles - i] = uint8(tiles.mid[i].getType());
 	for (sizet i = 0, e = Com::boardLength + Com::numTiles + 1; i < Com::numPieces; i++)
-		*reinterpret_cast<vec2b*>(sendb.data + e + i * sizeof(vec2b)) = pieces.own[i].getPos();
+		*reinterpret_cast<vec2b*>(sendb.data + e + i * sizeof(vec2b)) = invertPos(pieces.own[i].getPos());
 	sendData();
 }
 
@@ -533,7 +588,8 @@ void Game::sendData() {
 
 void Game::placePiece(Piece* piece, vec2b pos) {
 	piece->setPos(pos);
-	sendb.push(Com::Code::move, { uint8(piece - pieces.own), uint8(Com::boardLength - pos.x - 1), uint8(-pos.y) });	// rotate position 180
+	pos = invertPos(pos);
+	sendb.push(Com::Code::move, { uint8(piece - pieces.own), uint8(pos.x), uint8(pos.y) });
 }
 
 void Game::removePiece(Piece* piece) {
@@ -556,3 +612,40 @@ void Game::disconnectMessage(const string& msg) {
 	disconnect();
 	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventExitGame));
 }
+#ifdef DEBUG
+vector<Object*> Game::initDummyObjects() {
+	vector<Object*> objs = initObjects();
+
+	// columns 0 p, 2 f, 4 m, 6 w
+	for (int8 x = 0; x < 8; x += 2)
+		for (int8 y = 1; y <= Com::homeHeight; y++)
+			getTile(vec2b(x, y))->setType(Tile::Type(x / 2));
+
+	// columns 1 f, 3 fftp
+	for (int8 y = 1; y <= Com::homeHeight; y++)
+		getTile(vec2b(1, y))->setType(Tile::Type::forest);
+	for (int8 y = 1; y <= 2; y++)
+		getTile(vec2b(3, y))->setType(Tile::Type::forest);
+	getTile(vec2b(3, 3))->setType(Tile::Type::fortress);
+	getTile(vec2b(3, 4))->setType(Tile::Type::plains);
+
+	// columns 5 pm, 7 pw, 8 p
+	getTile(vec2b(5, 1))->setType(Tile::Type::plains);
+	for (int8 y = 2; y <= Com::homeHeight; y++)
+		getTile(vec2b(5, y))->setType(Tile::Type::mountain);
+	getTile(vec2b(7, 1))->setType(Tile::Type::plains);
+	for (int8 y = 2; y <= Com::homeHeight; y++)
+		getTile(vec2b(7, y))->setType(Tile::Type::water);
+	for (int8 y = 1; y <= Com::homeHeight; y++)
+		getTile(vec2b(8, y))->setType(Tile::Type::plains);
+
+	// middle 0 p, 2 f, 4 m, 6 w
+	for (int8 i = 0; i < 8; i += 2)
+		getTile(vec2b(i, 0))->setType(Tile::Type(i / 2));
+
+	// pieces
+	for (uint8 i = 0; i < Com::numPieces * 2; i += 2)
+		pieces.own[i/2].setPos(vec2b(i % Com::boardLength, 1 + i / Com::boardLength));
+	return objs;
+}
+#endif

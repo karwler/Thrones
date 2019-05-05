@@ -26,7 +26,7 @@ struct Keyframe {
 	float time;		// time difference between this and previous keyframe
 	Change change;	// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec4 color = vec4());
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec4& color = vec4());
 };
 
 class Animation {

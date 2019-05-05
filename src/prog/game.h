@@ -1,5 +1,6 @@
 #include "utils/objects.h"
 
+// helper for populating send buffer
 struct DataBatch {
 	uint8 size;		// shall not exceed data size, is never actually checked though
 	uint8 data[Com::recvSize];
@@ -7,7 +8,7 @@ struct DataBatch {
 	DataBatch();
 
 	void push(Com::Code code);
-	void push(Com::Code code, const vector<uint8>& info);
+	void push(Com::Code code, const initializer_list<uint8>& info);
 };
 
 inline DataBatch::DataBatch() :
@@ -18,6 +19,7 @@ inline void DataBatch::push(Com::Code code) {
 	data[size++] = uint8(code);
 }
 
+// handles game logic and networking
 class Game {
 private:
 	SDLNet_SocketSet socks;
@@ -26,9 +28,9 @@ private:
 	uint8 recvb[Com::recvSize];
 	DataBatch sendb;
 
+	Object board, bgrid, screen;
 	TileCol tiles;
 	PieceCol pieces;
-	Object screen, board;
 
 	struct Record {
 		Piece* piece;
@@ -59,13 +61,21 @@ public:
 	bool getMyTurn() const;
 
 	vector<Object*> initObjects();
+#ifdef DEBUG
+	vector<Object*> initDummyObjects();
+#endif
+	void uninitObjects();
 	void prepareMatch();
-	void setOwnTilesInteract(bool on);
+	void setOwnTilesInteract(Tile::Interactivity lvl);
 	void setMidTilesInteract(bool on);
 	void setOwnPiecesInteract(bool on);
-	string checkOwnTiles() const;	// returns empty string on success
-	string checkMidTiles() const;	// ^
-	string checkOwnPieces() const;	// ^
+	void setOwnPiecesVisible(bool on);
+	void checkOwnTiles() const;		// throws error string on failure
+	void checkMidTiles() const;		// ^
+	void checkOwnPieces() const;	// ^
+	vector<uint8> countOwnTiles() const;
+	vector<uint8> countMidTiles() const;
+	vector<uint8> countOwnPieces() const;
 	void fillInFortress();
 	void takeOutFortress();
 
@@ -80,13 +90,14 @@ private:
 
 	void setScreen();
 	void setBoard();
+	void setBgrid();
 	void setMidTiles();
 	static void setTiles(Tile* tiles, int8 yofs, OCall lcall, Object::Info mode);
 	static void setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode);
 	static void setTilesInteract(Tile* tiles, sizet num, bool on);
-	static void setPiecesInteract(Piece* pieces, bool on);
-	static Object::Info getTileInfoInteract(Object::Info mode, bool on);
-	static Object::Info getPieceInfoInteract(Object::Info mode, bool on);
+	static void setPiecesInteract(Piece* pieces, sizet num, bool on);
+	static void setPiecesVisible(Piece* pieces, bool on);
+	static vector<uint8> countTiles(const Tile* tiles, sizet num, vector<uint8> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 
 	bool survivalCheck(Piece* piece, vec2b pos);
@@ -113,6 +124,7 @@ private:
 	static void printInvalidCode(uint8 code);
 	static uint8 posToGid(vec2b p);
 	static vec2b gidToPos(uint8 i);
+	static vec2b invertPos(vec2b p);
 };
 
 inline Tile* Game::getTile(vec2b pos) {
@@ -135,24 +147,24 @@ inline bool Game::getMyTurn() const {
 	return myTurn;
 }
 
-inline void Game::setOwnTilesInteract(bool on) {
-	setTilesInteract(tiles.own, Com::numTiles, on);
-}
-
 inline void Game::setMidTilesInteract(bool on) {
 	setTilesInteract(tiles.mid, Com::boardLength, on);
 }
 
 inline void Game::setOwnPiecesInteract(bool on) {
-	setPiecesInteract(pieces.own, on);
+	setPiecesInteract(pieces.own, Com::numPieces, on);
 }
 
-inline Object::Info Game::getTileInfoInteract(Object::Info mode, bool on) {
-	return on ? mode | Object::INFO_RAYCAST : mode & ~Object::INFO_RAYCAST;
+inline void Game::setOwnPiecesVisible(bool on) {
+	setPiecesVisible(pieces.own, on);
 }
 
-inline Object::Info Game::getPieceInfoInteract(Object::Info mode, bool on) {
-	return on ? mode | Object::INFO_SHOW | Object::INFO_RAYCAST : mode & ~(Object::INFO_SHOW | Object::INFO_RAYCAST);
+inline vector<uint8> Game::countOwnTiles() const {
+	return countTiles(tiles.own, Com::numTiles, vector<uint8>(Tile::amounts.begin(), Tile::amounts.end() - 1));
+}
+
+inline vector<uint8> Game::countMidTiles() const {
+	return countTiles(tiles.mid, Com::boardLength, vector<uint8>(Tile::amounts.size() - 1, 1));
 }
 
 template <class T>
@@ -176,4 +188,8 @@ inline uint8 Game::posToGid(vec2b p) {
 
 inline vec2b Game::gidToPos(uint8 i) {
 	return vec2b(int8(i % Com::boardLength), int8(i / Com::boardLength) - Com::homeHeight);
+}
+
+inline vec2b Game::invertPos(vec2b p) {
+	return vec2b(Com::boardLength - p.x - 1, -p.y);
 }

@@ -10,6 +10,7 @@
 #include <ctime>
 #include <iostream>
 #include <random>
+#include <string>
 
 // get rid of SDL's main
 #ifdef main
@@ -17,6 +18,8 @@
 #endif
 
 using std::array;
+using std::initializer_list;
+using std::string;
 
 using uchar = unsigned char;
 using ushort = unsigned short;
@@ -40,6 +43,7 @@ using sizet = size_t;
 using pdift = ptrdiff_t;
 
 namespace Com {
+	const string loopback = "127.0.0.1";
 	constexpr uint16 defaultPort = 39741;
 	constexpr sizet maxPlayers = 2;
 	constexpr sizet maxSockets = maxPlayers + 1;

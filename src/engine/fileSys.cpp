@@ -17,7 +17,7 @@ Settings::Settings() :
 	fullscreen(false),
 	vsync(VSync::synchronized),
 	resolution(800, 600),
-	address("127.0.0.1"),
+	address(Com::loopback),
 	port(Com::defaultPort)
 {}
 

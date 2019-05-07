@@ -40,17 +40,14 @@ void World::setArgs(int argc, char** argv) {
 }
 #ifdef _WIN32
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+	World::setArgs(pCmdLine);
 #else
 int main(int argc, char** argv) {
+	World::setArgs(argc - 1, argv + 1);
 #endif
 	std::setlocale(LC_ALL, "");
 	std::locale::global(std::locale(""));
 	std::cout.imbue(std::locale());
 	std::cerr.imbue(std::locale());
-#ifdef _WIN32
-	World::setArgs(pCmdLine);
-#else
-	World::setArgs(argc - 1, argv + 1);
-#endif
 	return World::winSys()->start();
 }

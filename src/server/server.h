@@ -58,31 +58,31 @@ namespace Com {
 	constexpr uint8 piecesSize = numPieces * 2;
 
 	constexpr array<uint8 (*)(uint8), 4> adjacentStraight = {
-		[](uint8 id) -> uint8 { return id - boardLength; },								// up
-		[](uint8 id) -> uint8 { return id % boardLength ? id - 1 : UINT8_MAX; },		// left
-		[](uint8 id) -> uint8 { return id % (boardLength - 1) ? id + 1 : UINT8_MAX; },	// right
-		[](uint8 id) -> uint8 { return id + boardLength; }								// down
+		[](uint8 id) -> uint8 { return id / boardLength ? id - boardLength : UINT8_MAX; },						// up
+		[](uint8 id) -> uint8 { return id % boardLength ? id - 1 : UINT8_MAX; },								// left
+		[](uint8 id) -> uint8 { return id % boardLength != boardLength - 1 ? id + 1 : UINT8_MAX; },				// right
+		[](uint8 id) -> uint8 { return id / boardLength != boardLength - 1 ? id + boardLength : UINT8_MAX; }	// down
 	};
 	constexpr array<uint8 (*)(uint8), 8> adjacentFull = {
-		[](uint8 id) -> uint8 { return id % boardLength ? id - boardLength - 1 : UINT8_MAX; },			// left up
-		[](uint8 id) -> uint8 { return id - boardLength; },												// up
-		[](uint8 id) -> uint8 { return id % (boardLength - 1) ? id - boardLength + 1 : UINT8_MAX; },	// right up
+		[](uint8 id) -> uint8 { return id / boardLength && id % boardLength ? id - boardLength - 1 : UINT8_MAX; },						// left up
+		[](uint8 id) -> uint8 { return id / boardLength ? id - boardLength : UINT8_MAX; },												// up
+		[](uint8 id) -> uint8 { return id / boardLength && id % boardLength != boardLength - 1  ? id - boardLength + 1 : UINT8_MAX; },	// right up
 		[](uint8 id) -> uint8 { return id % boardLength ? id - 1 : UINT8_MAX; },						// left
-		[](uint8 id) -> uint8 { return id % (boardLength - 1) ? id + 1 : UINT8_MAX; },					// right
-		[](uint8 id) -> uint8 { return id % boardLength ? id + boardLength - 1 : UINT8_MAX; },			// left down
-		[](uint8 id) -> uint8 { return id + boardLength; },												// down
-		[](uint8 id) -> uint8 { return id % (boardLength - 1) ? id + boardLength + 1 : UINT8_MAX; }		// right down
+		[](uint8 id) -> uint8 { return id % boardLength != boardLength - 1 ? id + 1 : UINT8_MAX; },		// right
+		[](uint8 id) -> uint8 { return id / boardLength != boardLength - 1 && id % boardLength ? id + boardLength - 1 : UINT8_MAX; },					// left down
+		[](uint8 id) -> uint8 { return id / boardLength != boardLength - 1 ? id + boardLength : UINT8_MAX; },											// down
+		[](uint8 id) -> uint8 { return id / boardLength != boardLength - 1 && id % boardLength != boardLength - 1 ? id + boardLength + 1 : UINT8_MAX; }	// right down
 	};
 
 	enum class Code : uint8 {
-		full,
-		setup,
-		ready,
-		move,
-		kill,
-		ruin,
-		record,
-		win
+		full,	// server full
+		setup,	// start setup phase (has first turn info)
+		ready,	// player ready to start match (tile and piece position info)
+		move,	// piece move (piece + position info)
+		kill,	// piece die (piece info)
+		ruin,	// fortress state change (ruined or not info)
+		record,	// turn record data (piece + has attacked or switched info)
+		win		// player win (if it's the sender who won info)
 	};
 }
 

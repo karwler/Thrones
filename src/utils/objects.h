@@ -15,12 +15,12 @@ struct Vertex {
 class Object : public Interactable {
 public:
 	enum Info : uint8 {
-		INFO_NONE      = 0x0,
-		INFO_SHOW      = 0x1,	// draw at all
-		INFO_TEXTURE   = 0x2,	// draw texture
-		INFO_LINES     = 0x4,	// draw lines
-		INFO_RAYCAST   = 0x8,	// be detected by raycast
-		INFO_FILL      = INFO_SHOW | INFO_TEXTURE
+		INFO_NONE    = 0x0,
+		INFO_SHOW    = 0x1,	// draw at all
+		INFO_TEXTURE = 0x2,	// draw texture
+		INFO_LINES   = 0x4,	// draw lines
+		INFO_RAYCAST = 0x8,	// be detected by raycast
+		INFO_FILL    = INFO_SHOW | INFO_TEXTURE
 	};
 
 	static const vec4 defaultColor;
@@ -96,6 +96,7 @@ public:
 	virtual ~BoardObject() override = default;
 
 	virtual void draw() const override;
+	virtual void drawTop() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
@@ -107,9 +108,6 @@ public:
 	void setUlcall(OCall pcl);
 	void setUrcall(OCall pcl);
 	void setModeByInteract(bool on);
-
-private:
-	static void drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex);
 };
 
 inline void BoardObject::setClcall(OCall pcl) {
@@ -242,12 +240,13 @@ public:
 	};
 	static const array<string, sizet(Type::throne)+1> names;	// for textures
 	static const array<uint8, sizet(Type::throne)+1> amounts;
+	static const vec4 enemyColor;
 private:
 	Type type;
 
 public:
 	Piece() = default;
-	Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
+	Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color);
 	virtual ~Piece() override = default;
 
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function

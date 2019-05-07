@@ -21,7 +21,13 @@ inline void DataBatch::push(Com::Code code) {
 
 // handles game logic and networking
 class Game {
+public:
+	static constexpr char messageTurnGo[] = "Your turn";
+	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
+	static constexpr char messageWin[] = "You win";
+	static constexpr char messageLoose[] = "You lose";
+
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
 	uint8 (Game::*conn)(const uint8*);
@@ -88,29 +94,31 @@ private:
 	uint8 connectionSetup(const uint8* data);
 	uint8 connectionMatch(const uint8* data);
 
+	static Piece* getPieces(Piece* pieces, Piece::Type type);
 	void setScreen();
 	void setBoard();
 	void setBgrid();
 	void setMidTiles();
 	static void setTiles(Tile* tiles, int8 yofs, OCall lcall, Object::Info mode);
-	static void setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode);
+	static void setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode, const vec4& color);
 	static void setTilesInteract(Tile* tiles, sizet num, bool on);
 	static void setPiecesInteract(Piece* pieces, sizet num, bool on);
 	static void setPiecesVisible(Piece* pieces, bool on);
 	static vector<uint8> countTiles(const Tile* tiles, sizet num, vector<uint8> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
+	static void rearangeMiddle(Tile::Type* mid, Tile::Type* buf, bool fwd);
 
-	bool survivalCheck(Piece* piece, vec2b pos);
 	bool checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool attacking);
 	bool checkMoveBySingle(vec2b pos, vec2b dst);
-	bool checkMoveByArea(Piece* piece, vec2b pos, vec2b dst, uint dist);
-	static bool spaceAvailible(uint8 pos, void* data);
+	static bool spaceAvailible(uint8 pos);
 	bool checkMoveByType(vec2b pos, vec2b dst);
 	bool checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type);
 	bool checkFire(Piece* killer, vec2b pos, Piece* victim, vec2b dst);
 	bool checkTilesByDistance(vec2b pos, vec2b dst, int8 dist);
 	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
-	bool tryWin(Piece* piece, Piece* victim, Tile* dest);
+	bool survivalCheck(Piece* piece, vec2b pos);
+	void failSurvivalCheck(Piece* piece);
+	bool checkWin();
 
 	void prepareTurn();
 	void endTurn();
@@ -133,6 +141,10 @@ inline Tile* Game::getTile(vec2b pos) {
 
 inline bool Game::isHomeTile(Tile* til) const {
 	return til >= tiles.own;
+}
+
+inline Piece* Game::getOwnPieces(Piece::Type type) {
+	return getPieces(pieces.own, type);
 }
 
 inline bool Game::isOwnPiece(Piece* pce) const {
@@ -172,10 +184,6 @@ void Game::setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id) 
 	for (sizet i = 0; i < size; i++)
 		dst[id+i] = &data[i];
 	id += size;
-}
-
-inline bool Game::survivalCheck(Piece* piece, vec2b pos) {
-	return piece->getType() == Piece::Type::dragon || (piece->getType() == Piece::Type::ranger && getTile(pos)->getType() == Tile::Type::mountain) || (piece->getType() == Piece::Type::spearman && getTile(pos)->getType() == Tile::Type::water) || randDist(randGen);
 }
 
 inline void Game::printInvalidCode(uint8 code) {

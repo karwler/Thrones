@@ -22,40 +22,21 @@ vec4 Rect::crop(const Rect& rect) {
 
 // TEXTURE
 
-void Texture::loadFile(const string& file) {
-	SDL_Surface* img = SDL_LoadBMP(file.c_str());
-	if (!img || img->format->format != SDL_PIXELFORMAT_ARGB8888) {
-		SDL_FreeSurface(img);
+bool Texture::loadGl(SDL_Surface* img) {
+	if (!img) {
 		res = 0;
-		throw std::runtime_error("failed to load texture " + file + '\n' + SDL_GetError());
+		return false;
 	}
-
-	for (int i = 0, s = img->w * img->h; i < s; i++) {
-		uint32* pix = static_cast<uint32*>(img->pixels) + i;
-		*pix = (*pix << 8) | (*pix >> 24);
-	}
-	loadGl(img, GL_RGBA);
-}
-
-void Texture::loadText(SDL_Surface* img) {
-	if (img && img->format->format == SDL_PIXELFORMAT_BGRA32)
-		loadGl(img, GL_BGRA);
-	else {
-		SDL_FreeSurface(img);
-		res = 0;
-	}
-}
-
-void Texture::loadGl(SDL_Surface* img, GLenum format) {
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->w, img->h, 0, format, GL_UNSIGNED_BYTE, img->pixels);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->w, img->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	res = vec2i(img->w, img->h);
 	SDL_FreeSurface(img);
+	return true;
 }
 
 void Texture::close() {
@@ -69,88 +50,50 @@ void Texture::close() {
 
 void Interactable::onClick(const vec2i&, uint8) {}
 
-// A STAR
+// DIJKSTRA
 
-Astar::Node::Node(uint8 id, uint8 parent, uint16 gCost, float fCost) :
+Dijkstra::Node::Node(uint8 id, uint8 dst) :
 	id(id),
-	parent(parent),
-	gCost(gCost),
-	fCost(fCost)
+	dst(dst)
 {}
 
-Astar::Astar(bool (*stepable)(uint8, void*), void* data) :
-	stepable(stepable),
-	data(data)
-{}
-
-float Astar::distance(uint8 id, uint8 dst) {
-	int dx = id % Com::boardLength - dst % Com::boardLength;
-	int dy = id / Com::boardLength - dst / Com::boardLength;
-	return std::sqrt(float(dx * dx + dy * dy));
-}
-
-vector<uint8> Astar::travelPath(uint8 src, uint8 dst) {
-	int ret = travelDist(src, dst);
-	if (ret == -1)
-		return {};
-
-	vector<uint8> path(sizet(ret) + 1);
-	for (uint8 id = dst; ret; id = grid[id].parent, ret--)
-		path[sizet(ret)] = id;
-	path[sizet(ret)] = src;
-	return path;
-}
-
-int Astar::travelDist(uint8 src, uint8 dst) {
-	if (src == dst)
-		return 0;
-	if (!isValid(dst))
-		return -1;
-
+array<uint8, Com::boardSize> Dijkstra::travelDist(uint8 src, bool (*stepable)(uint8)) {
+	// init graph
+	array<Adjacent, Com::boardSize> grid;
 	for (uint8 i = 0; i < Com::boardSize; i++)
-		grid[i] = Node(i, UINT8_MAX, UINT16_MAX, FLT_MAX);
-	grid[src] = Node(src, src, 0, 0.f);
-
-	bool closed[Com::boardSize];
-	memset(closed, 0, Com::boardSize * sizeof(*closed));
-	for (sset<Node> open = { grid[src] }; !open.empty() && open.size() < Com::boardSize;) {
-		sset<Node>::iterator nid = std::find_if(open.begin(), open.end(), [this](const Node& it) -> bool { return isValid(it.id); });
-		Node node = *nid;
-		open.erase(open.begin(), next(nid));
-		closed[node.id] = true;
-
-		for (uint8 (*mov)(uint8) : Com::adjacentStraight)	// TODO: test
-			if (uint8 ni = mov(node.id); isValid(ni)) {
-				if (ni == dst) {
-					grid[ni].parent = node.id;
-					return node.gCost + 1;
-				}
-				if (!closed[ni]) {
-					uint16 g = node.gCost + 1;
-					float f = float(g) + distance(ni, dst);
-
-					if (grid[ni].fCost > f) {
-						grid[ni].parent = node.id;
-						grid[ni].gCost = g;
-						grid[ni].fCost = f;
-						open.insert(grid[ni]);
-					}
-				}
+		if (grid[i].cnt = 0; stepable(i) || i == src)	// ignore rules for starting point cause it can be a blocking piece
+			for (uint8 (*mov)(uint8) : Com::adjacentStraight) {
+				uint8 ni = mov(i);
+				if (ni < Com::boardSize && stepable(ni))
+					grid[i].adj[grid[i].cnt++] = ni;
 			}
-	}
-	return -1;
+
+	array<uint8, Com::boardSize> dist;
+	std::fill(dist.begin(), dist.end(), UINT8_MAX);
+	dist[src] = 0;
+
+	bool visited[Com::boardSize];
+	std::fill_n(visited, Com::boardSize, false);
+
+	// dijkstra
+	std::priority_queue<Node, vector<Node>, Comp> nodes;
+	nodes.emplace(src, 0);
+	do {
+		uint8 u = nodes.top().id;
+		nodes.pop();
+		if (!visited[u]) {	// maybe try "if (nodes.top().dst < dist[u])" instead of using bool matrix
+			for (uint8 i = 0; i < grid[u].cnt; i++)
+				if (uint8 v = grid[u].adj[i], du = dist[u] + 1; !visited[v] && du < dist[v]) {
+					dist[v] = du;
+					nodes.emplace(v, dist[v]);
+				}
+			visited[u] = true;
+		}
+	} while (!nodes.empty());
+	return dist;
 }
 
 // STRINGS
-
-string filename(const string& path) {
-	if (path.empty() || path == dseps)
-		return emptyStr;
-
-	sizet end = path.back() == dsep ? path.length() - 1 : path.length();
-	sizet pos = path.find_last_of(dsep, end - 1);
-	return pos == string::npos ? path.substr(0, end) : path.substr(pos + 1, end-pos - 1);
-}
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

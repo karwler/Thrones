@@ -70,7 +70,7 @@ uint8 Game::connectionWait(const uint8* data) {
 		return 1;
 	case Com::Code::setup:
 		conn = &Game::connectionSetup;
-		myTurn = data[1];
+		firstTurn = myTurn = data[1];
 		World::program()->eventOpenSetup();
 		return 2;
 	default:
@@ -85,8 +85,8 @@ uint8 Game::connectionSetup(const uint8* data) {
 		uint8 bi = 1;
 		for (uint8 i = 0; i < Com::numTiles; i++, bi++)
 			tiles.ene[i].setType(Tile::Type(data[bi]));
-		for (int8 i = 0; i < Com::boardLength; i++, bi++)
-			static_cast<ProgSetup*>(World::state())->rcvMidBuffer[sizet(i)] = Tile::Type(data[bi]);
+		std::copy(reinterpret_cast<const Tile::Type*>(data + bi), reinterpret_cast<const Tile::Type*>(data + bi + Com::boardLength), static_cast<ProgSetup*>(World::state())->rcvMidBuffer.begin());
+		bi += Com::boardLength;
 		for (uint8 i = 0; i < Com::numPieces; i++, bi += 2)
 			pieces.ene[i].setPos(*reinterpret_cast<const vec2b*>(data + bi));
 
@@ -109,9 +109,9 @@ uint8 Game::connectionMatch(const uint8* data) {
 	case Com::Code::move:
 		pieces.ene[data[1]].setPos(*reinterpret_cast<const vec2b*>(data + 2));
 		return 4;
-	case Com::Code::kill: {
+	case Com::Code::kill:
 		(data[1] ? pieces.ene : pieces.own)[data[2]].disable();
-		return 3; }
+		return 3;
 	case Com::Code::ruin:
 		(tiles.begin() + data[1])->ruined = data[2];
 		return 3;
@@ -121,17 +121,12 @@ uint8 Game::connectionMatch(const uint8* data) {
 		prepareTurn();
 		return 4;
 	case Com::Code::win:
-		disconnectMessage("You lose");
-		return 1;
+		disconnectMessage(data[1] ? messageLoose : messageWin);
+		return 2;
 	default:
 		printInvalidCode(*data);
 	}
 	return 1;
-}
-
-Piece* Game::findPiece(vec2b pos) {
-	Piece* pce = std::find_if(pieces.begin(), pieces.end(), [pos](const Piece& it) -> bool { return it.getPos() == pos; });
-	return pce != pieces.end() ? pce : nullptr;
 }
 
 vector<Object*> Game::initObjects() {
@@ -139,8 +134,8 @@ vector<Object*> Game::initObjects() {
 	setTiles(tiles.ene, -Com::homeHeight, nullptr, Object::INFO_TEXTURE);
 	setMidTiles();
 	setTiles(tiles.own, 1, &Program::eventPlaceTileC, Object::INFO_TEXTURE | Object::INFO_RAYCAST);
-	setPieces(pieces.own, &Program::eventClearPiece, &Program::eventMovePiece, Object::INFO_TEXTURE);
-	setPieces(pieces.ene, nullptr, nullptr, Object::INFO_TEXTURE);
+	setPieces(pieces.own, &Program::eventClearPiece, &Program::eventMovePiece, Object::INFO_TEXTURE, Object::defaultColor);
+	setPieces(pieces.ene, nullptr, nullptr, Object::INFO_TEXTURE, Piece::enemyColor);
 	setScreen();
 	setBoard();
 	setBgrid();
@@ -161,8 +156,6 @@ void Game::uninitObjects() {
 }
 
 void Game::prepareMatch() {
-	firstTurn = myTurn;
-
 	// set interactivity and reassign callback events
 	for (Tile& it : tiles) {
 		it.setModeByInteract(myTurn);
@@ -182,18 +175,32 @@ void Game::prepareMatch() {
 	}
 
 	// rearange middle tiles
-	if (ProgSetup* ps = static_cast<ProgSetup*>(World::state()); myTurn) {
-		for (uint8 i = 0; i < Com::boardLength; i++)
-			if ((tiles.mid[i].getType() != Tile::Type::empty) && (ps->rcvMidBuffer[i] != Tile::Type::empty))
-				std::find_if(tiles.mid, tiles.mid + Com::boardLength, [](const Tile& it) -> bool { return it.getType() == Tile::Type::empty; })->setType(ps->rcvMidBuffer[i]);
-	} else
-		for (uint8 i = 0; i < Com::boardLength; i++)
-			if (ps->rcvMidBuffer[i] != Tile::Type::empty) {
-				if (tiles.mid[i].getType() != Tile::Type::empty)
-					tiles.mid[sizet(std::find(ps->rcvMidBuffer.begin(), ps->rcvMidBuffer.end(), Tile::Type::empty) - ps->rcvMidBuffer.begin())].setType(tiles.mid[i].getType());
-				tiles.mid[i].setType(ps->rcvMidBuffer[i]);
+	Tile::Type mid[Com::boardLength];
+	for (uint8 i = 0; i < Com::boardLength; i++)
+		mid[i] = tiles.mid[i].getType();
+	rearangeMiddle(mid, static_cast<ProgSetup*>(World::state())->rcvMidBuffer.data(), myTurn);
+	for (uint8 i = 0; i < Com::boardLength; i++)
+		tiles.mid[i].setType(mid[i]);
+}
+
+void Game::rearangeMiddle(Tile::Type* mid, Tile::Type* buf, bool fwd) {
+	if (!fwd)
+		std::swap(mid, buf);
+	for (uint8 i = fwd ? 0 : Com::boardLength - 1, fm = btom<uint8>(fwd), rm = btom<uint8>(!fwd); i < Com::boardLength; i += fm)
+		if (buf[i] != Tile::Type::empty) {
+			if (mid[i] == Tile::Type::empty)
+				mid[i] = buf[i];
+			else {
+				uint8 x;
+				for (x = i + rm; x < Com::boardLength && mid[x] != Tile::Type::empty; x += rm);
+				if (x >= Com::boardLength)
+					for (x = i + fm; x < Com::boardLength && mid[x] != Tile::Type::empty; x += fm);
+				mid[x] = buf[i];
 			}
-	std::find_if(tiles.mid, tiles.mid + Com::boardLength, [](const Tile& it) -> bool { return it.getType() == Tile::Type::empty; })->setType(Tile::Type::fortress);
+		}
+	*std::find(mid, mid + Com::boardLength, Tile::Type::empty) = Tile::Type::fortress;
+	if (!fwd)
+		std::copy(mid, mid + Com::boardLength, buf);
 }
 
 void Game::checkOwnTiles() const {
@@ -267,15 +274,13 @@ void Game::pieceMove(Piece* piece, vec2b pos, Piece* occupant) {
 	bool attacking = occupant && !isOwnPiece(occupant);
 	if (!checkMove(piece, spos, occupant, pos, attacking))
 		return;
-
 	if (!survivalCheck(piece, spos)) {
-		removePiece(piece);
-		sendData();
+		failSurvivalCheck(piece);
 		return;
 	}
 
 	// handle movement
-	if (attacking) {		// kill and/or ruin
+	if (attacking) {	// kill and/or ruin
 		Tile* til = getTile(pos);
 		bool ruin = til->getType() == Tile::Type::fortress && !til->ruined;
 		if (ruin)	// ruin fortress
@@ -295,7 +300,7 @@ void Game::pieceMove(Piece* piece, vec2b pos, Piece* occupant) {
 	}
 	placePiece(piece, pos);
 
-	if (!tryWin(piece, occupant, getTile(pos)))
+	if (!checkWin())
 		endTurn();
 }
 
@@ -310,20 +315,16 @@ void Game::pieceFire(Piece* killer, vec2b pos, Piece* piece) {
 			updateFortress(til, true);
 			record = Record(killer, true, false);
 			endTurn();
-		} else {
-			removePiece(killer);
-			sendData();
-		}
+		} else
+			failSurvivalCheck(killer);
 	} else if (piece && !isOwnPiece(piece)) {	// regular behaviour
 		if (succ) {
 			removePiece(piece);
 			record = Record(killer, true, false);
-			if (!tryWin(killer, piece, nullptr))
+			if (!checkWin())
 				endTurn();
-		} else {
-			removePiece(killer);
-			sendData();
-		}
+		} else
+			failSurvivalCheck(killer);
 	}
 }
 
@@ -335,8 +336,9 @@ void Game::placeDragon(vec2b pos, Piece* occupant) {
 	// get rid of button
 	ProgMatch* pm = static_cast<ProgMatch*>(World::state());
 	pm->dragonIcon->getParent()->deleteWidget(pm->dragonIcon->getID());
+	pm->dragonIcon = nullptr;
 
-	// kill any piece that might be occupying the tile
+	// kill any piece that might be occupying the tile (possibility of killing own throne)
 	if (occupant)
 		removePiece(occupant);
 
@@ -344,7 +346,9 @@ void Game::placeDragon(vec2b pos, Piece* occupant) {
 	Piece* maid = getOwnPieces(Piece::Type::dragon);
 	maid->mode |= Object::INFO_SHOW;
 	placePiece(maid, pos);
-	endTurn();
+
+	if (!checkWin())
+		endTurn();
 }
 
 void Game::setScreen() {
@@ -399,9 +403,9 @@ void Game::setMidTiles() {
 		tiles.mid[sizet(i)] = Tile(vec2b(i, 0), Tile::Type::empty, &Program::eventPlaceTileC, &Program::eventClearTile, &Program::eventMoveTile, nullptr, Object::INFO_TEXTURE);
 }
 
-void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode) {
+void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode, const vec4& color) {
 	for (uint8 i = 0, t = 0, c = 0; i < Com::numPieces; i++) {
-		pieces[i] = Piece(INT8_MIN, Piece::Type(t), nullptr, rcall, ucall, nullptr, mode);
+		pieces[i] = Piece(INT8_MIN, Piece::Type(t), nullptr, rcall, ucall, nullptr, mode, color);
 		if (++c >= Piece::amounts[t]) {
 			c = 0;
 			t++;
@@ -429,11 +433,15 @@ void Game::setPiecesVisible(Piece* pieces, bool on) {
 		pieces[i].setModeByOn(on);
 }
 
-Piece* Game::getOwnPieces(Piece::Type type) {
-	Piece* it = pieces.own;
+Piece* Game::getPieces(Piece* pieces, Piece::Type type) {
 	for (uint8 t = 0; t < uint8(type); t++)
-		it += Piece::amounts[t];
-	return it;
+		pieces += Piece::amounts[t];
+	return pieces;
+}
+
+Piece* Game::findPiece(vec2b pos) {
+	Piece* pce = std::find_if(pieces.begin(), pieces.end(), [pos](const Piece& it) -> bool { return it.getPos() == pos; });
+	return pce != pieces.end() ? pce : nullptr;
 }
 
 bool Game::checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool attacking) {
@@ -446,15 +454,17 @@ bool Game::checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool a
 			return false;
 		if (dtil->getType() == Tile::Type::fortress && !dtil->ruined)
 			return checkMoveBySingle(pos, dst);
-	} else if (occupant && piece->getType() == occupant->getType())
-		return false;
+	} else if (occupant)
+		return piece->getType() != occupant->getType() ? checkMoveBySingle(pos, dst) : false;
 
-	if (piece->getType() == Piece::Type::spearman && dtil->getType() == Tile::Type::water)
-		return checkMoveByType(pos, dst);
-	if (piece->getType() == Piece::Type::lancer && dtil->getType() == Tile::Type::plains && !attacking)
-		return checkMoveByType(pos, dst);
-	if (piece->getType() == Piece::Type::dragon && !attacking)
-		return checkMoveByArea(piece, pos, dst, 4);
+	switch (piece->getType()) {
+	case Piece::Type::spearman:
+		return dtil->getType() == Tile::Type::water ? checkMoveByType(pos, dst) : checkMoveBySingle(pos, dst);
+	case Piece::Type::lancer:
+		return dtil->getType() == Tile::Type::plains && !attacking ? checkMoveByType(pos, dst) : checkMoveBySingle(pos, dst);
+	case Piece::Type::dragon:
+		return !attacking ? Dijkstra::travelDist(posToGid(pos), spaceAvailible)[posToGid(dst)] <= 4 : checkMoveBySingle(pos, dst);	// 4 being the max distance of a dragon
+	}
 	return checkMoveBySingle(pos, dst);
 }
 
@@ -466,19 +476,14 @@ bool Game::checkMoveBySingle(vec2b pos, vec2b dst) {
 	return false;
 }
 
-bool Game::checkMoveByArea(Piece* piece, vec2b pos, vec2b dst, uint dist) {
-	int cost = Astar(spaceAvailible, piece).travelDist(posToGid(pos), posToGid(dst));
-	return uint(cost) <= dist && cost != -1;
-}
-
-bool Game::spaceAvailible(uint8 pos, void* data) {
+bool Game::spaceAvailible(uint8 pos) {
 	Piece* occ = World::game()->findPiece(gidToPos(pos));
-	return !occ || static_cast<Piece*>(data)->getType() != Piece::Type::dragon || (occ->getType() != Piece::Type::dragon && occ->getType() != Piece::Type::crossbowman && occ->getType() != Piece::Type::catapult && occ->getType() != Piece::Type::trebuchet);
+	return !occ || (occ->getType() != Piece::Type::dragon && occ->getType() != Piece::Type::crossbowman && occ->getType() != Piece::Type::catapult && occ->getType() != Piece::Type::trebuchet);
 }
 
 bool Game::checkMoveByType(vec2b pos, vec2b dst) {
 	bool visited[Com::boardSize];
-	memset(visited, 0, Com::boardSize * sizeof(bool));
+	std::fill_n(visited, Com::boardSize, 0);
 	return checkAdjacentTilesByType(posToGid(pos), posToGid(dst), visited, getTile(pos)->getType()) || checkMoveBySingle(pos, dst);
 }
 
@@ -544,11 +549,35 @@ bool Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) {
 	return true;
 }
 
-bool Game::tryWin(Piece* piece, Piece* victim, Tile* dest) {
-	if ((victim && !isOwnPiece(victim) && victim->getType() == Piece::Type::throne) || (dest && piece->getType() == Piece::Type::throne && dest->getType() == Tile::Type::fortress && dest < tiles.mid)) {
-		sendb.push(Com::Code::win);
+bool Game::survivalCheck(Piece* piece, vec2b pos) {
+	Tile::Type type = getTile(pos)->getType();
+	if (type != Tile::Type::mountain && type != Tile::Type::water)
+		return true;
+	if (piece->getType() == Piece::Type::dragon || piece->getType() == (type == Tile::Type::mountain ? Piece::Type::ranger : Piece::Type::spearman))
+		return true;
+	return randDist(randGen);
+}
+
+void Game::failSurvivalCheck(Piece* piece) {
+	removePiece(piece);
+	if (!checkWin()) {
+		sendData();
+		static_cast<ProgMatch*>(World::state())->message->setText("Failed survival check");
+	}
+}
+
+bool Game::checkWin() {
+	Piece* ot = getOwnPieces(Piece::Type::throne);
+	if (!ot->active()) {	// no need to check if enemy throne has occupied own fortress
+		sendb.push(Com::Code::win, { false });
 		endTurn();
-		disconnectMessage("You win");
+		disconnectMessage(messageLoose);
+		return true;
+	}
+	if (Tile* of = getTile(ot->getPos()); !getPieces(pieces.ene, Piece::Type::throne)->active() || of->getType() == Tile::Type::fortress && of < tiles.mid) {
+		sendb.push(Com::Code::win, { true });
+		endTurn();
+		disconnectMessage(messageWin);
 		return true;
 	}
 	return false;
@@ -559,6 +588,10 @@ void Game::prepareTurn() {
 	setMidTilesInteract(myTurn);
 	setTilesInteract(tiles.ene, Com::numTiles, myTurn);
 	setPiecesInteract(pieces.begin(), Com::piecesSize, myTurn);
+
+	ProgMatch* pm = static_cast<ProgMatch*>(World::state());
+	pm->message->setText(myTurn ? messageTurnGo : messageTurnWait);
+	pm->setDragonIconOn(myTurn);
 }
 
 void Game::endTurn() {
@@ -626,7 +659,6 @@ vector<Object*> Game::initDummyObjects() {
 		getTile(vec2b(1, y))->setType(Tile::Type::forest);
 	for (int8 y = 1; y <= 2; y++)
 		getTile(vec2b(3, y))->setType(Tile::Type::forest);
-	getTile(vec2b(3, 3))->setType(Tile::Type::fortress);
 	getTile(vec2b(3, 4))->setType(Tile::Type::plains);
 
 	// columns 5 pm, 7 pw, 8 p

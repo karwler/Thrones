@@ -6,6 +6,7 @@ const vec4 Widget::colorNormal(205.f/2.f / 255.f, 175.f/2.f / 255.f, 149.f/2.f /
 const vec4 Widget::colorDark(139.f/2.f / 255.f, 119.f/2.f / 255.f, 101.f/2.f / 255.f, 1.f);
 const vec4 Widget::colorLight(238.f/2.f / 255.f, 203.f/2.f / 255.f, 173.f/2.f / 255.f, 1.f);
 const vec4 Widget::colorSelect(255.f/2.f / 255.f, 218.f/2.f / 255.f, 185.f/2.f / 255.f, 1.f);
+const vec4 Widget::colorTexture(1.f);
 
 Widget::Widget(const Size& relSize, Layout* parent, sizet id) :
 	parent(parent),
@@ -46,11 +47,11 @@ void Widget::drawRect(const Rect& rect, const vec4& color, int z) {
 	glEnd();
 }
 
-void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame) {
+void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame, const vec4& color) {
 	vec4 crop = rect.crop(frame);
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, tex->getID());
-	glColor4f(1.f, 1.f, 1.f, 1.f);
+	glColor4f(color.r, color.g, color.b, color.a);
 
 	glBegin(GL_QUADS);
 	glTexCoord2f(crop.x, crop.y);
@@ -129,7 +130,10 @@ Draglet::Draglet(const Size& relSize, BCall leftCall, BCall rightCall, BCall dou
 }
 
 void Draglet::draw() const {
-	Picture::draw();
+	if (Rect frm = frame(); bgTex)
+		drawTexture(bgTex, texRect(), frm, bgColor());
+	else if (showColor)
+		drawRect(rect().intersect(frm), bgColor());
 
 	if (selected) {
 		Rect rbg = rect();
@@ -299,13 +303,9 @@ LabelEdit::LabelEdit(const Size& relSize, const string& text, BCall leftCall, BC
 	cleanText();
 }
 
-void LabelEdit::draw() const {
-	Label::draw();
-
-	if (World::scene()->capture == this) {	// caret
-		vec2i ps = position();
-		drawRect({ caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y }, colorLight, 1);
-	}
+void LabelEdit::drawTop() const {
+	vec2i ps = position();
+	drawRect({ caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y }, colorLight, 1);
 }
 
 void LabelEdit::onClick(const vec2i&, uint8 mBut) {

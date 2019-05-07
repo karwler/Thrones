@@ -140,7 +140,6 @@ public:
 	Texture(SDL_Surface* img);
 
 	void loadFile(const string& file);
-	void loadText(SDL_Surface* img);
 	void close();
 
 	GLuint getID() const;
@@ -148,7 +147,7 @@ public:
 	bool valid() const;
 
 private:
-	void loadGl(SDL_Surface* img, GLenum format);
+	bool loadGl(SDL_Surface* img);
 };
 
 inline Texture::Texture() :
@@ -160,7 +159,12 @@ inline Texture::Texture(const string& file) {
 }
 
 inline Texture::Texture(SDL_Surface* img) {
-	loadText(img);
+	loadGl(img);
+}
+
+inline void Texture::loadFile(const string& file) {
+	if (!loadGl(SDL_LoadBMP(file.c_str())))
+		throw std::runtime_error("failed to load texture " + file + '\n' + SDL_GetError());
 }
 
 inline GLuint Texture::getID() const {
@@ -181,6 +185,7 @@ class Interactable {
 public:
 	virtual ~Interactable() = default;
 
+	virtual void drawTop() const {}
 	virtual void onClick(const vec2i& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onDoubleClick(const vec2i&, uint8) {}
 	virtual void onMouseMove(const vec2i&, const vec2i&) {}
@@ -191,42 +196,33 @@ public:
 	virtual void onText(const string&) {}
 };
 
-// a star for the game's grid
+// for travel distance on game board
 
-class Astar {
-public:
+class Dijkstra {
+private:
 	struct Node {
 		uint8 id;
-		uint8 parent;
-		uint16 gCost;
-		float fCost;
+		uint8 dst;
 
 		Node() = default;
-		Node(uint8 id, uint8 parent, uint16 gCost, float fCost);
+		Node(uint8 id, uint8 dst);
 	};
 
-private:
-	array<Node, Com::boardSize> grid;
-	bool (*stepable)(uint8, void*);
-	void* data;
+	struct Adjacent {
+		uint8 cnt;
+		uint8 adj[4];
+	};
+
+	struct Comp {
+		bool operator()(const Node& a, const Node& b);
+	};
 
 public:
-	Astar(bool (*stepable)(uint8, void*), void* data);
-
-	vector<uint8> travelPath(uint8 src, uint8 dst);
-	int travelDist(uint8 src, uint8 dst);	// returns distance or -1 on error
-
-private:
-	bool isValid(uint8 id);
-	static float distance(uint8 id, uint8 dst);
+	static array<uint8, Com::boardSize> travelDist(uint8 src, bool (*stepable)(uint8));
 };
 
-inline bool operator<(const Astar::Node& l, const Astar::Node& r) {
-	return l.fCost < r.fCost;
-}
-
-inline bool Astar::isValid(uint8 id) {
-	return id < Com::boardSize && stepable(id, data);
+inline bool Dijkstra::Comp::operator()(const Node& a, const Node& b) {
+	return a.dst > b.dst;
 }
 
 // files and strings

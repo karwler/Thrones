@@ -1,50 +1,5 @@
 #include "world.h"
 
-// CLICK STAMP
-
-ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos) :
-	inter(inter),
-	area(area),
-	mPos(mPos)
-{}
-
-// KEYFRAME
-
-Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec4& color) :
-	pos(pos),
-	rot(rot),
-	color(color),
-	time(time),
-	change(change)
-{}
-
-// ANIMATION
-
-Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
-	keyframes(keyframes),
-	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot, object->color),
-	object(object)
-{}
-
-bool Animation::tick(float dSec) {
-	begin.time += dSec;
-
-	float td = clampHigh(begin.time / keyframes.front().time, 1.f);
-	if (keyframes.front().change & Keyframe::CHG_POS)
-		object->pos = linearTransition(begin.pos, keyframes.front().pos, td);
-	if (keyframes.front().change & Keyframe::CHG_ROT)
-		object->rot = linearTransition(begin.rot, keyframes.front().rot, td);
-	if (keyframes.front().change & Keyframe::CHG_CLR)
-		object->color = linearTransition(begin.color, keyframes.front().color, td);
-
-	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f)
-		if (keyframes.pop(); !keyframes.empty()) {
-			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
-			return tick(ovhead);
-		}
-	return !keyframes.empty();
-}
-
 // CAMERA
 
 const vec3 Camera::up(0.f, 1.f, 0.f);
@@ -89,6 +44,59 @@ vec3 Camera::direction(const vec2i& mPos) const {
 	return glm::normalize(dir * znear + h * m.x + v * m.y);
 }
 
+// CLICK STAMP
+
+ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos) :
+	inter(inter),
+	area(area),
+	mPos(mPos)
+{}
+
+// KEYFRAME
+
+Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec4& color) :
+	pos(pos),
+	rot(rot),
+	color(color),
+	time(time),
+	change(change)
+{}
+
+// ANIMATION
+
+Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
+	keyframes(keyframes),
+	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot, object->color),
+	object(object),
+	useObject(true)
+{}
+
+Animation::Animation(Camera* camera, const queue<Keyframe>& keyframes) :
+	keyframes(keyframes),
+	begin(0.f, Keyframe::CHG_NONE, camera->pos, camera->lat),
+	camera(camera),
+	useObject(false)
+{}
+
+bool Animation::tick(float dSec) {
+	begin.time += dSec;
+
+	float td = clampHigh(begin.time / keyframes.front().time, 1.f);
+	if (keyframes.front().change & Keyframe::CHG_POS)
+		(useObject ? object->pos : camera->pos) = linearTransition(begin.pos, keyframes.front().pos, td);
+	if (keyframes.front().change & Keyframe::CHG_ROT)
+		(useObject ? object->rot : camera->lat) = linearTransition(begin.rot, keyframes.front().rot, td);
+	if (useObject && keyframes.front().change & Keyframe::CHG_CLR)
+		object->color = linearTransition(begin.color, keyframes.front().color, td);
+
+	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f)
+		if (keyframes.pop(); !keyframes.empty()) {
+			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
+			return tick(ovhead);
+		}
+	return !keyframes.empty();
+}
+
 // SCENE
 
 Scene::Scene() :
@@ -105,12 +113,16 @@ void Scene::draw() {
 	camera.update();
 	for (Object* it : objects)
 		it->draw();
+	if (dynamic_cast<Object*>(capture))
+		capture->drawTop();
 
 	// draw UI
 	Camera::updateUI();
 	layout->draw();
 	if (popup)
 		popup->draw();
+	if (dynamic_cast<Widget*>(capture))
+		capture->drawTop();
 }
 
 void Scene::tick(float dSec) {
@@ -122,7 +134,7 @@ void Scene::tick(float dSec) {
 		if (animations[i].tick(dSec))
 			i++;
 		else
-			animations.erase(animations.begin() + i);
+			animations.erase(animations.begin() + pdift(i));
 	}
 }
 
@@ -145,7 +157,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 
 void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
 	mouseMove = mMov;
-	select = getSelected(mPos, topLayout());
+	select = getSelected(mPos);
 
 	if (capture)
 		capture->onDrag(mPos, mMov);
@@ -158,7 +170,7 @@ void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	select = getSelected(mPos, topLayout());
+	select = getSelected(mPos);
 	if (mCnt == 1) {
 		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
 		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
@@ -218,23 +230,23 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	onMouseMove(mousePos(), 0);
 }
 
-Interactable* Scene::getSelected(const vec2i& mPos, Layout* box) {
-	for (;;) {
+Interactable* Scene::getSelected(const vec2i& mPos) {
+	for (Layout* box = !popup ? layout.get() : popup.get();;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
-				return (*it)->selectable() ? *it : getScrollAreaOrObject(mPos, *it);
+				return (*it)->selectable() ? *it : getScrollOrObject(mPos, *it);
 		} else
-			return getScrollAreaOrObject(mPos, box);
+			return getScrollOrObject(mPos, box);
 	}
 }
 
-Interactable* Scene::getScrollAreaOrObject(const vec2i& mPos, Widget* wgt) const {
+Interactable* Scene::getScrollOrObject(const vec2i& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
-	return rayCast(pickerRay(mPos));
+	return !popup ? static_cast<Interactable*>(rayCast(pickerRay(mPos))) : static_cast<Interactable*>(popup.get());
 }
 
 ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {

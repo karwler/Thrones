@@ -111,7 +111,7 @@ array<int, 9> FileSys::readFace(const char* str) {
 			if (*str == '/')
 				str++;
 			if (isSpace(*str) && j < 2) {
-				memset(face.data() + i * 3 + j, 0, (3 - j) * sizeof(*face.data()));
+				std::fill_n(face.data() + i * 3 + j, 3 - j, 0);
 				break;
 			}
 		}

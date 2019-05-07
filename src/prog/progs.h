@@ -115,12 +115,14 @@ inline uint8 ProgSetup::getSelected() const {
 
 class ProgMatch : public ProgState {
 public:
-	Layout* dragonIcon;
+	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
+	Label* message;
 
 public:
 	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
+	void setDragonIconOn(bool on);
 
 	virtual Layout* createLayout() override;
 };

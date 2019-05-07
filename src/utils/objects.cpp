@@ -93,30 +93,24 @@ BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall crcall, OCall
 {}
 
 void BoardObject::draw() const {
-	if (dragState == DragState::none)
+	if (dragState != DragState::move)
 		Object::draw();
-	else {
-		vec3 ray = World::scene()->pickerRay(mousePos());
-		if (vec3 loc = World::scene()->getCamera().pos + ray * (pos.y - upperPoz - World::scene()->getCamera().pos.y / ray.y); dragState == DragState::move)
-			drawRect(loc, rot, scl, color * moveIconColor, mode & INFO_TEXTURE ? tex : nullptr);
-		else {
-			Object::draw();
-			drawRect(loc, rot, scl, color * fireIconColor, mode & INFO_TEXTURE ? tex : nullptr);	// TODO: fire icon
-		}
-	}
 }
 
-void BoardObject::drawRect(const vec3& pos, const vec3& rot, const vec3& scl, const vec4& color, const Texture* tex) {
-	setColorization(tex, color, INFO_TEXTURE);
-	setTransform(pos, rot, scl);
+void BoardObject::drawTop() const {
+	if (dragState != DragState::none) {
+		vec3 ray = World::scene()->pickerRay(mousePos());
+		setColorization(dragState == DragState::move ? tex : World::winSys()->texture("crosshair"), dragState == DragState::move ? color * moveIconColor : fireIconColor, mode);
+		setTransform(World::scene()->getCamera()->pos + ray * (pos.y - upperPoz * 2.f - World::scene()->getCamera()->pos.y / ray.y), rot, scl);
 
-	glBegin(GL_QUADS);
-	for (Vertex it : squareVertices) {
-		glTexCoord2fv(glm::value_ptr(it.tuv));
-		glNormal3fv(glm::value_ptr(it.nrm));
-		glVertex3fv(glm::value_ptr(it.pos));
+		glBegin(GL_QUADS);
+		for (const Vertex& it : squareVertices) {
+			glTexCoord2fv(glm::value_ptr(it.tuv));
+			glNormal3fv(glm::value_ptr(it.nrm));
+			glVertex3fv(glm::value_ptr(it.pos));
+		}
+		glEnd();
 	}
-	glEnd();
 }
 
 void BoardObject::onClick(const vec2i&, uint8 mBut) {
@@ -187,8 +181,13 @@ void Tile::setCalls(Interactivity lvl) {
 	switch (lvl) {
 	case Interactivity::tiling:
 		clcall = &Program::eventPlaceTileC;
-		crcall = type != Type::empty ? &Program::eventClearTile : nullptr;
-		ulcall = type != Type::empty ? &Program::eventMoveTile : nullptr;
+		if (type != Type::empty) {
+			crcall = &Program::eventClearTile;
+			ulcall = &Program::eventMoveTile;
+		} else {
+			crcall = nullptr;
+			ulcall = nullptr;
+		}
 		break;
 	case Interactivity::piecing:
 		clcall = &Program::eventPlacePieceC;
@@ -230,8 +229,10 @@ const array<uint8, Piece::amounts.size()> Piece::amounts = {
 	1
 };
 
-Piece::Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
-	BoardObject(pos, upperPoz, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), defaultColor, mode),
+const vec4 Piece::enemyColor(0.5f, 0.5f, 1.f, 1.f);
+
+Piece::Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color) :
+	BoardObject(pos, upperPoz, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), color, mode),
 	type(type)
 {}
 

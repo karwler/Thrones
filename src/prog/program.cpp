@@ -191,6 +191,7 @@ void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
 	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, game.getScreen()->pos + vec3(0.f, -3.f, 0.f)) })));
+	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, vec3(0.f, 11.f, 5.f), vec3(0.f, 0.f, 1.f)) })));
 }
 
 void Program::eventPlaceDragon(Button*) {

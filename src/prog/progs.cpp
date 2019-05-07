@@ -216,12 +216,15 @@ void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
 }
 
 void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
-	if (Draglet* ico = getIcon(type); on) {
-		ico->setColor(isTile ? Tile::colors[type] : BoardObject::defaultColor);
-		ico->setLcall(isTile ? &Program::eventPlaceTileD : &Program::eventPlacePieceD);
-	} else {
+	if (Draglet* ico = getIcon(type); !on) {
 		ico->setColor(ico->color * 0.5f);
 		ico->setLcall(nullptr);
+	} else if (isTile) {
+		ico->setColor(Tile::colors[type]);
+		ico->setLcall(&Program::eventPlaceTileD);
+	} else {
+		ico->setColor(Object::defaultColor);
+		ico->setLcall(&Program::eventPlacePieceD);
 	}
 }
 
@@ -232,21 +235,41 @@ void ProgMatch::eventEscape() {
 		World::program()->eventExitGame();
 }
 
+void ProgMatch::setDragonIconOn(bool on) {
+	if (dragonIcon) {
+		if (Draglet* ico = static_cast<Draglet*>(dragonIcon->getWidget(0)); on) {
+			ico->setLcall(&Program::eventPlaceDragon);
+			ico->setColor(Object::defaultColor);
+		} else {
+			ico->setLcall(nullptr);
+			ico->setColor(ico->color * 0.5f);
+		}
+	}
+}
+
 Layout* ProgMatch::createLayout() {
 	// sidebar
 	Text exit("Exit", lineHeight);
-	vector<Widget*> left = {
-		new Label(lineHeight, exit.text, &Program::eventExitGame)
-	};
+	vector<Widget*> left = { new Label(lineHeight, exit.text, &Program::eventExitGame) };
+	if (World::game()->getOwnPieces(Piece::Type::dragon)->getPos().hasNot(INT8_MIN))
+		dragonIcon = nullptr;
+	else {
+		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, false, Object::defaultColor, World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])) }, false, 0));
+		setDragonIconOn(World::game()->getMyTurn());
+	}
 
-	// dragon icon
-	if (!World::game()->getOwnPieces(Piece::Type::dragon)->getPos().hasNot(INT8_MIN))
-		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, &Program::eventPlaceDragon, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])) }, false, 0));
+	// middle for message
+	vector<Widget*> midl = {
+		new Widget(),
+		message = new Label(superHeight, World::game()->getMyTurn() ? Game::messageTurnGo : Game::messageTurnWait, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
+		new Widget(superHeight / 2)
+	};
 
 	// root layout
 	vector<Widget*> cont = {
 		new Layout(exit.length, left, true),
-		new Widget()
+		new Layout(1.f, midl, true, 0),
+		new Widget(exit.length)
 	};
 	return new Layout(1.f, cont, false, 0);
 }

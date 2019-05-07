@@ -3,6 +3,22 @@
 #include "utils/layouts.h"
 #include "utils/objects.h"
 
+// additional data for rendering objects
+class Camera {
+public:
+	vec3 pos, lat;
+	float fov, znear, zfar;
+private:
+	static const vec3 up;
+
+public:
+	Camera(const vec3& pos = vec3(0.f, 8.f, 8.f), const vec3& lat = vec3(0.f, 0.f, 2.f), float fov = 45.f, float znear = 1.f, float zfar = 20.f);
+
+	void update() const;
+	static void updateUI();
+	vec3 direction(const vec2i& mPos) const;
+};
+
 // saves what widget is being clicked on with what button at what position
 struct ClickStamp {
 	Interactable* inter;
@@ -12,16 +28,18 @@ struct ClickStamp {
 	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, const vec2i& mPos = 0);
 };
 
+// defines change of object properties at a time
 struct Keyframe {
 	enum Change : uint8 {
 		CHG_NONE = 0x0,
 		CHG_POS  = 0x1,
 		CHG_ROT  = 0x2,
+		CHG_LAT  = CHG_ROT,
 		CHG_CLR  = 0x4
 	};
 
 	vec3 pos;
-	vec3 rot;
+	vec3 rot;		// lat if applied to camera
 	vec4 color;
 	float time;		// time difference between this and previous keyframe
 	Change change;	// what members get affected
@@ -29,14 +47,48 @@ struct Keyframe {
 	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec4& color = vec4());
 };
 
+inline constexpr Keyframe::Change operator~(Keyframe::Change a) {
+	return Keyframe::Change(~uint8(a));
+}
+
+inline constexpr Keyframe::Change operator&(Keyframe::Change a, Keyframe::Change b) {
+	return Keyframe::Change(uint8(a) & uint8(b));
+}
+
+inline constexpr Keyframe::Change operator&=(Keyframe::Change& a, Keyframe::Change b) {
+	return a = Keyframe::Change(uint8(a) & uint8(b));
+}
+
+inline constexpr Keyframe::Change operator^(Keyframe::Change a, Keyframe::Change b) {
+	return Keyframe::Change(uint8(a) ^ uint8(b));
+}
+
+inline constexpr Keyframe::Change operator^=(Keyframe::Change& a, Keyframe::Change b) {
+	return a = Keyframe::Change(uint8(a) ^ uint8(b));
+}
+
+inline constexpr Keyframe::Change operator|(Keyframe::Change a, Keyframe::Change b) {
+	return Keyframe::Change(uint8(a) | uint8(b));
+}
+
+inline constexpr Keyframe::Change operator|=(Keyframe::Change& a, Keyframe::Change b) {
+	return a = Keyframe::Change(uint8(a) | uint8(b));
+}
+
+// a sequence of keyframes applied to an object
 class Animation {
 private:
 	queue<Keyframe> keyframes;
 	Keyframe begin;		// initial state of the object
-	Object* object;		// cannot be null
+	union {
+		Object* object;
+		Camera* camera;
+	};	// cannot be null
+	bool useObject;
 
 public:
 	Animation(Object* object, const queue<Keyframe>& keyframes);
+	Animation(Camera* camera, const queue<Keyframe>& keyframes);
 
 	bool tick(float dSec);
 
@@ -48,22 +100,6 @@ template <class T>
 T Animation::linearTransition(const T& start, const T& end, float factor) {
 	return start + (end - start) * factor;
 }
-
-// additional data for rendering objects
-class Camera {
-public:
-	vec3 pos, lat;
-	float fov, znear, zfar;
-private:
-	static const vec3 up;
-
-public:
-	Camera(const vec3& pos = vec3(0.f, 8.f, 8.f), const vec3& lat = vec3(0.f, 0.f, 2.f), float fov = 45.f, float znear = 0.01f, float zfar = 20.f);
-
-	void update() const;
-	static void updateUI();
-	vec3 direction(const vec2i& mPos) const;
-};
 
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
@@ -97,7 +133,7 @@ public:
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
-	const Camera& getCamera() const;
+	Camera* getCamera();
 	void setObjects(const vector<Object*>& objs);
 	void resetLayouts();
 	Layout* getLayout();
@@ -110,11 +146,10 @@ public:
 	vec3 pickerRay(const vec2i& mPos) const;
 
 private:
-	Interactable* getSelected(const vec2i& mPos, Layout* box);
-	Interactable* getScrollAreaOrObject(const vec2i& mPos, Widget* wgt) const;
+	Interactable* getSelected(const vec2i& mPos);
+	Interactable* getScrollOrObject(const vec2i& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
-	Layout* topLayout();
 
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
@@ -124,8 +159,8 @@ inline void Scene::onText(const string& str) {
 	capture->onText(str);
 }
 
-inline const Camera& Scene::getCamera() const {
-	return camera;
+inline Camera* Scene::getCamera() {
+	return &camera;
 }
 
 inline void Scene::setObjects(const vector<Object*>& objs) {
@@ -158,10 +193,6 @@ inline bool Scene::cursorInClickRange(const vec2i& mPos, uint8 mBut) {
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {
 	return dynamic_cast<Widget*>(select) ? findFirstScrollArea(static_cast<Widget*>(select)) : nullptr;
-}
-
-inline Layout* Scene::topLayout() {
-	return popup ? popup.get() : layout.get();
 }
 
 inline vec3 Scene::pickerRay(const vec2i& mPos) const {

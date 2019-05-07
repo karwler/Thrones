@@ -45,8 +45,9 @@ public:
 	static const vec4 colorDark;
 	static const vec4 colorLight;
 	static const vec4 colorSelect;
-
 protected:
+	static const vec4 colorTexture;
+
 	Layout* parent;	// every widget that isn't a Layout should have a parent
 	sizet pcID;		// this widget's id in parent's widget list
 	Size relSize;	// size relative to parent's parameters
@@ -74,7 +75,7 @@ public:
 
 protected:
 	static void drawRect(const Rect& rect, const vec4& color, int z = 0);
-	static void drawTexture(const Texture* tex, Rect rect, const Rect& frame);
+	static void drawTexture(const Texture* tex, Rect rect, const Rect& frame, const vec4& color = colorTexture);
 };
 
 inline sizet Widget::getID() const {
@@ -289,7 +290,7 @@ public:
 	LabelEdit(const Size& relSize = 1.f, const string& text = emptyStr, BCall leftCall = nullptr, BCall rightCall = nullptr, BCall doubleCall = nullptr, TextType type = TextType::text, const Texture* bgTex = nullptr, const vec4& color = colorNormal, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
-	virtual void draw() const override;
+	virtual void drawTop() const override;
 	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
 	virtual void onDoubleClick(const vec2i&, uint8) override {}
 	virtual void onKeypress(const SDL_Keysym& key) override;

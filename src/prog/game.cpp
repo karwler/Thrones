@@ -18,12 +18,19 @@ Game::Record::Record(Piece* piece, bool attack, bool swap) :
 
 // GAME
 
+const vec3 Game::screenPosUp(0.f, 0.f, -BoardObject::halfSize);
+const vec3 Game::screenPosDown(0.f, -3.f, -BoardObject::halfSize);
+
 Game::Game() :
 	socks(nullptr),
 	socket(nullptr),
 	randGen(createRandomEngine()),
 	randDist(0, 1)
-{}
+{
+	setBoard();
+	setBgrid();
+	setScreen();
+}
 
 Game::~Game() {
 	disconnect();
@@ -113,7 +120,7 @@ uint8 Game::connectionMatch(const uint8* data) {
 		(data[1] ? pieces.ene : pieces.own)[data[2]].disable();
 		return 3;
 	case Com::Code::ruin:
-		(tiles.begin() + data[1])->ruined = data[2];
+		(tiles.begin() + data[1])->setRuined(data[2]);
 		return 3;
 	case Com::Code::record:
 		record = Record(pieces.ene + data[1], data[2], data[3]);
@@ -136,9 +143,6 @@ vector<Object*> Game::initObjects() {
 	setTiles(tiles.own, 1, &Program::eventPlaceTileC, Object::INFO_TEXTURE | Object::INFO_RAYCAST);
 	setPieces(pieces.own, &Program::eventClearPiece, &Program::eventMovePiece, Object::INFO_TEXTURE, Object::defaultColor);
 	setPieces(pieces.ene, nullptr, nullptr, Object::INFO_TEXTURE, Piece::enemyColor);
-	setScreen();
-	setBoard();
-	setBgrid();
 
 	// collect array of references to all objects
 	initializer_list<Object*> others = { &board, &bgrid, &screen };
@@ -166,8 +170,9 @@ void Game::prepareMatch() {
 	for (Piece& it : pieces.own) {
 		it.setModeByInteract(myTurn);
 		it.setClcall(nullptr);
+		it.setCrcall(nullptr);
 		it.setUlcall(&Program::eventMove);
-		it.setUrcall(&Program::eventFire);
+		it.setUrcall(it.canFire() ? &Program::eventFire : nullptr);
 	}
 	for (Piece& it : pieces.ene) {
 		it.mode |= Object::INFO_SHOW;
@@ -186,12 +191,11 @@ void Game::prepareMatch() {
 void Game::rearangeMiddle(Tile::Type* mid, Tile::Type* buf, bool fwd) {
 	if (!fwd)
 		std::swap(mid, buf);
-	for (uint8 i = fwd ? 0 : Com::boardLength - 1, fm = btom<uint8>(fwd), rm = btom<uint8>(!fwd); i < Com::boardLength; i += fm)
+	for (uint8 x, i = fwd ? 0 : Com::boardLength - 1, fm = btom<uint8>(fwd), rm = btom<uint8>(!fwd); i < Com::boardLength; i += fm)
 		if (buf[i] != Tile::Type::empty) {
 			if (mid[i] == Tile::Type::empty)
 				mid[i] = buf[i];
 			else {
-				uint8 x;
 				for (x = i + rm; x < Com::boardLength && mid[x] != Tile::Type::empty; x += rm);
 				if (x >= Com::boardLength)
 					for (x = i + fm; x < Com::boardLength && mid[x] != Tile::Type::empty; x += fm);
@@ -233,7 +237,7 @@ void Game::checkMidTiles() const {
 			cnt[uint8(type)]++;
 	// check if all pieces except for dragon were placed
 	for (uint8 i = 0; i < uint8(Tile::Type::fortress); i++)
-		if (cnt[i] != 1)
+		if (!cnt[i])
 			throw firstUpper(Tile::names[i]) + " wasn't placed";
 }
 
@@ -280,26 +284,24 @@ void Game::pieceMove(Piece* piece, vec2b pos, Piece* occupant) {
 	}
 
 	// handle movement
-	if (attacking) {	// kill and/or ruin
-		Tile* til = getTile(pos);
-		bool ruin = til->getType() == Tile::Type::fortress && !til->ruined;
-		if (ruin)	// ruin fortress
+	if (attacking) {	// kill or ruin
+		if (Tile* til = getTile(pos); piece->getType() != Piece::Type::throne && til->isUnruinedFortress())	// ruin fortress
 			updateFortress(til, true);
-
-		if (!ruin || piece->getType() == Piece::Type::throne) {	// execute attack
+		else {	// execute attack
 			removePiece(occupant);
-			record = Record(piece, true, false);
+			placePiece(piece, pos);
 		}
+		record = Record(piece, true, false);
 	} else if (occupant) {	// switch ally
 		placePiece(occupant, spos);
+		placePiece(piece, pos);
 		record = Record(piece, false, true);
 	} else {				// regular move
-		if (Tile* til = getTile(spos); til->getType() == Tile::Type::fortress && til->ruined)
+		if (Tile* til = getTile(spos); til->isRuinedFortress())
 			updateFortress(til, false);	// restore fortress
+		placePiece(piece, pos);
 		record = Record(piece, false, false);
 	}
-	placePiece(piece, pos);
-
 	if (!checkWin())
 		endTurn();
 }
@@ -310,7 +312,7 @@ void Game::pieceFire(Piece* killer, vec2b pos, Piece* piece) {
 		return;
 
 	bool succ = survivalCheck(killer, kpos);
-	if (Tile* til = getTile(pos); til->getType() == Tile::Type::fortress && !til->ruined) {	// specific behaviour for firing on fortress
+	if (Tile* til = getTile(pos); til->isUnruinedFortress()) {	// specific behaviour for firing on fortress
 		if (succ) {
 			updateFortress(til, true);
 			record = Record(killer, true, false);
@@ -319,6 +321,8 @@ void Game::pieceFire(Piece* killer, vec2b pos, Piece* piece) {
 			failSurvivalCheck(killer);
 	} else if (piece && !isOwnPiece(piece)) {	// regular behaviour
 		if (succ) {
+			if (til->isRuinedFortress())
+				updateFortress(til, false);	// restore fortress
 			removePiece(piece);
 			record = Record(killer, true, false);
 			if (!checkWin())
@@ -338,15 +342,10 @@ void Game::placeDragon(vec2b pos, Piece* occupant) {
 	pm->dragonIcon->getParent()->deleteWidget(pm->dragonIcon->getID());
 	pm->dragonIcon = nullptr;
 
-	// kill any piece that might be occupying the tile (possibility of killing own throne)
+	// kill any piece that might be occupying the tile (possibility of killing own throne) and  place the dragon
 	if (occupant)
 		removePiece(occupant);
-
-	// place the dragon
-	Piece* maid = getOwnPieces(Piece::Type::dragon);
-	maid->mode |= Object::INFO_SHOW;
-	placePiece(maid, pos);
-
+	placePiece(getOwnPieces(Piece::Type::dragon), pos);
 	if (!checkWin())
 		endTurn();
 }
@@ -358,7 +357,7 @@ void Game::setScreen() {
 		Vertex(vec3(4.7f, 2.6f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 0.f)),
 		Vertex(vec3(4.7f, 0.f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 1.f))
 	};
-	screen = Object(vec3(0.f, 0.f, -BoardObject::halfSize), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.2f, 0.13f, 0.062f, 1.f), Object::INFO_FILL);
+	screen = Object(screenPosUp, vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.2f, 0.13f, 0.062f, 1.f), Object::INFO_FILL);
 }
 
 void Game::setBoard() {
@@ -452,7 +451,7 @@ bool Game::checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool a
 	if (attacking) {
 		if (!checkAttack(piece, occupant, dtil) || firstTurn)
 			return false;
-		if (dtil->getType() == Tile::Type::fortress && !dtil->ruined)
+		if (dtil->isUnruinedFortress())
 			return checkMoveBySingle(pos, dst);
 	} else if (occupant)
 		return piece->getType() != occupant->getType() ? checkMoveBySingle(pos, dst) : false;
@@ -463,13 +462,13 @@ bool Game::checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool a
 	case Piece::Type::lancer:
 		return dtil->getType() == Tile::Type::plains && !attacking ? checkMoveByType(pos, dst) : checkMoveBySingle(pos, dst);
 	case Piece::Type::dragon:
-		return !attacking ? Dijkstra::travelDist(posToGid(pos), spaceAvailible)[posToGid(dst)] <= 4 : checkMoveBySingle(pos, dst);	// 4 being the max distance of a dragon
+		return !attacking ? Dijkstra::travelDist(posToId(pos), spaceAvailible)[posToId(dst)] <= 4 : checkMoveBySingle(pos, dst);	// 4 being the max distance of a dragon
 	}
 	return checkMoveBySingle(pos, dst);
 }
 
 bool Game::checkMoveBySingle(vec2b pos, vec2b dst) {
-	uint8 pi = posToGid(pos), di = posToGid(dst);
+	uint8 pi = posToId(pos), di = posToId(dst);
 	for (uint8 (*mov)(uint8) : Com::adjacentFull)
 		if (uint8 ni = mov(pi); ni < Com::boardSize && ni == di)
 			return true;
@@ -477,17 +476,18 @@ bool Game::checkMoveBySingle(vec2b pos, vec2b dst) {
 }
 
 bool Game::spaceAvailible(uint8 pos) {
-	Piece* occ = World::game()->findPiece(gidToPos(pos));
-	return !occ || (occ->getType() != Piece::Type::dragon && occ->getType() != Piece::Type::crossbowman && occ->getType() != Piece::Type::catapult && occ->getType() != Piece::Type::trebuchet);
+	Piece* occ = World::game()->findPiece(idToPos(pos));
+	return !occ || (occ->getType() != Piece::Type::dragon && !occ->canFire());
 }
 
 bool Game::checkMoveByType(vec2b pos, vec2b dst) {
 	bool visited[Com::boardSize];
 	std::fill_n(visited, Com::boardSize, 0);
-	return checkAdjacentTilesByType(posToGid(pos), posToGid(dst), visited, getTile(pos)->getType()) || checkMoveBySingle(pos, dst);
+	bool ret = checkAdjacentTilesByType(posToId(pos), posToId(dst), visited, getTile(pos)->getType()) || checkMoveBySingle(pos, dst);
+	return ret;
 }
 
-bool Game::checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type) {
+bool Game::checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type) const {
 	visited[pos] = true;
 	if (pos == dst)
 		return true;
@@ -511,15 +511,7 @@ bool Game::checkFire(Piece* killer, vec2b pos, Piece* victim, vec2b dst) {
 		if (killer->getType() == Piece::Type::catapult && dtil->getType() == Tile::Type::forest)
 			return false;
 	}
-	switch (killer->getType()) {
-	case Piece::Type::crossbowman:
-		return checkTilesByDistance(pos, dst, 1);
-	case Piece::Type::catapult:
-		return checkTilesByDistance(pos, dst, 2);
-	case Piece::Type::trebuchet:
-		return checkTilesByDistance(pos, dst, 3);
-	}
-	return false;
+	return killer->canFire() ? checkTilesByDistance(pos, dst, int8(killer->getType()) - int8(Piece::Type::crossbowman) + 1) : false;
 }
 
 bool Game::checkTilesByDistance(vec2b pos, vec2b dst, int8 dist) {
@@ -531,7 +523,7 @@ bool Game::checkTilesByDistance(vec2b pos, vec2b dst, int8 dist) {
 }
 
 bool Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) {
-	if (dtil->getType() == Tile::Type::fortress && !dtil->ruined)
+	if (dtil->isUnruinedFortress())
 		return true;
 	if (!victim)
 		return false;
@@ -574,7 +566,7 @@ bool Game::checkWin() {
 		disconnectMessage(messageLoose);
 		return true;
 	}
-	if (Tile* of = getTile(ot->getPos()); !getPieces(pieces.ene, Piece::Type::throne)->active() || of->getType() == Tile::Type::fortress && of < tiles.mid) {
+	if (Tile* of = getTile(ot->getPos()); !getPieces(pieces.ene, Piece::Type::throne)->active() || of->getType() == Tile::Type::fortress && isEnemyTile(of)) {
 		sendb.push(Com::Code::win, { true });
 		endTurn();
 		disconnectMessage(messageWin);
@@ -595,10 +587,10 @@ void Game::prepareTurn() {
 }
 
 void Game::endTurn() {
-	myTurn = false;
+	firstTurn = myTurn = false;
 	prepareTurn();
 
-	sendb.push(Com::Code::record, { uint8(record.piece - pieces.own), record.attack, record.swap });
+	sendb.push(Com::Code::record, { uint8(record.piece - pieces.own), uint8(record.attack), uint8(record.swap) });
 	sendData();
 }
 
@@ -632,8 +624,8 @@ void Game::removePiece(Piece* piece) {
 }
 
 void Game::updateFortress(Tile* fort, bool ruined) {
-	fort->ruined = ruined;
-	sendb.push(Com::Code::ruin, { uint8(tiles.end() - fort - 1), ruined });	// invert index of fort
+	fort->setRuined(ruined);
+	sendb.push(Com::Code::ruin, { uint8(tiles.end() - fort - 1), uint8(ruined) });	// invert index of fort
 }
 
 bool Game::connectFail() {

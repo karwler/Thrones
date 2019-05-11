@@ -164,8 +164,8 @@ const array<uint8, Tile::amounts.size()> Tile::amounts = {
 
 Tile::Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
 	BoardObject(pos, 0.f, clcall, crcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
-	ruined(false),
-	type(type)
+	type(type),
+	ruined(false)
 {}
 
 void Tile::onText(const string&) {}
@@ -174,6 +174,11 @@ void Tile::setType(Type newType) {
 	type = newType;
 	color = colors[uint8(type)];
 	mode = getModeByType(mode, type);
+}
+
+void Tile::setRuined(bool yes) {
+	ruined = yes;
+	color = colors[uint8(type)] * (ruined ? 0.5f : 1.f);
 }
 
 void Tile::setCalls(Interactivity lvl) {

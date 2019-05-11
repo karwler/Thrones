@@ -2,6 +2,10 @@
 
 // CAMERA
 
+const vec3 Camera::posSetup(0.f, 8.f, 8.f);
+const vec3 Camera::posMatch(0.f, 11.f, 5.f);
+const vec3 Camera::latSetup(0.f, 0.f, 2.f);
+const vec3 Camera::latMatch(0.f, 0.f, 1.f);
 const vec3 Camera::up(0.f, 1.f, 0.f);
 
 Camera::Camera(const vec3& pos, const vec3& lat, float fov, float znear, float zfar) :

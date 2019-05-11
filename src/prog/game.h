@@ -22,6 +22,7 @@ inline void DataBatch::push(Com::Code code) {
 // handles game logic and networking
 class Game {
 public:
+	static const vec3 screenPosUp, screenPosDown;
 	static constexpr char messageTurnGo[] = "Your turn";
 	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
@@ -60,6 +61,7 @@ public:
 
 	Tile* getTile(vec2b pos);
 	bool isHomeTile(Tile* til) const;
+	bool isEnemyTile(Tile* til) const;
 	Piece* getOwnPieces(Piece::Type type);
 	Piece* findPiece(vec2b pos);
 	bool isOwnPiece(Piece* pce) const;
@@ -109,12 +111,12 @@ private:
 	static void rearangeMiddle(Tile::Type* mid, Tile::Type* buf, bool fwd);
 
 	bool checkMove(Piece* piece, vec2b pos, Piece* occupant, vec2b dst, bool attacking);
-	bool checkMoveBySingle(vec2b pos, vec2b dst);
+	static bool checkMoveBySingle(vec2b pos, vec2b dst);
 	static bool spaceAvailible(uint8 pos);
 	bool checkMoveByType(vec2b pos, vec2b dst);
-	bool checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type);
+	bool checkAdjacentTilesByType(uint8 pos, uint8 dst, bool* visited, Tile::Type type) const;
 	bool checkFire(Piece* killer, vec2b pos, Piece* victim, vec2b dst);
-	bool checkTilesByDistance(vec2b pos, vec2b dst, int8 dist);
+	static bool checkTilesByDistance(vec2b pos, vec2b dst, int8 dist);
 	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
 	bool survivalCheck(Piece* piece, vec2b pos);
 	void failSurvivalCheck(Piece* piece);
@@ -130,8 +132,8 @@ private:
 	bool connectFail();
 	void disconnectMessage(const string& msg);
 	static void printInvalidCode(uint8 code);
-	static uint8 posToGid(vec2b p);
-	static vec2b gidToPos(uint8 i);
+	static uint8 posToId(vec2b p);
+	static vec2b idToPos(uint8 i);
 	static vec2b invertPos(vec2b p);
 };
 
@@ -141,6 +143,10 @@ inline Tile* Game::getTile(vec2b pos) {
 
 inline bool Game::isHomeTile(Tile* til) const {
 	return til >= tiles.own;
+}
+
+inline bool Game::isEnemyTile(Tile* til) const {
+	return til < tiles.mid;
 }
 
 inline Piece* Game::getOwnPieces(Piece::Type type) {
@@ -190,11 +196,11 @@ inline void Game::printInvalidCode(uint8 code) {
 	std::cerr << "invalid net code " << uint(code) << std::endl;
 }
 
-inline uint8 Game::posToGid(vec2b p) {
+inline uint8 Game::posToId(vec2b p) {
 	return uint8((p.y + Com::homeHeight) * Com::boardLength + p.x);
 }
 
-inline vec2b Game::gidToPos(uint8 i) {
+inline vec2b Game::idToPos(uint8 i) {
 	return vec2b(int8(i % Com::boardLength), int8(i / Com::boardLength) - Com::homeHeight);
 }
 

@@ -302,6 +302,7 @@ Layout* ProgSettings::createLayout() {
 
 	// setting buttons, labels and action fields for labels
 	vector<string> txs = {
+		"Smooth",
 		"VSync",
 		"Resolution",
 		"Fullscreen"
@@ -317,6 +318,9 @@ Layout* ProgSettings::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(World::sets()->vsync)], &Program::eventSetVsync)
+	}, {
+		new Label(descLength, popBack(txs)),
+		new SwitchBox(1.f, Settings::smoothNames.data(), Settings::smoothNames.size(), Settings::smoothNames[uint8(World::sets()->smooth)], &Program::eventSetSmooth)
 	} };
 	vector<Widget*> lns(lnc);
 	for (sizet i = 0; i < lnc; i++)

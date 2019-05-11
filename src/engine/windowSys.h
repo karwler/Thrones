@@ -73,6 +73,7 @@ public:
 	void setFullscreen(bool on);
 	void setResolution(const string& line);
 	void setVsync(Settings::VSync vsync);
+	void setSmooth(Settings::Smooth smooth);
 	void resetSettings();
 
 	FileSys* getFileSys();
@@ -93,6 +94,7 @@ private:
 	void setSwapInterval();
 
 	void updateViewport() const;
+	void updateSmooth() const;
 	vec2i displayResolution() const;
 	void setResolution(const vec2i& res);
 };

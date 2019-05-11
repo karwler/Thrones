@@ -52,6 +52,7 @@ public:
 	void eventSetFullscreen(Button* but);
 	void eventSetResolution(Button* but);
 	void eventSetVsync(Button* but);
+	void eventSetSmooth(Button* but);
 	void eventResetSettings(Button* but);
 	void eventOpenInfo(Button* but = nullptr);
 

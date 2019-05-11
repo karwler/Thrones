@@ -1,13 +1,11 @@
 #pragma once
 
+#include "utils/cvec2.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
 #include <SDL2/SDL_net.h>
 #include <array>
-#include <cstddef>
-#include <cstdint>
-#include <ctime>
 #include <iostream>
 #include <random>
 #include <string>
@@ -19,7 +17,6 @@
 
 using std::array;
 using std::initializer_list;
-using std::string;
 
 using uchar = unsigned char;
 using ushort = unsigned short;
@@ -38,9 +35,6 @@ using int32 = int32_t;
 using uint32 = uint32_t;
 using int64 = int64_t;
 using uint64 = uint64_t;
-
-using sizet = size_t;
-using pdift = ptrdiff_t;
 
 namespace Com {
 	const string loopback = "127.0.0.1";

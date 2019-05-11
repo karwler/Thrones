@@ -131,12 +131,14 @@ void WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
-
+#ifdef DEBUG
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+#endif
 	setResolution(sets->resolution);
 	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->resolution.x, sets->resolution.y, windowFlags | (sets->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0))))
 		throw std::runtime_error(string("failed to create window:\n") + SDL_GetError());
@@ -164,12 +166,12 @@ void WindowSys::createWindow() {
 	glFrontFace(GL_CCW);
 	glShadeModel(GL_SMOOTH);
 	glEnable(GL_MULTISAMPLE);
-	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+	updateSmooth();
 
 	// load default textures with colors
 	for (const string& file : FileSys::listDir(FileSys::dirTexs, FTYPE_REG)) {
 		try {
-			texes.emplace(delExt(file), FileSys::dirTexs + file);
+			texes.emplace(delExt(file), appDsep(FileSys::dirTexs) + file);
 		} catch (const std::runtime_error& e) {
 			std::cerr << e.what() << std::endl;
 		}
@@ -243,6 +245,23 @@ void WindowSys::setSwapInterval() {
 		std::cerr << "swap interval " << sets->vsyncToInterval() << " not supported" << std::endl;
 }
 
+void WindowSys::updateSmooth() const {
+	GLenum hmode = sets->smooth == Settings::Smooth::nice ? GL_NICEST : GL_FASTEST;
+	if (sets->smooth == Settings::Smooth::off) {
+		glDisable(GL_POINT_SMOOTH);
+		glDisable(GL_LINE_SMOOTH);
+		glDisable(GL_POLYGON_SMOOTH);
+	} else {
+		glEnable(GL_POINT_SMOOTH);
+		glHint(GL_POINT_SMOOTH_HINT, hmode);
+		glEnable(GL_LINE_SMOOTH);
+		glHint(GL_LINE_SMOOTH_HINT, hmode);
+		glEnable(GL_POLYGON_SMOOTH);
+		glHint(GL_POLYGON_SMOOTH_HINT, hmode);
+	}
+	glHint(GL_PERSPECTIVE_CORRECTION_HINT, hmode);
+}
+
 Texture WindowSys::renderText(const string& text, int height) {
 	try {
 		return TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText);
@@ -274,6 +293,11 @@ void WindowSys::setResolution(const string& line) {
 void WindowSys::setVsync(Settings::VSync vsync) {
 	sets->vsync = vsync;
 	setSwapInterval();
+}
+
+void WindowSys::setSmooth(Settings::Smooth smooth) {
+	sets->smooth = smooth;
+	updateSmooth();
 }
 
 void WindowSys::resetSettings() {

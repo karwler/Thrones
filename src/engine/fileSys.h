@@ -15,8 +15,16 @@ public:
 	};
 	static const array<string, sizet(VSync::adaptive)+1> vsyncNames;
 
+	enum class Smooth : uint8 {
+		off,
+		fast,
+		nice
+	};
+	static const array<string, sizet(Smooth::nice)+1> smoothNames;
+
 	bool maximized, fullscreen;
 	VSync vsync;
+	Smooth smooth;
 	vec2i resolution;
 	string address;
 	uint16 port;
@@ -71,13 +79,7 @@ inline constexpr FileType operator|=(FileType& a, FileType b) {
 // handles all filesystem interactions
 class FileSys {
 public:
-#ifdef _WIN32
-	static constexpr char dirSavs[] = "saves\\";
-	static constexpr char dirTexs[] = "textures\\";
-#else
-	static constexpr char dirSavs[] = "saves/";
-	static constexpr char dirTexs[] = "textures/";
-#endif
+	static constexpr char dirTexs[] = "textures";
 	static constexpr char extIni[] = ".ini";
 private:
 	static constexpr char fileSettings[] = "settings.ini";
@@ -89,6 +91,7 @@ private:
 	static constexpr char iniKeywordFullscreen[] = "fullscreen";
 	static constexpr char iniKeywordResolution[] = "resolution";
 	static constexpr char iniKeywordVsync[] = "vsync";
+	static constexpr char iniKeywordSmooth[] = "smooth";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 

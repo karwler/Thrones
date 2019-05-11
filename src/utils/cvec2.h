@@ -12,6 +12,9 @@ using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 
+using sizet = size_t;
+using pdift = ptrdiff_t;
+
 using std::string;
 using std::wstring;
 using std::to_string;
@@ -26,8 +29,8 @@ struct cvec2 {
 	template <class A, class B> constexpr cvec2(const A& x, const B& y);
 	template <class A> constexpr cvec2(const cvec2<A>& v);
 
-	T& operator[](size_t i);
-	constexpr const T& operator[](size_t i) const;
+	T& operator[](sizet i);
+	constexpr const T& operator[](sizet i) const;
 
 	cvec2& operator+=(const cvec2& v);
 	cvec2& operator-=(const cvec2& v);
@@ -77,12 +80,12 @@ constexpr cvec2<T>::cvec2(const cvec2<A>& v) :
 {}
 
 template <class T>
-T& cvec2<T>::operator[](size_t i) {
+T& cvec2<T>::operator[](sizet i) {
 	return (&x)[i];
 }
 
 template <class T>
-constexpr const T& cvec2<T>::operator[](size_t i) const {
+constexpr const T& cvec2<T>::operator[](sizet i) const {
 	return (&x)[i];
 }
 

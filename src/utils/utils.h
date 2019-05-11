@@ -2,7 +2,6 @@
 
 // stuff that's used pretty much everywhere
 #include "server/server.h"
-#include "utils/cvec2.h"
 #define GLEW_STATIC
 #include <GL/glew.h>
 #include <memory>
@@ -444,11 +443,11 @@ V vtog(const vector<T>& vec) {
 }
 
 inline vec2b ptog(const vec3& p) {
-	return vec2b(uint8(p.x) + 4, p.z);	// game field starts at (-4, 0)
+	return vec2b(uint8(p.x) + Com::homeHeight, p.z);	// game field starts at (-4, 0)
 }
 
 inline vec3 gtop(vec2b p, float z = 0.f) {
-	return vec3(p.x - 4, z, p.y);
+	return vec3(p.x - Com::homeHeight, z, p.y);
 }
 
 // container stuff

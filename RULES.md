@@ -82,4 +82,3 @@ Fortress: Crossbowmen, Warhorse, Trebuchet
 - Thrones can also rebuild destroyed Fortresses correspondingly, which do not rebuild in this gametype. Dragon pieces cannot be respawned.  
 - Farm and City tiles must be unoccupied to spawn a new piece, and be at least two tiles away from another spawning tile.  
 - City tiles cannot be destroyed, only occupied, and cannot be established before a Farm has been established. Spawning a piece replaces movement or combat for that turn; establishing Farm or City or rebuilding a Fortress does not.  
-

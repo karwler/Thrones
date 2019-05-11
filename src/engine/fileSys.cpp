@@ -12,10 +12,17 @@ const array<string, Settings::vsyncNames.size()> Settings::vsyncNames = {
 	"adaptive"
 };
 
+const array<string, Settings::smoothNames.size()> Settings::smoothNames = {
+	"off",
+	"fast",
+	"nice"
+};
+
 Settings::Settings() :
 	maximized(false),
 	fullscreen(false),
 	vsync(VSync::synchronized),
+	smooth(Smooth::nice),
 	resolution(800, 600),
 	address(Com::loopback),
 	port(Com::defaultPort)
@@ -27,15 +34,13 @@ FileSys::FileSys() {
 	// check if all (more or less) necessary files and directories exist
 	if (setWorkingDir())
 		std::cerr << "failed to set working directory" << std::endl;
-	if (fileType(dirSavs) != FTYPE_DIR && !createDir(dirSavs))
-		std::cerr << "failed to create save data directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
 		std::cerr << "failed to find texture directory" << std::endl;
 }
 
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
-	for (const string& line : readFileLines(string(dirSavs) + fileSettings, false)) {
+	for (const string& line : readFileLines(fileSettings, false)) {
 		if (pairStr il = splitIniLine(line); il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
 		else if (il.first == iniKeywordFullscreen)
@@ -44,6 +49,8 @@ Settings* FileSys::loadSettings() {
 			sets->resolution = vec2i::get(il.second, strtoul, 0);
 		else if (il.first == iniKeywordVsync)
 			sets->vsync = valToEnum<Settings::VSync>(Settings::vsyncNames, il.second);
+		else if (il.first == iniKeywordSmooth)
+			sets->smooth = valToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -58,9 +65,10 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordFullscreen, btos(sets->fullscreen));
 	text += makeIniLine(iniKeywordResolution, sets->resolution.toString());
 	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync)]);
+	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
-	return writeTextFile(string(dirSavs) + fileSettings, text);
+	return writeTextFile(fileSettings, text);
 }
 
 Object FileSys::loadObj(const string& file) {

@@ -33,11 +33,5 @@ The game client can be run with the following command line arguments:
 -d : place objects beforehand (only for debug build)  
 
 ## To do  
-- test basic movement  
-- test switching  
-- test attacking  
-- test firing  
-- test ruining  
-- test winning conditions  
 - test obj loading  
 - alternate game modes  

@@ -190,8 +190,8 @@ void Program::eventShowWaitPopup(Button*) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
-	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, game.getScreen()->pos + vec3(0.f, -3.f, 0.f)) })));
-	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, vec3(0.f, 11.f, 5.f), vec3(0.f, 0.f, 1.f)) })));
+	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, Game::screenPosDown) })));
+	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 }
 
 void Program::eventPlaceDragon(Button*) {
@@ -213,6 +213,10 @@ void Program::eventFire(BoardObject* obj) {
 }
 
 void Program::eventExitGame(Button*) {
+	if (dynamic_cast<ProgMatch*>(state.get())) {
+		World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, Game::screenPosUp) })));
+		World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, Camera::latSetup) })));
+	}
 	game.disconnect();
 	eventOpenMainMenu();
 }
@@ -233,6 +237,10 @@ void Program::eventSetResolution(Button* but) {
 
 void Program::eventSetVsync(Button* but) {
 	World::winSys()->setVsync(Settings::VSync(static_cast<SwitchBox*>(but)->getCurOpt()));
+}
+
+void Program::eventSetSmooth(Button* but) {
+	World::winSys()->setSmooth(Settings::Smooth(static_cast<SwitchBox*>(but)->getCurOpt()));
 }
 
 void Program::eventResetSettings(Button*) {

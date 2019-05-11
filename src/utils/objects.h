@@ -149,6 +149,9 @@ public:
 		fortress,
 		empty
 	};
+	static const array<vec4, sizet(Type::empty)+1> colors;
+	static const array<string, sizet(Type::empty)> names;
+	static const array<uint8, sizet(Type::empty)> amounts;
 
 	enum class Interactivity : uint8 {
 		none,
@@ -157,13 +160,9 @@ public:
 		piecing
 	};
 
-	static const array<vec4, sizet(Type::empty)+1> colors;
-	static const array<string, sizet(Type::empty)> names;
-	static const array<uint8, sizet(Type::empty)> amounts;
-
-	bool ruined;	// only for fortress
 private:
 	Type type;
+	bool ruined;	// only for fortress
 
 public:
 	Tile() = default;
@@ -174,6 +173,10 @@ public:
 
 	Type getType() const;
 	void setType(Type newType);
+	bool isRuinedFortress() const;
+	bool isUnruinedFortress() const;
+	bool getRuined() const;
+	void setRuined(bool yes);
 	void setCalls(Interactivity lvl);
 private:
 	static Info getModeByType(Info mode, Type type);
@@ -181,6 +184,18 @@ private:
 
 inline Tile::Type Tile::getType() const {
 	return type;
+}
+
+inline bool Tile::isRuinedFortress() const {
+	return type == Tile::Type::fortress && ruined;
+}
+
+inline bool Tile::isUnruinedFortress() const {
+	return type == Tile::Type::fortress && !ruined;
+}
+
+inline bool Tile::getRuined() const {
+	return ruined;
 }
 
 inline Object::Info Tile::getModeByType(Info mode, Type type) {
@@ -229,7 +244,7 @@ public:
 	enum class Type : uint8 {
 		ranger,
 		spearman,
-		crossbowman,
+		crossbowman,	// it's important that crossbowman, catapult, trebuchet come right after another in that order
 		catapult,
 		trebuchet,
 		lancer,
@@ -254,6 +269,7 @@ public:
 	Type getType() const;
 	void setType(Type newType);
 	void setModeByOn(bool on);
+	bool canFire() const;
 	bool active() const;
 	void enable(vec2b bpos);
 	void disable();
@@ -265,6 +281,10 @@ inline Piece::Type Piece::getType() const {
 
 inline void Piece::setModeByOn(bool on) {
 	on ? mode |= INFO_SHOW | INFO_RAYCAST : mode &= ~(INFO_SHOW | INFO_RAYCAST);
+}
+
+inline bool Piece::canFire() const {
+	return type >= Type::crossbowman && type <= Type::trebuchet;
 }
 
 inline bool Piece::active() const {

@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
 	if (!server)
 		return connectionFail("failed to resolve host:");
 
-	TCPsocket players[2] = { nullptr, nullptr };
+	TCPsocket players[maxPlayers] = { nullptr, nullptr };
 	SDLNet_SocketSet sockets = SDLNet_AllocSocketSet(maxSockets);
 	SDLNet_TCP_AddSocket(sockets, server);
 	std::cout << "press 'q' to exit" << std::endl;

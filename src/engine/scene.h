@@ -8,11 +8,14 @@ class Camera {
 public:
 	vec3 pos, lat;
 	float fov, znear, zfar;
+	
+	static const vec3 posSetup, posMatch;
+	static const vec3 latSetup, latMatch;
 private:
 	static const vec3 up;
 
 public:
-	Camera(const vec3& pos = vec3(0.f, 8.f, 8.f), const vec3& lat = vec3(0.f, 0.f, 2.f), float fov = 45.f, float znear = 1.f, float zfar = 20.f);
+	Camera(const vec3& pos = posSetup, const vec3& lat = latSetup, float fov = 45.f, float znear = 1.f, float zfar = 20.f);
 
 	void update() const;
 	static void updateUI();

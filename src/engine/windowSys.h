@@ -4,7 +4,11 @@
 #include "scene.h"
 #include "prog/program.h"
 #include "utils/layouts.h"
+#ifdef __APPLE__
+#include <SDL2_ttf/SDL_ttf.h>
+#else
 #include <SDL2/SDL_ttf.h>
+#endif
 
 // loads different font sizes from one file
 class FontSet {

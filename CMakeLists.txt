@@ -54,6 +54,11 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 		"SDL2_net.dll"
 		"SDL2_ttf.dll"
 		"zlib1.dll")	
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	find_library(LIB_SDL2 SDL2)
+	find_library(LIB_SDL2_NET SDL2_net)
+	find_library(LIB_SDL2_TTF SDL2_ttf)
+	find_library(LIB_OPENGL OpenGL)
 endif()
 
 # definitions
@@ -77,12 +82,14 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 # include directories and link libraries
 include_directories("${CMAKE_SOURCE_DIR}/src")
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	include_directories("${CMAKE_SOURCE_DIR}/lib/include")
-	target_link_libraries(${PROJECT_NAME} glew32s glu32 opengl32)
+	include_directories("${CMAKE_SOURCE_DIR}/lib/includeGL" "${CMAKE_SOURCE_DIR}/lib/includeSDL")
+	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf glew32s glu32 opengl32)
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	include_directories("${CMAKE_SOURCE_DIR}/lib/includeGL")
+	target_link_libraries(${PROJECT_NAME} ${LIB_SDL2} ${LIB_SDL2_NET} ${LIB_SDL2_TTF} ${LIB_OPENGL})
 else()
-	target_link_libraries(${PROJECT_NAME} GLEW GLU GL)
+	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf GLEW GLU GL)
 endif()
-target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf)
 
 # target properties
 set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
@@ -157,7 +164,12 @@ set(SERVER_SRC
 string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
 add_executable(${SERVER_NAME} ${SERVER_SRC})
 target_compile_features(${SERVER_NAME} PUBLIC cxx_std_17)
-target_link_libraries(${SERVER_NAME} SDL2 SDL2_net)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	target_link_libraries(${SERVER_NAME} ${LIB_SDL2} ${LIB_SDL2_NET})
+else()
+	target_link_libraries(${SERVER_NAME} SDL2 SDL2_net)
+endif()
 
 set_target_properties(${SERVER_NAME} PROPERTIES
 								RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}

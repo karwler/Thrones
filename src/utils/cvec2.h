@@ -193,7 +193,7 @@ template <class T> template <class F, class... A>
 cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 	cvec2<T> vec(T(0));
 	const char* pos = str.c_str();
-	for (uint i = 0; *pos && i < 2; i++) {
+	for (unsigned int i = 0; *pos && i < 2; i++) {
 		char* end;
 		if (T num = T(strtox(pos, &end, args...)); end != pos) {
 			vec[i] = num;

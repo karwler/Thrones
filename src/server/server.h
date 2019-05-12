@@ -4,7 +4,11 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
+#ifdef __APPLE__
+#include <SDL2_net/SDL_net.h>
+#else
 #include <SDL2/SDL_net.h>
+#endif
 #include <array>
 #include <iostream>
 #include <random>

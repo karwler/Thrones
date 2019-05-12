@@ -2,15 +2,18 @@
 
 // stuff that's used pretty much everywhere
 #include "server/server.h"
+#ifdef __APPLE
+#include <OpenGL/gl.h>
+#else
 #define GLEW_STATIC
 #include <GL/glew.h>
+#endif
 #include <memory>
 #include <queue>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
 #ifndef _WIN32
 #include <strings.h>
 #endif

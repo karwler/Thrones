@@ -112,8 +112,9 @@ vec2i Layout::listSize() const {
 
 const vec4 Popup::colorDim(0.f, 0.f, 0.f, 0.5f);
 
-Popup::Popup(const vec2s& relSize, const vector<Widget*>& children, bool vertical, int spacing) :
+Popup::Popup(const cvec2<Size>& relSize, const vector<Widget*>& children, BCall ccall, bool vertical, int spacing) :
 	Layout(relSize.x, children, vertical, spacing, nullptr, SIZE_MAX),
+	ccall(ccall),
 	sizeY(relSize.y)
 {}
 

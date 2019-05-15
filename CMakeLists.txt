@@ -28,6 +28,8 @@ set(SRC_FILES
 	"src/utils/layouts.h"
 	"src/utils/objects.cpp"
 	"src/utils/objects.h"
+	"src/utils/text.cpp"
+	"src/utils/text.h"
 	"src/utils/utils.cpp"
 	"src/utils/utils.h"
 	"src/utils/widgets.cpp"
@@ -110,7 +112,7 @@ if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-padded")
 	endif()
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-deprecated -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-deprecated -Wno-float-equal -Wno-implicit-fallthrough -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -159,7 +161,9 @@ endforeach()
 set(SERVER_SRC
 	"src/server/server.cpp"
 	"src/server/server.h"
-	"src/server/serverProg.cpp")
+	"src/server/serverProg.cpp"
+	"src/utils/text.cpp"
+	"src/utils/text.h")
 
 string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
 add_executable(${SERVER_NAME} ${SERVER_SRC})

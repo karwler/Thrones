@@ -41,8 +41,6 @@ private:
 	static constexpr char fileFont[] = "Merriweather.otf";
 	static constexpr char fileIcon[] = "icon.ico";
 	static constexpr vec2i defaultWindowPos = { SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED };
-	static constexpr vec2i minWindowSize = { 640, 480 };
-	static constexpr uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN;
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
 	static constexpr GLclampf colorClear[4] = { 0.f, 0.f, 0.f, 1.f };
@@ -57,6 +55,7 @@ private:
 	SDL_GLContext context;
 	FontSet fonts;
 	umap<string, Texture> texes;	// name, texture data
+	int curDisplay;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 
@@ -73,9 +72,10 @@ public:
 	float getDSec() const;
 	const Texture* texture(const string& name) const;
 	vec2i windowSize() const;
+	vector<vec2i> displaySizes() const;
+	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	void setFullscreen(bool on);
-	void setResolution(const string& line);
+	void setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode);
 	void setVsync(Settings::VSync vsync);
 	void setSmooth(Settings::Smooth smooth);
 	void resetSettings();
@@ -96,15 +96,19 @@ private:
 	void eventWindow(const SDL_WindowEvent& winEvent);
 	void setDSec(uint32& oldTicks);
 	void setSwapInterval();
+	bool trySetSwapInterval();
 
 	void updateViewport() const;
 	void updateSmooth() const;
-	vec2i displayResolution() const;
-	void setResolution(const vec2i& res);
+	template <class T> static bool checkResolution(T& val, const vector<T>& modes);
 };
 
 inline void WindowSys::close() {
 	run = false;
+}
+
+inline Texture WindowSys::renderText(const string& text, int height) {
+	return TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText);
 }
 
 inline int WindowSys::textLength(const string& text, int height) {
@@ -150,11 +154,13 @@ inline int WindowSys::displayID() const {
 	return SDL_GetWindowDisplayIndex(window);
 }
 
-inline vec2i WindowSys::displayResolution() const {
-	SDL_DisplayMode mode;
-	return !SDL_GetDesktopDisplayMode(window ? SDL_GetWindowDisplayIndex(window) : 0, &mode) ? vec2i(mode.w, mode.h) : INT_MAX;
-}
+template <class T>
+bool WindowSys::checkResolution(T& val, const vector<T>& modes) {
+	typename vector<T>::const_iterator it;
+	if (it = std::find(modes.begin(), modes.end(), val); it != modes.end() || modes.empty())
+		return true;
 
-inline void WindowSys::setResolution(const vec2i& res) {
-	sets->resolution = res.clamp(minWindowSize, displayResolution());
+	for (it = modes.begin(); it != modes.end() && *it < val; it++);
+	val = it == modes.begin() ? *it : *(it - 1);
+	return false;
 }

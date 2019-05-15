@@ -33,5 +33,14 @@ The game client can be run with the following command line arguments:
 -d : place objects beforehand (only for debug build)  
 
 ## To do  
+- implement fate's favor  
+- add move indicator  
+- add server UI  
+- add server game settings  
+- test new packets  
+- test firing on fortress  
+- test survival checks  
+- test screen modes  
+- test gradients  
 - test obj loading  
 - alternate game modes  

@@ -37,10 +37,8 @@ TTF_Font* FontSet::addSize(int size) {
 
 TTF_Font* FontSet::getFont(int height) {
 	height = int(float(height) * heightScale);
-	try {	// load font if it hasn't been loaded yet
-		return fonts.at(height);
-	} catch (const std::out_of_range&) {}
-	return addSize(height);
+	umap<int, TTF_Font*>::iterator it = fonts.find(height);
+	return it != fonts.end() ? it->second : addSize(height);	// load font if it hasn't been loaded yet
 }
 
 int FontSet::length(const string& text, int height) {
@@ -127,6 +125,18 @@ void WindowSys::cleanup() {
 void WindowSys::createWindow() {
 	destroyWindow();	// make sure old window (if exists) is destroyed
 
+	uint32 flags = SDL_WINDOW_OPENGL;
+	switch (sets->screen) {
+	case Settings::Screen::borderless:
+		flags |= SDL_WINDOW_BORDERLESS;
+		break;
+	case Settings::Screen::fullscreen:
+		flags |= SDL_WINDOW_FULLSCREEN;
+		break;
+	case Settings::Screen::desktop:
+		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+	}
+
 	// create new window
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -139,11 +149,17 @@ void WindowSys::createWindow() {
 #ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
-	setResolution(sets->resolution);
-	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->resolution.x, sets->resolution.y, windowFlags | (sets->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0))))
+	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:\n") + SDL_GetError());
 
-	SDL_SetWindowMinimumSize(window, minWindowSize.x, minWindowSize.y);
+	curDisplay = SDL_GetWindowDisplayIndex(window);
+	checkResolution(sets->size, displaySizes());
+	checkResolution(sets->mode, displayModes());
+	if (sets->screen <= Settings::Screen::borderless)
+		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+	else if (sets->screen == Settings::Screen::fullscreen)
+		SDL_SetWindowDisplayMode(window, &sets->mode);
+
 	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
@@ -192,10 +208,10 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel));
 		break;
 	case SDL_MOUSEBUTTONDOWN:
-		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button, event.button.clicks);
+		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button);
 		break;
 	case SDL_MOUSEBUTTONUP:
-		scene->onMouseUp(vec2i(event.button.x, event.button.y), event.button.button, event.button.clicks);
+		scene->onMouseUp(vec2i(event.button.x, event.button.y), event.button.button);
 		break;
 	case SDL_MOUSEWHEEL:
 		scene->onMouseWheel(vec2i(event.wheel.x, -event.wheel.y));
@@ -216,18 +232,21 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 
 void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	switch (winEvent.event) {
-	case SDL_WINDOWEVENT_RESIZED:
-		if (uint32 flags = SDL_GetWindowFlags(window); !(flags & SDL_WINDOW_FULLSCREEN_DESKTOP) && !(sets->maximized = flags & SDL_WINDOW_MAXIMIZED))	// update settings if needed
-			SDL_GetWindowSize(window, &sets->resolution.x, &sets->resolution.y);
-		updateViewport();
-		scene->onResize();
-		break;
 	case SDL_WINDOWEVENT_SIZE_CHANGED:
 		updateViewport();
 		scene->onResize();
 		break;
 	case SDL_WINDOWEVENT_LEAVE:
 		scene->onMouseLeave();
+		break;
+	case SDL_WINDOWEVENT_MOVED:
+		if (int newDisp = SDL_GetWindowDisplayIndex(window); curDisplay != newDisp) {
+			if (curDisplay = newDisp; sets->screen <= Settings::Screen::borderless) {
+				if (!checkResolution(sets->size, displaySizes()))
+					SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+			} else if (sets->screen == Settings::Screen::fullscreen && !checkResolution(sets->mode, displayModes()))
+				SDL_SetWindowDisplayMode(window, &sets->mode);
+		}
 		break;
 	case SDL_WINDOWEVENT_CLOSE:
 		close();
@@ -241,8 +260,26 @@ void WindowSys::setDSec(uint32& oldTicks) {
 }
 
 void WindowSys::setSwapInterval() {
-	if (SDL_GL_SetSwapInterval(sets->vsyncToInterval()))
-		std::cerr << "swap interval " << sets->vsyncToInterval() << " not supported" << std::endl;
+	switch (sets->vsync) {
+	case Settings::VSync::adaptive:
+		if (trySetSwapInterval())
+			break;
+		sets->vsync = Settings::VSync::synchronized;
+	case Settings::VSync::synchronized:
+		if (trySetSwapInterval())
+			break;
+		sets->vsync = Settings::VSync::immediate;
+	case Settings::VSync::immediate:
+		trySetSwapInterval();
+	}
+}
+
+bool WindowSys::trySetSwapInterval() {
+	if (SDL_GL_SetSwapInterval(int8(sets->vsync))) {
+		std::cerr << "swap interval " << int(sets->vsync) << " not supported" << std::endl;
+		return false;
+	}
+	return true;
 }
 
 void WindowSys::updateSmooth() const {
@@ -262,32 +299,26 @@ void WindowSys::updateSmooth() const {
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, hmode);
 }
 
-Texture WindowSys::renderText(const string& text, int height) {
-	try {
-		return TTF_RenderUTF8_Blended(fonts.getFont(height), text.c_str(), colorText);
-	} catch (const std::runtime_error& e) {
-		std::cerr << e.what() << std::endl;
-	}
-	return Texture();
-}
-
 const Texture* WindowSys::texture(const string& name) const {
-	try {
-		return &texes.at(name);
-	} catch (const std::out_of_range&) {
-		std::cerr << "texture " << name << " doesn't exist" << std::endl;
-	}
-	return nullptr;
+	umap<string, Texture>::const_iterator it = texes.find(name);
+	return it != texes.end() ? &it->second : nullptr;
 }
 
-void WindowSys::setFullscreen(bool on) {
-	sets->fullscreen = on;
-	SDL_SetWindowFullscreen(window, on ? SDL_GetWindowFlags(window) | SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_GetWindowFlags(window) & uint32(~SDL_WINDOW_FULLSCREEN_DESKTOP));
-}
-
-void WindowSys::setResolution(const string& line) {
-	setResolution(vec2i::get(line, strtoul, 0));
-	SDL_SetWindowSize(window, sets->resolution.x, sets->resolution.y);
+void WindowSys::setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode) {
+	checkResolution(sets->size = size, displaySizes());
+	checkResolution(sets->mode = mode, displayModes());
+	if (sets->screen = screen; sets->screen <= Settings::Screen::borderless) {
+		SDL_SetWindowFullscreen(window, 0);
+		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
+		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED);
+	} else if (sets->screen == Settings::Screen::fullscreen) {
+		SDL_SetWindowDisplayMode(window, &sets->mode);
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+	} else
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	updateViewport();
+	scene->onResize();
 }
 
 void WindowSys::setVsync(Settings::VSync vsync) {
@@ -304,4 +335,20 @@ void WindowSys::resetSettings() {
 	sets.reset(new Settings);
 	createWindow();
 	scene->resetLayouts();
+}
+
+vector<vec2i> WindowSys::displaySizes() const {
+	vector<vec2i> sizes;
+	for (int im = 0; im < SDL_GetNumDisplayModes(curDisplay); im++)
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(curDisplay, im, &mode))
+			sizes.emplace_back(mode.w, mode.h);
+	return uniqueSort(sizes);
+}
+
+vector<SDL_DisplayMode> WindowSys::displayModes() const {
+	vector<SDL_DisplayMode> mods;
+	for (int im = 0; im < SDL_GetNumDisplayModes(curDisplay); im++)
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(curDisplay, im, &mode))
+			mods.push_back(mode);
+	return uniqueSort(mods);
 }

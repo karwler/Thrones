@@ -28,7 +28,6 @@ public:
 	void eventEnter();
 	virtual void eventEscape() {}
 	virtual void eventWheel(int) {}
-	virtual void eventResized() {}
 
 	virtual Layout* createLayout();
 	static Popup* createPopupMessage(const string& msg, BCall ccal, const string& ctxt = "Ok");
@@ -66,7 +65,7 @@ public:
 	};
 
 	bool enemyReady;
-	array<Tile::Type, Com::boardLength> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	vector<Com::Tile> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
 	Label* message;
 private:
 	Layout* icons;
@@ -115,35 +114,56 @@ inline uint8 ProgSetup::getSelected() const {
 
 class ProgMatch : public ProgState {
 public:
-	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 	Label* message;
+private:
+	Layout* favorIcon;	// has to be nullptr if dragon can't be placed anymore
+	Layout* dragonIcon;	// ^
 
 public:
 	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
-	void setDragonIconOn(bool on);
+	void setIconOn(bool on, uint8 cnt);
+	void setIconOn(bool on);
+	void deleteIcon(bool favor);	// either favor or dragon
 
 	virtual Layout* createLayout() override;
+
+private:
+	static void setIconOn(bool on, Layout* icon, BCall call);
 };
 
 class ProgSettings : public ProgState {
+public:
+	SwitchBox* screen;
+	SwitchBox* winSize;
+	SwitchBox* dspMode;
+
 private:
-	LabelEdit* resolution;
+	static constexpr char rv2iSeparator[] = " x ";
 
 public:
 	virtual ~ProgSettings() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventResized() override;
 	
 	virtual Layout* createLayout() override;
+private:
+	static string sizeToFstr(const vec2i& size);
+	static string dispToFstr(const SDL_DisplayMode& mode);
 };
+
+inline string ProgSettings::sizeToFstr(const vec2i& size) {
+	return size.toString(rv2iSeparator);
+}
+
+inline string ProgSettings::dispToFstr(const SDL_DisplayMode& mode) {
+	return to_string(mode.w) + " x " + to_string(mode.h) + " | " + to_string(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
+}
 
 class ProgInfo : public ProgState {
 private:
 	static const array<string, SDL_POWERSTATE_CHARGED+1> powerNames;
-	static const string infinity;
 
 public:
 	virtual ~ProgInfo() override = default;

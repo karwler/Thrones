@@ -6,9 +6,7 @@
 class World {
 private:
 	static WindowSys windowSys;		// the thing on which everything runs
-	static vector<string> vals;		// TODO: check if these could be saved as char[]
-	static uset<string> flags;
-	static umap<string, string> opts;
+	static Arguments arguments;
 
 public:
 	static FileSys* fileSys();
@@ -61,13 +59,21 @@ inline Settings* World::sets() {
 }
 
 inline const vector<string>& World::getVals() {
-	return vals;
+	return arguments.vals;
 }
 
 inline bool World::hasFlag(const string& flg) {
-	return flags.count(flg);
+	return arguments.flags.count(flg);
 }
-
+#ifdef _WIN32
+inline void World::setArgs(PWSTR pCmdLine) {
+	arguments.setArgs(pCmdLine);
+}
+#else
+inline void World::setArgs(int argc, char** argv) {
+	arguments.setArgs(argc, argv, stos);
+}
+#endif
 template <class F, class... A>
 void World::prun(F func, A... args) {
 	run(program(), func, args...);

@@ -11,7 +11,7 @@ struct Vertex {
 	Vertex(const vec3& pos = vec3(0.f), const vec3& nrm = vec3(0.f), const vec2& tuv = vec2(0.f));
 };
 
-// generic 3D object
+// 3D object with triangles
 class Object : public Interactable {
 public:
 	enum Info : uint8 {
@@ -72,15 +72,16 @@ inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
 	return a = Object::Info(uint8(a) | uint8(b));
 }
 
-// square object on a single plane with coordinates { (0, 0) ... (8, 3) }
+// square object on a single plane
 class BoardObject : public Object {
 public:
 	static constexpr float upperPoz = 0.001f;
 	static constexpr float halfSize = 0.5f;
 	static const vec3 defaultNormal;
 	static const vector<ushort> squareElements;
-private:
+protected:
 	static const vector<Vertex> squareVertices;
+private:
 	static const vec4 moveIconColor, fireIconColor;
 
 	enum class DragState : uint8 {
@@ -92,7 +93,7 @@ protected:
 	OCall clcall, crcall, ulcall, urcall;
 
 public:
-	BoardObject(vec2b pos = 0, float poz = 0.f, OCall clcall = nullptr, OCall crcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
+	BoardObject(const vec3& pos = vec3(0.f), OCall clcall = nullptr, OCall crcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
 	virtual ~BoardObject() override = default;
 
 	virtual void draw() const override;
@@ -101,8 +102,6 @@ public:
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
-	vec2b getPos() const;
-	void setPos(vec2b gpos);
 	void setClcall(OCall pcl);
 	void setCrcall(OCall pcl);
 	void setUlcall(OCall pcl);
@@ -126,14 +125,6 @@ inline void BoardObject::setUrcall(OCall pcl) {
 	urcall = pcl;
 }
 
-inline vec2b BoardObject::getPos() const {
-	return ptog(pos);
-}
-
-inline void BoardObject::setPos(vec2b gpos) {
-	pos = gtop(gpos, pos.y);
-}
-
 inline void BoardObject::setModeByInteract(bool on) {
 	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
 }
@@ -141,18 +132,6 @@ inline void BoardObject::setModeByInteract(bool on) {
 // piece of terrain
 class Tile : public BoardObject {
 public:
-	enum class Type : uint8 {
-		plains,
-		forest,
-		mountain,
-		water,
-		fortress,
-		empty
-	};
-	static const array<vec4, sizet(Type::empty)+1> colors;
-	static const array<string, sizet(Type::empty)> names;
-	static const array<uint8, sizet(Type::empty)> amounts;
-
 	enum class Interactivity : uint8 {
 		none,
 		raycast,
@@ -160,122 +139,167 @@ public:
 		piecing
 	};
 
+	enum class Favor : uint8 {
+		none,
+		own,
+		enemy
+	};
+	static const array<vec4, sizet(Favor::enemy)> favColors;
+	static const array<vec4, Com::tileMax+1> colors;
+
+	Favor favored;	// for non-fortress
 private:
-	Type type;
-	bool ruined;	// only for fortress
+	Com::Tile type;
+	bool breached;	// only for fortress
+
+	static const array<Vertex, 12> outlineVertices;
+	static const array<uint8, 16> outlineElements;
+	static constexpr float outlineSize = halfSize / 5.f;
+	static constexpr float outlineUV = outlineSize / (halfSize * 2);
 
 public:
 	Tile() = default;
-	Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
+	Tile(const vec3& pos, Com::Tile type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
 	virtual ~Tile() override = default;
 
+	virtual void draw() const override;
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
-	Type getType() const;
-	void setType(Type newType);
-	bool isRuinedFortress() const;
-	bool isUnruinedFortress() const;
-	bool getRuined() const;
-	void setRuined(bool yes);
+	Com::Tile getType() const;
+	void setType(Com::Tile newType);
+	bool isBreachedFortress() const;
+	bool isUnbreachedFortress() const;
+	bool getBreached() const;
+	void setBreached(bool yes);
 	void setCalls(Interactivity lvl);
 private:
-	static Info getModeByType(Info mode, Type type);
+	static Info getModeByType(Info mode, Com::Tile type);
 };
 
-inline Tile::Type Tile::getType() const {
+inline Com::Tile Tile::getType() const {
 	return type;
 }
 
-inline bool Tile::isRuinedFortress() const {
-	return type == Tile::Type::fortress && ruined;
+inline bool Tile::isBreachedFortress() const {
+	return type == Com::Tile::fortress && breached;
 }
 
-inline bool Tile::isUnruinedFortress() const {
-	return type == Tile::Type::fortress && !ruined;
+inline bool Tile::isUnbreachedFortress() const {
+	return type == Com::Tile::fortress && !breached;
 }
 
-inline bool Tile::getRuined() const {
-	return ruined;
+inline bool Tile::getBreached() const {
+	return breached;
 }
 
-inline Object::Info Tile::getModeByType(Info mode, Type type) {
-	return type != Type::empty ? mode | INFO_SHOW : mode & ~INFO_SHOW;
+inline Object::Info Tile::getModeByType(Info mode, Com::Tile type) {
+	return type != Com::Tile::empty ? mode | INFO_SHOW : mode & ~INFO_SHOW;
 }
 
 // tiles on a board
 struct TileCol {
-	Tile ene[Com::numTiles], mid[Com::boardLength], own[Com::numTiles];
+	Tile* tl;	// must be allocated at some point
+	const Com::Config& conf;
 
-	Tile& operator[](sizet i);
-	const Tile& operator[](sizet i) const;
+	TileCol(const Com::Config& conf);
+	~TileCol();
+
+	Tile& operator[](uint16 i);
+	const Tile& operator[](uint16 i) const;
 	Tile* begin();
 	const Tile* begin() const;
 	Tile* end();
 	const Tile* end() const;
+	Tile* ene(pdift i = 0);
+	const Tile* ene(pdift i = 0) const;
+	Tile* mid(pdift i = 0);
+	const Tile* mid(pdift i = 0) const;
+	Tile* own(pdift i = 0);
+	const Tile* own(pdift i = 0) const;
 };
 
-inline Tile& TileCol::operator[](sizet i) {
-	return reinterpret_cast<Tile*>(this)[i];
+inline TileCol::TileCol(const Com::Config& conf) :
+	conf(conf)
+{}
+
+inline TileCol::~TileCol() {
+	delete[] tl;
 }
 
-inline const Tile& TileCol::operator[](sizet i) const {
-	return reinterpret_cast<const Tile*>(this)[i];
+inline Tile& TileCol::operator[](uint16 i) {
+	return tl[i];
+}
+
+inline const Tile& TileCol::operator[](uint16 i) const {
+	return tl[i];
 }
 
 inline Tile* TileCol::begin() {
-	return reinterpret_cast<Tile*>(this);
+	return tl;
 }
 
 inline const Tile* TileCol::begin() const {
-	return reinterpret_cast<const Tile*>(this);
+	return tl;
 }
 
 inline Tile* TileCol::end() {
-	return begin() + Com::boardSize;
+	return tl + conf.boardSize;
 }
 
 inline const Tile* TileCol::end() const {
-	return begin() + Com::boardSize;
+	return tl + conf.boardSize;
+}
+
+inline Tile* TileCol::ene(pdift i) {
+	return tl + i;
+}
+
+inline const Tile* TileCol::ene(pdift i) const {
+	return tl + i;
+}
+
+inline Tile* TileCol::mid(pdift i) {
+	return tl + conf.numTiles + i;
+}
+
+inline const Tile* TileCol::mid(pdift i) const {
+	return tl + conf.numTiles + i;
+}
+
+inline Tile* TileCol::own(pdift i) {
+	return tl + conf.extraSize + i;
+}
+
+inline const Tile* TileCol::own(pdift i) const {
+	return tl + conf.extraSize + i;
 }
 
 // player on tiles
 class Piece : public BoardObject {
 public:
-	enum class Type : uint8 {
-		ranger,
-		spearman,
-		crossbowman,	// it's important that crossbowman, catapult, trebuchet come right after another in that order
-		catapult,
-		trebuchet,
-		lancer,
-		warhorse,
-		elephant,
-		dragon,
-		throne
-	};
-	static const array<string, sizet(Type::throne)+1> names;	// for textures
-	static const array<uint8, sizet(Type::throne)+1> amounts;
 	static const vec4 enemyColor;
+
+	uint16 lastFortress;	// index of last visited fortress (only relevant to throne)
 private:
-	Type type;
+	Com::Piece type;
 
 public:
 	Piece() = default;
-	Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color);
+	Piece(const vec3& pos, Com::Piece type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color);
 	virtual ~Piece() override = default;
 
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
-	Type getType() const;
-	void setType(Type newType);
+	Com::Piece getType() const;
+	void setType(Com::Piece newType);
 	void setModeByOn(bool on);
 	bool canFire() const;
 	bool active() const;
-	void enable(vec2b bpos);
+	void enable(vec2s bpos);
 	void disable();
 };
 
-inline Piece::Type Piece::getType() const {
+inline Com::Piece Piece::getType() const {
 	return type;
 }
 
@@ -284,45 +308,73 @@ inline void Piece::setModeByOn(bool on) {
 }
 
 inline bool Piece::canFire() const {
-	return type >= Type::crossbowman && type <= Type::trebuchet;
-}
-
-inline bool Piece::active() const {
-	return getPos().hasNot(INT8_MIN) && (mode & (INFO_SHOW | INFO_RAYCAST));
+	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet;
 }
 
 // pieces on a board
 struct PieceCol {
-	Piece own[Com::numPieces], ene[Com::numPieces];
+	Piece* pc;	// must be allocated at some point
+	const Com::Config& conf;
 
-	Piece& operator[](sizet i);
-	const Piece& operator[](sizet i) const;
+	PieceCol(const Com::Config& conf);
+	~PieceCol();
+
+	Piece& operator[](uint16 i);
+	const Piece& operator[](uint16 i) const;
 	Piece* begin();
 	const Piece* begin() const;
 	Piece* end();
 	const Piece* end() const;
+	Piece* own(pdift i = 0);
+	const Piece* own(pdift i = 0) const;
+	Piece* ene(pdift i = 0);
+	const Piece* ene(pdift i = 0) const;
 };
 
-inline Piece& PieceCol::operator[](sizet i) {
-	return reinterpret_cast<Piece*>(this)[i];
+inline PieceCol::PieceCol(const Com::Config& conf) :
+	conf(conf)
+{}
+
+inline PieceCol::~PieceCol() {
+	delete[] pc;
 }
 
-inline const Piece& PieceCol::operator[](sizet i) const {
-	return reinterpret_cast<const Piece*>(this)[i];
+inline Piece& PieceCol::operator[](uint16 i) {
+	return pc[i];
+}
+
+inline const Piece& PieceCol::operator[](uint16 i) const {
+	return pc[i];
 }
 
 inline Piece* PieceCol::begin() {
-	return reinterpret_cast<Piece*>(this);
+	return pc;
 }
 
 inline const Piece* PieceCol::begin() const {
-	return reinterpret_cast<const Piece*>(this);
+	return pc;
 }
 
 inline Piece* PieceCol::end() {
-	return begin() + Com::piecesSize;
+	return pc + conf.piecesSize;
 }
 
 inline const Piece* PieceCol::end() const {
-	return begin() + Com::piecesSize;
+	return pc + conf.piecesSize;
+}
+
+inline Piece* PieceCol::own(pdift i) {
+	return pc + i;
+}
+
+inline const Piece* PieceCol::own(pdift i) const {
+	return pc + i;
+}
+
+inline Piece* PieceCol::ene(pdift i) {
+	return pc + conf.numPieces + i;
+}
+
+inline const Piece* PieceCol::ene(pdift i) const {
+	return pc + conf.numPieces + i;
 }

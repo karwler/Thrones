@@ -10,7 +10,7 @@ void Program::start() {
 	if (const string& addr = World::getOpt(argAddress); !addr.empty())
 		World::sets()->address = addr;
 	else if (World::hasFlag(argAddress))
-		World::sets()->address = Com::loopback;
+		World::sets()->address = Settings::loopback;
 
 	if (const string& port = World::getOpt(argPort); !port.empty())
 		World::sets()->port = uint16(sstoul(port));
@@ -73,11 +73,11 @@ void Program::eventPlaceTileD(Button* but) {
 void Program::placeTile(Tile* tile, uint8 type) {
 	// remove any piece that may already be there
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (tile->getType() < Tile::Type::fortress)
+	if (tile->getType() < Com::Tile::fortress)
 		ps->incdecIcon(uint8(tile->getType()), true, true);
 
 	// place the tile
-	tile->setType(Tile::Type(type));
+	tile->setType(Com::Tile(type));
 	tile->setCalls(Tile::Interactivity::tiling);
 	ps->incdecIcon(type, false, true);
 }
@@ -85,18 +85,18 @@ void Program::placeTile(Tile* tile, uint8 type) {
 void Program::eventPlacePieceC(BoardObject* obj) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	if (uint8 tid = ps->getSelected(); ps->getCount(tid)) {
-		vec2b pos = obj->getPos();
+		vec2s pos = game.ptog(obj->pos);
 		placePiece(pos, tid, extractPiece(obj, pos));
 	}
 }
 
 void Program::eventPlacePieceD(Button* but) {
-	vec2b pos;
+	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		placePiece(pos, uint8(but->getID() - 1), pce);
 }
 
-void Program::placePiece(vec2b pos, uint8 type, Piece* occupant) {
+void Program::placePiece(vec2s pos, uint8 type, Piece* occupant) {
 	// remove any piece that may be occupying that tile already
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	if (occupant) {
@@ -105,8 +105,8 @@ void Program::placePiece(vec2b pos, uint8 type, Piece* occupant) {
 	}
 
 	// find the first not placed piece of the specified type and place it if it exists
-	Piece* pieces = game.getOwnPieces(Piece::Type(type));
-	for (uint8 i = 0; i < Piece::amounts[type]; i++)
+	Piece* pieces = game.getOwnPieces(Com::Piece(type));
+	for (uint8 i = 0; i < game.getConfig().pieceAmounts[type]; i++)
 		if (!pieces[i].active()) {
 			pieces[i].enable(pos);
 			ps->incdecIcon(type, false, false);
@@ -117,7 +117,7 @@ void Program::placePiece(vec2b pos, uint8 type, Piece* occupant) {
 void Program::eventMoveTile(BoardObject* obj) {
 	// switch types with destination tile
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
-		Tile::Type desType = dst->getType();
+		Com::Tile desType = dst->getType();
 		dst->setType(src->getType());
 		dst->setCalls(Tile::Interactivity::tiling);
 		src->setType(desType);
@@ -127,12 +127,12 @@ void Program::eventMoveTile(BoardObject* obj) {
 
 void Program::eventMovePiece(BoardObject* obj) {
 	// get new position and set or swap positions with possibly already occupying piece
-	vec2b pos;
+	vec2s pos;
 	if (Piece* dst; pickBob(pos, dst)) {
 		Piece* src = static_cast<Piece*>(obj);
 		if (dst)
-			dst->setPos(src->getPos());
-		src->setPos(pos);
+			dst->pos = src->pos;
+		src->pos = game.gtop(pos, BoardObject::upperPoz);
 	}
 }
 
@@ -140,12 +140,12 @@ void Program::eventClearTile(BoardObject* obj) {
 	Tile* til = static_cast<Tile*>(obj);
 
 	static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
-	til->setType(Tile::Type::empty);
+	til->setType(Com::Tile::empty);
 	til->setCalls(Tile::Interactivity::tiling);
 }
 
 void Program::eventClearPiece(BoardObject* obj) {
-	if (Piece* pce = extractPiece(obj, obj->getPos())) {
+	if (Piece* pce = extractPiece(obj, game.ptog(obj->pos))) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
 		pce->disable();
 	}
@@ -194,20 +194,26 @@ void Program::eventOpenMatch() {
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 }
 
+void Program::eventPlaceFavor(Button*) {
+	vec2s pos;
+	if (Piece* pce; pickBob(pos, pce))
+		game.placeFavor(pos);
+}
+
 void Program::eventPlaceDragon(Button*) {
-	vec2b pos;
+	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.placeDragon(pos, pce);
 }
 
 void Program::eventMove(BoardObject* obj) {
-	vec2b pos;
+	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.pieceMove(static_cast<Piece*>(obj), pos, pce);
 }
 
 void Program::eventFire(BoardObject* obj) {
-	vec2b pos;
+	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.pieceFire(static_cast<Piece*>(obj), pos, pce);
 }
@@ -227,16 +233,13 @@ void Program::eventOpenSettings(Button*) {
 	setState(new ProgSettings);
 }
 
-void Program::eventSetFullscreen(Button* but) {
-	World::winSys()->setFullscreen(static_cast<CheckBox*>(but)->on);
-}
-
-void Program::eventSetResolution(Button* but) {
-	World::winSys()->setResolution(static_cast<LabelEdit*>(but)->getText());
+void Program::eventApplySettings(Button*) {
+	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
+	World::winSys()->setScreen(Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), strToDisp(ps->dspMode->getText()));
 }
 
 void Program::eventSetVsync(Button* but) {
-	World::winSys()->setVsync(Settings::VSync(static_cast<SwitchBox*>(but)->getCurOpt()));
+	World::winSys()->setVsync(Settings::VSync(static_cast<SwitchBox*>(but)->getCurOpt() - 1));
 }
 
 void Program::eventSetSmooth(Button* but) {
@@ -266,12 +269,11 @@ void Program::setState(ProgState* newState) {
 	World::scene()->resetLayouts();
 }
 
-BoardObject* Program::pickBob(vec2b& pos, Piece*& pce) {
+BoardObject* Program::pickBob(vec2s& pos, Piece*& pce) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
 	if (bob) {
-		pos = bob->getPos();
+		pos = game.ptog(bob->pos);
 		pce = extractPiece(bob, pos);
 	}
 	return bob;
-
 }

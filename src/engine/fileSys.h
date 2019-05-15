@@ -8,12 +8,22 @@
 
 class Settings {
 public:
-	enum class VSync : uint8 {
-		immediate,
-		synchronized,
-		adaptive
+	static constexpr char loopback[] = "127.0.0.1";
+
+	enum class Screen : uint8 {
+		window,
+		borderless,
+		fullscreen,
+		desktop
 	};
-	static const array<string, sizet(VSync::adaptive)+1> vsyncNames;
+	static const array<string, sizet(Screen::desktop)+1> screenNames;
+
+	enum class VSync : int8 {
+		adaptive = -1,
+		immediate,
+		synchronized
+	};
+	static const array<string, 3> vsyncNames;	// add 1 to vsync value to get name
 
 	enum class Smooth : uint8 {
 		off,
@@ -22,30 +32,25 @@ public:
 	};
 	static const array<string, sizet(Smooth::nice)+1> smoothNames;
 
-	bool maximized, fullscreen;
+	bool maximized;
+	Screen screen;
 	VSync vsync;
 	Smooth smooth;
-	vec2i resolution;
+	vec2i size;
+	SDL_DisplayMode mode;
 	string address;
 	uint16 port;
 
 public:
 	Settings();
-
-	int vsyncToInterval() const;
 };
 
-inline int Settings::vsyncToInterval() const {
-	return vsync <= VSync::synchronized ? int(vsync) : -1;
-}
-
 enum FileType : uint8 {
+	FTYPE_NON = 0x0,
 	FTYPE_REG = 0x1,
 	FTYPE_DIR = 0x2,
 	FTYPE_OTH = 0x4,
-
-	FTYPE_NON = 0x0,
-	FTYPE_STD = 0x3
+	FTYPE_STD = FTYPE_REG | FTYPE_DIR
 };
 
 inline constexpr FileType operator~(FileType a) {
@@ -84,12 +89,10 @@ public:
 private:
 	static constexpr char fileSettings[] = "settings.ini";
 
-	static constexpr char defaultFrMode[] = "rb";
-	static constexpr char defaultFwMode[] = "wb";
-
 	static constexpr char iniKeywordMaximized[] = "maximized";
-	static constexpr char iniKeywordFullscreen[] = "fullscreen";
-	static constexpr char iniKeywordResolution[] = "resolution";
+	static constexpr char iniKeywordScreen[] = "screen";
+	static constexpr char iniKeywordSize[] = "size";
+	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordSmooth[] = "smooth";
 	static constexpr char iniKeywordAddress[] = "address";
@@ -112,11 +115,6 @@ public:
 	static FileType fileType(const string& file, bool readLink = true);
 
 private:
-	static vector<string> readFileLines(const string& file, bool printMessage = true);
-	static string readTextFile(const string& file, bool printMessage = true);
-	static bool writeTextFile(const string& file, const string& text);
-	static pairStr splitIniLine(const string& line);
-	static string makeIniLine(const string& key, const string& val);
 	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * { vertex, uv, normal }
 	template <class T> static T resolveObjId(int id, const vector<T>& vec);
 
@@ -154,6 +152,3 @@ inline FileType FileSys::fileType(const string& file, bool readLink) {
 	return stmtoft(file, readLink ? stat : lstat);
 }
 #endif
-inline string FileSys::makeIniLine(const string& key, const string& val) {
-	return key + '=' + val + '\n';
-}

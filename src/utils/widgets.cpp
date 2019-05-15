@@ -47,7 +47,7 @@ void Widget::drawRect(const Rect& rect, const vec4& color, int z) {
 	glEnd();
 }
 
-void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame, const vec4& color) {
+void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame, const vec4& color, int z) {
 	vec4 crop = rect.crop(frame);
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, tex->getID());
@@ -55,13 +55,13 @@ void Widget::drawTexture(const Texture* tex, Rect rect, const Rect& frame, const
 
 	glBegin(GL_QUADS);
 	glTexCoord2f(crop.x, crop.y);
-	glVertex3i(rect.x, rect.y, 0);
+	glVertex3i(rect.x, rect.y, z);
 	glTexCoord2f(crop.z, crop.y);
-	glVertex3i(rect.x + rect.w, rect.y, 0);
+	glVertex3i(rect.x + rect.w, rect.y, z);
 	glTexCoord2f(crop.z, crop.a);
-	glVertex3i(rect.x + rect.w, rect.y + rect.h, 0);
+	glVertex3i(rect.x + rect.w, rect.y + rect.h, z);
 	glTexCoord2f(crop.x, crop.a);
-	glVertex3i(rect.x, rect.y + rect.h, 0);
+	glVertex3i(rect.x, rect.y + rect.h, z);
 	glEnd();
 }
 
@@ -78,7 +78,7 @@ Picture::Picture(const Size& relSize, bool showColor, const vec4& color, const T
 void Picture::draw() const {
 	Rect frm = frame();
 	if (showColor)
-		drawRect(rect().intersect(frm), bgColor());
+		drawRect(rect().intersect(frm), World::scene()->select != this ? color : colorSelect);
 	if (bgTex)
 		drawTexture(bgTex, texRect(), frm);
 }
@@ -88,17 +88,12 @@ Rect Picture::texRect() const {
 	return Rect(rct.pos() + bgMargin, rct.size() - bgMargin * 2);
 }
 
-const vec4& Picture::bgColor() const {
-	return World::scene()->select != this ? color : colorSelect;
-}
-
 // BUTTON
 
-Button::Button(const Size& relSize, BCall leftCall, BCall rightCall, BCall doubleCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
+Button::Button(const Size& relSize, BCall leftCall, BCall rightCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
 	Picture(relSize, showColor, color, bgTex, bgMargin, parent, id),
 	lcall(leftCall),
-	rcall(rightCall),
-	dcall(doubleCall)
+	rcall(rightCall)
 {}
 
 void Button::onClick(const vec2i&, uint8 mBut) {
@@ -108,32 +103,103 @@ void Button::onClick(const vec2i&, uint8 mBut) {
 		World::prun(rcall, this);
 }
 
-void Button::onDoubleClick(const vec2i&, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT)
-		World::prun(dcall, this);
+bool Button::selectable() const {
+	return lcall || rcall;
 }
 
-bool Button::selectable() const {
-	return lcall || rcall || dcall;
+// CHECK BOX
+
+CheckBox::CheckBox(const Size& relSize, bool on, BCall leftCall, BCall rightCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
+	Button(relSize, leftCall, rightCall, showColor, color, bgTex, bgMargin, parent, id),
+	on(on)
+{}
+
+void CheckBox::draw() const {
+	Picture::draw();									// draw background
+	drawRect(boxRect().intersect(frame()), boxColor());	// draw checkbox
+}
+
+void CheckBox::onClick(const vec2i& mPos, uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT)
+		toggle();
+	Button::onClick(mPos, mBut);
+}
+
+Rect CheckBox::boxRect() const {
+	vec2i siz = size();
+	int margin = (siz.x > siz.y ? siz.y : siz.x) / 4;
+	return Rect(position() + margin, siz - margin * 2);
+}
+
+// LABEL
+
+Label::Label(const Size& relSize, const string& text, BCall leftCall, BCall rightCall, Alignment alignment, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
+	Button(relSize, leftCall, rightCall, showColor, color, bgTex, bgMargin, parent, id),
+	text(text),
+	textMargin(textMargin),
+	align(alignment)
+{}
+
+Label::~Label() {
+	textTex.close();
+}
+
+void Label::draw() const {
+	Picture::draw();
+	if (textTex.valid())
+		drawTexture(&textTex, textRect(), frame());
+}
+
+void Label::onResize() {
+	updateTextTex();
+}
+
+void Label::postInit() {
+	updateTextTex();
+}
+
+void Label::setText(const string& str) {
+	text = str;
+	updateTextTex();
+}
+
+vec2i Label::textPos(const Texture& text, Label::Alignment alignment, const vec2i& pos, const vec2i& siz, int margin) {
+	switch (alignment) {
+	case Alignment::left:
+		return vec2i(pos.x + margin, pos.y);
+	case Alignment::center: {
+		return vec2i(pos.x + (siz.x - text.getRes().x) / 2, pos.y); }
+	case Alignment::right:
+		return vec2i(pos.x + siz.x - text.getRes().x - margin, pos.y);
+	}
+	return 0;
+}
+
+void Label::updateTextTex() {
+	textTex.close();
+	textTex = World::winSys()->renderText(text, size().y);
 }
 
 // DRAGLET
 
 const vec4 Draglet::borderColor(0.804f, 0.522f, 0.247f, 1.f);
 
-Draglet::Draglet(const Size& relSize, BCall leftCall, BCall rightCall, BCall doubleCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, doubleCall, showColor, color, bgTex, bgMargin, parent, id),
+Draglet::Draglet(const Size& relSize, BCall leftCall, BCall rightCall, bool showColor, const vec4& color, const Texture* bgTex, const string& text, Alignment alignment, int textMargin, int bgMargin, Layout* parent, sizet id) :
+	Label(relSize, text, leftCall, rightCall, alignment, bgTex, color, showColor, textMargin, bgMargin, parent, id),
 	dragging(false),
-	selected(false)
-{
-	updateSelectColor();
-}
+	selected(false),
+	dimFactor(1.f)
+{}
 
 void Draglet::draw() const {
-	if (Rect frm = frame(); bgTex)
-		drawTexture(bgTex, texRect(), frm, bgColor());
-	else if (showColor)
-		drawRect(rect().intersect(frm), bgColor());
+	Rect frm = frame();
+	vec4 tclr = colorTexture * dimFactor;
+	if (showColor)
+		drawRect(rect().intersect(frm), (dragging || World::scene()->select == this ? glm::clamp(color * selectFactor, vec4(0.f), vec4(1.f)) : color * dimFactor));
+	if (bgTex)
+		drawTexture(bgTex, texRect(), frm, tclr);
+	if (textTex.valid())
+		drawTexture(&textTex, textRect(), frame(), tclr);
 
 	if (selected) {
 		Rect rbg = rect();
@@ -143,12 +209,15 @@ void Draglet::draw() const {
 		drawRect(Rect(rbg.x + rbg.w - bgMargin, rbg.y + bgMargin, bgMargin, rbg.h - bgMargin * 2), borderColor, 1);
 	}
 	if (dragging) {
+		frm = Rect(0, World::winSys()->windowSize());
 		vec2i siz = size() / 2;
 		vec2i pos = mousePos() - siz / 2;
 		if (showColor)
 			drawRect(Rect(pos, siz), color, 1);
 		if (bgTex)
-			drawTexture(bgTex, Rect(pos + bgMargin / 2, siz - bgMargin), Rect(0, World::winSys()->windowSize()));
+			drawTexture(bgTex, Rect(pos + bgMargin / 2, siz - bgMargin), frm, tclr, 1);
+		if (textTex.valid())
+			drawTexture(&textTex, Rect(textPos(textTex, align, pos, siz, textMargin / 2), textTex.getRes() / 2), frm, tclr, 1);
 	}
 }
 
@@ -172,105 +241,10 @@ void Draglet::onUndrag(uint8 mBut) {
 	}
 }
 
-void Draglet::setColor(const vec4& clr) {
-	color = clr;
-	updateSelectColor();
-}
-
-const vec4& Draglet::bgColor() const {
-	return dragging || World::scene()->select == this ? selectColor : color;
-}
-
-// CHECK BOX
-
-CheckBox::CheckBox(const Size& relSize, bool on, BCall leftCall, BCall rightCall, BCall doubleCall, bool showColor, const vec4& color, const Texture* bgTex, int bgMargin, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, doubleCall, showColor, color, bgTex, bgMargin, parent, id),
-	on(on)
-{}
-
-void CheckBox::draw() const {
-	Picture::draw();									// draw background
-	drawRect(boxRect().intersect(frame()), boxColor());	// draw checkbox
-}
-
-void CheckBox::onClick(const vec2i& mPos, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT)
-		toggle();
-	Button::onClick(mPos, mBut);
-}
-
-Rect CheckBox::boxRect() const {
-	vec2i siz = size();
-	int margin = (siz.x > siz.y ? siz.y : siz.x) / 4;
-	return Rect(position() + margin, siz - margin * 2);
-}
-
-// LABEL
-
-Label::Label(const Size& relSize, const string& text, BCall leftCall, BCall rightCall, BCall doubleCall, Alignment alignment, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, doubleCall, showColor, color, bgTex, bgMargin, parent, id),
-	text(text),
-	textMargin(textMargin),
-	align(alignment)
-{}
-
-Label::~Label() {
-	textTex.close();
-}
-
-void Label::draw() const {
-	Picture::draw();
-	if (textTex.valid())
-		drawTexture(&textTex, textRect(), textFrame());
-}
-
-void Label::onResize() {
-	updateTextTex();
-}
-
-void Label::postInit() {
-	updateTextTex();
-}
-
-void Label::setText(const string& str) {
-	text = str;
-	updateTextTex();
-}
-
-Rect Label::textFrame() const {
-	Rect rct = rect();
-	int ofs = textIconOffset();
-	return Rect(rct.x + ofs + textMargin, rct.y, rct.w - ofs - textMargin * 2, rct.h).intersect(frame());
-}
-
-Rect Label::texRect() const {
-	Rect rct = rect();
-	rct.h -= bgMargin * 2;
-	return Rect(rct.pos() + bgMargin, vec2i(float(rct.h * bgTex->getRes().x) / float(bgTex->getRes().y), rct.h));
-}
-
-vec2i Label::textPos() const {
-	switch (vec2i pos = position(); align) {
-	case Alignment::left:
-		return vec2i(pos.x + textIconOffset() + textMargin, pos.y);
-	case Alignment::center: {
-		int iofs = textIconOffset();
-		return vec2i(pos.x + iofs + (size().x - iofs - textTex.getRes().x)/2, pos.y); }
-	case Alignment::right:
-		return vec2i(pos.x + size().x - textTex.getRes().x - textMargin, pos.y);
-	}
-	return 0;	// to get rid of warning
-}
-
-void Label::updateTextTex() {
-	textTex.close();
-	textTex = World::winSys()->renderText(text, size().y);
-}
-
 // SWITCH BOX
 
 SwitchBox::SwitchBox(const Size& relSize, const string* opts, sizet ocnt, const string& curOption, BCall call, Alignment alignment, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
-	Label(relSize, curOption, call, call, nullptr, alignment, bgTex, color, showColor, textMargin, bgMargin, parent, id),
+	Label(relSize, curOption, call, call, alignment, bgTex, color, showColor, textMargin, bgMargin, parent, id),
 	options(opts, opts + ocnt),
 	curOpt(sizet(std::find(options.begin(), options.end(), curOption) - options.begin()))
 {
@@ -280,32 +254,38 @@ SwitchBox::SwitchBox(const Size& relSize, const string* opts, sizet ocnt, const 
 
 void SwitchBox::onClick(const vec2i& mPos, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
-		shiftOption(1);
+		shiftOption(true);
 	else if (mBut == SDL_BUTTON_RIGHT)
-		shiftOption(-1);
+		shiftOption(false);
 	Button::onClick(mPos, mBut);
 }
 
-void SwitchBox::shiftOption(int ofs) {
-	curOpt = (curOpt + sizet(ofs)) % options.size();
+bool SwitchBox::selectable() const {
+	return true;
+}
+
+void SwitchBox::shiftOption(bool fwd) {
+	if (curOpt += btom<sizet>(fwd); curOpt >= options.size())
+		curOpt = fwd ? 0 : options.size() - 1;
 	setText(options[curOpt]);
 }
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(const Size& relSize, const string& text, BCall leftCall, BCall rightCall, BCall doubleCall, TextType type, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
-	Label(relSize, text, leftCall, rightCall, doubleCall, Alignment::left, bgTex, color, showColor, textMargin, bgMargin, parent, id),
+LabelEdit::LabelEdit(const Size& relSize, const string& text, BCall leftCall, BCall rightCall, BCall retCall, TextType type, Label::Alignment alignment, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
+	Label(relSize, text, leftCall, rightCall, alignment, bgTex, color, showColor, textMargin, bgMargin, parent, id),
 	textType(type),
+	textOfs(0),
 	oldText(text),
 	cpos(0),
-	textOfs(0)
+	ecall(retCall)
 {
 	cleanText();
 }
 
 void LabelEdit::drawTop() const {
 	vec2i ps = position();
-	drawRect({ caretPos() + ps.x + textIconOffset() + textMargin, ps.y, caretWidth, size().y }, colorLight, 1);
+	drawRect({ caretPos() + ps.x + textMargin, ps.y, caretWidth, size().y }, colorLight, 1);
 }
 
 void LabelEdit::onClick(const vec2i&, uint8 mBut) {
@@ -389,7 +369,7 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 		break;
 	case SDL_SCANCODE_RETURN:
 		confirm();
-		World::prun(dcall, this);
+		World::prun(ecall, this);
 		break;
 	case SDL_SCANCODE_ESCAPE:
 		cancel();
@@ -402,11 +382,6 @@ void LabelEdit::onText(const string& str) {
 	cleanText();
 	updateTextTex();
 	setCPos(cpos + (text.length() - olen));
-}
-
-vec2i LabelEdit::textPos() const {
-	vec2i pos = position();
-	return vec2i(pos.x + textOfs + textIconOffset() + textMargin, pos.y);
 }
 
 void LabelEdit::setText(const string& str) {
@@ -422,7 +397,7 @@ void LabelEdit::setCPos(sizet cp) {
 	cpos = cp;
 	if (int cl = caretPos(); cl < 0)
 		textOfs -= cl;
-	else if (int ce = cl + caretWidth, sx = size().x - bgMargin*2; ce > sx)
+	else if (int ce = cl + caretWidth, sx = size().x - bgMargin * 2; ce > sx)
 		textOfs -= ce - sx;
 }
 

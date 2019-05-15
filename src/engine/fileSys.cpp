@@ -6,10 +6,17 @@
 
 // SETTINGS
 
+const array<string, Settings::screenNames.size()> Settings::screenNames = {
+	"window",
+	"borderless",
+	"fullscreen",
+	"desktop"
+};
+
 const array<string, Settings::vsyncNames.size()> Settings::vsyncNames = {
+	"adaptive",
 	"immediate",
-	"synchronized",
-	"adaptive"
+	"synchronized"
 };
 
 const array<string, Settings::smoothNames.size()> Settings::smoothNames = {
@@ -20,11 +27,12 @@ const array<string, Settings::smoothNames.size()> Settings::smoothNames = {
 
 Settings::Settings() :
 	maximized(false),
-	fullscreen(false),
+	screen(Screen::window),
 	vsync(VSync::synchronized),
 	smooth(Smooth::nice),
-	resolution(800, 600),
-	address(Com::loopback),
+	size(800, 600),
+	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
+	address(loopback),
 	port(Com::defaultPort)
 {}
 
@@ -40,15 +48,17 @@ FileSys::FileSys() {
 
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
-	for (const string& line : readFileLines(fileSettings, false)) {
-		if (pairStr il = splitIniLine(line); il.first == iniKeywordMaximized)
+	for (const string& line : readTextFile(fileSettings)) {
+		if (pairStr il = readIniLine(line); il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
-		else if (il.first == iniKeywordFullscreen)
-			sets->fullscreen = stob(il.second);
-		else if (il.first == iniKeywordResolution)
-			sets->resolution = vec2i::get(il.second, strtoul, 0);
+		else if (il.first == iniKeywordScreen)
+			sets->screen = valToEnum<Settings::Screen>(Settings::screenNames, il.second);
+		else if (il.first == iniKeywordSize)
+			sets->size = vec2i::get(il.second, strtoul, 0);
+		else if (il.first == iniKeywordMode)
+			sets->mode = strToDisp(il.second);
 		else if (il.first == iniKeywordVsync)
-			sets->vsync = valToEnum<Settings::VSync>(Settings::vsyncNames, il.second);
+			sets->vsync = Settings::VSync(valToEnum<int8>(Settings::vsyncNames, il.second) - 1);
 		else if (il.first == iniKeywordSmooth)
 			sets->smooth = valToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
 		else if (il.first == iniKeywordAddress)
@@ -62,9 +72,10 @@ Settings* FileSys::loadSettings() {
 bool FileSys::saveSettings(const Settings* sets) {
 	string text;
 	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
-	text += makeIniLine(iniKeywordFullscreen, btos(sets->fullscreen));
-	text += makeIniLine(iniKeywordResolution, sets->resolution.toString());
-	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync)]);
+	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
+	text += makeIniLine(iniKeywordSize, sets->size.toString());
+	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
+	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync)+1]);
 	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
@@ -72,7 +83,7 @@ bool FileSys::saveSettings(const Settings* sets) {
 }
 
 Object FileSys::loadObj(const string& file) {
-	vector<string> lines = readFileLines(file);
+	vector<string> lines = readTextFile(file);
 	if (lines.empty())
 		return Object();
 
@@ -124,53 +135,6 @@ array<int, 9> FileSys::readFace(const char* str) {
 			}
 		}
 	return face;
-}
-
-vector<string> FileSys::readFileLines(const string& file, bool printMessage) {
-	vector<string> lines(1);
-	for (char c : readTextFile(file, printMessage)) {
-		if (c != '\n' && c != '\r')
-			lines.back() += c;
-		else if (!lines.back().empty())
-			lines.push_back(emptyStr);
-	}
-	if (lines.back().empty())
-		lines.pop_back();
-	return lines;
-}
-
-string FileSys::readTextFile(const string& file, bool printMessage) {
-	FILE* ifh = fopen(file.c_str(), defaultFrMode);
-	if (!ifh) {
-		if (printMessage)
-			std::cerr << "failed to open file " << file << std::endl;
-		return emptyStr;
-	}
-	fseek(ifh, 0, SEEK_END);
-	sizet len = sizet(ftell(ifh));
-	fseek(ifh, 0, SEEK_SET);
-
-	string text;
-	text.resize(len);
-	fread(text.data(), sizeof(char), text.length(), ifh);
-
-	fclose(ifh);
-	return text;
-}
-
-bool FileSys::writeTextFile(const string& file, const string& text) {
-	FILE* ofh = fopen(file.c_str(), defaultFwMode);
-	if (!ofh) {
-		std::cerr << "failed to write file " << file << std::endl;
-		return false;
-	}
-	fputs(text.c_str(), ofh);
-	return !fclose(ofh);
-}
-
-pairStr FileSys::splitIniLine(const string& line) {
-	sizet id = line.find_first_of('=');
-	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
 }
 
 vector<string> FileSys::listDir(const string& drc, FileType filter) {

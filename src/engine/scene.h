@@ -94,21 +94,14 @@ public:
 	Animation(Camera* camera, const queue<Keyframe>& keyframes);
 
 	bool tick(float dSec);
-
-private:
-	template <class T> static T linearTransition(const T& start, const T& end, float factor);
 };
-
-template <class T>
-T Animation::linearTransition(const T& start, const T& end, float factor) {
-	return start + (end - start) * factor;
-}
 
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
+	vector<Object> effects;	// extra objects that'll get drawn on top without culling and have no interactivity // TODO: add stuff
 private:
 	vec2i mouseMove;
 	Camera camera;
@@ -130,8 +123,8 @@ public:
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onMouseMove(const vec2i& mPos, const vec2i& mMov);
-	void onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt);
-	void onMouseUp(const vec2i& mPos, uint8 mBut, uint8 mCnt);
+	void onMouseDown(const vec2i& mPos, uint8 mBut);
+	void onMouseUp(const vec2i& mPos, uint8 mBut);
 	void onMouseWheel(const vec2i& wMov);
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary

@@ -1,5 +1,23 @@
 #include "utils.h"
 
+bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
+	if (a.h < b.h)
+		return true;
+	if (a.h > b.h)
+		return false;
+
+	if (a.w < b.w)
+		return true;
+	if (a.w > b.w)
+		return false;
+
+	if (a.refresh_rate < b.refresh_rate)
+		return true;
+	if (a.refresh_rate > b.refresh_rate)
+		return false;
+	return a.format < b.format;
+}
+
 // RECT
 
 vec4 Rect::crop(const Rect& rect) {
@@ -22,28 +40,48 @@ vec4 Rect::crop(const Rect& rect) {
 
 // TEXTURE
 
-bool Texture::loadGl(SDL_Surface* img) {
-	if (!img) {
-		res = 0;
-		return false;
+Texture::Texture(const vec2i& size, const vec4& pos, const vec4& end, bool vertical) {
+	vec4* pix = new vec4[uint(size.area())];
+	if (vec2f last = size - 1; vertical) {
+		for (int y = 0; y < size.y; y++)
+			std::fill_n(pix + y * size.x, size.x, linearTransition(pos, end, float(y) / last.y));
+	} else {
+		for (int x = 0; x < size.x; x++)
+			pix[x] = linearTransition(pos, end, float(x) / last.x);
+		for (int y = 1; y < size.y; y++)
+			std::copy_n(pix, size.x, pix + y * size.x);
 	}
-	glGenTextures(1, &id);
-	glBindTexture(GL_TEXTURE_2D, id);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img->w, img->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	res = vec2i(img->w, img->h);
-	SDL_FreeSurface(img);
-	return true;
+	loadGL(size, GL_RGBA, GL_FLOAT, pix);
+	delete[] pix;
 }
 
 void Texture::close() {
 	if (valid()) {
 		glDeleteTextures(1, &id);
-		res = 0;
+		*this = Texture();
 	}
+}
+
+bool Texture::load(SDL_Surface* img) {
+	if (img) {
+		loadGL(vec2i(img->w, img->h), GL_BGRA, GL_UNSIGNED_BYTE, img->pixels);
+		SDL_FreeSurface(img);
+		return true;
+	}
+	*this = Texture();
+	return false;
+}
+
+void Texture::loadGL(const vec2i& size, GLenum format, GLenum type, const void* pix) {
+	res = size;
+	glGenTextures(1, &id);
+	glBindTexture(GL_TEXTURE_2D, id);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, res.x, res.y, 0, format, type, pix);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 // INTERACTABLE
@@ -52,38 +90,33 @@ void Interactable::onClick(const vec2i&, uint8) {}
 
 // DIJKSTRA
 
-Dijkstra::Node::Node(uint8 id, uint8 dst) :
+Dijkstra::Node::Node(uint16 id, uint16 dst) :
 	id(id),
 	dst(dst)
 {}
 
-array<uint8, Com::boardSize> Dijkstra::travelDist(uint8 src, bool (*stepable)(uint8)) {
+vector<uint16> Dijkstra::travelDist(uint16 src, uint16 width, uint16 size, bool (*stepable)(uint16)) {
 	// init graph
-	array<Adjacent, Com::boardSize> grid;
-	for (uint8 i = 0; i < Com::boardSize; i++)
+	vector<Adjacent> grid(size);
+	for (uint16 i = 0; i < size; i++)
 		if (grid[i].cnt = 0; stepable(i) || i == src)	// ignore rules for starting point cause it can be a blocking piece
-			for (uint8 (*mov)(uint8) : Com::adjacentStraight) {
-				uint8 ni = mov(i);
-				if (ni < Com::boardSize && stepable(ni))
+			for (uint16 (*mov)(uint16, uint16) : Com::adjacentStraight)
+				if (uint16 ni = mov(i, width); ni < size && stepable(ni))
 					grid[i].adj[grid[i].cnt++] = ni;
-			}
 
-	array<uint8, Com::boardSize> dist;
-	std::fill(dist.begin(), dist.end(), UINT8_MAX);
+	vector<bool> visited(size, false);
+	vector<uint16> dist(size, UINT16_MAX);
 	dist[src] = 0;
-
-	bool visited[Com::boardSize];
-	std::fill_n(visited, Com::boardSize, false);
 
 	// dijkstra
 	std::priority_queue<Node, vector<Node>, Comp> nodes;
 	nodes.emplace(src, 0);
 	do {
-		uint8 u = nodes.top().id;
+		uint16 u = nodes.top().id;
 		nodes.pop();
 		if (!visited[u]) {	// maybe try "if (nodes.top().dst < dist[u])" instead of using bool matrix
 			for (uint8 i = 0; i < grid[u].cnt; i++)
-				if (uint8 v = grid[u].adj[i], du = dist[u] + 1; !visited[v] && du < dist[v]) {
+				if (uint16 v = grid[u].adj[i], du = dist[u] + 1; !visited[v] && du < dist[v]) {
 					dist[v] = du;
 					nodes.emplace(v, dist[v]);
 				}
@@ -92,29 +125,3 @@ array<uint8, Com::boardSize> Dijkstra::travelDist(uint8 src, bool (*stepable)(ui
 	} while (!nodes.empty());
 	return dist;
 }
-
-// STRINGS
-#ifdef _WIN32
-string wtos(const wchar* src) {
-	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
-	if (len <= 1)
-		return emptyStr;
-	len--;
-	
-	string dst;
-	dst.resize(len);
-	WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
-	return dst;
-}
-
-wstring stow(const string& src) {
-	int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0);
-	if (len <= 0)
-		return L"";
-
-	wstring dst;
-	dst.resize(len);
-	MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
-	return dst;
-}
-#endif

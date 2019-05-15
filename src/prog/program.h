@@ -42,6 +42,7 @@ public:
 
 	// game match
 	void eventOpenMatch();
+	void eventPlaceFavor(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
 	void eventMove(BoardObject* obj);
 	void eventFire(BoardObject* obj);
@@ -49,8 +50,7 @@ public:
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
-	void eventSetFullscreen(Button* but);
-	void eventSetResolution(Button* but);
+	void eventApplySettings(Button* but = nullptr);
 	void eventSetVsync(Button* but);
 	void eventSetSmooth(Button* but);
 	void eventResetSettings(Button* but);
@@ -65,11 +65,11 @@ public:
 
 private:
 	void placeTile(Tile* tile, uint8 type);
-	void placePiece(vec2b pos, uint8 type, Piece* occupant);
+	void placePiece(vec2s pos, uint8 type, Piece* occupant);
 
 	void setState(ProgState* newState);
-	BoardObject* pickBob(vec2b& pos, Piece*& pce);
-	Piece* extractPiece(BoardObject* bob, vec2b pos);
+	BoardObject* pickBob(vec2s& pos, Piece*& pce);
+	Piece* extractPiece(BoardObject* bob, vec2s pos);
 };
 
 inline Program::Program() :
@@ -84,6 +84,6 @@ inline Game* Program::getGame() {
 	return &game;
 }
 
-inline Piece* Program::extractPiece(BoardObject* bob, vec2b pos) {
+inline Piece* Program::extractPiece(BoardObject* bob, vec2s pos) {
 	return dynamic_cast<Piece*>(bob) ? static_cast<Piece*>(bob) : game.findPiece(pos);
 }

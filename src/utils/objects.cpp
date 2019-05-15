@@ -73,18 +73,18 @@ const vector<ushort> BoardObject::squareElements = {
 };
 
 const vector<Vertex> BoardObject::squareVertices = {
-	Vertex(vec3(-halfSize, 0.f, halfSize), defaultNormal, vec2(0.f, 1.f)),
 	Vertex(vec3(-halfSize, 0.f, -halfSize), defaultNormal, vec2(0.f, 0.f)),
 	Vertex(vec3(halfSize, 0.f, -halfSize), defaultNormal, vec2(1.f, 0.f)),
-	Vertex(vec3(halfSize, 0.f, halfSize), defaultNormal, vec2(1.f, 1.f))
+	Vertex(vec3(halfSize, 0.f, halfSize), defaultNormal, vec2(1.f, 1.f)),
+	Vertex(vec3(-halfSize, 0.f, halfSize), defaultNormal, vec2(0.f, 1.f))
 };
 
 const vec3 BoardObject::defaultNormal(0.f, 1.f, 0.f);
 const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
 const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
-BoardObject::BoardObject(vec2b pos, float poz, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
-	Object(gtop(pos, poz), vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
+BoardObject::BoardObject(const vec3& pos, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
+	Object(pos, vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
 	dragState(DragState::none),
 	clcall(clcall),
 	crcall(crcall),
@@ -146,39 +146,67 @@ const array<vec4, Tile::colors.size()> Tile::colors = {
 	vec4(0.3f, 0.3f, 0.3f, 1.f)
 };
 
-const array<string, Tile::names.size()> Tile::names = {
-	"plains",
-	"forest",
-	"mountain",
-	"water",
-	"fortress"
+const array<vec4, Tile::favColors.size()> Tile::favColors = {
+	vec4(1.f, 0.843f, 0.f, 1.f),
+	vec4(1.f, 0.f, 0.f, 1.f)
 };
 
-const array<uint8, Tile::amounts.size()> Tile::amounts = {
-	11,
-	10,
-	7,
-	7,
-	1
+const array<Vertex, Tile::outlineVertices.size()> Tile::outlineVertices = {
+	Vertex(squareVertices[0].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(0.f, 0.f)),
+	Vertex(squareVertices[1].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(1.f, 0.f)),
+	Vertex(squareVertices[1].pos + vec3(0.f, upperPoz / 2.f, outlineSize), defaultNormal, vec2(1.f, outlineUV)),
+	Vertex(squareVertices[0].pos + vec3(0.f, upperPoz / 2.f, outlineSize), defaultNormal, vec2(0.f, outlineUV)),
+	Vertex(squareVertices[3].pos + vec3(0.f, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(0.f, 1.f - outlineUV)),
+	Vertex(squareVertices[2].pos + vec3(0.f, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(1.f, 1.f - outlineUV)),
+	Vertex(squareVertices[2].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(1.f, 1.f)),
+	Vertex(squareVertices[3].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(0.f, 1.f)),
+	Vertex(squareVertices[0].pos + vec3(outlineSize, upperPoz / 2.f, outlineSize), defaultNormal, vec2(outlineUV)),
+	Vertex(squareVertices[3].pos + vec3(outlineSize, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(outlineUV, 1.f - outlineUV)),
+	Vertex(squareVertices[2].pos + vec3(-outlineSize, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(1.f - outlineUV)),
+	Vertex(squareVertices[1].pos + vec3(-outlineSize, upperPoz / 2.f, outlineSize), defaultNormal, vec2(1.f - outlineUV, outlineUV)),
 };
 
-Tile::Tile(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
-	BoardObject(pos, 0.f, clcall, crcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+const array<uint8, Tile::outlineElements.size()> Tile::outlineElements = {
+	0, 1, 2, 3,
+	4, 5, 6, 7,
+	3, 8, 9, 4,
+	11, 2, 5, 10
+};
+
+Tile::Tile(const vec3& pos, Com::Tile type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
+	BoardObject(pos, clcall, crcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
+	favored(Favor::none),
 	type(type),
-	ruined(false)
+	breached(false)
 {}
+
+void Tile::draw() const {
+	BoardObject::draw();
+	if (favored != Favor::none) {
+		glDisable(GL_TEXTURE_2D);
+		glColor4fv(glm::value_ptr(favColors[uint8(favored)-1]));
+
+		glBegin(GL_QUADS);
+		for (uint8 id : outlineElements) {
+			glTexCoord2fv(glm::value_ptr(outlineVertices[id].tuv));
+			glNormal3fv(glm::value_ptr(outlineVertices[id].nrm));
+			glVertex3fv(glm::value_ptr(outlineVertices[id].pos));
+		}
+		glEnd();
+	}
+}
 
 void Tile::onText(const string&) {}
 
-void Tile::setType(Type newType) {
+void Tile::setType(Com::Tile newType) {
 	type = newType;
 	color = colors[uint8(type)];
 	mode = getModeByType(mode, type);
 }
 
-void Tile::setRuined(bool yes) {
-	ruined = yes;
-	color = colors[uint8(type)] * (ruined ? 0.5f : 1.f);
+void Tile::setBreached(bool yes) {
+	breached = yes;
+	color = colors[uint8(type)] * (breached ? 0.5f : 1.f);
 }
 
 void Tile::setCalls(Interactivity lvl) {
@@ -186,7 +214,7 @@ void Tile::setCalls(Interactivity lvl) {
 	switch (lvl) {
 	case Interactivity::tiling:
 		clcall = &Program::eventPlaceTileC;
-		if (type != Type::empty) {
+		if (type != Com::Tile::empty) {
 			crcall = &Program::eventClearTile;
 			ulcall = &Program::eventMoveTile;
 		} else {
@@ -208,52 +236,31 @@ void Tile::setCalls(Interactivity lvl) {
 
 // PIECE
 
-const array<string, Piece::names.size()> Piece::names = {
-	"ranger",
-	"spearman",
-	"crossbowman",
-	"catapult",
-	"trebuchet",
-	"lancer",
-	"warhorse",
-	"elephant",
-	"dragon",
-	"throne"
-};
-
-const array<uint8, Piece::amounts.size()> Piece::amounts = {
-	2,
-	2,
-	2,
-	1,
-	1,
-	2,
-	1,
-	2,
-	1,
-	1
-};
-
 const vec4 Piece::enemyColor(0.5f, 0.5f, 1.f, 1.f);
 
-Piece::Piece(vec2b pos, Type type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color) :
-	BoardObject(pos, upperPoz, clcall, crcall, ulcall, urcall, World::winSys()->texture(names[uint8(type)]), color, mode),
+Piece::Piece(const vec3& pos, Com::Piece type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color) :
+	BoardObject(pos, clcall, crcall, ulcall, urcall, World::winSys()->texture(Com::pieceNames[uint8(type)]), color, mode),
+	lastFortress(INT16_MAX),
 	type(type)
 {}
 
 void Piece::onText(const string&) {}
 
-void Piece::setType(Piece::Type newType) {
+void Piece::setType(Com::Piece newType) {
 	type = newType;
-	tex = World::winSys()->texture(names[uint8(type)]);
+	tex = World::winSys()->texture(Com::pieceNames[uint8(type)]);
 }
 
-void Piece::enable(vec2b bpos) {
-	setPos(bpos);
+bool Piece::active() const {
+	return World::game()->ptog(pos).hasNot(INT16_MIN) && (mode & (INFO_SHOW | INFO_RAYCAST));
+}
+
+void Piece::enable(vec2s bpos) {
+	pos = World::game()->gtop(bpos, upperPoz);
 	setModeByOn(true);
 }
 
 void Piece::disable() {
-	setPos(INT8_MIN);
+	pos = World::game()->gtop(INT16_MIN, upperPoz);
 	setModeByOn(false);
 }

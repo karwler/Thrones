@@ -1,23 +1,15 @@
 #pragma once
 
+#include "text.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <algorithm>
 #include <cmath>
-#include <string>
 
 using glm::mat4;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
-
-using sizet = size_t;
-using pdift = ptrdiff_t;
-
-using std::string;
-using std::wstring;
-using std::to_string;
 
 template <class T>
 struct cvec2 {
@@ -48,7 +40,7 @@ struct cvec2 {
 	cvec2 operator--(int);
 
 	template <class F, class... A> static cvec2 get(const string& str, F strtox, A... args);
-	string toString(char sep = ' ') const;
+	string toString(const char* sep = " ") const;
 	constexpr vec2 glm() const;
 	constexpr bool has(const T& n) const;
 	constexpr bool hasNot(const T& n) const;
@@ -58,7 +50,7 @@ struct cvec2 {
 	constexpr cvec2 swap() const;
 	cvec2 swap(bool yes) const;
 	static cvec2 swap(const T& x, const T& y, bool swap);
-	constexpr cvec2 clamp(const cvec2& min, const cvec2& max) const;
+	cvec2 clamp(const cvec2& min, const cvec2& max) const;
 };
 
 template <class T> template <class A>
@@ -193,19 +185,13 @@ template <class T> template <class F, class... A>
 cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 	cvec2<T> vec(T(0));
 	const char* pos = str.c_str();
-	for (unsigned int i = 0; *pos && i < 2; i++) {
-		char* end;
-		if (T num = T(strtox(pos, &end, args...)); end != pos) {
-			vec[i] = num;
-			pos = end;
-		} else
-			pos++;
-	}
+	for (uint8 i = 0; *pos && i < 2;)
+		vec[i++] = readNumber<T>(pos, strtox, args...);
 	return vec;
 }
 
 template<class T>
-inline string cvec2<T>::toString(char sep) const {
+inline string cvec2<T>::toString(const char* sep) const {
 	return to_string(x) + sep + to_string(y);
 }
 
@@ -255,7 +241,7 @@ cvec2<T> cvec2<T>::swap(const T& x, const T& y, bool swap) {
 }
 
 template<class T>
-constexpr cvec2<T> cvec2<T>::clamp(const cvec2<T>& min, const cvec2<T>& max) const {
+cvec2<T> cvec2<T>::clamp(const cvec2<T>& min, const cvec2<T>& max) const {
 	return cvec2<T>(std::clamp(x, min.x, max.x), std::clamp(y, min.y, max.y));
 }
 
@@ -417,4 +403,11 @@ constexpr bool operator!=(const cvec2<T>& a, const T& b) {
 template <class T>
 constexpr bool operator!=(const T& a, const cvec2<T>& b) {
 	return a != b.x || a != b.y;
+}
+
+template <class T>
+bool operator<(const cvec2<T>& a, const cvec2<T>& b) {
+	if (a.y < b.y)
+		return true;
+	return a.y == b.y ? a.x < b.x : false;
 }

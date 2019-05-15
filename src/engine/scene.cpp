@@ -117,6 +117,10 @@ void Scene::draw() {
 	camera.update();
 	for (Object* it : objects)
 		it->draw();
+	glDisable(GL_CULL_FACE);
+	for (Object& it : effects)
+		it.draw();
+	glEnable(GL_CULL_FACE);
 	if (dynamic_cast<Object*>(capture))
 		capture->drawTop();
 
@@ -146,7 +150,6 @@ void Scene::onResize() {
 	layout->onResize();
 	if (popup)
 		popup->onResize();
-	World::state()->eventResized();
 }
 
 void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
@@ -170,25 +173,19 @@ void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
 		popup->onMouseMove(mPos, mMov);
 }
 
-void Scene::onMouseDown(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
+void Scene::onMouseDown(const vec2i& mPos, uint8 mBut) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
 	select = getSelected(mPos);
-	if (mCnt == 1) {
-		stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
-		if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
-			stamps[mBut].area->onHold(mPos, mBut);
-		if (stamps[mBut].inter != stamps[mBut].area)
-			stamps[mBut].inter->onHold(mPos, mBut);
-	} else if (mCnt == 2 && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
-		select->onDoubleClick(mPos, mBut);
+	stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
+	if (stamps[mBut].area)		// area goes first so widget can overwrite it's capture
+		stamps[mBut].area->onHold(mPos, mBut);
+	if (stamps[mBut].inter != stamps[mBut].area)
+		stamps[mBut].inter->onHold(mPos, mBut);
 }
 
-void Scene::onMouseUp(const vec2i& mPos, uint8 mBut, uint8 mCnt) {
-	if (mCnt != 1)
-		return;
-
+void Scene::onMouseUp(const vec2i& mPos, uint8 mBut) {
 	if (capture)
 		capture->onUndrag(mBut);
 	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
@@ -272,7 +269,7 @@ Object* Scene::rayCast(const vec3& ray) const {
 
 		mat4 trans = obj->getTransform();
 		for (sizet i = 0; i < obj->elems.size(); i += 3)
-			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t) && t < min) {
+			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t) && t <= min) {
 				min = t;
 				mob = obj;
 			}

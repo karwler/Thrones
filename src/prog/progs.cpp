@@ -28,11 +28,9 @@ void ProgState::eventEnter() {
 }
 
 bool ProgState::tryClosePopup() {
-	if (World::scene()->getPopup()) {
-		World::program()->eventClosePopup();
-		return true;
-	}
-	return false;
+	if (World::scene()->getPopup())
+		World::prun(World::scene()->getPopup()->ccall, nullptr);
+	return World::scene()->getPopup();
 }
 
 Layout* ProgState::createLayout() {
@@ -44,27 +42,27 @@ Popup* ProgState::createPopupMessage(const string& msg, BCall ccal, const string
 	Text ms(msg, superHeight);
 	vector<Widget*> bot = {
 		new Widget(),
-		new Label(ok.length, ok.text, ccal, nullptr, nullptr, Label::Alignment::center),
+		new Label(ok.length, ok.text, ccal, nullptr, Label::Alignment::center),
 		new Widget()
 	};
 	vector<Widget*> con = {
-		new Label(1.f, ms.text, nullptr, nullptr, nullptr, Label::Alignment::center),
+		new Label(1.f, ms.text, nullptr, nullptr, Label::Alignment::center),
 		new Layout(1.f, bot, false, 0)
 	};
-	return new Popup(vec2s(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con);
+	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, ccal);
 }
 
 Popup* ProgState::createPopupChoice(const string& msg, BCall kcal, BCall ccal) {
 	Text ms(msg, superHeight);
 	vector<Widget*> bot = {
-		new Label(1.f, "Yes", kcal, nullptr, nullptr, Label::Alignment::center),
-		new Label(1.f, "No", ccal, nullptr, nullptr, Label::Alignment::center)
+		new Label(1.f, "Yes", kcal, nullptr, Label::Alignment::center),
+		new Label(1.f, "No", ccal, nullptr, Label::Alignment::center)
 	};
 	vector<Widget*> con = {
-		new Label(1.f, ms.text, nullptr, nullptr, nullptr, Label::Alignment::center),
+		new Label(1.f, ms.text, nullptr, nullptr, Label::Alignment::center),
 		new Layout(1.f, bot, false, 0)
 	};
-	return new Popup(vec2s(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con);
+	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, ccal);
 }
 
 // PROG MENU
@@ -93,10 +91,10 @@ Layout* ProgMenu::createLayout() {
 		new Widget(),
 		new Layout(superHeight, srv, false),
 		new Layout(superHeight, prt, false),
-		new Label(superHeight, "Connect", &Program::eventConnectServer, nullptr, nullptr, Label::Alignment::center),
+		new Label(superHeight, "Connect", &Program::eventConnectServer, nullptr, Label::Alignment::center),
 		new Widget(0),
-		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, nullptr, Label::Alignment::center),
-		new Label(superHeight, "Exit", &Program::eventExit, nullptr, nullptr, Label::Alignment::center),
+		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, Label::Alignment::center),
+		new Label(superHeight, "Exit", &Program::eventExit, nullptr, Label::Alignment::center),
 		new Widget()
 	};
 
@@ -170,7 +168,7 @@ Layout* ProgSetup::createLayout() {
 	icons = stage == Stage::pieces ? getPicons() : getTicons();
 	vector<Widget*> midl = {
 		new Widget(1.f),
-		message = new Label(superHeight, emptyStr, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
+		message = new Label(superHeight, emptyStr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
 		new Widget(5.f),
 		icons
 	};
@@ -188,15 +186,15 @@ Layout* ProgSetup::createLayout() {
 Layout* ProgSetup::getTicons() {
 	vector<Widget*> tbot = { new Widget() };
 	for (uint8 i = 0; i < 4; i++)
-		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, nullptr, true, Tile::colors[i]));
+		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, true, Tile::colors[i]));
 	tbot.push_back(new Widget());
 	return new Layout(iconSize, tbot, false);
 }
 
 Layout* ProgSetup::getPicons() {
 	vector<Widget*> pbot = { new Widget() };
-	for (const string& it : Piece::names)
-		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePieceD, nullptr, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
+	for (const string& it : Com::pieceNames)
+		pbot.push_back(new Draglet(iconSize, &Program::eventPlacePieceD, nullptr, false, vec4(0.5f, 0.5f, 0.5f, 1.f), World::winSys()->texture(it)));
 	pbot.push_back(new Widget());
 	return new Layout(iconSize, pbot, false);
 }
@@ -217,14 +215,17 @@ void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
 
 void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
 	if (Draglet* ico = getIcon(type); !on) {
-		ico->setColor(ico->color * 0.5f);
+		ico->setDim(0.5f);
 		ico->setLcall(nullptr);
-	} else if (isTile) {
-		ico->setColor(Tile::colors[type]);
-		ico->setLcall(&Program::eventPlaceTileD);
 	} else {
-		ico->setColor(Object::defaultColor);
-		ico->setLcall(&Program::eventPlacePieceD);
+		ico->setDim(1.f);
+		if (isTile) {
+			ico->color = Tile::colors[type];
+			ico->setLcall(&Program::eventPlaceTileD);
+		} else {
+			ico->color = Object::defaultColor;
+			ico->setLcall(&Program::eventPlacePieceD);
+		}
 	}
 }
 
@@ -235,33 +236,54 @@ void ProgMatch::eventEscape() {
 		World::program()->eventExitGame();
 }
 
-void ProgMatch::setDragonIconOn(bool on) {
-	if (dragonIcon) {
-		if (Draglet* ico = static_cast<Draglet*>(dragonIcon->getWidget(0)); on) {
-			ico->setLcall(&Program::eventPlaceDragon);
-			ico->setColor(Object::defaultColor);
-		} else {
-			ico->setLcall(nullptr);
-			ico->setColor(ico->color * 0.5f);
-		}
+void ProgMatch::setIconOn(bool on, uint8 cnt) {
+	if (favorIcon) {
+		setIconOn(on && cnt, favorIcon, &Program::eventPlaceFavor);
+		static_cast<Draglet*>(favorIcon->getWidget(0))->setText(to_string(cnt));
 	}
+}
+
+void ProgMatch::setIconOn(bool on) {
+	if (dragonIcon)
+		setIconOn(on, dragonIcon, &Program::eventPlaceDragon);
+}
+
+void ProgMatch::setIconOn(bool on, Layout* icon, BCall call) {
+	if (Draglet* ico = static_cast<Draglet*>(icon->getWidget(0)); on) {
+		ico->setLcall(call);
+		ico->setDim(1.f);
+	} else {
+		ico->setLcall(nullptr);
+		ico->setDim(0.5f);
+	}
+}
+
+void ProgMatch::deleteIcon(bool favor) {
+	Layout*& icon = favor ? favorIcon : dragonIcon;
+	icon->getParent()->deleteWidget(icon->getID());
+	icon = nullptr;
 }
 
 Layout* ProgMatch::createLayout() {
 	// sidebar
 	Text exit("Exit", lineHeight);
-	vector<Widget*> left = { new Label(lineHeight, exit.text, &Program::eventExitGame) };
-	if (World::game()->getOwnPieces(Piece::Type::dragon)->getPos().hasNot(INT8_MIN))
+	vector<Widget*> left = {
+		new Label(lineHeight, exit.text, &Program::eventExitGame),
+		favorIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, true, Tile::favColors[0], nullptr, emptyStr, Label::Alignment::center) }, false, 0)
+	};
+	setIconOn(World::game()->getMyTurn(), World::game()->getFavorCount());
+	
+	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->pos).hasNot(INT16_MIN))
 		dragonIcon = nullptr;
 	else {
-		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, false, Object::defaultColor, World::winSys()->texture(Piece::names[uint8(Piece::Type::dragon)])) }, false, 0));
-		setDragonIconOn(World::game()->getMyTurn());
+		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, false, Object::defaultColor, World::winSys()->texture(Com::pieceNames[uint8(Com::Piece::dragon)])) }, false, 0));
+		setIconOn(World::game()->getMyTurn());
 	}
 
 	// middle for message
 	vector<Widget*> midl = {
 		new Widget(),
-		message = new Label(superHeight, World::game()->getMyTurn() ? Game::messageTurnGo : Game::messageTurnWait, nullptr, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
+		message = new Label(superHeight, World::game()->getMyTurn() ? Game::messageTurnGo : Game::messageTurnWait, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
 		new Widget(superHeight / 2)
 	};
 
@@ -281,10 +303,6 @@ void ProgSettings::eventEscape() {
 		World::program()->eventOpenMainMenu();
 }
 
-void ProgSettings::eventResized() {
-	resolution->setText(World::sets()->resolution.toString());
-}
-
 Layout* ProgSettings::createLayout() {
 	// side bar
 	vector<string> tps = {
@@ -296,35 +314,50 @@ Layout* ProgSettings::createLayout() {
 	vector<Widget*> lft = {
 		new Label(lineHeight, popBack(tps), &Program::eventOpenMainMenu),
 		new Label(lineHeight, popBack(tps), &Program::eventOpenInfo),
-		new Widget(lineHeight / 2 - Layout::defaultItemSpacing),
+		new Widget(0),
 		new Label(lineHeight, popBack(tps), &Program::eventResetSettings)
 	};
 
+	// resolution list
+	vector<vec2i> sizes = World::winSys()->displaySizes();
+	vector<SDL_DisplayMode> modes = World::winSys()->displayModes();
+	vector<string> winsiz(sizes.size()), dmodes(modes.size());
+	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), sizeToFstr);
+	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
+
 	// setting buttons, labels and action fields for labels
+	Text aptx("Apply", lineHeight);
 	vector<string> txs = {
 		"Smooth",
 		"VSync",
-		"Resolution",
-		"Fullscreen"
+		"Mode",
+		"Size",
+		"Screen"
 	};
 	sizet lnc = txs.size();
 	int descLength = findMaxLength(txs.begin(), txs.end());
+
 	vector<Widget*> lx[] = { {
 		new Label(descLength, popBack(txs)),
-		new CheckBox(lineHeight, World::sets()->fullscreen, &Program::eventSetFullscreen)
+		screen = new SwitchBox(1.f, Settings::screenNames.data(), Settings::screenNames.size(), Settings::screenNames[uint8(World::sets()->screen)])
 	}, {
 		new Label(descLength, popBack(txs)),
-		resolution = new LabelEdit(1.f, World::sets()->resolution.toString(), &Program::eventSetResolution, nullptr, nullptr, LabelEdit::TextType::uIntSpaced)
+		winSize = new SwitchBox(1.f, winsiz.data(), winsiz.size(), World::sets()->size.toString(rv2iSeparator))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(World::sets()->vsync)], &Program::eventSetVsync)
+		dspMode = new SwitchBox(1.f, dmodes.data(), dmodes.size(), dispToFstr(World::sets()->mode))
+	}, {
+		new Label(descLength, popBack(txs)),
+		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(World::sets()->vsync)+1], &Program::eventSetVsync)
 	}, {
 		new Label(descLength, popBack(txs)),
 		new SwitchBox(1.f, Settings::smoothNames.data(), Settings::smoothNames.size(), Settings::smoothNames[uint8(World::sets()->smooth)], &Program::eventSetSmooth)
-	} };
-	vector<Widget*> lns(lnc);
+	}, };
+	vector<Widget*> lns(lnc + 2);
 	for (sizet i = 0; i < lnc; i++)
 		lns[i] = new Layout(lineHeight, lx[i], false);
+	lns[lnc] = new Widget(0);
+	lns[lnc+1] = new Layout(lineHeight, { new Label(aptx.length, aptx.text, &Program::eventApplySettings) }, false);
 
 	// root layout
 	vector<Widget*> cont = {
@@ -343,7 +376,6 @@ const array<string, ProgInfo::powerNames.size()> ProgInfo::powerNames = {
 	"CHARGING",
 	"CHARGED"
 };
-const string ProgInfo::infinity = u8"\u221E";
 
 void ProgInfo::eventEscape() {
 	if (!tryClosePopup())
@@ -545,12 +577,12 @@ void ProgInfo::appendDisplay(vector<Widget*>& lines, int i, int width, const vec
 void ProgInfo::appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	int secs, pct;
 	SDL_PowerState power = SDL_GetPowerInfo(&secs, &pct);
-	Text tprc((pct >= 0 ? to_string(pct) : infinity) + '%');
+	Text tprc((pct >= 0 ? to_string(pct) : u8"\u221E") + '%');
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, powerNames[power]) }, false),
-		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(tprc.length, tprc.text), new Label(1.f, (secs >= 0 ? to_string(secs) : infinity) + 's') }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(tprc.length, tprc.text), new Label(1.f, (secs >= 0 ? to_string(secs) : u8"\u221E") + 's') }, false),
 		new Widget(lineHeight)
 	});
 }

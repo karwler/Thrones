@@ -2,14 +2,70 @@
 
 #include "utils.h"
 
-// exactly what it sounds like
+// indices of vertex, uv, normal for a point
 struct Vertex {
-	vec3 pos;
-	vec3 nrm;
-	vec2 tuv;
+	static constexpr uint8 size = 3;
 
-	Vertex(const vec3& pos = vec3(0.f), const vec3& nrm = vec3(0.f), const vec2& tuv = vec2(0.f));
+	ushort v, t, n;
+
+	Vertex() = default;
+	Vertex(ushort v, ushort t, ushort n);
+
+	ushort& operator[](uint8 i);
+	ushort operator[](uint8 i) const;
 };
+
+inline ushort& Vertex::operator[](uint8 i) {
+	return reinterpret_cast<ushort*>(this)[i];
+}
+
+inline ushort Vertex::operator[](uint8 i) const {
+	return reinterpret_cast<const ushort*>(this)[i];
+}
+
+// vertex data that's shared between objects
+class Blueprint {
+public:
+	vector<vec3> verts;
+	vector<vec2> tuvs;		// must contain at least one dummy element
+	vector<vec3> norms;		// ^
+	vector<Vertex> elems;	// size must be a multiple of 3 if not INFO_LINES, otherwise 2
+
+private:
+	static const vector<vec3> squareVertices, outlineVertices;
+	static const vector<vec2> squareTextureUVs, outlineTextureUVs;
+	static const vector<vec3> squareNormals;
+	static const vector<Vertex> squareElements, outlineElements;
+	static constexpr float outlOfs = 0.1f;
+
+public:
+	Blueprint() = default;
+	Blueprint(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems);
+
+	void draw(GLenum mode) const;
+	bool empty() const;
+
+	static Blueprint makeRectangle(const vec3& pos, const vec3& rot, const vec2& scl);
+	static Blueprint makeOutline(const vec3& pos, const vec3& rot, const vec2& scl);
+private:
+	static Blueprint makeThing(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems, const mat4& trans);
+};
+
+inline bool Blueprint::empty() const {
+	return elems.empty() || verts.empty() || tuvs.empty() || norms.empty();
+}
+
+inline Blueprint Blueprint::makeRectangle(const vec3& pos, const vec3& rot, const vec2& scl) {
+	return makeThing(squareVertices, squareTextureUVs, squareNormals, squareElements, makeTransform(pos, rot, vec3(scl.x, 1.f, scl.y)));
+}
+
+inline Blueprint Blueprint::makeOutline(const vec3& pos, const vec3& rot, const vec2& scl) {
+	return makeThing(outlineVertices, outlineTextureUVs, squareNormals, outlineElements, makeTransform(pos, rot, vec3(scl.x, 1.f, scl.y)));
+}
+
+inline Blueprint Blueprint::makeThing(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems, const mat4& trans) {
+	return Blueprint(transformCopy(verts, trans), tuvs, transformCopy(norms, trans), elems);
+}
 
 // 3D object with triangles
 class Object : public Interactable {
@@ -25,20 +81,18 @@ public:
 
 	static const vec4 defaultColor;
 
-	vector<Vertex> verts;
-	vector<ushort> elems;	// size must be a multiple of 3
+	const Blueprint* bpr;
 	const Texture* tex;
 	vec3 pos, rot, scl;
 	vec4 color;
 	Info mode;
 
 public:
-	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const vector<Vertex>& verts = {}, const vector<ushort>& elems = {}, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL);
+	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL);
 	virtual ~Object() override = default;
 
 	virtual void draw() const;
 
-	mat4 getTransform() const;
 protected:
 	static void setTransform(const vec3& pos, const vec3& rot, const vec3& scl);
 	static void setColorization(const Texture* tex, const vec4& color, Info mode);
@@ -77,10 +131,6 @@ class BoardObject : public Object {
 public:
 	static constexpr float upperPoz = 0.001f;
 	static constexpr float halfSize = 0.5f;
-	static const vec3 defaultNormal;
-	static const vector<ushort> squareElements;
-protected:
-	static const vector<Vertex> squareVertices;
 private:
 	static const vec4 moveIconColor, fireIconColor;
 
@@ -152,11 +202,6 @@ private:
 	Com::Tile type;
 	bool breached;	// only for fortress
 
-	static const array<Vertex, 12> outlineVertices;
-	static const array<uint8, 16> outlineElements;
-	static constexpr float outlineSize = halfSize / 5.f;
-	static constexpr float outlineUV = outlineSize / (halfSize * 2);
-
 public:
 	Tile() = default;
 	Tile(const vec3& pos, Com::Tile type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
@@ -197,12 +242,16 @@ inline Object::Info Tile::getModeByType(Info mode, Com::Tile type) {
 }
 
 // tiles on a board
-struct TileCol {
-	Tile* tl;	// must be allocated at some point
-	const Com::Config& conf;
+class TileCol {
+private:
+	Tile* tl;
+	uint16 home, extra, size;
 
+public:
 	TileCol(const Com::Config& conf);
 	~TileCol();
+
+	void update(const Com::Config& conf);
 
 	Tile& operator[](uint16 i);
 	const Tile& operator[](uint16 i) const;
@@ -217,10 +266,6 @@ struct TileCol {
 	Tile* own(pdift i = 0);
 	const Tile* own(pdift i = 0) const;
 };
-
-inline TileCol::TileCol(const Com::Config& conf) :
-	conf(conf)
-{}
 
 inline TileCol::~TileCol() {
 	delete[] tl;
@@ -243,11 +288,11 @@ inline const Tile* TileCol::begin() const {
 }
 
 inline Tile* TileCol::end() {
-	return tl + conf.boardSize;
+	return tl + size;
 }
 
 inline const Tile* TileCol::end() const {
-	return tl + conf.boardSize;
+	return tl + size;
 }
 
 inline Tile* TileCol::ene(pdift i) {
@@ -259,19 +304,19 @@ inline const Tile* TileCol::ene(pdift i) const {
 }
 
 inline Tile* TileCol::mid(pdift i) {
-	return tl + conf.numTiles + i;
+	return tl + home + i;
 }
 
 inline const Tile* TileCol::mid(pdift i) const {
-	return tl + conf.numTiles + i;
+	return tl + home + i;
 }
 
 inline Tile* TileCol::own(pdift i) {
-	return tl + conf.extraSize + i;
+	return tl + extra + i;
 }
 
 inline const Tile* TileCol::own(pdift i) const {
-	return tl + conf.extraSize + i;
+	return tl + extra + i;
 }
 
 // player on tiles
@@ -312,12 +357,16 @@ inline bool Piece::canFire() const {
 }
 
 // pieces on a board
-struct PieceCol {
-	Piece* pc;	// must be allocated at some point
-	const Com::Config& conf;
+class PieceCol {
+private:
+	Piece* pc;
+	uint16 num, size;
 
+public:
 	PieceCol(const Com::Config& conf);
 	~PieceCol();
+
+	void update(const Com::Config& conf);
 
 	Piece& operator[](uint16 i);
 	const Piece& operator[](uint16 i) const;
@@ -330,10 +379,6 @@ struct PieceCol {
 	Piece* ene(pdift i = 0);
 	const Piece* ene(pdift i = 0) const;
 };
-
-inline PieceCol::PieceCol(const Com::Config& conf) :
-	conf(conf)
-{}
 
 inline PieceCol::~PieceCol() {
 	delete[] pc;
@@ -356,11 +401,11 @@ inline const Piece* PieceCol::begin() const {
 }
 
 inline Piece* PieceCol::end() {
-	return pc + conf.piecesSize;
+	return pc + size;
 }
 
 inline const Piece* PieceCol::end() const {
-	return pc + conf.piecesSize;
+	return pc + size;
 }
 
 inline Piece* PieceCol::own(pdift i) {
@@ -372,9 +417,9 @@ inline const Piece* PieceCol::own(pdift i) const {
 }
 
 inline Piece* PieceCol::ene(pdift i) {
-	return pc + conf.numPieces + i;
+	return pc + num + i;
 }
 
 inline const Piece* PieceCol::ene(pdift i) const {
-	return pc + conf.numPieces + i;
+	return pc + num + i;
 }

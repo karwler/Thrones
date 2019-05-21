@@ -14,28 +14,9 @@ enum class WaitResult : uint8 {
 	exit
 };
 
-constexpr uint8 maxPlayers = 2;
 constexpr uint32 checkTimeout = 500;
 
 static bool running = true;
-
-static vector<Config> loadConfig(const string& file) {
-	vector<Config> confs;
-	for (const string& line : readTextFile(file)) {
-		if (string title = readIniTitle(line); !title.empty())
-			confs.push_back(title);
-		else
-			confs.back().fromIniLine(line);
-	}
-	return confs.empty() ? confs : vector<Config>(1);
-}
-
-static void saveConfs(const vector<Config>& confs, const string& file) {
-	string text;
-	for (const Config& cfg : confs)
-		text += cfg.toIniText() + linend;
-	writeTextFile(file, text);
-}
 
 static Config getConfig(Arguments&& args, uint16& port) {
 	umap<string, string>::iterator it = args.opts.find("p");
@@ -46,11 +27,11 @@ static Config getConfig(Arguments&& args, uint16& port) {
 
 	char* path = SDL_GetBasePath();
 	it = args.opts.find("f");
-	string file = it != args.opts.end() ? it->second : (path ? path : emptyStr) + "game.ini";
+	string file = it != args.opts.end() ? it->second : (path ? path : emptyStr) + defaultConfigFile;
 	SDL_free(path);
 
 	Config ret;
-	vector<Config> confs = loadConfig(file);
+	vector<Config> confs = loadConfs(file);
 	if (vector<Config>::iterator cit = std::find_if(confs.begin(), confs.end(), [&name](const Config& cf) -> bool { return cf.name == name; }); cit != confs.end())
 		ret = cit->checkValues();
 	else
@@ -78,13 +59,6 @@ static bool quitting() {
 #endif
 }
 
-static uint8 findFirstFree(const TCPsocket* sockets) {
-	for (uint8 i = 0; i < maxPlayers; i++)
-		if (!sockets[i])
-			return i;
-	return UINT8_MAX;
-}
-
 static void disconnectSocket(SDLNet_SocketSet sockets, TCPsocket& client) {
 	if (client) {
 		SDLNet_TCP_DelSocket(sockets, client);
@@ -99,16 +73,8 @@ static void disconnectPlayers(SDLNet_SocketSet sockets, TCPsocket* players) {
 		disconnectSocket(sockets, players[i]);
 }
 
-static void sendRejection(TCPsocket server) {
-	TCPsocket tmps = SDLNet_TCP_Accept(server);
-	uint8 code = uint8(Code::full);
-	SDLNet_TCP_Send(tmps, &code, sizeof(code));
-	SDLNet_TCP_Close(tmps);
-	std::cout << "rejected incoming connection" << std::endl;
-}
-
 static void addPlayer(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server, uint8& pc) {
-	if (uint8 i = findFirstFree(players); i < maxPlayers) {
+	if (uint8 i = uint8(std::find(players, players + maxPlayers, nullptr) - players); i < maxPlayers) {
 		players[i] = SDLNet_TCP_Accept(server);
 		SDLNet_TCP_AddSocket(sockets, players[i]);
 		std::cout << "player " << uint(++pc) << " connected" << std::endl;
@@ -144,7 +110,8 @@ static WaitResult waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, T
 	// decide which player goes first and send game config information
 	std::default_random_engine ranGen = createRandomEngine();
 	uint8 first = uint8(std::uniform_int_distribution<uint>(0, 1)(ranGen));
-	vector<uint8> sendb = conf.toComData();
+	vector<uint8> sendb(conf.dataSize(Code::setup));
+	conf.toComData(sendb.data());
 	for (uint8 i = 0; i < maxPlayers; i++) {
 		sendb[1] = i == first;
 		if (SDLNet_TCP_Send(players[i], sendb.data(), int(sendb.size())) != int(sendb.size())) {

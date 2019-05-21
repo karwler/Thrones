@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <SDL2/SDL.h>
 #include <algorithm>
 #include <array>
@@ -210,14 +211,6 @@ T btom(bool fwd) {
 	return T(fwd) * 2 - 1;
 }
 
-template <class V, class T>
-V vtog(const vector<T>& vec) {
-	V gvn(T(0));
-	for (sizet i = 0, end = sizet(V::length()) <= vec.size() ? sizet(V::length()) : vec.size(); i < end; i++)
-		gvn[int(i)] = vec[i];
-	return gvn;
-}
-
 template <class T, class F, class... A>
 T readNumber(const char*& pos, F strtox, A... args) {
 	T num = T(0);
@@ -229,15 +222,15 @@ T readNumber(const char*& pos, F strtox, A... args) {
 	return num;
 }
 
-template <class T, class F, class... A>
-vector<T> stov(const char* str, sizet len, F strtox, T fill = T(0), A... args) {
-	sizet i = 0;
-	vector<T> vec(len);
-	while (*str && i < len)
-		vec[i++] = readNumber<T>(str, strtox, args...);
-	while (i < len)
-		vec[i++] = fill;
-	return vec;
+template <glm::length_t L>
+glm::vec<L, float, glm::highp> stov(const char* str, float fill = 0.f) {
+	glm::length_t i = 0;
+	glm::vec<L, float, glm::highp> gvn;
+	while (*str && i < L)
+		gvn[i++] = readNumber<float>(str, strtof);
+	while (i < L)
+		gvn[i++] = fill;
+	return gvn;
 }
 
 // files

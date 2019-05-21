@@ -64,9 +64,11 @@ int WindowSys::start() {
 	} catch (const std::runtime_error& e) {
 		std::cerr << e.what() << std::endl;
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", e.what(), window);
+#ifdef NDEBUG
 	} catch (...) {
 		std::cerr << "unknown error" << std::endl;
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "unknown error", window);
+#endif
 	}
 	cleanup();
 	return 0;
@@ -138,14 +140,8 @@ void WindowSys::createWindow() {
 	}
 
 	// create new window
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, sets->samples != 0);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sets->samples);
 #ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
@@ -304,15 +300,18 @@ const Texture* WindowSys::texture(const string& name) const {
 	return it != texes.end() ? &it->second : nullptr;
 }
 
-void WindowSys::setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode) {
+void WindowSys::setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode, uint8 samples) {
 	checkResolution(sets->size = size, displaySizes());
 	checkResolution(sets->mode = mode, displayModes());
-	if (sets->screen = screen; sets->screen <= Settings::Screen::borderless) {
+	if (sets->screen = screen; samples != sets->samples) {
+		sets->samples = samples;
+		createWindow();
+	} else if (sets->screen <= Settings::Screen::borderless) {
 		SDL_SetWindowFullscreen(window, 0);
 		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED);
-	} else if (sets->screen == Settings::Screen::fullscreen) {
+	} else  if (sets->screen == Settings::Screen::fullscreen) {
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 	} else

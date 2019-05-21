@@ -1,12 +1,5 @@
 #include "engine/world.h"
 
-// SENDER/RECERIVER
-
-inline Receiver::Receiver() :
-	state(Com::Code::none),
-	pos(0)
-{}
-
 // RECORD
 
 Game::Record::Record(Piece* piece, bool attack, bool swap) :
@@ -17,90 +10,53 @@ Game::Record::Record(Piece* piece, bool attack, bool swap) :
 
 // GAME
 
-const vec3 Game::screenPosUp(0.f, 0.f, -BoardObject::halfSize);
-const vec3 Game::screenPosDown(0.f, -3.f, -BoardObject::halfSize);
+const vec3 Game::screenPosUp(0.f, 1.3f, -BoardObject::halfSize);
+const vec3 Game::screenPosDown(0.f, -1.4f, -BoardObject::halfSize);
 
 Game::Game() :
-	socks(nullptr),
-	socket(nullptr),
+	gridat({}, { vec3() }, { vec3(0.f, 1.f, 0.f) }, {}),
+	bgrid(vec3(0.f), vec3(0.f), vec3(1.f), &gridat, nullptr, Tile::colors[uint8(Com::Tile::empty)], Object::INFO_SHOW | Object::INFO_LINES),
+	board(vec3(0.f, -BoardObject::upperPoz, 0.f), vec3(0.f), vec3(11.f, 1.f, 11.f), World::scene()->blueprint(Scene::bprRect), nullptr, vec4(0.166f, 0.068f, 0.019f, 1.f), Object::INFO_FILL),
+	screen(screenPosUp, vec3(90.f, 0.f, 0.f), vec3(9.4f, 1.f, 2.6f), World::scene()->blueprint(Scene::bprRect), nullptr, vec4(0.2f, 0.13f, 0.062f, 1.f), Object::INFO_FILL),
 	tiles(config),
-	pieces(config),
-	randGen(Com::createRandomEngine()),
-	randDist(0, 1)
-{
-	tiles.tl = new Tile[config.boardSize];
-	pieces.pc = new Piece[config.piecesSize];
+	pieces(config)
+{}
 
-	setBoard();
-	setBgrid();
-	setScreen();
-}
-
-Game::~Game() {
-	disconnect();
-}
-
-bool Game::connect() {
-	IPaddress address;
-	if (SDLNet_ResolveHost(&address, World::sets()->address.c_str(), World::sets()->port))
-		return connectFail();
-	if (!(socket = SDLNet_TCP_Open(&address)))
-		return connectFail();
-	socks = SDLNet_AllocSocketSet(1);
-	SDLNet_TCP_AddSocket(socks, socket);
-
-	World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventConnectCancel, "Cancel"));
-	return true;
-}
-
-void Game::disconnect() {
-	if (socket) {
-		SDLNet_TCP_DelSocket(socks, socket);
-		SDLNet_TCP_Close(socket);
-		SDLNet_FreeSocketSet(socks);
-		socket = nullptr;
-		socks = nullptr;
-	}
+void Game::conhost(const Com::Config& cfg) {
+	config = cfg;	// don't mess with the tiles or pieces before initObjects() gets called
+	connect(new NetcpHost);
 }
 
 void Game::tick() {
-	if (socket && SDLNet_CheckSockets(socks, 0) > 0 && SDLNet_SocketReady(socket)) {
-		if (int len = SDLNet_TCP_Recv(socket, recvb.data + recvb.pos, Com::recvSize - recvb.pos); len > 0)
-			processData(len);
-		else
-			disconnectMessage("Connection lost");
+	if (netcp)
+		netcp->tick();
+}
+
+void Game::connect(Netcp* net) {
+	try {
+		netcp.reset(net);
+		netcp->connect();
+		World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventConnectCancel, "Cancel"));
+	} catch (const char* err) {
+		netcp.reset();
+		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 
-void Game::processData(int len) {
-	do {
-		if (recvb.state == Com::Code::none) {
-			recvb.state = Com::Code(*recvb.data);
-			len--;
-			recvb.pos++;
-		}
-		if (uint16 await = config.dataSize(recvb.state), left = await - recvb.pos; len >= left) {
-			processCode(recvb.data + 1);
-			len -= left;
-			memmove(recvb.data, recvb.data + await, sizet(len));
-			recvb.state = Com::Code::none;
-			recvb.pos = 0;
-		} else {
-			recvb.pos += len;
-			len = 0;
-		}
-	} while (len);
+void Game::disconnect(const string& msg) {
+	disconnect();
+	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventExitGame));
 }
 
-void Game::processCode(const uint8* data) {
-	switch (recvb.state) {
+void Game::processCode(Com::Code code, const uint8* data) {
+	switch (code) {
 	case Com::Code::full:
-		disconnectMessage("Server full");
+		disconnect("Server full");
 		break;
-	case Com::Code::setup: {
+	case Com::Code::setup:
 		config.fromComData(data);
 		World::program()->eventOpenSetup();
-		break; }
+		break;
 	case Com::Code::tiles:
 		for (uint16 i = 0; i < config.numTiles; i++)
 			tiles.ene(i)->setType(decompressTile(data, i));
@@ -140,14 +96,18 @@ void Game::processCode(const uint8* data) {
 		prepareTurn();
 		break;
 	case Com::Code::win:
-		disconnectMessage(data[0] ? messageLoose : messageWin);
+		disconnect(data[0] ? messageLoose : messageWin);
 		break;
 	default:
-		std::cerr << "invalid net code " << uint(recvb.state) << std::endl;
+		std::cerr << "invalid net code " << uint(code) << std::endl;
 	}
 }
 
 vector<Object*> Game::initObjects() {
+	tiles.update(config);
+	pieces.update(config);
+	setBgrid();
+
 	// prepare objects for setup
 	setTiles(tiles.ene(), -int16(config.homeHeight), nullptr, Object::INFO_TEXTURE);
 	setMidTiles();
@@ -210,15 +170,18 @@ void Game::prepareMatch() {
 void Game::rearangeMiddle(Com::Tile* mid, Com::Tile* buf) {
 	if (!myTurn)
 		std::swap(mid, buf);
-	bool fwd = myTurn != config.shiftLeft;	// TODO: this probably doesn't work
+	bool fwd = myTurn == config.shiftLeft;
 	for (uint16 x, i = fwd ? 0 : config.homeWidth - 1, fm = btom<uint16>(fwd), rm = btom<uint16>(!fwd); i < config.homeWidth; i += fm)
 		if (buf[i] != Com::Tile::empty) {
 			if (mid[i] == Com::Tile::empty)
 				mid[i] = buf[i];
-			else {	// TODO: shift far
-				for (x = i + rm; x < config.homeWidth && mid[x] != Com::Tile::empty; x += rm);
-				if (x >= config.homeWidth)
-					for (x = i + fm; x < config.homeWidth && mid[x] != Com::Tile::empty; x += fm);
+			else {
+				if (config.shiftNear) {
+					for (x = i + rm; x < config.homeWidth && mid[x] != Com::Tile::empty; x += rm);
+					if (x >= config.homeWidth)
+						for (x = i + fm; x < config.homeWidth && mid[x] != Com::Tile::empty; x += fm);
+				} else
+					for (x = fwd ? 0 : config.homeWidth - 1; x < config.homeWidth && mid[x] != Com::Tile::empty; x += fm);
 				mid[x] = buf[i];
 			}
 		}
@@ -369,44 +332,23 @@ void Game::placeDragon(vec2s pos, Piece* occupant) {
 	}
 }
 
-void Game::setScreen() {
-	vector<Vertex> verts = {
-		Vertex(vec3(-4.7f, 0.f, 0.f), vec3(0.f, 0.f, 1.f), vec2(0.f, 1.f)),
-		Vertex(vec3(-4.7f, 2.6f, 0.f), vec3(0.f, 0.f, 1.f), vec2(0.f, 0.f)),
-		Vertex(vec3(4.7f, 2.6f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 0.f)),
-		Vertex(vec3(4.7f, 0.f, 0.f), vec3(0.f, 0.f, 1.f), vec2(1.f, 1.f))
-	};
-	screen = Object(screenPosUp, vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.2f, 0.13f, 0.062f, 1.f), Object::INFO_FILL);
-}
-
-void Game::setBoard() {
-	vector<Vertex> verts = {
-		Vertex(vec3(-5.5f, 0.f, 5.5f), BoardObject::defaultNormal, vec2(0.f, 1.f)),
-		Vertex(vec3(-5.5f, 0.f, -5.5f), BoardObject::defaultNormal, vec2(0.f, 0.f)),
-		Vertex(vec3(5.5f, 0.f, -5.5f), BoardObject::defaultNormal, vec2(1.f, 0.f)),
-		Vertex(vec3(5.5f, 0.f, 5.5f), BoardObject::defaultNormal, vec2(1.f, 1.f))
-	};
-	board = Object(vec3(0.f, -BoardObject::upperPoz, 0.f), vec3(0.f), vec3(1.f), verts, BoardObject::squareElements, nullptr, vec4(0.166f, 0.068f, 0.019f, 1.f), Object::INFO_FILL);
-}
-
 void Game::setBgrid() {
 	sizet i = 0;
-	vector<Vertex> verts((config.homeWidth + 1) * 4);
+	gridat.verts.resize((config.homeWidth + 1) * 4);
 	for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y += config.homeWidth)
 		for (int16 x = 0; x <= config.homeWidth; x++)
-			verts[i++] = Vertex(gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize), BoardObject::defaultNormal);
+			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize);
 	for (int16 x = 0; x <= config.homeWidth; x += config.homeWidth)
 		for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y++)
-			verts[i++] = Vertex(gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize), BoardObject::defaultNormal);
+			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-BoardObject::halfSize, 0.f, -BoardObject::halfSize);
 
 	i = 0;
-	vector<ushort> elems((config.homeWidth + 1) * 4);
-	for (uint16 ofs = 0; ofs <= uint16(verts.size()) / 2; ofs += uint16(verts.size()) / 2)
+	gridat.elems.resize((config.homeWidth + 1) * 4);
+	for (uint16 ofs = 0; ofs <= uint16(gridat.verts.size()) / 2; ofs += uint16(gridat.verts.size()) / 2)
 		for (uint16 c = 0; c <= config.homeWidth; c++) {
-			elems[i++] = ofs + c;
-			elems[i++] = ofs + c + config.homeWidth + 1;
+			gridat.elems[i++] = Vertex(ofs + c, 0, 0);
+			gridat.elems[i++] = Vertex(ofs + c + config.homeWidth + 1, 0, 0);
 		}
-	bgrid = Object(vec3(0.f), vec3(0.f), vec3(1.f), verts, elems, nullptr, Tile::colors[uint8(Com::Tile::empty)], Object::INFO_SHOW | Object::INFO_LINES);
 }
 
 void Game::setTiles(Tile* tiles, int16 yofs, OCall lcall, Object::Info mode) {
@@ -571,14 +513,14 @@ bool Game::survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking) {
 		return true;
 	if ((piece->getType() == Com::Piece::ranger && src != Com::Tile::water && dst == Com::Tile::water) || (piece->getType() == Com::Piece::spearman && src != Com::Tile::mountain && dst == Com::Tile::mountain))
 		return true;
-	return randDist(randGen);
+	return netcp->random();
 }
 
 void Game::failSurvivalCheck(Piece* piece) {
 	if (piece) {
 		removePiece(piece);
 		if (!checkWin()) {
-			sendData();
+			netcp->sendData();
 			static_cast<ProgMatch*>(World::state())->message->setText("Failed survival check");
 		}
 	} else {
@@ -614,9 +556,9 @@ bool Game::checkFortressWin() {
 }
 
 bool Game::doWin(bool win) {
-	sendb.push(vector<uint8>({ uint8(Com::Code::win), win }));
+	netcp->push(vector<uint8>({ uint8(Com::Code::win), uint8(win) }));
 	endTurn();
-	disconnectMessage(win ? messageWin : messageLoose);
+	disconnect(win ? messageWin : messageLoose);
 	return true;
 }
 
@@ -636,36 +578,29 @@ void Game::endTurn() {
 	firstTurn = myTurn = false;
 	prepareTurn();
 
-	sendb.push(Com::Code::record);
-	sendb.push(uint16(record.piece - pieces.own()));
-	sendb.push(vector<uint8>({ uint8(record.attack), uint8(record.swap) }));
-	sendData();
+	netcp->push(Com::Code::record);
+	netcp->push(uint16(record.piece - pieces.own()));
+	netcp->push(vector<uint8>({ uint8(record.attack), uint8(record.swap) }));
+	netcp->sendData();
 }
 
 void Game::sendSetup() {
 	// send tiles
-	sendb.size = config.tileCompressionEnd();
-	std::fill_n(sendb.data, sendb.size, 0);
-	sendb.data[0] = uint8(Com::Code::tiles); 
+	netcp->sendSize = config.tileCompressionEnd();
+	std::fill_n(netcp->sendb, netcp->sendSize, 0);
+	netcp->sendb[0] = uint8(Com::Code::tiles);
 	for (uint16 i = 0; i < config.extraSize; i++) {
 		uint16 e = config.extraSize - i - 1;
-		sendb.data[i/2+1] |= uint8(tiles.mid(e)->getType()) << (e % 2 * 4);
+		netcp->sendb[i/2+1] |= uint8(tiles.mid(e)->getType()) << (e % 2 * 4);
 	}
-	sendData();
+	netcp->sendData();
 
 	// send pieces
-	sendb.size = config.dataSize(Com::Code::pieces);
-	sendb.data[0] = uint8(Com::Code::pieces);
+	netcp->sendSize = config.dataSize(Com::Code::pieces);
+	netcp->sendb[0] = uint8(Com::Code::pieces);
 	for (uint16 i = 0; i < config.numPieces; i++)
-		reinterpret_cast<uint16*>(sendb.data + 1)[i] = invertId(posToId(ptog(pieces.own(i)->pos)));
-	sendData();
-}
-
-void Game::sendData() {
-	if (SDLNet_TCP_Send(socket, sendb.data, sendb.size) == sendb.size)
-		sendb.size = 0;
-	else 
-		disconnectMessage(SDLNet_GetError());
+		reinterpret_cast<uint16*>(netcp->sendb + 1)[i] = invertId(posToId(ptog(pieces.own(i)->pos)));
+	netcp->sendData();
 }
 
 void Game::placePiece(Piece* piece, vec2s pos) {
@@ -676,37 +611,27 @@ void Game::placePiece(Piece* piece, vec2s pos) {
 			favorTotal++;
 		}
 	piece->pos = gtop(pos, BoardObject::upperPoz);
-	sendb.push(Com::Code::move);
-	sendb.push(vector<uint16>({ uint16(piece - pieces.own()), invertId(posToId(pos)) }));
+	netcp->push(Com::Code::move);
+	netcp->push(vector<uint16>({ uint16(piece - pieces.own()), invertId(posToId(pos)) }));
 }
 
 void Game::removePiece(Piece* piece) {
 	piece->disable();
 	bool mine = isOwnPiece(piece);
-	sendb.push(vector<uint8>({ uint8(Com::Code::kill), uint8(mine) }));
-	sendb.push(uint16(piece - (mine ? pieces.own() : pieces.ene())));
+	netcp->push(vector<uint8>({ uint8(Com::Code::kill), uint8(mine) }));
+	netcp->push(uint16(piece - (mine ? pieces.own() : pieces.ene())));
 }
 
 void Game::updateFortress(Tile* fort, bool breached) {
 	fort->setBreached(breached);
-	sendb.push(vector<uint8>({ uint8(Com::Code::breach), uint8(breached) }));
-	sendb.push(inverseTileId(fort));
+	netcp->push(vector<uint8>({ uint8(Com::Code::breach), uint8(breached) }));
+	netcp->push(inverseTileId(fort));
 }
 
 void Game::updateFavored(Tile* tile, bool favored) {
 	tile->favored = Tile::Favor(favored);
-	sendb.push(vector<uint8>({ uint8(Com::Code::favor), uint8(favored ? Tile::Favor::enemy : Tile::Favor::none) }));
-	sendb.push(inverseTileId(tile));
-}
-
-bool Game::connectFail() {
-	World::scene()->setPopup(ProgState::createPopupMessage(SDLNet_GetError(), &Program::eventClosePopup));
-	return false;
-}
-
-void Game::disconnectMessage(const string& msg) {
-	disconnect();
-	World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventExitGame));
+	netcp->push(vector<uint8>({ uint8(Com::Code::favor), uint8(favored ? Tile::Favor::enemy : Tile::Favor::none) }));
+	netcp->push(inverseTileId(tile));
 }
 #ifdef DEBUG
 vector<Object*> Game::initDummyObjects() {

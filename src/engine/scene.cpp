@@ -107,8 +107,19 @@ Scene::Scene() :
 	select(nullptr),
 	capture(nullptr),
 	mouseMove(0),
-	layout(new Layout)	// dummy layout in case a function gets called preemptively
-{}
+	layout(new Layout),	// dummy layout in case a function gets called preemptively
+	bprints({
+		pair(bprRect, Blueprint::makeRectangle(vec3(0.f), vec3(0.f), vec3(1.f))),
+		pair(bprOutline, Blueprint::makeOutline(vec3(0.f), vec3(0.f), vec3(1.f)))
+	})
+{
+	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG)) {
+		if (Blueprint bpr = FileSys::loadObj(appDsep(FileSys::dirObjs) + file); !bpr.empty())
+			bprints.emplace(delExt(file), bpr);
+		else
+			std::cerr << "failed to load object " << file << std::endl;
+	}
+}
 
 void Scene::draw() {
 	glClear(clearSet);
@@ -267,9 +278,9 @@ Object* Scene::rayCast(const vec3& ray) const {
 		if (!(obj->mode & Object::INFO_RAYCAST))
 			continue;
 
-		mat4 trans = obj->getTransform();
-		for (sizet i = 0; i < obj->elems.size(); i += 3)
-			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->verts[obj->elems[i]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+1]].pos, 1.f), trans * vec4(obj->verts[obj->elems[i+2]].pos, 1.f), t) && t <= min) {
+		mat4 trans = makeTransform(obj->pos, obj->rot, obj->scl);
+		for (sizet i = 0; i < obj->bpr->elems.size(); i += 3)
+			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->bpr->verts[obj->bpr->elems[i].v], 1.f), trans * vec4(obj->bpr->verts[obj->bpr->elems[i+1].v], 1.f), trans * vec4(obj->bpr->verts[obj->bpr->elems[i+2].v], 1.f), t) && t <= min) {
 				min = t;
 				mob = obj;
 			}
@@ -298,4 +309,9 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 
 	t = f * glm::dot(e2, q);
 	return t > FLT_EPSILON;
+}
+
+const Blueprint* Scene::blueprint(const string& name) const {
+	umap<string, Blueprint>::const_iterator it = bprints.find(name);
+	return it != bprints.end() ? &it->second : nullptr;
 }

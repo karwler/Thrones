@@ -99,6 +99,9 @@ public:
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
+	static constexpr char bprRect[] = "rect";
+	static constexpr char bprOutline[] = "outline";
+
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 	vector<Object> effects;	// extra objects that'll get drawn on top without culling and have no interactivity // TODO: add stuff
@@ -110,6 +113,7 @@ private:
 	uptr<Popup> popup;
 	array<ClickStamp, SDL_BUTTON_X2+1> stamps;	// data about last mouse click (indexes are mouse button numbers
 	vector<Animation> animations;
+	umap<string, Blueprint> bprints;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
@@ -129,6 +133,7 @@ public:
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
+	const Blueprint* blueprint(const string& name) const;
 	Camera* getCamera();
 	void setObjects(const vector<Object*>& objs);
 	void resetLayouts();

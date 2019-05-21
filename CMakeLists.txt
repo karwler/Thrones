@@ -17,6 +17,8 @@ set(SRC_FILES
 	"src/engine/world.h"
 	"src/prog/game.cpp"
 	"src/prog/game.h"
+	"src/prog/netcp.cpp"
+	"src/prog/netcp.h"
 	"src/prog/program.cpp"
 	"src/prog/program.h"
 	"src/prog/progs.cpp"

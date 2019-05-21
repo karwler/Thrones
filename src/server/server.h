@@ -63,6 +63,8 @@ const array<string, pieceMax> pieceNames = {
 
 constexpr uint16 defaultPort = 39741;
 constexpr uint16 recvSize = 1380;
+constexpr uint8 maxPlayers = 2;
+constexpr char defaultConfigFile[] = "game.ini";
 
 constexpr array<uint16 (*)(uint16, uint16), 4> adjacentStraight = {
 	[](uint16 id, uint16 lim) -> uint16 { return id / lim ? id - lim : UINT16_MAX; },			// up
@@ -107,7 +109,7 @@ public:
 	array<uint16, pieceMax> pieceAmounts;
 	uint16 winFortress, winThrone;
 	array<bool, pieceMax> capturers;
-	bool shiftLeft, shiftNear;		// TODO: use
+	bool shiftLeft, shiftNear;
 
 	uint16 extraSize;	// home size + mid size
 	uint16 boardSize;	// total number of tiles
@@ -120,6 +122,7 @@ private:
 	static constexpr uint16 maxWidth = 65;
 	static constexpr uint16 minHeight = 3;
 	static constexpr uint16 maxHeight = 32;
+	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
 	static constexpr char keywordSize[] = "size";
 	static constexpr char keywordTile[] = "tile_";
 	static constexpr char keywordPiece[] = "piece_";
@@ -137,20 +140,20 @@ public:
 
 	void updateValues();
 	Config& checkValues();
-	vector<uint8> toComData() const;
+	uint8* toComData(uint8* data) const;
 	void fromComData(const uint8* data);
 	uint16 dataSize(Code code) const;
 	uint16 tileCompressionEnd() const;
 	string toIniText() const;
 	void fromIniLine(const string& line);
+	string capturersString() const;
+	void readCapturers(const string& line);
 private:
 	void readSize(const string& line);
 	static uint16 makeOdd(uint16 val);
 	template <sizet S, class F> static void matchAmounts(uint16& total, array<uint16, S>& amts, uint16 limit, uint8 si, uint8 ei, int8 mov, F comp);
 	template <sizet S> static void readAmount(const pairStr& it, const string& word, const array<string, S>& names, array<uint16, S>& amts);
 	template <sizet S> static void writeAmount(string& text, const string& word, const array<string, S>& names, const array<uint16, S>& amts);
-	void readCapturers(const string& line);
-	string capturersString() const;
 	void readShift(const string& line);
 };
 
@@ -183,6 +186,9 @@ void Config::writeAmount(string& text, const string& word, const array<string, S
 		text += makeIniLine(word + names[i], to_string(amts[i]));
 }
 
+vector<Config> loadConfs(const string& file);
+void saveConfs(const vector<Config>& confs, const string& file);
+void sendRejection(TCPsocket server);
 std::default_random_engine createRandomEngine();
 
 }

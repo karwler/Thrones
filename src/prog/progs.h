@@ -55,6 +55,23 @@ public:
 	virtual Layout* createLayout() override;
 };
 
+class ProgHost : public ProgState {
+public:
+	vector<Com::Config> confs;
+	sizet curConf;
+
+public:
+	ProgHost();
+	virtual ~ProgHost() override = default;
+
+	virtual void eventEscape() override;
+
+	virtual Layout* createLayout() override;
+private:
+	static void setLines(vector<Widget*>& menu, const vector<vector<Widget*>>& lines, sizet& id);
+	static void setTitle(vector<Widget*>& menu, const string& title, sizet& id);
+};
+
 class ProgSetup : public ProgState {
 public:
 	enum class Stage : uint8 {
@@ -138,6 +155,7 @@ public:
 	SwitchBox* screen;
 	SwitchBox* winSize;
 	SwitchBox* dspMode;
+	SwitchBox* msample;
 
 private:
 	static constexpr char rv2iSeparator[] = " x ";

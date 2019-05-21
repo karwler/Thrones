@@ -29,6 +29,7 @@ Settings::Settings() :
 	maximized(false),
 	screen(Screen::window),
 	vsync(VSync::synchronized),
+	samples(4),
 	smooth(Smooth::nice),
 	size(800, 600),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
@@ -42,6 +43,8 @@ FileSys::FileSys() {
 	// check if all (more or less) necessary files and directories exist
 	if (setWorkingDir())
 		std::cerr << "failed to set working directory" << std::endl;
+	if (fileType(dirObjs) != FTYPE_DIR)
+		std::cerr << "failed to find object directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
 		std::cerr << "failed to find texture directory" << std::endl;
 }
@@ -61,6 +64,8 @@ Settings* FileSys::loadSettings() {
 			sets->vsync = Settings::VSync(valToEnum<int8>(Settings::vsyncNames, il.second) - 1);
 		else if (il.first == iniKeywordSmooth)
 			sets->smooth = valToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
+		else if (il.first == iniKeywordSamples)
+			sets->samples = uint8(sstoul(il.second));
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -75,66 +80,88 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
 	text += makeIniLine(iniKeywordSize, sets->size.toString());
 	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
-	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync)+1]);
+	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[int8(sets->vsync)+1]);
+	text += makeIniLine(iniKeywordSamples, to_string(sets->samples));
 	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
 	return writeTextFile(fileSettings, text);
 }
 
-Object FileSys::loadObj(const string& file) {
+Blueprint FileSys::loadObj(const string& file) {
+	Blueprint obj;
 	vector<string> lines = readTextFile(file);
 	if (lines.empty())
-		return Object();
+		return obj;
 
-	// collect vertex positions, uv data, normals and face v/u/n-indices
-	vector<array<int, 9>> faces;
-	vector<vec3> poss;
-	vector<vec2> uvs;
-	vector<vec3> norms;
+	uint8 fill = 0;
+	array<ushort, Vertex::size> begins = { 0, 0, 0 };
 	for (const string& line : lines) {
-		if (!line.compare(0, 1, "v"))
-			poss.emplace_back(vtog<vec3>(stov(&line[1], vec3::length(), strtof, 0.f)));
-		else if (!line.compare(0, 2, "vt"))
-			uvs.emplace_back(vtog<vec2>(stov(&line[2], vec2::length(), strtof, 0.f)));
-		else if (!line.compare(0, 2, "vn"))
-			norms.emplace_back(vtog<vec3>(stov(&line[1], vec3::length(), strtof, 0.f)));
-		else if (!line.compare(0, 1, "f"))
-			faces.emplace_back(readFace(&line[1]));
+		if (toupper(line[0]) == 'V') {
+			if (toupper(line[1]) == 'T')
+				obj.tuvs.emplace_back(stov<2>(&line[2]));
+			else if (toupper(line[1]) == 'N')
+				obj.norms.emplace_back(stov<3>(&line[2]));
+			else
+				obj.verts.emplace_back(stov<3>(&line[1]));
+		} else if (toupper(line[0]) == 'F')
+			fill |= readFace(&line[1], obj, begins);
+		else if (int c = toupper(line[0]); c == 'O' || c == 'G')
+			begins = { ushort(obj.verts.size()), ushort(obj.tuvs.size()), ushort(obj.norms.size()) };	// TODO: this might be a wrong assumption
 	}
-
-	// convert collected data to interleaved vertex information format
-	vector<Vertex> verts;
-	vector<ushort> elems;
-	std::map<array<int, 3>, ushort> vmap;
-	for (array<int, 9>& it : faces)
-		for (sizet i = 0; i < 3; i++) {
-			if (array<int, 3>& vp = reinterpret_cast<array<int, 3>*>(it.data())[i]; !vmap.count(vp)) {
-				vmap.emplace(vp, ushort(verts.size()));
-				elems.push_back(ushort(verts.size()));
-				verts.emplace_back(resolveObjId(vp[0], poss), glm::normalize(resolveObjId(vp[2], norms)), resolveObjId(vp[1], uvs));
-			} else
-				elems.push_back(vmap[vp]);
-		}
-	return Object(vec3(0.f), vec3(0.f), vec3(1.f), verts, elems);
+	if (fill & 1)
+		obj.verts.emplace_back(0.f);
+	if (fill & 2)
+		obj.tuvs.emplace_back(0.f);
+	if (fill & 4)
+		obj.norms.emplace_back(0.f);
+	return obj;
 }
 
-array<int, 9> FileSys::readFace(const char* str) {
-	array<int, 9> face;
-	for (uint i = 0; i < 3; i++)
-		for (uint j = 0; j < 3; j++) {
-			char* end;
-			face[i * 3 + j] = int(strtol(str, &end, 0));
-			str = str != end ? end : str + 1;
-
-			if (*str == '/')
-				str++;
-			if (isSpace(*str) && j < 2) {
-				std::fill_n(face.data() + i * 3 + j, 3 - j, 0);
-				break;
-			}
+uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins) {
+	array<ushort, Vertex::size> sizes = {
+		ushort(obj.verts.size()),
+		ushort(obj.tuvs.size()),
+		ushort(obj.norms.size())
+	};
+	array<Vertex, 3> face;
+	uint8 v = 0, e = 0;
+	for (char* end; *str && v < face.size();) {
+		if (int n = int(strtol(str, &end, 0)); end != str) {
+			face[v][e] = resolveObjId(n, sizes[e] - begins[e]) + begins[e];
+			str = end;
+			e++;
+		} else if (*str == '/') {
+			face[v][e] = sizes[e];
+			e++;
 		}
-	return face;
+		if (e && (*str != '/' || e >= Vertex::size)) {
+			e = 0;
+			v++;
+		}
+		if (*str)
+			str++;
+	}
+	if (v < face.size())
+		return 0;
+	
+	std::swap(face[1], face[2]);	// model is CW, need CCW
+	obj.elems.insert(obj.elems.end(), face.begin(), face.end());
+
+	uint8 fill = 0;
+	for (const Vertex& it : face)
+		for (uint8 i = 0; i < 3; i++)
+			if (it[i] == sizes[i])
+				fill |= 1 << i;
+	return fill;
+}
+
+ushort FileSys::resolveObjId(int id, ushort size) {
+	if (ushort pid = ushort(id - 1); id > 0 && pid < size)
+		return pid;
+	if (ushort eid = size + ushort(id); id < 0 && eid < size)
+		return eid;
+	return size;
 }
 
 vector<string> FileSys::listDir(const string& drc, FileType filter) {

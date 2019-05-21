@@ -6,11 +6,6 @@
 // handles the frontend
 class Program {
 private:
-	static const string argAddress;
-	static const string argPort;
-	static const string argConnect;
-	static const string argSetup;
-
 	uptr<ProgState> state;
 	Game game;
 
@@ -25,6 +20,22 @@ public:
 	void eventConnectCancel(Button* but = nullptr);
 	void eventUpdateAddress(Button* but);
 	void eventUpdatePort(Button* but);
+
+	// host menu
+	void eventOpenHostMenu(Button* but = nullptr);
+	void eventHostServer(Button* but = nullptr);
+	void eventSwitchConfig(Button* but);
+	void eventUpdateWidth(Button* but);
+	void eventUpdateHeight(Button* but);
+	void eventUpdateTile(Button* but);
+	void eventUpdatePiece(Button* but);
+	void eventUpdateWinThrone(Button* but);
+	void eventUpdateWinFortress(Button* but);
+	void eventUpdateCapturers(Button* but);
+	void eventUpdateShiftLeft(Button* but);
+	void eventUpdateShiftNear(Button* but);
+	void eventUpdateReset(Button* but);
+	void eventExitHost(Button* but = nullptr);
 
 	// game setup
 	void eventOpenSetup();

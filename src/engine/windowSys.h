@@ -75,7 +75,7 @@ public:
 	vector<vec2i> displaySizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	void setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode);
+	void setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode, uint8 samples);
 	void setVsync(Settings::VSync vsync);
 	void setSmooth(Settings::Smooth smooth);
 	void resetSettings();

@@ -35,6 +35,7 @@ public:
 	bool maximized;
 	Screen screen;
 	VSync vsync;
+	uint8 samples;
 	Smooth smooth;
 	vec2i size;
 	SDL_DisplayMode mode;
@@ -84,6 +85,7 @@ inline constexpr FileType operator|=(FileType& a, FileType b) {
 // handles all filesystem interactions
 class FileSys {
 public:
+	static constexpr char dirObjs[] = "objects";
 	static constexpr char dirTexs[] = "textures";
 	static constexpr char extIni[] = ".ini";
 private:
@@ -94,11 +96,12 @@ private:
 	static constexpr char iniKeywordSize[] = "size";
 	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
+	static constexpr char iniKeywordSamples[] = "samples";
 	static constexpr char iniKeywordSmooth[] = "smooth";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
-#ifdef _WIN32		// os's font directories
+#ifdef _WIN32	// os's font directories
 	array<string, 2> dirFonts;
 #else
 	array<string, 3> dirFonts;
@@ -108,15 +111,15 @@ public:
 
 	Settings* loadSettings();
 	bool saveSettings(const Settings* sets);
-	static Object loadObj(const string& file);
+	static Blueprint loadObj(const string& file);
 
 	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD);
 	static bool createDir(const string& path);
 	static FileType fileType(const string& file, bool readLink = true);
 
 private:
-	static array<int, 9> readFace(const char* str);	// returns IDs of 3 * { vertex, uv, normal }
-	template <class T> static T resolveObjId(int id, const vector<T>& vec);
+	static uint8 readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins);
+	static ushort resolveObjId(int id, ushort size);
 
 	static int setWorkingDir();
 #ifdef _WIN32
@@ -126,15 +129,6 @@ private:
 	static bool dtycmp(const string& drc, const dirent* entry, FileType filter, bool readLink);
 #endif
 };
-
-template <class T>
-T FileSys::resolveObjId(int id, const vector<T>& vec) {
-	if (sizet pid = sizet(id - 1); id > 0 && pid < vec.size())
-		return vec[pid];
-	if (sizet eid = vec.size() + sizet(id); id < 0 && eid < vec.size())
-		return vec[eid];
-	return T(0.f);
-}
 
 inline bool FileSys::createDir(const string& path) {
 #ifdef _WIN32

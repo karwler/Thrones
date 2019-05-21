@@ -4,6 +4,12 @@
 
 // class that makes accessing stuff easier
 class World {
+public:
+	static constexpr char argAddress[] = "s";
+	static constexpr char argPort[] = "p";
+	static constexpr char argConnect[] = "c";
+	static constexpr char argSetup[] = "d";
+
 private:
 	static WindowSys windowSys;		// the thing on which everything runs
 	static Arguments arguments;

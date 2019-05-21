@@ -2,19 +2,101 @@
 
 // VERTEX
 
-Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
-	pos(pos),
-	nrm(nrm),
-	tuv(tuv)
+Vertex::Vertex(ushort v, ushort t, ushort n) :
+	v(v),
+	t(t),
+	n(n)
 {}
+
+// BLUEPRINT
+
+const vector<vec3> Blueprint::squareVertices = {
+	vec3(-0.5f, 0.f, -0.5f),
+	vec3(0.5f, 0.f, -0.5f),
+	vec3(0.5f, 0.f, 0.5f),
+	vec3(-0.5f, 0.f, 0.5f)
+};
+
+const vector<vec2> Blueprint::squareTextureUVs = {
+	vec2(0.f, 0.f),
+	vec2(1.f, 0.f),
+	vec2(1.f, 1.f),
+	vec2(0.f, 1.f)
+};
+
+const vector<vec3> Blueprint::squareNormals = {
+	vec3(0.f, 1.f, 0.f)
+};
+
+const vector<Vertex> Blueprint::squareElements = {
+	{ 0, 0, 0 }, { 1, 1, 0 }, { 2, 2, 0 },
+	{ 2, 2, 0 }, { 3, 3, 0 }, { 0, 0, 0 }
+};
+
+const vector<vec3> Blueprint::outlineVertices = {
+	squareVertices[0],
+	squareVertices[1],
+	squareVertices[1] + vec3(0.f, 0.f, outlOfs),
+	squareVertices[0] + vec3(0.f, 0.f, outlOfs),
+	squareVertices[3] + vec3(0.f, 0.f, -outlOfs),
+	squareVertices[2] + vec3(0.f, 0.f, -outlOfs),
+	squareVertices[2],
+	squareVertices[3],
+	squareVertices[0] + vec3(outlOfs, 0.f, outlOfs),
+	squareVertices[3] + vec3(outlOfs, 0.f, -outlOfs),
+	squareVertices[2] + vec3(-outlOfs, 0.f, -outlOfs),
+	squareVertices[1] + vec3(-outlOfs, 0.f, outlOfs)
+};
+
+const vector<vec2> Blueprint::outlineTextureUVs = {
+	vec2(0.f, 0.f),
+	vec2(1.f, 0.f),
+	vec2(1.f, outlOfs),
+	vec2(0.f, outlOfs),
+	vec2(0.f, 1.f - outlOfs),
+	vec2(1.f, 1.f - outlOfs),
+	vec2(1.f, 1.f),
+	vec2(0.f, 1.f),
+	vec2(outlOfs),
+	vec2(outlOfs, 1.f - outlOfs),
+	vec2(1.f - outlOfs),
+	vec2(1.f - outlOfs, outlOfs)
+};
+
+const vector<Vertex> Blueprint::outlineElements = {
+	{ 0, 0, 0 }, { 1, 1, 0 }, { 2, 2, 0 },
+	{ 2, 2, 0 }, { 3, 3, 0 }, { 0, 0, 0 },
+	{ 4, 4, 0 }, { 5, 5, 0 }, { 6, 6, 0 },
+	{ 6, 6, 0 }, { 7, 7, 0 }, { 4, 4, 0 },
+	{ 3, 3, 0 }, { 8, 8, 0 }, { 9, 9, 0 },
+	{ 9, 9, 0 }, { 4, 4, 0 }, { 3, 3, 0 },
+	{ 11, 11, 0 }, { 2, 2, 0 }, { 5, 5, 0 },
+	{ 5, 5, 0 }, { 10, 10, 0 }, { 11, 11, 0 }
+};
+
+Blueprint::Blueprint(const vector<glm::vec3>& verts, const vector<glm::vec2>& tuvs, const vector<glm::vec3>& norms, const vector<Vertex>& elems) :
+	verts(verts),
+	tuvs(tuvs),
+	norms(norms),
+	elems(elems)
+{}
+
+void Blueprint::draw(GLenum mode) const {
+	glBegin(mode);
+	for (const Vertex& id : elems) {
+		glTexCoord2fv(glm::value_ptr(tuvs[id.t]));
+		glNormal3fv(glm::value_ptr(norms[id.n]));
+		glVertex3fv(glm::value_ptr(verts[id.v]));
+	}
+	glEnd();
+}
 
 // OBJECT
 
 const vec4 Object::defaultColor(1.f);
 
-Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<Vertex>& verts, const vector<ushort>& elems, const Texture* tex, const vec4& color, Info mode) :
-	verts(verts),
-	elems(elems),
+Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const Blueprint* bpr, const Texture* tex, const vec4& color, Info mode) :
+	bpr(bpr),
 	tex(tex),
 	pos(pos),
 	rot(rot),
@@ -24,27 +106,11 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const vector<V
 {}
 
 void Object::draw() const {
-	if (!(mode & INFO_SHOW))
-		return;
-
-	setColorization(tex, color, mode);
-	setTransform(pos, rot, scl);
-
-	glBegin(!(mode & INFO_LINES) ? GL_TRIANGLES : GL_LINES);
-	for (ushort id : elems) {
-		glTexCoord2fv(glm::value_ptr(verts[id].tuv));
-		glNormal3fv(glm::value_ptr(verts[id].nrm));
-		glVertex3fv(glm::value_ptr(verts[id].pos));
+	if (mode & INFO_SHOW) {
+		setColorization(tex, color, mode);
+		setTransform(pos, rot, scl);
+		bpr->draw(!(mode & INFO_LINES) ? GL_TRIANGLES : GL_LINES);
 	}
-	glEnd();
-}
-
-mat4 Object::getTransform() const {
-	mat4 trans = glm::translate(mat4(1.f), pos);
-	trans = glm::rotate(trans, rot.x, vec3(1.f, 0.f, 0.f));
-	trans = glm::rotate(trans, rot.y, vec3(0.f, 1.f, 0.f));
-	trans = glm::rotate(trans, rot.z, vec3(0.f, 0.f, 1.f));
-	return glm::scale(trans, scl);
 }
 
 void Object::setTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
@@ -67,24 +133,11 @@ void Object::setColorization(const Texture* tex, const vec4& color, Info mode) {
 
 // GAME OBJECT
 
-const vector<ushort> BoardObject::squareElements = {
-	0, 1, 2,
-	2, 3, 0
-};
-
-const vector<Vertex> BoardObject::squareVertices = {
-	Vertex(vec3(-halfSize, 0.f, -halfSize), defaultNormal, vec2(0.f, 0.f)),
-	Vertex(vec3(halfSize, 0.f, -halfSize), defaultNormal, vec2(1.f, 0.f)),
-	Vertex(vec3(halfSize, 0.f, halfSize), defaultNormal, vec2(1.f, 1.f)),
-	Vertex(vec3(-halfSize, 0.f, halfSize), defaultNormal, vec2(0.f, 1.f))
-};
-
-const vec3 BoardObject::defaultNormal(0.f, 1.f, 0.f);
 const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
 const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
 BoardObject::BoardObject(const vec3& pos, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, const Texture* tex, const vec4& color, Info mode) :
-	Object(pos, vec3(0.f), vec3(1.f), squareVertices, squareElements, tex, color, mode),
+	Object(pos, vec3(0.f), vec3(1.f), World::scene()->blueprint(Scene::bprRect), tex, color, mode),
 	dragState(DragState::none),
 	clcall(clcall),
 	crcall(crcall),
@@ -102,14 +155,7 @@ void BoardObject::drawTop() const {
 		vec3 ray = World::scene()->pickerRay(mousePos());
 		setColorization(dragState == DragState::move ? tex : World::winSys()->texture("crosshair"), dragState == DragState::move ? color * moveIconColor : fireIconColor, mode);
 		setTransform(World::scene()->getCamera()->pos + ray * (pos.y - upperPoz * 2.f - World::scene()->getCamera()->pos.y / ray.y), rot, scl);
-
-		glBegin(GL_QUADS);
-		for (const Vertex& it : squareVertices) {
-			glTexCoord2fv(glm::value_ptr(it.tuv));
-			glNormal3fv(glm::value_ptr(it.nrm));
-			glVertex3fv(glm::value_ptr(it.pos));
-		}
-		glEnd();
+		bpr->draw(GL_TRIANGLES);
 	}
 }
 
@@ -151,28 +197,6 @@ const array<vec4, Tile::favColors.size()> Tile::favColors = {
 	vec4(1.f, 0.f, 0.f, 1.f)
 };
 
-const array<Vertex, Tile::outlineVertices.size()> Tile::outlineVertices = {
-	Vertex(squareVertices[0].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(0.f, 0.f)),
-	Vertex(squareVertices[1].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(1.f, 0.f)),
-	Vertex(squareVertices[1].pos + vec3(0.f, upperPoz / 2.f, outlineSize), defaultNormal, vec2(1.f, outlineUV)),
-	Vertex(squareVertices[0].pos + vec3(0.f, upperPoz / 2.f, outlineSize), defaultNormal, vec2(0.f, outlineUV)),
-	Vertex(squareVertices[3].pos + vec3(0.f, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(0.f, 1.f - outlineUV)),
-	Vertex(squareVertices[2].pos + vec3(0.f, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(1.f, 1.f - outlineUV)),
-	Vertex(squareVertices[2].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(1.f, 1.f)),
-	Vertex(squareVertices[3].pos + vec3(0.f, upperPoz / 2.f, 0.f), defaultNormal, vec2(0.f, 1.f)),
-	Vertex(squareVertices[0].pos + vec3(outlineSize, upperPoz / 2.f, outlineSize), defaultNormal, vec2(outlineUV)),
-	Vertex(squareVertices[3].pos + vec3(outlineSize, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(outlineUV, 1.f - outlineUV)),
-	Vertex(squareVertices[2].pos + vec3(-outlineSize, upperPoz / 2.f, -outlineSize), defaultNormal, vec2(1.f - outlineUV)),
-	Vertex(squareVertices[1].pos + vec3(-outlineSize, upperPoz / 2.f, outlineSize), defaultNormal, vec2(1.f - outlineUV, outlineUV)),
-};
-
-const array<uint8, Tile::outlineElements.size()> Tile::outlineElements = {
-	0, 1, 2, 3,
-	4, 5, 6, 7,
-	3, 8, 9, 4,
-	11, 2, 5, 10
-};
-
 Tile::Tile(const vec3& pos, Com::Tile type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode) :
 	BoardObject(pos, clcall, crcall, ulcall, urcall, nullptr, colors[uint8(type)], getModeByType(mode, type)),
 	favored(Favor::none),
@@ -185,14 +209,7 @@ void Tile::draw() const {
 	if (favored != Favor::none) {
 		glDisable(GL_TEXTURE_2D);
 		glColor4fv(glm::value_ptr(favColors[uint8(favored)-1]));
-
-		glBegin(GL_QUADS);
-		for (uint8 id : outlineElements) {
-			glTexCoord2fv(glm::value_ptr(outlineVertices[id].tuv));
-			glNormal3fv(glm::value_ptr(outlineVertices[id].nrm));
-			glVertex3fv(glm::value_ptr(outlineVertices[id].pos));
-		}
-		glEnd();
+		World::scene()->blueprint(Scene::bprOutline)->draw(GL_TRIANGLES);
 	}
 }
 
@@ -234,6 +251,26 @@ void Tile::setCalls(Interactivity lvl) {
 	}
 }
 
+// TILE COL
+
+TileCol::TileCol(const Com::Config& conf) :
+	home(conf.numTiles),
+	extra(conf.extraSize),
+	size(conf.boardSize),
+	tl(new Tile[size])
+{}
+
+void TileCol::update(const Com::Config& conf) {
+	if (conf.boardSize != size) {
+		home = conf.numTiles;
+		extra = conf.extraSize;
+		size = conf.boardSize;
+
+		delete[] tl;
+		tl = new Tile[size];
+	}
+}
+
 // PIECE
 
 const vec4 Piece::enemyColor(0.5f, 0.5f, 1.f, 1.f);
@@ -263,4 +300,22 @@ void Piece::enable(vec2s bpos) {
 void Piece::disable() {
 	pos = World::game()->gtop(INT16_MIN, upperPoz);
 	setModeByOn(false);
+}
+
+// PIECE COL
+
+PieceCol::PieceCol(const Com::Config& conf) :
+	num(conf.numPieces),
+	size(conf.piecesSize),
+	pc(new Piece[size])
+{}
+
+void PieceCol::update(const Com::Config& conf) {
+	if (conf.piecesSize != size) {
+		num = conf.numPieces;
+		size = conf.piecesSize;
+
+		delete[] pc;
+		pc = new Piece[size];
+	}
 }

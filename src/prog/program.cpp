@@ -1,25 +1,20 @@
 #include "engine/world.h"
 #include <cassert>
 
-const string Program::argAddress = "s";
-const string Program::argPort = "p";
-const string Program::argConnect = "c";
-const string Program::argSetup = "d";
-
 void Program::start() {
-	if (const string& addr = World::getOpt(argAddress); !addr.empty())
+	if (const string& addr = World::getOpt(World::argAddress); !addr.empty())
 		World::sets()->address = addr;
-	else if (World::hasFlag(argAddress))
+	else if (World::hasFlag(World::argAddress))
 		World::sets()->address = Settings::loopback;
 
-	if (const string& port = World::getOpt(argPort); !port.empty())
+	if (const string& port = World::getOpt(World::argPort); !port.empty())
 		World::sets()->port = uint16(sstoul(port));
-	else if (World::hasFlag(argPort))
+	else if (World::hasFlag(World::argPort))
 		World::sets()->port = Com::defaultPort;
 
 	World::scene()->setObjects(game.initObjects());	// doesn't need to be here but I like having the game board in the background
 	eventOpenMainMenu();
-	if (World::hasFlag(argConnect))
+	if (World::hasFlag(World::argConnect))
 		eventConnectServer(nullptr);
 }
 
@@ -47,15 +42,113 @@ void Program::eventUpdatePort(Button* but) {
 	World::sets()->port = uint16(sstoul(static_cast<LabelEdit*>(but)->getText()));
 }
 
+// HOST MENU
+
+void Program::eventOpenHostMenu(Button*) {
+	setState(new ProgHost);
+}
+
+void Program::eventHostServer(Button*) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	Com::saveConfs(ph->confs, Com::defaultConfigFile);
+	game.conhost(ph->confs[ph->curConf]);
+}
+
+void Program::eventSwitchConfig(Button* but) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->curConf = static_cast<SwitchBox*>(but)->getCurOpt();
+	ph->confs[ph->curConf].checkValues();
+	World::scene()->resetLayouts();
+}
+
+void Program::eventUpdateWidth(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].homeWidth = uint16(sstol(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].homeWidth));
+}
+
+void Program::eventUpdateHeight(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].homeHeight = uint16(sstol(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].homeHeight));
+}
+
+void Program::eventUpdateTile(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	uint8 id = strToEnum<uint8>(Com::tileNames, static_cast<Label*>(le->getParent()->getWidget(0))->getText());
+	ph->confs[ph->curConf].tileAmounts[id] = uint16(sstoul(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].tileAmounts[id]));
+}
+
+void Program::eventUpdatePiece(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	uint8 id = strToEnum<uint8>(Com::tileNames, static_cast<Label*>(le->getParent()->getWidget(0))->getText());
+	ph->confs[ph->curConf].pieceAmounts[id] = uint16(sstoul(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].pieceAmounts[id]));
+}
+
+void Program::eventUpdateWinThrone(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].winThrone = uint16(sstol(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].winThrone));
+}
+
+void Program::eventUpdateWinFortress(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].winFortress = uint16(sstol(le->getText()));
+	ph->confs[ph->curConf].checkValues();
+	le->setText(to_string(ph->confs[ph->curConf].winFortress));
+}
+
+void Program::eventUpdateCapturers(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].readCapturers(le->getText());
+	ph->confs[ph->curConf].checkValues();
+	le->setText(ph->confs[ph->curConf].capturersString());
+}
+
+void Program::eventUpdateShiftLeft(Button* but) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].shiftLeft = static_cast<CheckBox*>(but)->on;
+}
+
+void Program::eventUpdateShiftNear(Button* but) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf].shiftNear = static_cast<CheckBox*>(but)->on;
+}
+
+void Program::eventUpdateReset(Button*) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ph->confs[ph->curConf] = Com::Config(ph->confs[ph->curConf].name);
+	World::scene()->resetLayouts();
+}
+
+void Program::eventExitHost(Button*) {
+	Com::saveConfs(static_cast<ProgHost*>(state.get())->confs, Com::defaultConfigFile);
+	eventOpenMainMenu();
+}
+
 // GAME SETUP
 
 void Program::eventOpenSetup() {
-	state.reset(new ProgSetup);
 #ifdef NDEBUG
 	World::scene()->setObjects(game.initObjects());
 #else
-	World::scene()->setObjects(World::hasFlag(argSetup) ? game.initDummyObjects() : game.initObjects());
+	World::scene()->setObjects(World::hasFlag(World::argSetup) ? game.initDummyObjects() : game.initObjects());
 #endif
+	setState(new ProgSetup);
 	static_cast<ProgSetup*>(state.get())->setStage(ProgSetup::Stage::tiles);
 }
 
@@ -235,7 +328,7 @@ void Program::eventOpenSettings(Button*) {
 
 void Program::eventApplySettings(Button*) {
 	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
-	World::winSys()->setScreen(Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), strToDisp(ps->dspMode->getText()));
+	World::winSys()->setScreen(Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), strToDisp(ps->dspMode->getText()), uint8(sstoul(ps->msample->getText())));
 }
 
 void Program::eventSetVsync(Button* but) {

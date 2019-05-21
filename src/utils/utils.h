@@ -207,6 +207,9 @@ inline bool Dijkstra::Comp::operator()(const Node& a, const Node& b) {
 
 // geometry?
 
+mat4 makeTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+vector<vec3> transformCopy(vector<vec3> vec, const mat4& trans);
+
 template <class T>
 bool inRange(const T& val, const T& min, const T& max) {
 	return val >= min && val <= max;

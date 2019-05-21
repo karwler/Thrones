@@ -1,42 +1,9 @@
+#pragma once
+
+#include "netcp.h"
 #include "utils/objects.h"
 
-// helper for populating send buffer
-struct Sender {
-	uint16 size;		// shall not exceed data size, is never actually checked though
-	uint8 data[Com::recvSize];
-
-	Sender();
-
-	template <class T> void push(T val);
-	template <class T> void push(const vector<T>&& lst);
-};
-
-inline Sender::Sender() :
-	size(0)
-{}
-
-template <class T>
-inline void Sender::push(T val) {
-	memcpy(data + size, &val, sizeof(val));
-	size += sizeof(val);
-}
-
-template <class T>
-void Sender::push(const vector<T>&& vec) {
-	uint16 len = uint16(vec.size() * sizeof(T));
-	memcpy(data + size, vec.data(), len);		// std::copy shits itself for some reason
-	size += len;
-}
-
-struct Receiver {
-	Com::Code state;
-	uint16 pos;
-	uint8 data[Com::recvSize];
-
-	Receiver();
-};
-
-// handles game logic and networking
+// handles game logic
 class Game {
 public:
 	static const vec3 screenPosUp, screenPosDown;
@@ -47,13 +14,10 @@ private:
 	static constexpr char messageLoose[] = "You lose";
 	static constexpr uint8 favorLimit = 4;
 
-	SDLNet_SocketSet socks;
-	TCPsocket socket;
-	Sender sendb;
-	Receiver recvb;
-
-	Com::Config config;	// TODO: load and utilize
-	Object board, bgrid, screen;
+	uptr<Netcp> netcp;	// shall never be nullptr
+	Com::Config config;
+	Blueprint gridat;
+	Object bgrid, board, screen;
 	TileCol tiles;
 	PieceCol pieces;
 
@@ -66,17 +30,8 @@ private:
 	bool myTurn, firstTurn;
 	uint8 favorCount, favorTotal;
 
-	std::default_random_engine randGen;
-	std::uniform_int_distribution<uint> randDist;
-
 public:
 	Game();
-	~Game();
-
-	bool connect();
-	void disconnect();
-	void tick();
-	void sendSetup();
 
 	Tile* getTile(vec2s pos);
 	bool isHomeTile(Tile* til) const;
@@ -91,6 +46,13 @@ public:
 	vec2s ptog(const vec3& p) const;	// TODO: optimize away
 	vec3 gtop(vec2s p, float z) const;
 
+	void connect();
+	void conhost(const Com::Config& cfg);
+	void disconnect();
+	void disconnect(const string& msg);
+	void tick();
+	void processCode(Com::Code code, const uint8* data);
+	void sendSetup();
 	vector<Object*> initObjects();
 #ifdef DEBUG
 	vector<Object*> initDummyObjects();
@@ -116,12 +78,8 @@ public:
 	void placeDragon(vec2s pos, Piece* occupant);
 
 private:
-	void processData(int len);
-	void processCode(const uint8* data);
-
+	void connect(Netcp* net);
 	Piece* getPieces(Piece* pieces, Com::Piece type);
-	void setScreen();
-	void setBoard();
 	void setBgrid();
 	void setMidTiles();
 	void setTiles(Tile* tiles, int16 yofs, OCall lcall, Object::Info mode);
@@ -152,20 +110,25 @@ private:
 
 	void prepareTurn();
 	void endTurn();
-	void sendData();
 	void placePiece(Piece* piece, vec2s pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
 	void updateFavored(Tile* tile, bool favored);
 
-	bool connectFail();
-	void disconnectMessage(const string& msg);
 	uint16 posToId(vec2s p);
 	vec2s idToPos(uint16 i);
 	uint16 invertId(uint16 i);
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
 };
+
+inline void Game::connect() {
+	return connect(new Netcp);
+}
+
+inline void Game::disconnect() {
+	netcp.reset();
+}
 
 inline Tile* Game::getTile(vec2s pos) {
 	return tiles.mid(pos.y * config.homeWidth + pos.x);

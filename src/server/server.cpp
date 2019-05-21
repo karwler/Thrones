@@ -26,8 +26,8 @@ void Config::updateValues() {
 	for (uint16 it : pieceAmounts)
 		numPieces += it;
 
-	extraSize = homeHeight + 1 * homeWidth;
-	boardSize = homeHeight * 2 + 1 * homeWidth;	// should equal countTiles * 2 + homeWidth
+	extraSize = (homeHeight + 1) * homeWidth;
+	boardSize = (homeHeight * 2 + 1) * homeWidth;	// should equal numTiles * 2 + homeWidth
 	piecesSize = numPieces * 2;
 }
 
@@ -39,9 +39,7 @@ Config& Config::checkValues() {
 	uint16 limit = homeHeight * homeWidth;
 	matchAmounts(numTiles, tileAmounts, limit, 0, uint8(tileAmounts.size()), 1, [](uint16 a, uint16 b) -> bool { return a < b; });
 	matchAmounts(numTiles, tileAmounts, limit, uint8(tileAmounts.size() - 1), uint8(tileAmounts.size()), -1, [](uint16 a, uint16 b) -> bool { return a > b; });
-
-	limit = (recvSize - 1) / 2;	// max transferable amount of pieces
-	matchAmounts(numPieces, pieceAmounts, numTiles < limit ? numTiles : limit, uint8(tileAmounts.size() - 1), uint8(tileAmounts.size()), -1, [](uint16 a, uint16 b) -> bool { return a > b; });
+	matchAmounts(numPieces, pieceAmounts, numTiles < maxNumPieces ? numTiles : maxNumPieces, uint8(tileAmounts.size() - 1), uint8(tileAmounts.size()), -1, [](uint16 a, uint16 b) -> bool { return a > b; });
 
 	winFortress = std::clamp(winFortress, uint16(0), tileAmounts[uint8(Tile::fortress)]);
 	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
@@ -51,11 +49,10 @@ Config& Config::checkValues() {
 	return *this;
 }
 
-vector<uint8> Config::toComData() const {
-	vector<uint8> data(dataSize(Code::setup));
+uint8* Config::toComData(uint8* data) const {
 	data[0] = uint8(Code::setup);	// leave second byte free for first turn indicator
 
-	uint16* sp = reinterpret_cast<uint16*>(data.data() + 2);
+	uint16* sp = reinterpret_cast<uint16*>(data + 2);
 	*sp++ = homeWidth;
 	*sp++ = homeHeight;
 	sp = std::copy(tileAmounts.begin(), tileAmounts.end(), sp);
@@ -71,11 +68,12 @@ vector<uint8> Config::toComData() const {
 }
 
 void Config::fromComData(const uint8* data) {
-	const uint16* sp = reinterpret_cast<const uint16*>(data + 2);	// skip com code and turn indicator
+	const uint16* sp = reinterpret_cast<const uint16*>(data + 1);	// skip turn indicator (com code should be already skipped)
 	homeWidth = *sp++;
 	homeHeight = *sp++;
-	sp = std::copy_n(sp, tileAmounts.size(), tileAmounts.begin());
-	sp = std::copy_n(sp, pieceAmounts.size(), pieceAmounts.begin());
+	std::copy_n(sp, tileAmounts.size(), tileAmounts.begin());
+	std::copy_n(sp + tileAmounts.size(), pieceAmounts.size(), pieceAmounts.begin());
+	sp += tileAmounts.size() + pieceAmounts.size();
 
 	winFortress = *sp++;
 	winThrone = *sp++;
@@ -96,7 +94,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::full:
 		return sizeof(Code);
 	case Code::setup:
-		return uint16(sizeof(homeWidth) + sizeof(homeHeight) + tileAmounts.size() * sizeof(tileAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
+		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + tileAmounts.size() * sizeof(tileAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
 	case Code::tiles:
 		return tileCompressionEnd();
 	case Code::pieces:
@@ -130,19 +128,19 @@ string Config::toIniText() const {
 }
 
 void Config::fromIniLine(const string& line) {
-	if (pairStr it = readIniLine(line); strcicmp(it.first, keywordSize))
+	if (pairStr it = readIniLine(line); !strcicmp(it.first, keywordSize))
 		readSize(it.second);
-	else if (strncicmp(it.first, keywordTile, strlen(keywordTile)))
+	else if (!strncicmp(it.first, keywordTile, strlen(keywordTile)))
 		readAmount(it, keywordTile, tileNames, tileAmounts);
-	else if (strncicmp(it.first, keywordPiece, strlen(keywordPiece)))
+	else if (!strncicmp(it.first, keywordPiece, strlen(keywordPiece)))
 		readAmount(it, keywordPiece, pieceNames, pieceAmounts);
-	else if (strcicmp(it.first, keywordWinFortress))
+	else if (!strcicmp(it.first, keywordWinFortress))
 		winFortress = uint16(sstol(it.second));
-	else if (strcicmp(it.first, keywordWinThrone))
+	else if (!strcicmp(it.first, keywordWinThrone))
 		winThrone = uint16(sstol(it.second));
-	else if (strcicmp(it.first, keywordCapturers))
+	else if (!strcicmp(it.first, keywordCapturers))
 		readCapturers(it.second);
-	else if (strcicmp(it.first, keywordShift))
+	else if (!strcicmp(it.first, keywordShift))
 		readShift(it.second);
 }
 
@@ -170,15 +168,41 @@ string Config::capturersString() const {
 
 void Config::readShift(const string& line) {
 	for (const char* pos = line.c_str(); *pos;) {
-		if (string word = readWord(pos); strcicmp(word, keywordLeft))
+		if (string word = readWord(pos); !strcicmp(word, keywordLeft))
 			shiftLeft = true;
-		else if (strcicmp(word, keywordRight))
+		else if (!strcicmp(word, keywordRight))
 			shiftLeft = false;
-		else if (strcicmp(word, keywordNear))
+		else if (!strcicmp(word, keywordNear))
 			shiftNear = true;
-		else if (strcicmp(word, keywordFar))
+		else if (!strcicmp(word, keywordFar))
 			shiftNear = false;
 	}
+}
+
+vector<Config> Com::loadConfs(const string& file) {
+	vector<Config> confs;
+	for (const string& line : readTextFile(file)) {
+		if (string title = readIniTitle(line); !title.empty())
+			confs.push_back(title);
+		else
+			confs.back().fromIniLine(line);
+	}
+	return !confs.empty() ? confs : vector<Config>(1);
+}
+
+void Com::saveConfs(const vector<Config>& confs, const string& file) {
+	string text;
+	for (const Config& cfg : confs)
+		text += cfg.toIniText() + linend;
+	writeTextFile(file, text);
+}
+
+void Com::sendRejection(TCPsocket server) {
+	TCPsocket tmps = SDLNet_TCP_Accept(server);
+	uint8 code = uint8(Code::full);
+	SDLNet_TCP_Send(tmps, &code, sizeof(code));
+	SDLNet_TCP_Close(tmps);
+	std::cout << "rejected incoming connection" << std::endl;
 }
 
 std::default_random_engine Com::createRandomEngine() {

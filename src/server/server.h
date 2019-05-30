@@ -66,24 +66,6 @@ constexpr uint16 recvSize = 1380;
 constexpr uint8 maxPlayers = 2;
 constexpr char defaultConfigFile[] = "game.ini";
 
-constexpr array<uint16 (*)(uint16, uint16), 4> adjacentStraight = {
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim ? id - lim : UINT16_MAX; },			// up
-	[](uint16 id, uint16 lim) -> uint16 { return id % lim ? id - 1 : UINT16_MAX; },				// left
-	[](uint16 id, uint16 lim) -> uint16 { return id % lim != lim - 1 ? id + 1 : UINT16_MAX; },	// right
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim != lim - 1 ? id + lim : UINT16_MAX; }	// down
-};
-
-constexpr array<uint16 (*)(uint16, uint16), 8> adjacentFull = {
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim && id % lim ? id - lim - 1 : UINT16_MAX; },						// left up
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim ? id - lim : UINT16_MAX; },										// up
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim && id % lim != lim - 1  ? id - lim + 1 : UINT16_MAX; },			// right up
-	[](uint16 id, uint16 lim) -> uint16 { return id % lim ? id - 1 : UINT16_MAX; },											// left
-	[](uint16 id, uint16 lim) -> uint16 { return id % lim != lim - 1 ? id + 1 : UINT16_MAX; },								// right
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim != lim - 1 && id % lim ? id + lim - 1 : UINT16_MAX; },			// left down
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim != lim - 1 ? id + lim : UINT16_MAX; },							// down
-	[](uint16 id, uint16 lim) -> uint16 { return id / lim != lim - 1 && id % lim != lim - 1 ? id + lim + 1 : UINT16_MAX; }	// right down
-};
-
 enum class Code : uint8 {
 	none,	// denotes a state of not reading data
 	full,	// server full
@@ -93,7 +75,6 @@ enum class Code : uint8 {
 	move,	// piece move (piece + position info)
 	kill,	// piece die (piece info)
 	breach,	// fortress state change (breached or not info)
-	favor,	// set favor (tile info)
 	record,	// turn record data (piece + has attacked or switched info)
 	win		// player win (if it's the sender who won info)
 };
@@ -102,10 +83,13 @@ enum class Code : uint8 {
 class Config {
 public:
 	static constexpr char defaultName[] = "default";
+	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
+	static constexpr float boardWidth = 10.f;
 
 	string name;
-	uint16 homeWidth, homeHeight;
+	uint16 homeWidth, homeHeight;		// TODO: dragon movement, same type tiles connect and ff limit
 	array<uint16, tileMax> tileAmounts;
+	array<uint16, tileMax-1> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
 	uint16 winFortress, winThrone;
 	array<bool, pieceMax> capturers;
@@ -116,15 +100,16 @@ public:
 	uint16 numTiles;	// number of own homeland tiles (must be calculated using tileAmounts)
 	uint16 numPieces;	// number of own pieces (must be calculated using pieceAmounts)
 	uint16 piecesSize;	// total number of pieces
-
+	float objectSize;	// width and height of a tile/piece
+	
 private:
-	static constexpr uint16 minWidth = 9;
-	static constexpr uint16 maxWidth = 65;
+	static constexpr uint16 minWidth = 3;	// TODO: can be lower if no fortress
+	static constexpr uint16 maxWidth = 71;
 	static constexpr uint16 minHeight = 3;
-	static constexpr uint16 maxHeight = 32;
-	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
+	static constexpr uint16 maxHeight = 35;
 	static constexpr char keywordSize[] = "size";
 	static constexpr char keywordTile[] = "tile_";
+	static constexpr char keywordMiddle[] = "middle_";
 	static constexpr char keywordPiece[] = "piece_";
 	static constexpr char keywordWinFortress[] = "win_fortresses";
 	static constexpr char keywordWinThrone[] = "win_thrones";
@@ -148,12 +133,12 @@ public:
 	void fromIniLine(const string& line);
 	string capturersString() const;
 	void readCapturers(const string& line);
+	template <class T, sizet S> static T calcSum(const array<T, S>& nums, sizet size = S);
 private:
 	void readSize(const string& line);
-	static uint16 makeOdd(uint16 val);
-	template <sizet S, class F> static void matchAmounts(uint16& total, array<uint16, S>& amts, uint16 limit, uint8 si, uint8 ei, int8 mov, F comp);
-	template <sizet S> static void readAmount(const pairStr& it, const string& word, const array<string, S>& names, array<uint16, S>& amts);
-	template <sizet S> static void writeAmount(string& text, const string& word, const array<string, S>& names, const array<uint16, S>& amts);
+	template <sizet S> static uint16 floorAmounts(uint16 total, array<uint16, S>& amts, uint16 limit, sizet ei);
+	template <sizet N, sizet S> static void readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts);
+	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
 	void readShift(const string& line);
 };
 
@@ -161,27 +146,34 @@ inline uint16 Config::tileCompressionEnd() const {
 	return 1 + extraSize / 2 + extraSize % 2;
 }
 
-inline uint16 Config::makeOdd(uint16 val) {
-	return val % 2 ? val : val - 1;
-}
-
-template <sizet S, class F>
-void Config::matchAmounts(uint16& total, array<uint16, S>& amts, uint16 limit, uint8 si, uint8 ei, int8 mov, F comp) {
-	for (uint8 i = si; comp(total, limit); total += uint16(mov)) {
-		amts[i] += uint16(mov);
-		if (i += uint8(mov); i >= ei)
-			i = si;
-	}
+template <class T, sizet S>
+T Config::calcSum(const array<T, S>& nums, sizet size) {
+	T res = T(0);
+	for (sizet i = 0; i < size; i++)
+		res += nums[i];
+	return res;
 }
 
 template <sizet S>
-void Config::readAmount(const pairStr& it, const string& word, const array<string, S>& names, array<uint16, S>& amts) {
+uint16 Config::floorAmounts(uint16 total, array<uint16, S>& amts, uint16 limit, sizet ei) {
+	for (sizet i = ei; total > limit;) {
+		if (amts[i]) {
+			amts[i]--;
+			total--;
+		}
+		i = i ? i - 1 : ei;
+	}
+	return total;
+}
+
+template <sizet N, sizet S>
+void Config::readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts) {
 	if (uint8 id = strToEnum<uint8>(names, it.first.substr(0, word.length())); id < amts.size())
 		amts[id] = uint16(sstol(it.second));
 }
 
-template <sizet S>
-void Config::writeAmount(string& text, const string& word, const array<string, S>& names, const array<uint16, S>& amts) {
+template <sizet N, sizet S>
+void Config::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
 	for (sizet i = 0; i < amts.size(); i++)
 		text += makeIniLine(word + names[i], to_string(amts[i]));
 }

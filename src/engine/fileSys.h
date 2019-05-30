@@ -91,6 +91,7 @@ public:
 private:
 	static constexpr char fileSettings[] = "settings.ini";
 
+	static constexpr char mtlKeywordNewmtl[] = "newmtl";
 	static constexpr char iniKeywordMaximized[] = "maximized";
 	static constexpr char iniKeywordScreen[] = "screen";
 	static constexpr char iniKeywordSize[] = "size";
@@ -111,14 +112,15 @@ public:
 
 	Settings* loadSettings();
 	bool saveSettings(const Settings* sets);
+	static vector<pair<string, Material>> loadMtl(const string& file);
 	static Blueprint loadObj(const string& file);
 
-	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD);
+	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD, const string& ext = emptyStr);
 	static bool createDir(const string& path);
 	static FileType fileType(const string& file, bool readLink = true);
 
 private:
-	static uint8 readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins);
+	static uint8 readFace(const char* str, Blueprint& obj);
 	static ushort resolveObjId(int id, ushort size);
 
 	static int setWorkingDir();

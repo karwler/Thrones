@@ -25,15 +25,13 @@ public:
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
 	void eventSwitchConfig(Button* but);
-	void eventUpdateWidth(Button* but);
-	void eventUpdateHeight(Button* but);
-	void eventUpdateTile(Button* but);
-	void eventUpdatePiece(Button* but);
-	void eventUpdateWinThrone(Button* but);
-	void eventUpdateWinFortress(Button* but);
-	void eventUpdateCapturers(Button* but);
-	void eventUpdateShiftLeft(Button* but);
-	void eventUpdateShiftNear(Button* but);
+	void eventConfigDeleteInput(Button* but = nullptr);
+	void eventConfigDelete(Button* but = nullptr);
+	void eventConfigCopyInput(Button* but = nullptr);
+	void eventConfigCopy(Button* but = nullptr);
+	void eventConfigNewInput(Button* but = nullptr);
+	void eventConfigNew(Button* but = nullptr);
+	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
 	void eventExitHost(Button* but = nullptr);
 
@@ -53,8 +51,8 @@ public:
 
 	// game match
 	void eventOpenMatch();
-	void eventPlaceFavor(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
+	void eventFavorStart(BoardObject* obj);
 	void eventMove(BoardObject* obj);
 	void eventFire(BoardObject* obj);
 	void eventExitGame(Button* but = nullptr);
@@ -75,6 +73,7 @@ public:
 	Game* getGame();
 
 private:
+	void updateConfigWidgets(ProgHost* ph, const Com::Config& cfg);
 	void placeTile(Tile* tile, uint8 type);
 	void placePiece(vec2s pos, uint8 type, Piece* occupant);
 

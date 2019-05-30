@@ -2,10 +2,10 @@
 
 // CAMERA
 
-const vec3 Camera::posSetup(0.f, 8.f, 8.f);
-const vec3 Camera::posMatch(0.f, 11.f, 5.f);
-const vec3 Camera::latSetup(0.f, 0.f, 2.f);
-const vec3 Camera::latMatch(0.f, 0.f, 1.f);
+const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 9.f, 8.f);
+const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 12.f, 5.f);
+const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, 2.f);
+const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, 1.f);
 const vec3 Camera::up(0.f, 1.f, 0.f);
 
 Camera::Camera(const vec3& pos, const vec3& lat, float fov, float znear, float zfar) :
@@ -48,6 +48,25 @@ vec3 Camera::direction(const vec2i& mPos) const {
 	return glm::normalize(dir * znear + h * m.x + v * m.y);
 }
 
+// LIGHT
+
+Light::Light(GLenum id, const glm::vec4& ambient, const glm::vec4& diffuse, const glm::vec4& specular, const glm::vec4& position) :
+	id(id),
+	ambient(ambient),
+	diffuse(diffuse),
+	specular(specular),
+	position(position)
+{
+	glEnable(id);
+}
+
+void Light::update() const {
+	glLightfv(GL_LIGHT0, GL_AMBIENT, glm::value_ptr(ambient));
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, glm::value_ptr(diffuse));
+	glLightfv(GL_LIGHT0, GL_SPECULAR, glm::value_ptr(specular));
+	glLightfv(GL_LIGHT0, GL_POSITION, glm::value_ptr(position));
+}
+
 // CLICK STAMP
 
 ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos) :
@@ -58,10 +77,9 @@ ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos)
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec4& color) :
+Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot) :
 	pos(pos),
 	rot(rot),
-	color(color),
 	time(time),
 	change(change)
 {}
@@ -70,7 +88,7 @@ Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, 
 
 Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
 	keyframes(keyframes),
-	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot, object->color),
+	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot),
 	object(object),
 	useObject(true)
 {}
@@ -90,12 +108,10 @@ bool Animation::tick(float dSec) {
 		(useObject ? object->pos : camera->pos) = linearTransition(begin.pos, keyframes.front().pos, td);
 	if (keyframes.front().change & Keyframe::CHG_ROT)
 		(useObject ? object->rot : camera->lat) = linearTransition(begin.rot, keyframes.front().rot, td);
-	if (useObject && keyframes.front().change & Keyframe::CHG_CLR)
-		object->color = linearTransition(begin.color, keyframes.front().color, td);
 
 	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f)
 		if (keyframes.pop(); !keyframes.empty()) {
-			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot, keyframes.front().color);
+			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot);
 			return tick(ovhead);
 		}
 	return !keyframes.empty();
@@ -108,12 +124,14 @@ Scene::Scene() :
 	capture(nullptr),
 	mouseMove(0),
 	layout(new Layout),	// dummy layout in case a function gets called preemptively
-	bprints({
-		pair(bprRect, Blueprint::makeRectangle(vec3(0.f), vec3(0.f), vec3(1.f))),
-		pair(bprOutline, Blueprint::makeOutline(vec3(0.f), vec3(0.f), vec3(1.f)))
-	})
+	lights({ Light(GL_LIGHT0) })
 {
-	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG)) {
+	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG, "mtl")) {
+		vector<pair<string, Material>> mtl = FileSys::loadMtl(appDsep(FileSys::dirObjs) + file);
+		materials.insert(mtl.begin(), mtl.end());
+	}
+
+	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG, "obj")) {
 		if (Blueprint bpr = FileSys::loadObj(appDsep(FileSys::dirObjs) + file); !bpr.empty())
 			bprints.emplace(delExt(file), bpr);
 		else
@@ -126,6 +144,11 @@ void Scene::draw() {
 
 	// draw objects
 	camera.update();
+	glEnable(GL_LIGHTING);
+	glLoadIdentity();
+	for (Light& it : lights)
+		it.update();
+
 	for (Object* it : objects)
 		it->draw();
 	glDisable(GL_CULL_FACE);
@@ -134,14 +157,19 @@ void Scene::draw() {
 	glEnable(GL_CULL_FACE);
 	if (dynamic_cast<Object*>(capture))
 		capture->drawTop();
+	glDisable(GL_LIGHTING);
 
 	// draw UI
 	Camera::updateUI();
+	glDisable(GL_POLYGON_SMOOTH);
+
 	layout->draw();
 	if (popup)
 		popup->draw();
 	if (dynamic_cast<Widget*>(capture))
 		capture->drawTop();
+	if (World::sets()->smooth != Settings::Smooth::off)
+		glEnable(GL_POLYGON_SMOOTH);
 }
 
 void Scene::tick(float dSec) {
@@ -158,6 +186,9 @@ void Scene::tick(float dSec) {
 }
 
 void Scene::onResize() {
+	for (Light& it : lights)	// lights need to be reenabled when recreating window
+		glEnable(it.id);
+
 	layout->onResize();
 	if (popup)
 		popup->onResize();
@@ -168,6 +199,10 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 		capture->onKeypress(key.keysym);
 	else if (!key.repeat)
 		switch (key.keysym.scancode) {
+		case SDL_SCANCODE_RETURN:
+			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
+				World::prun(popup->kcall, nullptr);
+			break;
 		case SDL_SCANCODE_ESCAPE:
 			World::state()->eventEscape();
 		}
@@ -314,4 +349,9 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 const Blueprint* Scene::blueprint(const string& name) const {
 	umap<string, Blueprint>::const_iterator it = bprints.find(name);
 	return it != bprints.end() ? &it->second : nullptr;
+}
+
+const Material* Scene::material(const string& name) const {
+	umap<string, Material>::const_iterator it = materials.find(name);
+	return it != materials.end() ? &it->second : nullptr;
 }

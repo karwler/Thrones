@@ -61,7 +61,12 @@ const string invalidStr = "invalid";
 
 // utility
 
-string readWord(const char*& pos);
+bool hasExt(const string& path, const string& ext);
+string readWordM(const char*& pos);
+
+inline string readWord(const char* pos) {
+	return readWordM(pos);
+}
 
 inline int strcicmp(const string& a, const string& b) {	// case insensitive check if strings are equal
 #ifdef _WIN32

@@ -1,0 +1,95 @@
+newmtl dark brown
+Ka 0 0 0
+Kd 0.166 0.068 0.019
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl light brown
+Ka 0 0 0
+Kd 0.2 0.13 0.062
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl gray
+Ka 0 0 0
+Kd 0.3 0.3 0.3
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl gold
+Ka 0 0 0
+Kd 1 0.843 0
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl plains
+Ka 0 0 0
+Kd 0.157 1 0.157
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl forest
+Ka 0 0 0
+Kd 0 0.627 0
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl mountain
+Ka 0 0 0
+Kd 0.471 0.471 0.471
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl water
+Ka 0 0 0
+Kd 0.157 0.784 1
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl fortress
+Ka 0 0 0
+Kd 0.549 0.275 0.078
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl rubble
+Ka 0 0 0
+Kd 0.274, 0.137, 0.039
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl ally
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1
+
+newmtl enemy
+Ka 0 0 0
+Kd 0.6 0.7 1
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96
+d 1

@@ -95,13 +95,13 @@ Dijkstra::Node::Node(uint16 id, uint16 dst) :
 	dst(dst)
 {}
 
-vector<uint16> Dijkstra::travelDist(uint16 src, uint16 width, uint16 size, bool (*stepable)(uint16)) {
+vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize) {
 	// init graph
 	vector<Adjacent> grid(size);
 	for (uint16 i = 0; i < size; i++)
 		if (grid[i].cnt = 0; stepable(i) || i == src)	// ignore rules for starting point cause it can be a blocking piece
-			for (uint16 (*mov)(uint16, uint16) : Com::adjacentStraight)
-				if (uint16 ni = mov(i, width); ni < size && stepable(ni))
+			for (uint8 m = 0; m < movSize; m++)
+				if (uint16 ni = vmov[m](i, width); ni < size && stepable(ni))
 					grid[i].adj[grid[i].cnt++] = ni;
 
 	vector<bool> visited(size, false);
@@ -114,7 +114,7 @@ vector<uint16> Dijkstra::travelDist(uint16 src, uint16 width, uint16 size, bool 
 	do {
 		uint16 u = nodes.top().id;
 		nodes.pop();
-		if (!visited[u]) {	// maybe try "if (nodes.top().dst < dist[u])" instead of using bool matrix	// maybe try limiting by max distance
+		if (dist[u] < dlim && !visited[u]) {
 			for (uint8 i = 0; i < grid[u].cnt; i++)
 				if (uint16 v = grid[u].adj[i], du = dist[u] + 1; !visited[v] && du < dist[v]) {
 					dist[v] = du;
@@ -133,11 +133,5 @@ mat4 makeTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
 	trans = glm::rotate(trans, rot.x, vec3(1.f, 0.f, 0.f));
 	trans = glm::rotate(trans, rot.y, vec3(0.f, 1.f, 0.f));
 	trans = glm::rotate(trans, rot.z, vec3(0.f, 0.f, 1.f));
-	return trans = glm::scale(trans, vec3(scl.x, 0.f, scl.y));
-}
-
-vector<vec3> transformCopy(vector<vec3> vec, const mat4& trans) {
-	for (vec3& it : vec)
-		it = trans * vec4(it, 1.f);
-	return vec;
+	return trans = glm::scale(trans, vec3(scl.x, scl.y, scl.z));
 }

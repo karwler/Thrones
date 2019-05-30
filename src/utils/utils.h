@@ -190,7 +190,7 @@ private:
 
 	struct Adjacent {
 		uint8 cnt;
-		uint16 adj[4];
+		uint16 adj[8];
 	};
 
 	struct Comp {
@@ -198,7 +198,7 @@ private:
 	};
 
 public:
-	static vector<uint16> travelDist(uint16 src, uint16 width, uint16 size, bool (*stepable)(uint16));
+	static vector<uint16> travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
 };
 
 inline bool Dijkstra::Comp::operator()(const Node& a, const Node& b) {
@@ -208,7 +208,6 @@ inline bool Dijkstra::Comp::operator()(const Node& a, const Node& b) {
 // geometry?
 
 mat4 makeTransform(const vec3& pos, const vec3& rot, const vec3& scl);
-vector<vec3> transformCopy(vector<vec3> vec, const mat4& trans);
 
 template <class T>
 bool inRange(const T& val, const T& min, const T& max) {

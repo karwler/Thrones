@@ -22,6 +22,19 @@ public:
 	vec3 direction(const vec2i& mPos) const;
 };
 
+struct Light {
+	GLenum id;
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
+	vec4 position;
+
+	Light() = default;
+	Light(GLenum id, const vec4& ambient = vec4(0.f, 0.f, 0.f, 1.f), const vec4& diffuse = vec4(1.f, 1.f, 1.f, 1.f), const vec4& specular = vec4(1.f, 1.f, 1.f, 1.f), const vec4& position = vec4(0.f, 4.f, 5.f, 0.f));
+
+	void update() const;
+};
+
 // saves what widget is being clicked on with what button at what position
 struct ClickStamp {
 	Interactable* inter;
@@ -37,17 +50,15 @@ struct Keyframe {
 		CHG_NONE = 0x0,
 		CHG_POS  = 0x1,
 		CHG_ROT  = 0x2,
-		CHG_LAT  = CHG_ROT,
-		CHG_CLR  = 0x4
+		CHG_LAT  = CHG_ROT
 	};
 
 	vec3 pos;
 	vec3 rot;		// lat if applied to camera
-	vec4 color;
 	float time;		// time difference between this and previous keyframe
 	Change change;	// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec4& color = vec4());
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3());
 };
 
 inline constexpr Keyframe::Change operator~(Keyframe::Change a) {
@@ -99,12 +110,9 @@ public:
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
-	static constexpr char bprRect[] = "rect";
-	static constexpr char bprOutline[] = "outline";
-
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
-	vector<Object> effects;	// extra objects that'll get drawn on top without culling and have no interactivity // TODO: add stuff
+	vector<Object> effects;	// extra objects that'll get drawn on top without culling and have no interactivity. first element is the favor indicator
 private:
 	vec2i mouseMove;
 	Camera camera;
@@ -113,7 +121,9 @@ private:
 	uptr<Popup> popup;
 	array<ClickStamp, SDL_BUTTON_X2+1> stamps;	// data about last mouse click (indexes are mouse button numbers
 	vector<Animation> animations;
+	vector<Light> lights;
 	umap<string, Blueprint> bprints;
+	umap<string, Material> materials;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
@@ -134,6 +144,7 @@ public:
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
 	const Blueprint* blueprint(const string& name) const;
+	const Material* material(const string& name) const;
 	Camera* getCamera();
 	void setObjects(const vector<Object*>& objs);
 	void resetLayouts();

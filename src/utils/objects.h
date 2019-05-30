@@ -2,6 +2,33 @@
 
 #include "utils.h"
 
+struct Material {
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
+	vec4 emission;
+	float shine;
+
+	Material(const vec4& ambient = vec4(0.f, 0.f, 0.f, 1.f), const vec4& diffuse = vec4(0.f, 0.f, 0.f, 1.f), const vec4& specular = vec4(0.f, 0.f, 0.f, 1.f), const vec4& emission = vec4(0.f, 0.f, 0.f, 1.f), float shine = 0.f);
+
+	void updateColor() const;
+	void updateColorDiffuse(const vec4& difu) const;
+	void updateColorEmission(const vec4& emis) const;
+	static void updateColor(const vec4& ambient, const vec4& diffuse, const vec4& specular, const vec4& emission, float shine);
+};
+
+inline void Material::updateColor() const {
+	updateColor(ambient, diffuse, specular, emission, shine);
+}
+
+inline void Material::updateColorDiffuse(const vec4& difu) const {
+	updateColor(ambient, difu, specular, emission, shine);
+}
+
+inline void Material::updateColorEmission(const vec4& emis) const {
+	updateColor(ambient, diffuse, specular, emis, shine);
+}
+
 // indices of vertex, uv, normal for a point
 struct Vertex {
 	static constexpr uint8 size = 3;
@@ -24,47 +51,21 @@ inline ushort Vertex::operator[](uint8 i) const {
 }
 
 // vertex data that's shared between objects
-class Blueprint {
-public:
+struct Blueprint {
 	vector<vec3> verts;
 	vector<vec2> tuvs;		// must contain at least one dummy element
 	vector<vec3> norms;		// ^
 	vector<Vertex> elems;	// size must be a multiple of 3 if not INFO_LINES, otherwise 2
 
-private:
-	static const vector<vec3> squareVertices, outlineVertices;
-	static const vector<vec2> squareTextureUVs, outlineTextureUVs;
-	static const vector<vec3> squareNormals;
-	static const vector<Vertex> squareElements, outlineElements;
-	static constexpr float outlOfs = 0.1f;
-
-public:
 	Blueprint() = default;
 	Blueprint(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems);
 
 	void draw(GLenum mode) const;
 	bool empty() const;
-
-	static Blueprint makeRectangle(const vec3& pos, const vec3& rot, const vec2& scl);
-	static Blueprint makeOutline(const vec3& pos, const vec3& rot, const vec2& scl);
-private:
-	static Blueprint makeThing(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems, const mat4& trans);
 };
 
 inline bool Blueprint::empty() const {
 	return elems.empty() || verts.empty() || tuvs.empty() || norms.empty();
-}
-
-inline Blueprint Blueprint::makeRectangle(const vec3& pos, const vec3& rot, const vec2& scl) {
-	return makeThing(squareVertices, squareTextureUVs, squareNormals, squareElements, makeTransform(pos, rot, vec3(scl.x, 1.f, scl.y)));
-}
-
-inline Blueprint Blueprint::makeOutline(const vec3& pos, const vec3& rot, const vec2& scl) {
-	return makeThing(outlineVertices, outlineTextureUVs, squareNormals, outlineElements, makeTransform(pos, rot, vec3(scl.x, 1.f, scl.y)));
-}
-
-inline Blueprint Blueprint::makeThing(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems, const mat4& trans) {
-	return Blueprint(transformCopy(verts, trans), tuvs, transformCopy(norms, trans), elems);
 }
 
 // 3D object with triangles
@@ -82,20 +83,20 @@ public:
 	static const vec4 defaultColor;
 
 	const Blueprint* bpr;
+	const Material* mat;
 	const Texture* tex;
 	vec3 pos, rot, scl;
-	vec4 color;
 	Info mode;
 
 public:
-	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL);
+	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL);
 	virtual ~Object() override = default;
 
 	virtual void draw() const;
 
 protected:
-	static void setTransform(const vec3& pos, const vec3& rot, const vec3& scl);
-	static void setColorization(const Texture* tex, const vec4& color, Info mode);
+	static void updateTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+	static void updateTexture(const Texture* tex, Info mode);
 };
 
 inline constexpr Object::Info operator~(Object::Info a) {
@@ -129,21 +130,19 @@ inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
 // square object on a single plane
 class BoardObject : public Object {
 public:
-	static constexpr float upperPoz = 0.001f;
-	static constexpr float halfSize = 0.5f;
-private:
-	static const vec4 moveIconColor, fireIconColor;
-
 	enum class DragState : uint8 {
 		none,
 		move,
 		fire
 	} dragState;
-protected:
-	OCall clcall, crcall, ulcall, urcall;
+	OCall clcall, crcall, hgcall, ulcall, urcall;
+
+	static constexpr float upperPoz = 0.001f;
+private:
+	static const vec4 moveIconColor, fireIconColor;
 
 public:
-	BoardObject(const vec3& pos = vec3(0.f), OCall clcall = nullptr, OCall crcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Texture* tex = nullptr, const vec4& color = defaultColor, Info mode = INFO_FILL | INFO_RAYCAST);
+	BoardObject(const vec3& pos = vec3(0.f), float size = 1.f, OCall clcall = nullptr, OCall crcall = nullptr, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL | INFO_RAYCAST);
 	virtual ~BoardObject() override = default;
 
 	virtual void draw() const override;
@@ -152,28 +151,8 @@ public:
 	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
-	void setClcall(OCall pcl);
-	void setCrcall(OCall pcl);
-	void setUlcall(OCall pcl);
-	void setUrcall(OCall pcl);
 	void setModeByInteract(bool on);
 };
-
-inline void BoardObject::setClcall(OCall pcl) {
-	clcall = pcl;
-}
-
-inline void BoardObject::setCrcall(OCall pcl) {
-	crcall = pcl;
-}
-
-inline void BoardObject::setUlcall(OCall pcl) {
-	ulcall = pcl;
-}
-
-inline void BoardObject::setUrcall(OCall pcl) {
-	urcall = pcl;
-}
 
 inline void BoardObject::setModeByInteract(bool on) {
 	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
@@ -189,25 +168,15 @@ public:
 		piecing
 	};
 
-	enum class Favor : uint8 {
-		none,
-		own,
-		enemy
-	};
-	static const array<vec4, sizet(Favor::enemy)> favColors;
-	static const array<vec4, Com::tileMax+1> colors;
-
-	Favor favored;	// for non-fortress
 private:
 	Com::Tile type;
 	bool breached;	// only for fortress
 
 public:
 	Tile() = default;
-	Tile(const vec3& pos, Com::Tile type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode);
+	Tile(const vec3& pos, float size, Com::Tile type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, Info mode);
 	virtual ~Tile() override = default;
 
-	virtual void draw() const override;
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
 	Com::Tile getType() const;
@@ -248,6 +217,7 @@ private:
 	uint16 home, extra, size;
 
 public:
+	TileCol() = default;
 	TileCol(const Com::Config& conf);
 	~TileCol();
 
@@ -322,15 +292,13 @@ inline const Tile* TileCol::own(pdift i) const {
 // player on tiles
 class Piece : public BoardObject {
 public:
-	static const vec4 enemyColor;
-
 	uint16 lastFortress;	// index of last visited fortress (only relevant to throne)
 private:
 	Com::Piece type;
 
 public:
 	Piece() = default;
-	Piece(const vec3& pos, Com::Piece type, OCall clcall, OCall crcall, OCall ulcall, OCall urcall, Info mode, const vec4& color);
+	Piece(const vec3& pos, float size, Com::Piece type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode);
 	virtual ~Piece() override = default;
 
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
@@ -363,6 +331,7 @@ private:
 	uint16 num, size;
 
 public:
+	PieceCol() = default;
 	PieceCol(const Com::Config& conf);
 	~PieceCol();
 

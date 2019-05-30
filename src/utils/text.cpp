@@ -1,6 +1,14 @@
 #include "text.h"
 
-string readWord(const char*& pos) {
+bool hasExt(const string& path, const string& ext) {
+	if (ext.empty())
+		return true;
+
+	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || c == dsep; });
+	return it != path.rend() && *it == '.' ? !strcicmp(string(it.base(), path.end()), ext) : false;
+}
+
+string readWordM(const char*& pos) {
 	const char* end;
 	for (; isSpace(*pos); pos++);
 	for (end = pos; notSpace(*end); end++);

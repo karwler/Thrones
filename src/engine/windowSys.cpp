@@ -89,6 +89,14 @@ void WindowSys::init() {
 	createWindow();
 	scene.reset(new Scene);
 	program.reset(new Program);
+
+	for (const string& file : FileSys::listDir(FileSys::dirTexs, FTYPE_REG, "bmp")) {
+		try {
+			texes.emplace(delExt(file), appDsep(FileSys::dirTexs) + file);
+		} catch (const std::runtime_error& e) {
+			std::cerr << e.what() << std::endl;
+		}
+	}
 }
 
 void WindowSys::exec() {
@@ -177,17 +185,8 @@ void WindowSys::createWindow() {
 	glCullFace(GL_FRONT);
 	glFrontFace(GL_CCW);
 	glShadeModel(GL_SMOOTH);
-	glEnable(GL_MULTISAMPLE);
+	sets->samples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
 	updateSmooth();
-
-	// load default textures with colors
-	for (const string& file : FileSys::listDir(FileSys::dirTexs, FTYPE_REG)) {
-		try {
-			texes.emplace(delExt(file), appDsep(FileSys::dirTexs) + file);
-		} catch (const std::runtime_error& e) {
-			std::cerr << e.what() << std::endl;
-		}
-	}
 }
 
 void WindowSys::destroyWindow() {
@@ -301,8 +300,10 @@ const Texture* WindowSys::texture(const string& name) const {
 }
 
 void WindowSys::setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode, uint8 samples) {
-	checkResolution(sets->size = size, displaySizes());
-	checkResolution(sets->mode = mode, displayModes());
+	sets->size = size;
+	checkResolution(sets->size, displaySizes());
+	sets->mode = mode;
+	checkResolution(sets->mode, displayModes());
 	if (sets->screen = screen; samples != sets->samples) {
 		sets->samples = samples;
 		createWindow();

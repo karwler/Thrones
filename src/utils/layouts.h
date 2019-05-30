@@ -54,14 +54,14 @@ inline bool Layout::getVertical() const {
 // layout with background with free position/size (shouldn't have a parent)
 class Popup : public Layout {
 public:
-	BCall ccall;	// gets called on escape press
+	BCall kcall, ccall;	// gets called on enter/escape press
 private:
-	Size sizeY;		// use Widget's relSize as sizeX
+	Size sizeY;			// use Widget's relSize as sizeX
 	
 	static const vec4 colorDim;
 
 public:
-	Popup(const cvec2<Size>& relSize = 1.f, const vector<Widget*>& children = {}, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);
+	Popup(const cvec2<Size>& relSize = 1.f, const vector<Widget*>& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;

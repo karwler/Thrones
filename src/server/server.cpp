@@ -7,6 +7,7 @@ Config::Config(const string& name) :
 	homeWidth(9),
 	homeHeight(4),
 	tileAmounts({ 11, 10, 7, 7, 1 }),
+	middleAmounts({ 1, 1, 1, 1 }),
 	pieceAmounts({ 2, 2, 2, 1, 1, 2, 1, 2, 1, 1 }),
 	winFortress(1),
 	winThrone(1),
@@ -18,34 +19,40 @@ Config::Config(const string& name) :
 }
 
 void Config::updateValues() {
-	numTiles = 0;
-	for (uint16 it : tileAmounts)
-		numTiles += it;
-
-	numPieces = 0;
-	for (uint16 it : pieceAmounts)
-		numPieces += it;
-
+	numTiles = homeHeight * homeWidth;				// should equal the sum of tileAmounts
 	extraSize = (homeHeight + 1) * homeWidth;
-	boardSize = (homeHeight * 2 + 1) * homeWidth;	// should equal numTiles * 2 + homeWidth
+	boardSize = (homeHeight * 2 + 1) * homeWidth;	// aka. total amount of tiles
+	
+	numPieces = calcSum(pieceAmounts);
 	piecesSize = numPieces * 2;
+	objectSize = boardWidth / float(std::max(homeWidth, uint16(homeHeight * 2 + 1)));
 }
 
 Config& Config::checkValues() {
-	homeWidth = std::clamp(makeOdd(homeWidth), minWidth, maxWidth);
+	homeWidth = std::clamp(homeWidth, minWidth, maxWidth);
 	homeHeight = std::clamp(homeHeight, minHeight, maxHeight);
-	updateValues();
 
-	uint16 limit = homeHeight * homeWidth;
-	matchAmounts(numTiles, tileAmounts, limit, 0, uint8(tileAmounts.size()), 1, [](uint16 a, uint16 b) -> bool { return a < b; });
-	matchAmounts(numTiles, tileAmounts, limit, uint8(tileAmounts.size() - 1), uint8(tileAmounts.size()), -1, [](uint16 a, uint16 b) -> bool { return a > b; });
-	matchAmounts(numPieces, pieceAmounts, numTiles < maxNumPieces ? numTiles : maxNumPieces, uint8(tileAmounts.size() - 1), uint8(tileAmounts.size()), -1, [](uint16 a, uint16 b) -> bool { return a > b; });
+	uint16 hsize = homeHeight * homeWidth;
+	tileAmounts[uint8(Tile::fortress)] = hsize - floorAmounts(calcSum(tileAmounts, tileAmounts.size() - 1), tileAmounts, hsize, tileAmounts.size() - 2);
+	floorAmounts(calcSum(middleAmounts, middleAmounts.size()), middleAmounts, homeWidth / 2, tileAmounts.size() - 1);
 
+	uint16 plim = hsize < maxNumPieces ? hsize : maxNumPieces;
+	uint16 psize = floorAmounts(calcSum(pieceAmounts), pieceAmounts, plim, tileAmounts.size() - 1);
+	
+	if (!winFortress && !winThrone)
+		winFortress = winThrone = 1;
 	winFortress = std::clamp(winFortress, uint16(0), tileAmounts[uint8(Tile::fortress)]);
-	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
+	if (winThrone && !pieceAmounts[uint8(Piece::throne)]) {
+		if (psize == plim)
+			(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
+		pieceAmounts[uint8(Piece::throne)]++;
+	} else
+		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
 
 	if (std::find(capturers.begin(), capturers.end(), true) == capturers.end())
 		std::fill(capturers.begin(), capturers.end(), true);
+
+	updateValues();
 	return *this;
 }
 
@@ -56,6 +63,7 @@ uint8* Config::toComData(uint8* data) const {
 	*sp++ = homeWidth;
 	*sp++ = homeHeight;
 	sp = std::copy(tileAmounts.begin(), tileAmounts.end(), sp);
+	sp = std::copy(middleAmounts.begin(), middleAmounts.end(), sp);
 	sp = std::copy(pieceAmounts.begin(), pieceAmounts.end(), sp);
 
 	*sp++ = winFortress;
@@ -72,8 +80,9 @@ void Config::fromComData(const uint8* data) {
 	homeWidth = *sp++;
 	homeHeight = *sp++;
 	std::copy_n(sp, tileAmounts.size(), tileAmounts.begin());
-	std::copy_n(sp + tileAmounts.size(), pieceAmounts.size(), pieceAmounts.begin());
-	sp += tileAmounts.size() + pieceAmounts.size();
+	std::copy_n(sp, middleAmounts.size(), middleAmounts.begin());
+	std::copy_n(sp + middleAmounts.size() + tileAmounts.size(), pieceAmounts.size(), pieceAmounts.begin());
+	sp += tileAmounts.size() + middleAmounts.size() + pieceAmounts.size();
 
 	winFortress = *sp++;
 	winThrone = *sp++;
@@ -94,7 +103,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::full:
 		return sizeof(Code);
 	case Code::setup:
-		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + tileAmounts.size() * sizeof(tileAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
+		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + tileAmounts.size() * sizeof(tileAmounts[0]) + middleAmounts.size() * sizeof(middleAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
 	case Code::tiles:
 		return tileCompressionEnd();
 	case Code::pieces:
@@ -105,8 +114,6 @@ uint16 Config::dataSize(Code code) const {
 		return sizeof(Code) + sizeof(bool) + sizeof(uint16);
 	case Code::breach:
 		return sizeof(Code) + sizeof(bool) + sizeof(uint16);
-	case Code::favor:
-		return sizeof(Code) + sizeof(uint8) + sizeof(uint16);
 	case Code::record:
 		return sizeof(Code) + sizeof(uint16) + sizeof(bool) * 2;
 	case Code::win:
@@ -118,8 +125,9 @@ uint16 Config::dataSize(Code code) const {
 string Config::toIniText() const {
 	string text = '[' + name + ']' + linend;
 	text += makeIniLine(keywordSize, to_string(homeWidth) + ' ' + to_string(homeHeight));
-	writeAmount(text, keywordTile, tileNames, tileAmounts);
-	writeAmount(text, keywordPiece, pieceNames, pieceAmounts);
+	writeAmounts(text, keywordTile, tileNames, tileAmounts);
+	writeAmounts(text, keywordMiddle, tileNames, middleAmounts);
+	writeAmounts(text, keywordPiece, pieceNames, pieceAmounts);
 	text += makeIniLine(keywordWinFortress, to_string(winFortress));
 	text += makeIniLine(keywordWinThrone, to_string(winThrone));
 	text += makeIniLine(keywordCapturers, capturersString());
@@ -132,6 +140,8 @@ void Config::fromIniLine(const string& line) {
 		readSize(it.second);
 	else if (!strncicmp(it.first, keywordTile, strlen(keywordTile)))
 		readAmount(it, keywordTile, tileNames, tileAmounts);
+	else if (!strncicmp(it.first, keywordMiddle, strlen(keywordMiddle)))
+		readAmount(it, keywordMiddle, tileNames, middleAmounts);
 	else if (!strncicmp(it.first, keywordPiece, strlen(keywordPiece)))
 		readAmount(it, keywordPiece, pieceNames, pieceAmounts);
 	else if (!strcicmp(it.first, keywordWinFortress))
@@ -153,7 +163,7 @@ void Config::readSize(const string& line) {
 void Config::readCapturers(const string& line) {
 	std::fill(capturers.begin(), capturers.end(), false);
 	for (const char* pos = line.c_str(); *pos;)
-		if (uint8 pi = strToEnum<uint8>(pieceNames, readWord(pos)); pi < pieceMax)
+		if (uint8 pi = strToEnum<uint8>(pieceNames, readWordM(pos)); pi < pieceMax)
 			capturers[pi] = true;
 }
 
@@ -168,7 +178,7 @@ string Config::capturersString() const {
 
 void Config::readShift(const string& line) {
 	for (const char* pos = line.c_str(); *pos;) {
-		if (string word = readWord(pos); !strcicmp(word, keywordLeft))
+		if (string word = readWordM(pos); !strcicmp(word, keywordLeft))
 			shiftLeft = true;
 		else if (!strcicmp(word, keywordRight))
 			shiftLeft = false;

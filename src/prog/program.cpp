@@ -61,78 +61,95 @@ void Program::eventSwitchConfig(Button* but) {
 	World::scene()->resetLayouts();
 }
 
-void Program::eventUpdateWidth(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].homeWidth = uint16(sstol(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].homeWidth));
+void Program::eventConfigDeleteInput(Button*) {
+	World::scene()->setPopup(ProgState::createPopupChoice("Are you sure?", &Program::eventConfigDelete, &Program::eventClosePopup));
 }
 
-void Program::eventUpdateHeight(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
+void Program::eventConfigDelete(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].homeHeight = uint16(sstol(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].homeHeight));
+	ph->confs.erase(ph->confs.begin() + pdift(ph->curConf));
+	if (ph->curConf >= ph->confs.size())
+		ph->curConf--;
+	World::scene()->resetLayouts();
 }
 
-void Program::eventUpdateTile(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	uint8 id = strToEnum<uint8>(Com::tileNames, static_cast<Label*>(le->getParent()->getWidget(0))->getText());
-	ph->confs[ph->curConf].tileAmounts[id] = uint16(sstoul(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].tileAmounts[id]));
+void Program::eventConfigCopyInput(Button*) {
+	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventConfigCopy));
 }
 
-void Program::eventUpdatePiece(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
+void Program::eventConfigCopy(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	uint8 id = strToEnum<uint8>(Com::tileNames, static_cast<Label*>(le->getParent()->getWidget(0))->getText());
-	ph->confs[ph->curConf].pieceAmounts[id] = uint16(sstoul(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].pieceAmounts[id]));
+	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
+	if (std::find_if(ph->confs.begin(), ph->confs.end(), [name](const Com::Config& it) -> bool { return it.name == name; }) == ph->confs.end()) {
+		Com::Config cfg = ph->confs[ph->curConf];
+		cfg.name = name;
+		ph->confs.push_back(cfg);
+		ph->curConf = ph->confs.size() - 1;
+		World::scene()->resetLayouts();
+	} else
+		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
-void Program::eventUpdateWinThrone(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].winThrone = uint16(sstol(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].winThrone));
+void Program::eventConfigNewInput(Button*) {
+	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventConfigNew));
 }
 
-void Program::eventUpdateWinFortress(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
+void Program::eventConfigNew(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].winFortress = uint16(sstol(le->getText()));
-	ph->confs[ph->curConf].checkValues();
-	le->setText(to_string(ph->confs[ph->curConf].winFortress));
+	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
+	if (std::find_if(ph->confs.begin(), ph->confs.end(), [name](const Com::Config& it) -> bool { return it.name == name; }) == ph->confs.end()) {
+		ph->confs.emplace_back(name);
+		ph->curConf = ph->confs.size() - 1;
+		World::scene()->resetLayouts();
+	} else
+		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
-void Program::eventUpdateCapturers(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
+void Program::eventUpdateConfig(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].readCapturers(le->getText());
-	ph->confs[ph->curConf].checkValues();
-	le->setText(ph->confs[ph->curConf].capturersString());
+	Com::Config& cfg = ph->confs[ph->curConf];
+
+	cfg.homeWidth = uint16(sstol(ph->inWidth->getText()));
+	cfg.homeHeight = uint16(sstol(ph->inHeight->getText()));
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		cfg.tileAmounts[i] = uint16(sstoul(ph->inTiles[i]->getText()));
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		cfg.middleAmounts[i] = uint16(sstoul(ph->inMiddles[i]->getText()));
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		cfg.pieceAmounts[i] = uint16(sstoul(ph->inPieces[i]->getText()));
+	cfg.winFortress = uint16(sstol(ph->inWinFortress->getText()));
+	cfg.winThrone = uint16(sstol(ph->inWinThrone->getText()));
+	cfg.readCapturers(ph->inCapturers->getText());
+	cfg.shiftLeft = ph->inShiftLeft->on;
+	cfg.shiftNear = ph->inShiftNear->on;
+	
+	cfg.checkValues();
+	updateConfigWidgets(ph, cfg);
 }
 
-void Program::eventUpdateShiftLeft(Button* but) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].shiftLeft = static_cast<CheckBox*>(but)->on;
-}
-
-void Program::eventUpdateShiftNear(Button* but) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf].shiftNear = static_cast<CheckBox*>(but)->on;
+void Program::updateConfigWidgets(ProgHost* ph, const Com::Config& cfg) {
+	ph->inWidth->setText(to_string(cfg.homeWidth));
+	ph->inHeight->setText(to_string(cfg.homeHeight));
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		ph->inTiles[i]->setText(to_string(cfg.tileAmounts[i]));
+	ph->outTileFortress->setText(ProgHost::tileFortressString(cfg));
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		ph->inMiddles[i]->setText(to_string(cfg.middleAmounts[i]));
+	ph->outMiddleFortress->setText(ProgHost::middleFortressString(cfg));
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		ph->inPieces[i]->setText(to_string(cfg.pieceAmounts[i]));
+	ph->outPieceTotal->setText(ProgHost::pieceTotalString(cfg));
+	ph->inWinFortress->setText(to_string(cfg.winFortress));
+	ph->inWinThrone->setText(to_string(cfg.winThrone));
+	ph->inCapturers->setText(cfg.capturersString());
+	ph->inShiftLeft->on = cfg.shiftLeft;
+	ph->inShiftNear->on = cfg.shiftNear;
 }
 
 void Program::eventUpdateReset(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	ph->confs[ph->curConf] = Com::Config(ph->confs[ph->curConf].name);
-	World::scene()->resetLayouts();
+	updateConfigWidgets(ph, ph->confs[ph->curConf]);
 }
 
 void Program::eventExitHost(Button*) {
@@ -149,7 +166,10 @@ void Program::eventOpenSetup() {
 	World::scene()->setObjects(World::hasFlag(World::argSetup) ? game.initDummyObjects() : game.initObjects());
 #endif
 	setState(new ProgSetup);
-	static_cast<ProgSetup*>(state.get())->setStage(ProgSetup::Stage::tiles);
+
+	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ps->setStage(ProgSetup::Stage::tiles);
+	ps->rcvMidBuffer.resize(game.getConfig().homeWidth);
 }
 
 void Program::eventPlaceTileC(BoardObject* obj) {
@@ -283,20 +303,21 @@ void Program::eventShowWaitPopup(Button*) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
-	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, Game::screenPosDown) })));
-	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
-}
+	static_cast<ProgMatch*>(state.get())->updateFavorIcon(game.getMyTurn(), game.getFavorCount(), game.getFavorTotal());
 
-void Program::eventPlaceFavor(Button*) {
-	vec2s pos;
-	if (Piece* pce; pickBob(pos, pce))
-		game.placeFavor(pos);
+	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(Game::screenPosDown.x, Game::screenPosDown.y, game.getScreen()->pos.z)) })));
+	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 }
 
 void Program::eventPlaceDragon(Button*) {
 	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.placeDragon(pos, pce);
+}
+
+void Program::eventFavorStart(BoardObject* obj) {
+	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LALT])
+		game.placeFavor(static_cast<Piece*>(obj));
 }
 
 void Program::eventMove(BoardObject* obj) {
@@ -313,7 +334,7 @@ void Program::eventFire(BoardObject* obj) {
 
 void Program::eventExitGame(Button*) {
 	if (dynamic_cast<ProgMatch*>(state.get())) {
-		World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, Game::screenPosUp) })));
+		World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(Game::screenPosUp.x, Game::screenPosUp.y, game.getScreen()->pos.z)) })));
 		World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, Camera::latSetup) })));
 	}
 	game.disconnect();
@@ -328,7 +349,7 @@ void Program::eventOpenSettings(Button*) {
 
 void Program::eventApplySettings(Button*) {
 	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
-	World::winSys()->setScreen(Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), strToDisp(ps->dspMode->getText()), uint8(sstoul(ps->msample->getText())));
+	World::winSys()->setScreen(Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), ps->currentMode(), uint8(sstoul(ps->msample->getText())));
 }
 
 void Program::eventSetVsync(Button* but) {

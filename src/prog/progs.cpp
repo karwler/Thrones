@@ -28,9 +28,11 @@ void ProgState::eventEnter() {
 }
 
 bool ProgState::tryClosePopup() {
-	if (World::scene()->getPopup())
+	if (World::scene()->getPopup()) {
 		World::prun(World::scene()->getPopup()->ccall, nullptr);
-	return World::scene()->getPopup();
+		return true;
+	}
+	return false;
 }
 
 Layout* ProgState::createLayout() {
@@ -49,7 +51,7 @@ Popup* ProgState::createPopupMessage(const string& msg, BCall ccal, const string
 		new Label(1.f, ms.text, nullptr, nullptr, Label::Alignment::center),
 		new Layout(1.f, bot, false, 0)
 	};
-	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, ccal);
+	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, ccal, ccal);
 }
 
 Popup* ProgState::createPopupChoice(const string& msg, BCall kcal, BCall ccal) {
@@ -62,7 +64,21 @@ Popup* ProgState::createPopupChoice(const string& msg, BCall kcal, BCall ccal) {
 		new Label(1.f, ms.text, nullptr, nullptr, Label::Alignment::center),
 		new Layout(1.f, bot, false, 0)
 	};
-	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, ccal);
+	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), con, kcal, ccal);
+}
+
+pair<Popup*, Widget*> ProgState::createPopupInput(const string& msg, BCall kcal) {
+	LabelEdit* ledit = new LabelEdit(1.f, emptyStr, kcal, &Program::eventClosePopup, kcal);
+	vector<Widget*> bot = {
+		new Label(1.f, "Ok", kcal, nullptr, Label::Alignment::center),
+		new Label(1.f, "Cancel", &Program::eventClosePopup, nullptr, Label::Alignment::center)
+	};
+	vector<Widget*> con = {
+		new Label(1.f, msg),
+		ledit,
+		new Layout(1.f, bot, false, 0)
+	};
+	return pair(new Popup(cvec2<Size>(500, superHeight * 3 + Layout::defaultItemSpacing * 2), con, kcal, &Program::eventClosePopup), ledit);
 }
 
 // PROG MENU
@@ -134,6 +150,8 @@ Layout* ProgHost::createLayout() {
 
 	Text back("Back", superHeight);
 	Text cfgt("Configuration: ", lineHeight);
+	Text copy("Copy");
+	Text newc("New");
 	Text port("Port:", lineHeight);
 	vector<Widget*> top0 = {
 		new Label(back.length, back.text, &Program::eventExitHost),
@@ -142,75 +160,110 @@ Layout* ProgHost::createLayout() {
 	vector<Widget*> top1 = {
 		new Label(cfgt.length, cfgt.text),
 		new SwitchBox(1.f, cfgNames.data(), cfgNames.size(), cfgNames[curConf], &Program::eventSwitchConfig, Label::Alignment::center),
+		new Label(copy.length, copy.text, &Program::eventConfigCopyInput),
+		new Label(newc.length, newc.text, &Program::eventConfigNewInput),
+		new Widget(superSpacing),
 		new Label(port.length, port.text),
-		new LabelEdit(World::winSys()->textLength("99999", lineHeight), to_string(World::sets()->port), &Program::eventUpdatePort, nullptr, nullptr, LabelEdit::TextType::uInt),
+		new LabelEdit(World::winSys()->textLength("00000", lineHeight), to_string(World::sets()->port), &Program::eventUpdatePort, nullptr, nullptr, LabelEdit::TextType::uInt),
 	};
+	if (confs.size() > 1) {
+		Text dele("Del");
+		top1.insert(top1.begin() + 2, new Label(dele.length, dele.text, &Program::eventConfigDeleteInput));
+	}
 
 	Text reset("Reset");
 	vector<string> txs = {
 		"Board width",
 		"Homeland height",
-		"Thrones killed",
 		"Fortresses captured",
+		"Thrones killed",
 		"Capturers",
 		"Shift left",
 		"Shift near"
 	};
 	std::reverse(txs.begin(), txs.end());
 	int descLength = findMaxLength(txs.begin(), txs.end());
+
 	vector<vector<Widget*>> lines0 = { {
 		new Label(descLength, popBack(txs)),
-		new LabelEdit(1.f, to_string(confs[curConf].homeWidth), &Program::eventUpdateWidth, nullptr, &Program::eventUpdateWidth, LabelEdit::TextType::sInt)
+		inWidth = new LabelEdit(1.f, to_string(confs[curConf].homeWidth), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::sInt)
 	}, {
 		new Label(descLength, popBack(txs)),
-		new LabelEdit(1.f, to_string(confs[curConf].homeHeight), &Program::eventUpdateHeight, nullptr, &Program::eventUpdateHeight, LabelEdit::TextType::sInt)
+		inHeight = new LabelEdit(1.f, to_string(confs[curConf].homeHeight), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::sInt)
 	} };
+
 	vector<vector<Widget*>> lines1(Com::tileMax);
-	for (uint8 i = 0; i < Com::tileMax; i++)
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines1[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
-			new LabelEdit(1.f, to_string(confs[curConf].tileAmounts[i]), &Program::eventUpdateTile, nullptr, &Program::eventUpdateTile, LabelEdit::TextType::uInt)
+			inTiles[i] = new LabelEdit(1.f, to_string(confs[curConf].tileAmounts[i]), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::uInt)
 		};
-	vector<vector<Widget*>> lines2(Com::pieceMax);
-	for (uint8 i = 0; i < Com::pieceMax; i++)
+	lines1.back() = {
+		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
+		outTileFortress = new Label(1.f, tileFortressString(confs[curConf]))
+	};
+
+	vector<vector<Widget*>> lines2(Com::tileMax);
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines2[i] = {
+			new Label(descLength, firstUpper(Com::tileNames[i])),
+			inMiddles[i] = new LabelEdit(1.f, to_string(confs[curConf].middleAmounts[i]), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::uInt)
+	};
+	lines2.back() = {
+		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
+		outMiddleFortress = new Label(1.f, middleFortressString(confs[curConf]))
+	};
+
+	vector<vector<Widget*>> lines3(Com::pieceMax + 1);
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		lines3[i] = {
 			new Label(descLength, firstUpper(Com::pieceNames[i])),
-			new LabelEdit(1.f, to_string(confs[curConf].pieceAmounts[i]), &Program::eventUpdatePiece, nullptr, &Program::eventUpdatePiece, LabelEdit::TextType::uInt)
+			inPieces[i] = new LabelEdit(1.f, to_string(confs[curConf].pieceAmounts[i]), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::uInt)
 		};
-	vector<vector<Widget*>> lines3 = { {
-		new Label(descLength, popBack(txs)),
-		new LabelEdit(1.f, to_string(confs[curConf].winThrone), &Program::eventUpdateWinThrone, nullptr, &Program::eventUpdateWinThrone, LabelEdit::TextType::sInt)
-	}, {
-		new Label(descLength, popBack(txs)),
-		new LabelEdit(1.f, to_string(confs[curConf].winFortress), &Program::eventUpdateWinFortress, nullptr, &Program::eventUpdateWinFortress, LabelEdit::TextType::sInt)
-	}, {
-		new Label(descLength, popBack(txs)),
-		new LabelEdit(1.f, confs[curConf].capturersString(), &Program::eventUpdateCapturers, nullptr, &Program::eventUpdateCapturers)
-	} };
+	lines3.back() = {
+		new Label(descLength, "Total"),
+		outPieceTotal = new Label(1.f, pieceTotalString(confs[curConf]))
+	};
+
 	vector<vector<Widget*>> lines4 = { {
 		new Label(descLength, popBack(txs)),
-		new CheckBox(lineHeight, confs[curConf].shiftLeft, &Program::eventUpdateShiftLeft),
+		inWinFortress = new LabelEdit(1.f, to_string(confs[curConf].winFortress), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::sInt)
+	}, {
+		new Label(descLength, popBack(txs)),
+		inWinThrone = new LabelEdit(1.f, to_string(confs[curConf].winThrone), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::sInt)
+	}, {
+		new Label(descLength, popBack(txs)),
+		inCapturers = new LabelEdit(1.f, confs[curConf].capturersString(), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig)
+	} };
+
+	vector<vector<Widget*>> lines5 = { {
+		new Label(descLength, popBack(txs)),
+		inShiftLeft = new CheckBox(lineHeight, confs[curConf].shiftLeft, &Program::eventUpdateConfig),
 		new Widget()
 	}, {
 		new Label(descLength, popBack(txs)),
-		new CheckBox(lineHeight, confs[curConf].shiftNear, &Program::eventUpdateShiftNear),
+		inShiftNear = new CheckBox(lineHeight, confs[curConf].shiftNear, &Program::eventUpdateConfig),
 		new Widget()
 	} };
+
 	vector<vector<Widget*>> lineR = { {
 		new Label(reset.length, reset.text, &Program::eventUpdateReset),
 		new Widget()
 	} };
+
 	sizet id = 0;
-	vector<Widget*> menu(lines0.size() + lines1.size() + lines2.size() + lines3.size() + lines4.size() + lineR.size() + 4);
+	vector<Widget*> menu(lines0.size() + lines1.size() + lines2.size() + lines3.size() + lines4.size() + lines5.size() + lineR.size() + 5);
 	setLines(menu, lines0, id);
 	setTitle(menu, "Tile amounts", id);
 	setLines(menu, lines1, id);
-	setTitle(menu, "Piece amounts", id);
+	setTitle(menu, "Middle amounts", id);
 	setLines(menu, lines2, id);
-	setTitle(menu, "Winning conditions", id);
+	setTitle(menu, "Piece amounts", id);
 	setLines(menu, lines3, id);
-	setTitle(menu, "Middle row rearranging", id);
+	setTitle(menu, "Winning conditions", id);
 	setLines(menu, lines4, id);
+	setTitle(menu, "Middle row rearranging", id);
+	setLines(menu, lines5, id);
 	setLines(menu, lineR, id);
 
 	vector<Widget*> cont = {
@@ -313,7 +366,7 @@ Layout* ProgSetup::createLayout() {
 Layout* ProgSetup::getTicons() {
 	vector<Widget*> tbot = { new Widget() };
 	for (uint8 i = 0; i < 4; i++)
-		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, true, Tile::colors[i]));
+		tbot.push_back(new Draglet(iconSize, &Program::eventPlaceTileD, nullptr, true, World::scene()->material(Com::tileNames[i])->diffuse));
 	tbot.push_back(new Widget());
 	return new Layout(iconSize, tbot, false);
 }
@@ -337,7 +390,7 @@ void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
 		switchIcon(type, false, isTile);
 	else if (inc && !counters[type])
 		switchIcon(type, true, isTile);
-	counters[type] += btom<uint8>(inc);
+	counters[type] += btom<uint16>(inc);
 }
 
 void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
@@ -347,7 +400,7 @@ void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
 	} else {
 		ico->setDim(1.f);
 		if (isTile) {
-			ico->color = Tile::colors[type];
+			ico->color = World::scene()->material(Com::tileNames[type])->diffuse;
 			ico->setLcall(&Program::eventPlaceTileD);
 		} else {
 			ico->color = Object::defaultColor;
@@ -363,62 +416,56 @@ void ProgMatch::eventEscape() {
 		World::program()->eventExitGame();
 }
 
-void ProgMatch::setIconOn(bool on, uint8 cnt) {
-	if (favorIcon) {
-		setIconOn(on && cnt, favorIcon, &Program::eventPlaceFavor);
-		static_cast<Draglet*>(favorIcon->getWidget(0))->setText(to_string(cnt));
+void ProgMatch::updateFavorIcon(bool on, uint8 cnt, uint8 tot) {
+	favorIcon->setDim(on && cnt ? 1.f : 0.5f);
+	favorIcon->setText("FF: " + to_string(cnt) + '/' + to_string(tot));
+}
+
+void ProgMatch::setDragonIcon(bool on) {
+	if (dragonIcon) {
+		if (Draglet* ico = static_cast<Draglet*>(dragonIcon->getWidget(0)); on) {
+			ico->setLcall(&Program::eventPlaceDragon);
+			ico->setDim(1.f);
+		} else {
+			ico->setLcall(nullptr);
+			ico->setDim(0.5f);
+		}
 	}
 }
 
-void ProgMatch::setIconOn(bool on) {
-	if (dragonIcon)
-		setIconOn(on, dragonIcon, &Program::eventPlaceDragon);
-}
-
-void ProgMatch::setIconOn(bool on, Layout* icon, BCall call) {
-	if (Draglet* ico = static_cast<Draglet*>(icon->getWidget(0)); on) {
-		ico->setLcall(call);
-		ico->setDim(1.f);
-	} else {
-		ico->setLcall(nullptr);
-		ico->setDim(0.5f);
-	}
-}
-
-void ProgMatch::deleteIcon(bool favor) {
-	Layout*& icon = favor ? favorIcon : dragonIcon;
-	icon->getParent()->deleteWidget(icon->getID());
-	icon = nullptr;
+void ProgMatch::deleteDragonIcon() {
+	dragonIcon->getParent()->deleteWidget(dragonIcon->getID());
+	dragonIcon = nullptr;
 }
 
 Layout* ProgMatch::createLayout() {
 	// sidebar
-	Text exit("Exit", lineHeight);
+	int sideLength = Text::strLength("FF: 0/0");
 	vector<Widget*> left = {
-		new Label(lineHeight, exit.text, &Program::eventExitGame),
-		favorIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, true, Tile::favColors[0], nullptr, emptyStr, Label::Alignment::center) }, false, 0)
+		new Label(lineHeight, "Exit", &Program::eventExitGame),
+		new Widget(0),
+		favorIcon = new Draglet(lineHeight, nullptr, nullptr, true, World::scene()->material("gold")->diffuse)
 	};
-	setIconOn(World::game()->getMyTurn(), World::game()->getFavorCount());
 	
 	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->pos).hasNot(INT16_MIN))
 		dragonIcon = nullptr;
 	else {
 		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, false, Object::defaultColor, World::winSys()->texture(Com::pieceNames[uint8(Com::Piece::dragon)])) }, false, 0));
-		setIconOn(World::game()->getMyTurn());
+		setDragonIcon(World::game()->getMyTurn());
 	}
 
 	// middle for message
 	vector<Widget*> midl = {
 		new Widget(),
 		message = new Label(superHeight, World::game()->getMyTurn() ? Game::messageTurnGo : Game::messageTurnWait, nullptr, nullptr, Label::Alignment::center, nullptr, Widget::colorNormal, false, 0),
-		new Widget(superHeight / 2)
+		new Widget(10)
 	};
 
 	// root layout
 	vector<Widget*> cont = {
-		new Layout(exit.length, left, true),
+		new Layout(sideLength, left, true),
 		new Layout(1.f, midl, true, 0),
-		new Widget(exit.length)
+		new Widget(sideLength)
 	};
 	return new Layout(1.f, cont, false, 0);
 }
@@ -448,6 +495,10 @@ Layout* ProgSettings::createLayout() {
 	// resolution list
 	vector<vec2i> sizes = World::winSys()->displaySizes();
 	vector<SDL_DisplayMode> modes = World::winSys()->displayModes();
+	pixelformats.clear();
+	for (const SDL_DisplayMode& it : modes)
+		pixelformats.emplace(pixelformatName(it.format), it.format);
+
 	vector<string> winsiz(sizes.size()), dmodes(modes.size());
 	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), sizeToFstr);
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
@@ -477,7 +528,7 @@ Layout* ProgSettings::createLayout() {
 		dspMode = new SwitchBox(1.f, dmodes.data(), dmodes.size(), dispToFstr(World::sets()->mode))
 	}, {
 		new Label(descLength, txs[3]),
-		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[int8(World::sets()->vsync)+1], &Program::eventSetVsync)
+		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync)
 	}, {
 		new Label(descLength, txs[4]),
 		msample = new SwitchBox(1.f, samples.data(), samples.size(), to_string(World::sets()->samples))
@@ -497,6 +548,14 @@ Layout* ProgSettings::createLayout() {
 		new ScrollArea(1.f, lns)
 	};
 	return new Layout(1.f, cont, false, superSpacing);
+}
+
+SDL_DisplayMode ProgSettings::currentMode() const {
+	SDL_DisplayMode mode = strToDisp(dspMode->getText());
+	if (string::const_reverse_iterator sit = std::find_if(dspMode->getText().rbegin(), dspMode->getText().rend(), [](char c) -> bool { return isSpace(c); }); sit != dspMode->getText().rend())
+		if (umap<string, uint32>::const_iterator pit = pixelformats.find(string(sit.base(), dspMode->getText().end())); pit != pixelformats.end())
+			mode.format = pit->second;
+	return mode;
 }
 
 // PROG INFO

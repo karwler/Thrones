@@ -32,6 +32,7 @@ public:
 	virtual Layout* createLayout();
 	static Popup* createPopupMessage(const string& msg, BCall ccal, const string& ctxt = "Ok");
 	static Popup* createPopupChoice(const string& msg, BCall kcal, BCall ccal);
+	static pair<Popup*, Widget*> createPopupInput(const string& msg, BCall kcal);
 
 protected:
 	bool tryClosePopup();
@@ -60,6 +61,20 @@ public:
 	vector<Com::Config> confs;
 	sizet curConf;
 
+	LabelEdit* inWidth;
+	LabelEdit* inHeight;
+	array<LabelEdit*, Com::tileMax> inTiles;
+	array<LabelEdit*, Com::tileMax-1> inMiddles;
+	array<LabelEdit*, Com::pieceMax> inPieces;
+	LabelEdit* inWinFortress;
+	LabelEdit* inWinThrone;
+	LabelEdit* inCapturers;
+	CheckBox* inShiftLeft;
+	CheckBox* inShiftNear;
+	Label* outTileFortress;
+	Label* outMiddleFortress;
+	Label* outPieceTotal;
+	
 public:
 	ProgHost();
 	virtual ~ProgHost() override = default;
@@ -67,10 +82,26 @@ public:
 	virtual void eventEscape() override;
 
 	virtual Layout* createLayout() override;
+
+	static string tileFortressString(const Com::Config& cfg);
+	static string middleFortressString(const Com::Config& cfg);
+	static string pieceTotalString(const Com::Config& cfg);
 private:
 	static void setLines(vector<Widget*>& menu, const vector<vector<Widget*>>& lines, sizet& id);
 	static void setTitle(vector<Widget*>& menu, const string& title, sizet& id);
 };
+
+inline string ProgHost::tileFortressString(const Com::Config& cfg) {
+	return to_string(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+}
+
+inline string ProgHost::middleFortressString(const Com::Config& cfg) {
+	return to_string(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+}
+
+inline string ProgHost::pieceTotalString(const Com::Config& cfg) {
+	return to_string(cfg.numPieces) + '/' + to_string(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
+}
 
 class ProgSetup : public ProgState {
 public:
@@ -86,7 +117,7 @@ public:
 	Label* message;
 private:
 	Layout* icons;
-	vector<uint8> counters;
+	vector<uint16> counters;
 	uint8 selected;
 	Stage stage;
 
@@ -101,7 +132,7 @@ public:
 	bool setStage(Stage stg);	// returns true if match is ready to load
 	Draglet* getIcon(uint8 type) const;
 	void incdecIcon(uint8 type, bool inc, bool isTile);
-	uint8 getCount(uint8 type) const;
+	uint16 getCount(uint8 type) const;
 	uint8 getSelected() const;
 
 	virtual Layout* createLayout() override;
@@ -121,7 +152,7 @@ inline Draglet* ProgSetup::getIcon(uint8 type) const {
 	return static_cast<Draglet*>(icons->getWidget(type + 1));
 }
 
-inline uint8 ProgSetup::getCount(uint8 type) const {
+inline uint16 ProgSetup::getCount(uint8 type) const {
 	return counters[type];
 }
 
@@ -133,21 +164,18 @@ class ProgMatch : public ProgState {
 public:
 	Label* message;
 private:
-	Layout* favorIcon;	// has to be nullptr if dragon can't be placed anymore
-	Layout* dragonIcon;	// ^
+	Draglet* favorIcon;
+	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 
 public:
 	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
-	void setIconOn(bool on, uint8 cnt);
-	void setIconOn(bool on);
-	void deleteIcon(bool favor);	// either favor or dragon
+	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
+	void setDragonIcon(bool on);
+	void deleteDragonIcon();
 
 	virtual Layout* createLayout() override;
-
-private:
-	static void setIconOn(bool on, Layout* icon, BCall call);
 };
 
 class ProgSettings : public ProgState {
@@ -159,6 +187,7 @@ public:
 
 private:
 	static constexpr char rv2iSeparator[] = " x ";
+	umap<string, uint32> pixelformats;
 
 public:
 	virtual ~ProgSettings() override = default;
@@ -166,6 +195,8 @@ public:
 	virtual void eventEscape() override;
 	
 	virtual Layout* createLayout() override;
+
+	SDL_DisplayMode currentMode() const;
 private:
 	static string sizeToFstr(const vec2i& size);
 	static string dispToFstr(const SDL_DisplayMode& mode);

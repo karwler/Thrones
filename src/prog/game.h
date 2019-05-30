@@ -6,13 +6,16 @@
 // handles game logic
 class Game {
 public:
-	static const vec3 screenPosUp, screenPosDown;
+	static const vec2 screenPosUp, screenPosDown;
 	static constexpr char messageTurnGo[] = "Your turn";
 	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
 	static constexpr char messageWin[] = "You win";
 	static constexpr char messageLoose[] = "You lose";
 	static constexpr uint8 favorLimit = 4;
+	static constexpr uint16 dragonDistLimit = 4;
+	static const array<uint16 (*)(uint16, uint16), 4> adjacentStraight;
+	static const array<uint16 (*)(uint16, uint16), 8> adjacentFull;
 
 	uptr<Netcp> netcp;	// shall never be nullptr
 	Com::Config config;
@@ -43,7 +46,8 @@ public:
 	const Com::Config& getConfig() const;
 	bool getMyTurn() const;
 	uint8 getFavorCount() const;
-	vec2s ptog(const vec3& p) const;	// TODO: optimize away
+	uint8 getFavorTotal() const;
+	vec2s ptog(const vec3& p) const;
 	vec3 gtop(vec2s p, float z) const;
 
 	void connect();
@@ -66,15 +70,15 @@ public:
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^
 	void checkOwnPieces() const;	// ^
-	vector<uint8> countOwnTiles() const;
-	vector<uint8> countMidTiles() const;
-	vector<uint8> countOwnPieces() const;
+	vector<uint16> countOwnTiles() const;
+	vector<uint16> countMidTiles() const;
+	vector<uint16> countOwnPieces() const;
 	void fillInFortress();
 	void takeOutFortress();
 
+	void placeFavor(Piece* piece);
 	void pieceMove(Piece* piece, vec2s pos, Piece* occupant);
 	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
-	void placeFavor(vec2s pos);
 	void placeDragon(vec2s pos, Piece* occupant);
 
 private:
@@ -83,25 +87,27 @@ private:
 	void setBgrid();
 	void setMidTiles();
 	void setTiles(Tile* tiles, int16 yofs, OCall lcall, Object::Info mode);
-	void setPieces(Piece* pieces, OCall rcall, OCall ucall, Object::Info mode, const vec4& color);
+	void setPieces(Piece* pieces, OCall rcall, OCall ucall, const Material* mat, Object::Info mode);
 	static void setTilesInteract(Tile* tiles, uint16 num, bool on);
 	static void setPiecesInteract(Piece* pieces, uint16 num, bool on);
 	void setPiecesVisible(Piece* pieces, bool on);
-	static vector<uint8> countTiles(const Tile* tiles, uint16 num, vector<uint8> cnt);
+	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf);
 	static Com::Tile decompressTile(const uint8* src, uint16 i);
+	Com::Tile pollFavor();
 
-	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking);
-	bool checkMoveBySingle(vec2s pos, vec2s dst);
-	bool checkMoveByArea(vec2s pos, vec2s dst, int16 dist);
+	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor);
+	bool checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor);
+	template <sizet S> bool checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), const array<uint16 (*)(uint16, uint16), S>& vmov);
 	static bool spaceAvailible(uint16 pos);
-	bool checkMoveByType(vec2s pos, vec2s dst);
+	static bool spaceAvailibleDummy(uint16 pos);
+	bool checkMoveByType(vec2s pos, vec2s dst, Com::Tile favor);
 	bool checkAdjacentTilesByType(uint16 pos, uint16 dst, vector<bool>& visited, Com::Tile type) const;
 	bool checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
 	static bool checkTilesByDistance(vec2s pos, vec2s dst, int16 dist);
 	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
-	bool survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking);	// in this case "attacking" only refers to attack by movement
+	bool survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking, bool switching, Com::Tile favor);	// in this case "attacking" only refers to attack by movement
 	void failSurvivalCheck(Piece* piece);	// pass null for soft fail
 	bool checkWin();
 	bool checkThroneWin(Piece* thrones);
@@ -113,7 +119,6 @@ private:
 	void placePiece(Piece* piece, vec2s pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
-	void updateFavored(Tile* tile, bool favored);
 
 	uint16 posToId(vec2s p);
 	vec2s idToPos(uint16 i);
@@ -166,6 +171,10 @@ inline uint8 Game::getFavorCount() const {
 	return favorCount;
 }
 
+inline uint8 Game::getFavorTotal() const {
+	return favorTotal;
+}
+
 inline void Game::setMidTilesInteract(bool on) {
 	setTilesInteract(tiles.mid(), config.homeWidth, on);
 }
@@ -178,12 +187,12 @@ inline void Game::setOwnPiecesVisible(bool on) {
 	setPiecesVisible(pieces.own(), on);
 }
 
-inline vector<uint8> Game::countOwnTiles() const {
-	return countTiles(tiles.own(), config.numTiles, vector<uint8>(config.tileAmounts.begin(), config.tileAmounts.end() - 1));
+inline vector<uint16> Game::countOwnTiles() const {
+	return countTiles(tiles.own(), config.numTiles, vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end() - 1));
 }
 
-inline vector<uint8> Game::countMidTiles() const {
-	return countTiles(tiles.mid(), config.homeWidth, vector<uint8>(config.tileAmounts.size() - 1, 1));
+inline vector<uint16> Game::countMidTiles() const {
+	return countTiles(tiles.mid(), config.homeWidth, vector<uint16>(config.middleAmounts.begin(), config.middleAmounts.end()));
 }
 
 template <class T>
@@ -197,12 +206,30 @@ inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
 	return Com::Tile((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
+inline bool Game::checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor) {
+	return checkMoveByArea(pos, dst, favor, 1, spaceAvailibleDummy, adjacentFull);
+}
+
+template <sizet S>
+bool Game::checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), const array<uint16 (*)(uint16, uint16), S>& vmov) {
+	if (favor == Com::Tile::plains) {
+		favorCount--;
+		favorTotal--;
+		dlim++;
+	}
+	return Dijkstra::travelDist(posToId(pos), dlim, config.homeWidth, config.boardSize, stepable, vmov.data(), S)[posToId(dst)] <= dlim;
+}
+
+inline bool Game::spaceAvailibleDummy(uint16) {
+	return true;
+}
+
 inline vec2s Game::ptog(const vec3& p) const {
-	return vec2s(uint16(p.x) + config.homeWidth / 2, p.z);
+	return vec2s((p.x - config.objectSize / 2.f) / config.objectSize, p.z / config.objectSize);
 }
 
 inline vec3 Game::gtop(vec2s p, float z) const {
-	return vec3(p.x - config.homeWidth / 2, z, p.y);
+	return vec3(p.x * config.objectSize + config.objectSize / 2.f, z, p.y * config.objectSize);
 }
 
 inline uint16 Game::posToId(vec2s p) {

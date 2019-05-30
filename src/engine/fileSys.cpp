@@ -80,12 +80,45 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
 	text += makeIniLine(iniKeywordSize, sets->size.toString());
 	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
-	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[int8(sets->vsync)+1]);
+	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
 	text += makeIniLine(iniKeywordSamples, to_string(sets->samples));
 	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
 	return writeTextFile(fileSettings, text);
+}
+
+vector<pair<string, Material>> FileSys::loadMtl(const string& file) {
+	vector<pair<string, Material>> mtl(1);
+	vector<string> lines = readTextFile(file);
+	if (lines.empty())
+		return mtl;
+	
+	sizet newLen = strlen(mtlKeywordNewmtl);
+	for (const string& line : lines) {
+		if (!strncicmp(line, mtlKeywordNewmtl, newLen)) {
+			if (pair<string, Material> next(trim(line.substr(newLen)), Material()); mtl.back().first.empty())
+				mtl.back() = next;
+			else
+				mtl.push_back(next);
+		} else if (int c0 = toupper(line[0]); c0 == 'K') {
+			if (int c1 = toupper(line[1]); c1 == 'A')
+				mtl.back().second.ambient = stov<4>(&line[2], 1.f);
+			else if (c1 == 'D')
+				mtl.back().second.diffuse = stov<4>(&line[2], 1.f);
+			else if (c1 == 'S')
+				mtl.back().second.specular = stov<4>(&line[2], 1.f);
+			else if (c1 == 'E')
+				mtl.back().second.emission = stov<4>(&line[2], 1.f);
+			else if (c1 == 'R')
+				mtl.back().second.ambient.a = strtof(&line[1], nullptr);	// perhaps reverse? (Tr = 1 - d)
+		} else if (c0 == 'N') {
+			if (toupper(line[1]) == 'S')
+				mtl.back().second.shine = strtof(&line[2], nullptr);
+		} else if (c0 == 'D')
+			mtl.back().second.ambient.a = strtof(&line[1], nullptr);
+	}
+	return mtl;
 }
 
 Blueprint FileSys::loadObj(const string& file) {
@@ -95,19 +128,19 @@ Blueprint FileSys::loadObj(const string& file) {
 		return obj;
 
 	uint8 fill = 0;
-	array<ushort, Vertex::size> begins = { 0, 0, 0 };
 	for (const string& line : lines) {
-		if (toupper(line[0]) == 'V') {
-			if (toupper(line[1]) == 'T')
+		if (int c0 = toupper(line[0]); c0 == 'V') {
+			if (int c1 = toupper(line[1]); c1 == 'T')
 				obj.tuvs.emplace_back(stov<2>(&line[2]));
-			else if (toupper(line[1]) == 'N')
+			else if (c1 == 'N')
 				obj.norms.emplace_back(stov<3>(&line[2]));
 			else
 				obj.verts.emplace_back(stov<3>(&line[1]));
-		} else if (toupper(line[0]) == 'F')
-			fill |= readFace(&line[1], obj, begins);
-		else if (int c = toupper(line[0]); c == 'O' || c == 'G')
-			begins = { ushort(obj.verts.size()), ushort(obj.tuvs.size()), ushort(obj.norms.size()) };	// TODO: this might be a wrong assumption
+		} else if (c0 == 'F')
+			fill |= readFace(&line[1], obj);
+		else if (c0 == 'O') {
+			// TODO: split objects
+		}
 	}
 	if (fill & 1)
 		obj.verts.emplace_back(0.f);
@@ -115,10 +148,10 @@ Blueprint FileSys::loadObj(const string& file) {
 		obj.tuvs.emplace_back(0.f);
 	if (fill & 4)
 		obj.norms.emplace_back(0.f);
-	return obj;
+	return  obj;
 }
 
-uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins) {
+uint8 FileSys::readFace(const char* str, Blueprint& obj) {
 	array<ushort, Vertex::size> sizes = {
 		ushort(obj.verts.size()),
 		ushort(obj.tuvs.size()),
@@ -128,7 +161,7 @@ uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Ver
 	uint8 v = 0, e = 0;
 	for (char* end; *str && v < face.size();) {
 		if (int n = int(strtol(str, &end, 0)); end != str) {
-			face[v][e] = resolveObjId(n, sizes[e] - begins[e]) + begins[e];
+			face[v][e] = resolveObjId(n, sizes[e]);
 			str = end;
 			e++;
 		} else if (*str == '/') {
@@ -164,22 +197,22 @@ ushort FileSys::resolveObjId(int id, ushort size) {
 	return size;
 }
 
-vector<string> FileSys::listDir(const string& drc, FileType filter) {
+vector<string> FileSys::listDir(const string& drc, FileType filter, const string& ext) {
 	vector<string> entries;
 #ifdef _WIN32
 	WIN32_FIND_DATAW data;
 	if (HANDLE hFind = FindFirstFileW(stow(appDsep(drc) + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
 		do {
-			if (!isDotName(data.cFileName) && atrcmp(data.dwFileAttributes, filter))
-				entries.emplace_back(wtos(data.cFileName));
+			if (string fname = wtos(data.cFileName); !isDotName(fname) && atrcmp(data.dwFileAttributes, filter) && hasExt(fname, ext))
+				entries.push_back(fname);
 		} while (FindNextFileW(hFind, &data));
 		FindClose(hFind);
 	}
 #else
 	if (DIR* directory = opendir(drc.c_str())) {
 		while (dirent* entry = readdir(directory))
-			if (!isDotName(entry->d_name) && dtycmp(drc, entry, filter, true))
-				entries.emplace_back(entry->d_name);
+			if (string fname = entry->d_name; !isDotName(fname) && dtycmp(drc, entry, filter, true) && hasExt(fname, ext))
+				entries.push_back(fname);
 		closedir(directory);
 	}
 #endif

@@ -14,18 +14,18 @@ protected:
 	bool vertical;				// how to arrange widgets
 
 public:
-	Layout(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(Size relSize = 1.f, vector<Widget*> children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Layout() override;
 
-	virtual void draw() const override;
+	virtual Rect draw() const override;
 	virtual void tick(float dSec) override;
 	virtual void onResize() override;
 	virtual void postInit() override;
-	virtual void onMouseMove(const vec2i& mPos, const vec2i& mMov) override;
+	virtual void onMouseMove(vec2i mPos, vec2i mMov) override;
 
 	Widget* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
-	void setWidgets(const vector<Widget*>& wgts);	// not suitable for using on a ReaderBox, use the overload
+	void setWidgets(vector<Widget*>&& wgts);
 	void deleteWidget(sizet id);
 	bool getVertical() const;
 	virtual vec2i position() const override;
@@ -35,7 +35,7 @@ public:
 	virtual vec2i wgtSize(sizet id) const;
 
 protected:
-	void initWidgets(const vector<Widget*>& wgts);
+	void initWidgets(vector<Widget*>&& wgts);
 	virtual vec2i listSize() const;
 };
 
@@ -61,10 +61,10 @@ private:
 	static const vec4 colorDim;
 
 public:
-	Popup(const cvec2<Size>& relSize = 1.f, const vector<Widget*>& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);
+	Popup(const cvec2<Size>& relSize = 1.f, vector<Widget*> children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);
 	virtual ~Popup() override = default;
 
-	virtual void draw() const override;
+	virtual Rect draw() const override;
 
 	virtual vec2i position() const override;
 	virtual vec2i size() const override;
@@ -84,16 +84,16 @@ private:
 	static constexpr float scrollThrottle = 10.f;
 
 public:
-	ScrollArea(const Size& relSize = 1.f, const vector<Widget*>& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	ScrollArea(Size relSize = 1.f, vector<Widget*> children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~ScrollArea() override = default;
 
-	virtual void draw() const override;
+	virtual Rect draw() const override;
 	virtual void tick(float dSec) override;
 	virtual void postInit() override;
-	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
-	virtual void onDrag(const vec2i& mPos, const vec2i& mMov) override;
+	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onDrag(vec2i mPos, vec2i mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
-	virtual void onScroll(const vec2i& wMov) override;
+	virtual void onScroll(vec2i wMov) override;
 
 	virtual Rect frame() const override;
 	virtual vec2i wgtPosition(sizet id) const override;
@@ -101,7 +101,7 @@ public:
 	Rect barRect() const;
 	Rect sliderRect() const;
 	vec2t visibleWidgets() const;
-	void moveListPos(const vec2i& mov);
+	void moveListPos(vec2i mov);
 
 protected:
 	virtual vec2i listLim() const;	// max list position
@@ -118,7 +118,7 @@ private:
 	static void throttleMotion(float& mov, float dSec);
 };
 
-inline void ScrollArea::moveListPos(const vec2i& mov) {
+inline void ScrollArea::moveListPos(vec2i mov) {
 	listPos = vec2i(listPos + mov).clamp(0, listLim());
 }
 

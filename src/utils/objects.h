@@ -40,6 +40,10 @@ struct Vertex {
 
 	ushort& operator[](uint8 i);
 	ushort operator[](uint8 i) const;
+	ushort* begin();
+	const ushort* begin() const;
+	ushort* end();
+	const ushort* end() const;
 };
 
 inline ushort& Vertex::operator[](uint8 i) {
@@ -50,6 +54,22 @@ inline ushort Vertex::operator[](uint8 i) const {
 	return reinterpret_cast<const ushort*>(this)[i];
 }
 
+inline ushort* Vertex::begin() {
+	return reinterpret_cast<ushort*>(this);
+}
+
+inline const ushort* Vertex::begin() const {
+	return reinterpret_cast<const ushort*>(this);
+}
+
+inline ushort* Vertex::end() {
+	return reinterpret_cast<ushort*>(this) + size;
+}
+
+inline const ushort* Vertex::end() const {
+	return reinterpret_cast<const ushort*>(this) + size;
+}
+
 // vertex data that's shared between objects
 struct Blueprint {
 	vector<vec3> verts;
@@ -58,7 +78,7 @@ struct Blueprint {
 	vector<Vertex> elems;	// size must be a multiple of 3 if not INFO_LINES, otherwise 2
 
 	Blueprint() = default;
-	Blueprint(const vector<vec3>& verts, const vector<vec2>& tuvs, const vector<vec3>& norms, const vector<Vertex>& elems);
+	Blueprint(vector<vec3> verts, vector<vec2> tuvs, vector<vec3> norms, vector<Vertex> elems);
 
 	void draw(GLenum mode) const;
 	bool empty() const;
@@ -67,6 +87,26 @@ struct Blueprint {
 inline bool Blueprint::empty() const {
 	return elems.empty() || verts.empty() || tuvs.empty() || norms.empty();
 }
+
+#define DCLASS_CONSTRUCT(Class, Base) \
+	Class() = default; \
+	Class(const Class& o) : \
+		Base() \
+	{ \
+		std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)); \
+	} \
+	Class(Class&& o) : \
+		Base() \
+	{ \
+		std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)); \
+	} \
+	Class& operator=(const Class& o) { \
+		return reinterpret_cast<Class*>(std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)))[-1]; \
+	} \
+	Class& operator=(Class&& o) { \
+		return reinterpret_cast<Class*>(std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)))[-1]; \
+	} \
+	virtual ~Class() override = default;
 
 // 3D object with triangles
 class Object : public Interactable {
@@ -89,8 +129,8 @@ public:
 	Info mode;
 
 public:
-	Object(const vec3& pos = vec3(0.f), const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL);
-	virtual ~Object() override = default;
+	DCLASS_CONSTRUCT(Object, Interactable)
+	Object(const vec3& pos, const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL);
 
 	virtual void draw() const;
 
@@ -135,26 +175,25 @@ public:
 		move,
 		fire
 	} dragState;
-	OCall clcall, crcall, hgcall, ulcall, urcall;
+	OCall hgcall, ulcall, urcall;
 
 	static constexpr float upperPoz = 0.001f;
 private:
 	static const vec4 moveIconColor, fireIconColor;
 
 public:
-	BoardObject(const vec3& pos = vec3(0.f), float size = 1.f, OCall clcall = nullptr, OCall crcall = nullptr, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL | INFO_RAYCAST);
-	virtual ~BoardObject() override = default;
+	DCLASS_CONSTRUCT(BoardObject, Object)
+	BoardObject(const vec3& pos, float size = 1.f, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL | INFO_RAYCAST);
 
 	virtual void draw() const override;
 	virtual void drawTop() const override;
-	virtual void onClick(const vec2i& mPos, uint8 mBut) override;
-	virtual void onHold(const vec2i& mPos, uint8 mBut) override;
+	virtual void onHold(vec2i mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
-	void setModeByInteract(bool on);
+	void setRaycast(bool on);
 };
 
-inline void BoardObject::setModeByInteract(bool on) {
+inline void BoardObject::setRaycast(bool on) {
 	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
 }
 
@@ -162,10 +201,9 @@ inline void BoardObject::setModeByInteract(bool on) {
 class Tile : public BoardObject {
 public:
 	enum class Interactivity : uint8 {
-		none,
-		raycast,
-		tiling,
-		piecing
+		off,
+		on,
+		tiling
 	};
 
 private:
@@ -173,9 +211,8 @@ private:
 	bool breached;	// only for fortress
 
 public:
-	Tile() = default;
-	Tile(const vec3& pos, float size, Com::Tile type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, Info mode);
-	virtual ~Tile() override = default;
+	DCLASS_CONSTRUCT(Tile, BoardObject)
+	Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, Info mode);
 
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 
@@ -185,9 +222,9 @@ public:
 	bool isUnbreachedFortress() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
-	void setCalls(Interactivity lvl);
+	void setInteractivity(Interactivity lvl);
 private:
-	static Info getModeByType(Info mode, Com::Tile type);
+	static Info getModeShow(Info mode, Com::Tile type);
 };
 
 inline Com::Tile Tile::getType() const {
@@ -206,7 +243,7 @@ inline bool Tile::getBreached() const {
 	return breached;
 }
 
-inline Object::Info Tile::getModeByType(Info mode, Com::Tile type) {
+inline Object::Info Tile::getModeShow(Info mode, Com::Tile type) {
 	return type != Com::Tile::empty ? mode | INFO_SHOW : mode & ~INFO_SHOW;
 }
 
@@ -297,9 +334,8 @@ private:
 	Com::Piece type;
 
 public:
-	Piece() = default;
-	Piece(const vec3& pos, float size, Com::Piece type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode);
-	virtual ~Piece() override = default;
+	DCLASS_CONSTRUCT(Piece, BoardObject)
+	Piece(const vec3& pos, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode);
 
 	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
 

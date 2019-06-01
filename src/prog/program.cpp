@@ -1,4 +1,4 @@
-#include "engine/world.h"
+﻿#include "engine/world.h"
 #include <cassert>
 
 void Program::start() {
@@ -111,6 +111,10 @@ void Program::eventUpdateConfig(Button*) {
 
 	cfg.homeWidth = uint16(sstol(ph->inWidth->getText()));
 	cfg.homeHeight = uint16(sstol(ph->inHeight->getText()));
+	cfg.survivalPass = uint8(sstoul(ph->inSurvival->getText()));
+	cfg.favorLimit = uint8(sstoul(ph->inFavors->getText()));
+	cfg.dragonDist = uint8(sstoul(ph->inDragonDist->getText()));
+	cfg.dragonDiag = ph->inDragonDiag->on;
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		cfg.tileAmounts[i] = uint16(sstoul(ph->inTiles[i]->getText()));
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
@@ -130,6 +134,10 @@ void Program::eventUpdateConfig(Button*) {
 void Program::updateConfigWidgets(ProgHost* ph, const Com::Config& cfg) {
 	ph->inWidth->setText(to_string(cfg.homeWidth));
 	ph->inHeight->setText(to_string(cfg.homeHeight));
+	ph->inSurvival->setText(to_string(cfg.survivalPass) + '%');
+	ph->inFavors->setText(to_string(cfg.favorLimit));
+	ph->inDragonDist->setText(to_string(cfg.dragonDist));
+	ph->inDragonDiag->on = cfg.dragonDiag;
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		ph->inTiles[i]->setText(to_string(cfg.tileAmounts[i]));
 	ph->outTileFortress->setText(ProgHost::tileFortressString(cfg));
@@ -172,10 +180,12 @@ void Program::eventOpenSetup() {
 	ps->rcvMidBuffer.resize(game.getConfig().homeWidth);
 }
 
-void Program::eventPlaceTileC(BoardObject* obj) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (uint8 tid = ps->getSelected(); ps->getCount(tid))
-		placeTile(static_cast<Tile*>(obj), tid);
+void Program::eventPlaceTileH() {
+	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select)) {
+		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+		if (uint8 tid = ps->getSelected(); ps->getCount(tid))
+			placeTile(til, tid);
+	}
 }
 
 void Program::eventPlaceTileD(Button* but) {
@@ -191,15 +201,16 @@ void Program::placeTile(Tile* tile, uint8 type) {
 
 	// place the tile
 	tile->setType(Com::Tile(type));
-	tile->setCalls(Tile::Interactivity::tiling);
+	tile->setInteractivity(Tile::Interactivity::tiling);
 	ps->incdecIcon(type, false, true);
 }
 
-void Program::eventPlacePieceC(BoardObject* obj) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	if (uint8 tid = ps->getSelected(); ps->getCount(tid)) {
-		vec2s pos = game.ptog(obj->pos);
-		placePiece(pos, tid, extractPiece(obj, pos));
+void Program::eventPlacePieceH() {
+	vec2s pos;
+	if (Piece* pce; pickBob(pos, pce)) {
+		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+		if (uint8 tid = ps->getSelected(); ps->getCount(tid))
+			placePiece(pos, tid, pce);
 	}
 }
 
@@ -232,9 +243,9 @@ void Program::eventMoveTile(BoardObject* obj) {
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
 		Com::Tile desType = dst->getType();
 		dst->setType(src->getType());
-		dst->setCalls(Tile::Interactivity::tiling);
+		dst->setInteractivity(Tile::Interactivity::tiling);
 		src->setType(desType);
-		src->setCalls(Tile::Interactivity::tiling);
+		src->setInteractivity(Tile::Interactivity::tiling);
 	}
 }
 
@@ -249,16 +260,18 @@ void Program::eventMovePiece(BoardObject* obj) {
 	}
 }
 
-void Program::eventClearTile(BoardObject* obj) {
-	Tile* til = static_cast<Tile*>(obj);
-
-	static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
-	til->setType(Com::Tile::empty);
-	til->setCalls(Tile::Interactivity::tiling);
+void Program::eventClearTile() {
+	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select); til && til->getType() != Com::Tile::empty) {
+		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
+		til->setType(Com::Tile::empty);
+		til->setInteractivity(Tile::Interactivity::tiling);
+	}
 }
 
-void Program::eventClearPiece(BoardObject* obj) {
-	if (Piece* pce = extractPiece(obj, game.ptog(obj->pos))) {
+void Program::eventClearPiece() {
+	vec2s pos;
+	Piece* pce;
+	if (pickBob(pos, pce); pce) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
 		pce->disable();
 	}
@@ -303,8 +316,6 @@ void Program::eventShowWaitPopup(Button*) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
-	static_cast<ProgMatch*>(state.get())->updateFavorIcon(game.getMyTurn(), game.getFavorCount(), game.getFavorTotal());
-
 	World::scene()->addAnimation(Animation(game.getScreen(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(Game::screenPosDown.x, Game::screenPosDown.y, game.getScreen()->pos.z)) })));
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 }
@@ -316,8 +327,8 @@ void Program::eventPlaceDragon(Button*) {
 }
 
 void Program::eventFavorStart(BoardObject* obj) {
-	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LALT])
-		game.placeFavor(static_cast<Piece*>(obj));
+	game.favorState.piece = static_cast<Piece*>(obj);
+	game.updateFavorState();
 }
 
 void Program::eventMove(BoardObject* obj) {
@@ -330,6 +341,10 @@ void Program::eventFire(BoardObject* obj) {
 	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.pieceFire(static_cast<Piece*>(obj), pos, pce);
+}
+
+void Program::eventNegateAttack(Button*) {
+	game.negateAttack();
 }
 
 void Program::eventExitGame(Button*) {
@@ -360,6 +375,30 @@ void Program::eventSetSmooth(Button* but) {
 	World::winSys()->setSmooth(Settings::Smooth(static_cast<SwitchBox*>(but)->getCurOpt()));
 }
 
+void Program::eventSetGammaSL(Button* but) {
+	World::winSys()->setGamma(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::gammaStepFactor);
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(trimZero(to_string(World::sets()->gamma)));
+}
+
+void Program::eventSetGammaLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	World::winSys()->setGamma(sstof(le->getText()));
+	le->setText(trimZero(to_string(World::sets()->gamma)));
+	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->gamma * ProgSettings::gammaStepFactor));
+}
+
+void Program::eventSetBrightnessSL(Button* but) {
+	World::winSys()->setBrightness(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::brightStepFactor);
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(trimZero(to_string(World::sets()->brightness)));
+}
+
+void Program::eventSetBrightnessLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	World::winSys()->setBrightness(sstof(le->getText()));
+	le->setText(trimZero(to_string(World::sets()->brightness)));
+	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->brightness * ProgSettings::brightStepFactor));
+}
+
 void Program::eventResetSettings(Button*) {
 	World::winSys()->resetSettings();
 }
@@ -388,6 +427,9 @@ BoardObject* Program::pickBob(vec2s& pos, Piece*& pce) {
 	if (bob) {
 		pos = game.ptog(bob->pos);
 		pce = extractPiece(bob, pos);
+	} else {
+		pos = INT16_MIN;
+		pce = nullptr;
 	}
 	return bob;
 }

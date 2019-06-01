@@ -6,29 +6,39 @@
 // handles game logic
 class Game {
 public:
+	struct FavorState {
+		Piece* piece;	// when dragging piece
+		bool use;		// when holding down lalt
+
+		FavorState();
+	} favorState;	// favor state when dragging piece
+
 	static const vec2 screenPosUp, screenPosDown;
 	static constexpr char messageTurnGo[] = "Your turn";
 	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
 	static constexpr char messageWin[] = "You win";
 	static constexpr char messageLoose[] = "You lose";
-	static constexpr uint8 favorLimit = 4;
-	static constexpr uint16 dragonDistLimit = 4;
 	static const array<uint16 (*)(uint16, uint16), 4> adjacentStraight;
 	static const array<uint16 (*)(uint16, uint16), 8> adjacentFull;
 
 	uptr<Netcp> netcp;	// shall never be nullptr
 	Com::Config config;
+	std::default_random_engine randGen;
+	std::uniform_int_distribution<uint> randDist;
+
 	Blueprint gridat;
 	Object bgrid, board, screen;
 	TileCol tiles;
 	PieceCol pieces;
 
 	struct Record {
-		Piece* piece;
-		bool attack, swap;
+		Piece* actor;				// the moved piece/the killer
+		Piece* victim;				// the attacked/restored piece	
+		vec2s actorPos, victimPos;	// necessary for restoring
+		bool attack, swap, restore;
 
-		Record(Piece* piece = nullptr, bool attack = false, bool swap = false);
+		Record(Piece* actor = nullptr, Piece* victim = nullptr, vec2s actorPos = INT16_MIN, vec2s victimPos = INT16_MIN, bool attack = false, bool swap = false, bool restore = false);
 	} record;	// what happened the previous turn
 	bool myTurn, firstTurn;
 	uint8 favorCount, favorTotal;
@@ -64,7 +74,7 @@ public:
 	void uninitObjects();
 	void prepareMatch();
 	void setOwnTilesInteract(Tile::Interactivity lvl);
-	void setMidTilesInteract(bool on);
+	void setMidTilesInteract(Tile::Interactivity lvl);
 	void setOwnPiecesInteract(bool on);
 	void setOwnPiecesVisible(bool on);
 	void checkOwnTiles() const;		// throws error string on failure
@@ -76,19 +86,20 @@ public:
 	void fillInFortress();
 	void takeOutFortress();
 
-	void placeFavor(Piece* piece);
+	void updateFavorState();
 	void pieceMove(Piece* piece, vec2s pos, Piece* occupant);
 	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
 	void placeDragon(vec2s pos, Piece* occupant);
+	void negateAttack();
 
 private:
 	void connect(Netcp* net);
 	Piece* getPieces(Piece* pieces, Com::Piece type);
 	void setBgrid();
 	void setMidTiles();
-	void setTiles(Tile* tiles, int16 yofs, OCall lcall, Object::Info mode);
-	void setPieces(Piece* pieces, OCall rcall, OCall ucall, const Material* mat, Object::Info mode);
-	static void setTilesInteract(Tile* tiles, uint16 num, bool on);
+	void setTiles(Tile* tiles, int16 yofs, Object::Info mode);
+	void setPieces(Piece* pieces, OCall ucall, const Material* mat, Object::Info mode);
+	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl);
 	static void setPiecesInteract(Piece* pieces, uint16 num, bool on);
 	void setPiecesVisible(Piece* pieces, bool on);
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
@@ -96,10 +107,11 @@ private:
 	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf);
 	static Com::Tile decompressTile(const uint8* src, uint16 i);
 	Com::Tile pollFavor();
+	void useFavor();
 
 	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor);
 	bool checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor);
-	template <sizet S> bool checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), const array<uint16 (*)(uint16, uint16), S>& vmov);
+	bool checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
 	static bool spaceAvailible(uint16 pos);
 	static bool spaceAvailibleDummy(uint16 pos);
 	bool checkMoveByType(vec2s pos, vec2s dst, Com::Tile favor);
@@ -125,10 +137,11 @@ private:
 	uint16 invertId(uint16 i);
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
+	uint16 inversePieceId(Piece* piece) const;
 };
 
 inline void Game::connect() {
-	return connect(new Netcp);
+	connect(new Netcp);
 }
 
 inline void Game::disconnect() {
@@ -175,8 +188,12 @@ inline uint8 Game::getFavorTotal() const {
 	return favorTotal;
 }
 
-inline void Game::setMidTilesInteract(bool on) {
-	setTilesInteract(tiles.mid(), config.homeWidth, on);
+inline void Game::setOwnTilesInteract(Tile::Interactivity lvl) {
+	setTilesInteract(tiles.own(), config.numTiles, lvl);
+}
+
+inline void Game::setMidTilesInteract(Tile::Interactivity lvl) {
+	setTilesInteract(tiles.mid(), config.homeWidth, lvl);
 }
 
 inline void Game::setOwnPiecesInteract(bool on) {
@@ -207,17 +224,7 @@ inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
 }
 
 inline bool Game::checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor) {
-	return checkMoveByArea(pos, dst, favor, 1, spaceAvailibleDummy, adjacentFull);
-}
-
-template <sizet S>
-bool Game::checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), const array<uint16 (*)(uint16, uint16), S>& vmov) {
-	if (favor == Com::Tile::plains) {
-		favorCount--;
-		favorTotal--;
-		dlim++;
-	}
-	return Dijkstra::travelDist(posToId(pos), dlim, config.homeWidth, config.boardSize, stepable, vmov.data(), S)[posToId(dst)] <= dlim;
+	return checkMoveByArea(pos, dst, favor, 1, spaceAvailibleDummy, adjacentFull.data(), uint8(adjacentFull.size()));
 }
 
 inline bool Game::spaceAvailibleDummy(uint16) {
@@ -250,4 +257,8 @@ inline uint16 Game::tileId(const Tile* tile) const {
 
 inline uint16 Game::inverseTileId(const Tile* tile) const {
 	return uint16(tiles.end() - tile - 1);
+}
+
+inline uint16 Game::inversePieceId(Piece* piece) const {
+	return isOwnPiece(piece) ? uint16(piece - pieces.own()) + config.numPieces : uint16(piece - pieces.ene());
 }

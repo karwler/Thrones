@@ -28,11 +28,11 @@ Vertex::Vertex(ushort v, ushort t, ushort n) :
 
 // BLUEPRINT
 
-Blueprint::Blueprint(const vector<glm::vec3>& verts, const vector<glm::vec2>& tuvs, const vector<glm::vec3>& norms, const vector<Vertex>& elems) :
-	verts(verts),
-	tuvs(tuvs),
-	norms(norms),
-	elems(elems)
+Blueprint::Blueprint(vector<vec3> verts, vector<vec2> tuvs, vector<vec3> norms, vector<Vertex> elems) :
+	verts(std::move(verts)),
+	tuvs(std::move(tuvs)),
+	norms(std::move(norms)),
+	elems(std::move(elems))
 {}
 
 void Blueprint::draw(GLenum mode) const {
@@ -90,11 +90,9 @@ void Object::updateTexture(const Texture* tex, Info mode) {
 const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
 const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
-BoardObject::BoardObject(const vec3& pos, float size, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, const Texture* tex, Info mode) :
+BoardObject::BoardObject(const vec3& pos, float size, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, const Texture* tex, Info mode) :
 	Object(pos, vec3(0.f), vec3(size, 1.f, size), World::scene()->blueprint("plane"), mat, tex, mode),
 	dragState(DragState::none),
-	clcall(clcall),
-	crcall(crcall),
 	hgcall(hgcall),
 	ulcall(ulcall),
 	urcall(urcall)
@@ -120,14 +118,7 @@ void BoardObject::drawTop() const {
 	}
 }
 
-void BoardObject::onClick(const vec2i&, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT)
-		World::prun(clcall, this);
-	else if (mBut == SDL_BUTTON_RIGHT)
-		World::prun(crcall, this);
-}
-
-void BoardObject::onHold(const vec2i&, uint8 mBut) {
+void BoardObject::onHold(vec2i, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
 		dragState = mBut == SDL_BUTTON_LEFT ? DragState::move : DragState::fire;
 		World::scene()->capture = this;
@@ -145,8 +136,8 @@ void BoardObject::onUndrag(uint8 mBut) {
 
 // TILE
 
-Tile::Tile(const vec3& pos, float size, Com::Tile type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, Info mode) :
-	BoardObject(pos, size, clcall, crcall, hgcall, ulcall, urcall, type != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(type)]) : nullptr, nullptr, getModeByType(mode, type)),
+Tile::Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, Info mode) :
+	BoardObject(pos, size, hgcall, ulcall, urcall, type != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(type)]) : nullptr, nullptr, getModeShow(mode, type)),
 	type(type),
 	breached(false)
 {}
@@ -155,8 +146,8 @@ void Tile::onText(const string&) {}
 
 void Tile::setType(Com::Tile newType) {
 	type = newType;
-	mat = newType != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(type)]) : nullptr;
-	mode = getModeByType(mode, type);
+	mat = newType != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(newType)]) : nullptr;
+	mode = getModeShow(mode, type);
 }
 
 void Tile::setBreached(bool yes) {
@@ -164,29 +155,9 @@ void Tile::setBreached(bool yes) {
 	mat = World::scene()->material(breached ? "rubble" : Com::tileNames[uint8(type)]);
 }
 
-void Tile::setCalls(Interactivity lvl) {
-	setModeByInteract(lvl != Interactivity::none);
-	switch (lvl) {
-	case Interactivity::tiling:
-		clcall = &Program::eventPlaceTileC;
-		if (type != Com::Tile::empty) {
-			crcall = &Program::eventClearTile;
-			ulcall = &Program::eventMoveTile;
-		} else {
-			crcall = nullptr;
-			ulcall = nullptr;
-		}
-		break;
-	case Interactivity::piecing:
-		clcall = &Program::eventPlacePieceC;
-		crcall = &Program::eventClearPiece;
-		ulcall = nullptr;
-		break;
-	default:
-		clcall = nullptr;
-		crcall = nullptr;
-		ulcall = nullptr;
-	}
+void Tile::setInteractivity(Interactivity lvl) {
+	setRaycast(lvl != Interactivity::off);
+	ulcall = lvl == Interactivity::tiling && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
 }
 
 // TILE COL
@@ -211,8 +182,8 @@ void TileCol::update(const Com::Config& conf) {
 
 // PIECE
 
-Piece::Piece(const vec3& pos, float size, Com::Piece type, OCall clcall, OCall crcall, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode) :
-	BoardObject(pos, size, clcall, crcall, hgcall, ulcall, urcall, mat, World::winSys()->texture(Com::pieceNames[uint8(type)]), mode),
+Piece::Piece(const vec3& pos, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode) :
+	BoardObject(pos, size, hgcall, ulcall, urcall, mat, World::winSys()->texture(Com::pieceNames[uint8(type)]), mode),
 	lastFortress(INT16_MAX),
 	type(type)
 {}

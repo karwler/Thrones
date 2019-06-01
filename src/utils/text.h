@@ -56,8 +56,6 @@ constexpr char dsep = '/';
 constexpr char dseps[] = "/";
 constexpr char linend[] = "\n";
 #endif
-const string emptyStr = "";
-const string invalidStr = "invalid";
 
 // utility
 
@@ -121,7 +119,7 @@ inline string trimZero(const string& str) {
 
 inline string delExt(const string& path) {
 	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || c == dsep; });
-	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : emptyStr;
+	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : "";
 }
 
 inline string appDsep(const string& path) {
@@ -140,8 +138,7 @@ inline string childPath(const string& parent, const string& child) {
 #endif
 }
 
-template <class T>
-bool isDotName(const T& str) {
+inline bool isDotName(const string& str) {
 	return str[0] == '.' && (str[1] == '\0' || (str[1] == '.' && str[2] == '\0'));
 }
 
@@ -151,7 +148,7 @@ bool isDotName(const T& str) {
 string wtos(const wchar* wstr);
 wstring stow(const string& str);
 #else
-inline string stos(const char* str) {	// dummy function for ARguments::setArgs
+inline string stos(const char* str) {	// dummy function for Arguments::setArgs
 	return str;
 }
 #endif
@@ -289,8 +286,9 @@ void Arguments::setArgs(int argc, C** argv, F conv) {
 			if (int ni = i + 1; ni < argc && argv[ni][0] != '-')
 				opts.emplace(conv(flg), conv(argv[++i]));
 			else
-				flags.emplace(conv(flg));
+				flags.insert(conv(flg));
 		} else
-			vals.emplace_back(conv(argv[i]));
+			vals.push_back(conv(argv[i]));
 	}
+	opts.emplace("", "");	// for if getOpt fails
 }

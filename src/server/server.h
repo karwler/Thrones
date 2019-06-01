@@ -85,9 +85,14 @@ public:
 	static constexpr char defaultName[] = "default";
 	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
 	static constexpr float boardWidth = 10.f;
+	static constexpr uint8 randomLimit = 100;
 
 	string name;
-	uint16 homeWidth, homeHeight;		// TODO: dragon movement, same type tiles connect and ff limit
+	uint16 homeWidth, homeHeight;
+	uint8 survivalPass;
+	uint8 favorLimit;
+	uint8 dragonDist;
+	bool dragonDiag;
 	array<uint16, tileMax> tileAmounts;
 	array<uint16, tileMax-1> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
@@ -108,6 +113,10 @@ private:
 	static constexpr uint16 minHeight = 3;
 	static constexpr uint16 maxHeight = 35;
 	static constexpr char keywordSize[] = "size";
+	static constexpr char keywordSurvival[] = "survival";
+	static constexpr char keywordFavors[] = "favors";
+	static constexpr char keywordDragonDist[] = "dragon_dist";
+	static constexpr char keywordDragonDiag[] = "dragon_diag";
 	static constexpr char keywordTile[] = "tile_";
 	static constexpr char keywordMiddle[] = "middle_";
 	static constexpr char keywordPiece[] = "piece_";
@@ -121,7 +130,7 @@ private:
 	static constexpr char keywordFar[] = "far";
 
 public:
-	Config(const string& name = defaultName);
+	Config(string name = defaultName);
 
 	void updateValues();
 	Config& checkValues();
@@ -136,7 +145,7 @@ public:
 	template <class T, sizet S> static T calcSum(const array<T, S>& nums, sizet size = S);
 private:
 	void readSize(const string& line);
-	template <sizet S> static uint16 floorAmounts(uint16 total, array<uint16, S>& amts, uint16 limit, sizet ei);
+	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, uint16 floor = 0);
 	template <sizet N, sizet S> static void readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
 	void readShift(const string& line);
@@ -152,18 +161,6 @@ T Config::calcSum(const array<T, S>& nums, sizet size) {
 	for (sizet i = 0; i < size; i++)
 		res += nums[i];
 	return res;
-}
-
-template <sizet S>
-uint16 Config::floorAmounts(uint16 total, array<uint16, S>& amts, uint16 limit, sizet ei) {
-	for (sizet i = ei; total > limit;) {
-		if (amts[i]) {
-			amts[i]--;
-			total--;
-		}
-		i = i ? i - 1 : ei;
-	}
-	return total;
 }
 
 template <sizet N, sizet S>

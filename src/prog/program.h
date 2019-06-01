@@ -37,14 +37,14 @@ public:
 
 	// game setup
 	void eventOpenSetup();
-	void eventPlaceTileC(BoardObject* obj);
+	void eventPlaceTileH();
 	void eventPlaceTileD(Button* but);
-	void eventPlacePieceC(BoardObject* obj);
+	void eventPlacePieceH();
 	void eventPlacePieceD(Button* but);
 	void eventMoveTile(BoardObject* obj);
 	void eventMovePiece(BoardObject* obj);
-	void eventClearTile(BoardObject* obj);
-	void eventClearPiece(BoardObject* obj);
+	void eventClearTile();
+	void eventClearPiece();
 	void eventSetupNext(Button* but = nullptr);
 	void eventSetupBack(Button* but = nullptr);
 	void eventShowWaitPopup(Button* but = nullptr);
@@ -55,6 +55,7 @@ public:
 	void eventFavorStart(BoardObject* obj);
 	void eventMove(BoardObject* obj);
 	void eventFire(BoardObject* obj);
+	void eventNegateAttack(Button* but = nullptr);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -62,6 +63,10 @@ public:
 	void eventApplySettings(Button* but = nullptr);
 	void eventSetVsync(Button* but);
 	void eventSetSmooth(Button* but);
+	void eventSetGammaSL(Button* but);
+	void eventSetGammaLE(Button* but);
+	void eventSetBrightnessSL(Button* but);
+	void eventSetBrightnessLE(Button* but);
 	void eventResetSettings(Button* but);
 	void eventOpenInfo(Button* but = nullptr);
 

@@ -21,8 +21,8 @@ struct cvec2 {
 	template <class A, class B> constexpr cvec2(const A& x, const B& y);
 	template <class A> constexpr cvec2(const cvec2<A>& v);
 
-	T& operator[](sizet i);
-	constexpr const T& operator[](sizet i) const;
+	template <class I> T& operator[](I i);
+	template <class I> constexpr const T& operator[](I i) const;
 
 	cvec2& operator+=(const cvec2& v);
 	cvec2& operator-=(const cvec2& v);
@@ -71,13 +71,13 @@ constexpr cvec2<T>::cvec2(const cvec2<A>& v) :
 	y(T(v.y))
 {}
 
-template <class T>
-T& cvec2<T>::operator[](sizet i) {
+template <class T> template <class I>
+T& cvec2<T>::operator[](I i) {
 	return (&x)[i];
 }
 
-template <class T>
-constexpr const T& cvec2<T>::operator[](sizet i) const {
+template <class T> template <class I>
+constexpr const T& cvec2<T>::operator[](I i) const {
 	return (&x)[i];
 }
 

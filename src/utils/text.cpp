@@ -21,7 +21,7 @@ string readWordM(const char*& pos) {
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
 	if (len <= 1)
-		return emptyStr;
+		return "";
 	len--;
 	
 	string dst;
@@ -61,7 +61,8 @@ vector<string> readTextFile(const string& file) {
 
 	string text;
 	text.resize(len);
-	fread(text.data(), sizeof(char), text.length(), ifh);
+	if (sizet read = fread(text.data(), sizeof(char), text.length(), ifh); read != len)
+		text.resize(read);
 	fclose(ifh);
 
 	vector<string> lines(1);
@@ -69,7 +70,7 @@ vector<string> readTextFile(const string& file) {
 		if (c != '\n' && c != '\r')
 			lines.back() += c;
 		else if (!lines.back().empty())
-			lines.push_back(emptyStr);
+			lines.emplace_back();
 	}
 	if (lines.back().empty())
 		lines.pop_back();
@@ -87,7 +88,7 @@ bool writeTextFile(const string& file, const string& text) {
 string readIniTitle(const string& line) {
 	sizet li = line.find_first_of('[');
 	sizet ri = line.find_last_of(']');
-	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : emptyStr;
+	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : "";
 }
 
 pairStr readIniLine(const string& line) {

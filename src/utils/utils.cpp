@@ -40,7 +40,7 @@ vec4 Rect::crop(const Rect& rect) {
 
 // TEXTURE
 
-Texture::Texture(const vec2i& size, const vec4& pos, const vec4& end, bool vertical) {
+Texture::Texture(vec2i size, const vec4& pos, const vec4& end, bool vertical) {
 	vec4* pix = new vec4[uint(size.area())];
 	if (vec2f last = size - 1; vertical) {
 		for (int y = 0; y < size.y; y++)
@@ -72,7 +72,7 @@ bool Texture::load(SDL_Surface* img) {
 	return false;
 }
 
-void Texture::loadGL(const vec2i& size, GLenum format, GLenum type, const void* pix) {
+void Texture::loadGL(vec2i size, GLenum format, GLenum type, const void* pix) {
 	res = size;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
@@ -86,7 +86,7 @@ void Texture::loadGL(const vec2i& size, GLenum format, GLenum type, const void* 
 
 // INTERACTABLE
 
-void Interactable::onClick(const vec2i&, uint8) {}
+void Interactable::onClick(vec2i, uint8) {}
 
 // DIJKSTRA
 

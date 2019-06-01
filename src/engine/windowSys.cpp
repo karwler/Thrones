@@ -7,10 +7,9 @@ FontSet::~FontSet() {
 		TTF_CloseFont(font);
 }
 
-void FontSet::init(const string& path) {
+void FontSet::init() {
 	clear();
-	file = path;
-	TTF_Font* tmp = TTF_OpenFont(path.c_str(), fontTestHeight);
+	TTF_Font* tmp = TTF_OpenFont(fileFont, fontTestHeight);
 	if (!tmp)
 		throw std::runtime_error(TTF_GetError());
 
@@ -27,7 +26,7 @@ void FontSet::clear() {
 }
 
 TTF_Font* FontSet::addSize(int size) {
-	TTF_Font* font = TTF_OpenFont(file.c_str(), size);
+	TTF_Font* font = TTF_OpenFont(fileFont, size);
 	if (font)
 		fonts.emplace(size, font);
 	else
@@ -85,7 +84,7 @@ void WindowSys::init() {
 
 	fileSys.reset(new FileSys);
 	sets.reset(fileSys->loadSettings());
-	fonts.init(fileFont);
+	fonts.init();
 	createWindow();
 	scene.reset(new Scene);
 	program.reset(new Program);
@@ -163,6 +162,8 @@ void WindowSys::createWindow() {
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
 	else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
+	setGamma(sets->gamma);
+	SDL_SetWindowBrightness(window, sets->brightness);
 
 	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
 		SDL_SetWindowIcon(window, icon);
@@ -213,6 +214,9 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		break;
 	case SDL_KEYDOWN:
 		scene->onKeyDown(event.key);
+		break;
+	case SDL_KEYUP:
+		scene->onKeyUp(event.key);
 		break;
 	case SDL_TEXTINPUT:
 		scene->onText(event.text.text);
@@ -299,7 +303,7 @@ const Texture* WindowSys::texture(const string& name) const {
 	return it != texes.end() ? &it->second : nullptr;
 }
 
-void WindowSys::setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode, uint8 samples) {
+void WindowSys::setScreen(Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode, uint8 samples) {
 	sets->size = size;
 	checkResolution(sets->size, displaySizes());
 	sets->mode = mode;
@@ -329,6 +333,18 @@ void WindowSys::setVsync(Settings::VSync vsync) {
 void WindowSys::setSmooth(Settings::Smooth smooth) {
 	sets->smooth = smooth;
 	updateSmooth();
+}
+
+void WindowSys::setGamma(float gamma) {
+	sets->gamma = clampHigh(gamma, Settings::gammaMax);
+	uint16 ramp[256];
+	SDL_CalculateGammaRamp(sets->gamma, ramp);
+	SDL_SetWindowGammaRamp(window, ramp, ramp, ramp);
+}
+
+void WindowSys::setBrightness(float bright) {
+	sets->brightness = clampHigh(bright, 1.f);
+	SDL_SetWindowBrightness(window, sets->brightness);
 }
 
 void WindowSys::resetSettings() {

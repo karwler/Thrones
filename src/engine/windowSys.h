@@ -16,15 +16,15 @@ public:
 	static constexpr int fontTestHeight = 100;
 private:
 	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
+	static constexpr char fileFont[] = "Merriweather.otf";
 
 	float heightScale;	// for scaling down font size to fit requested height
-	string file;
 	umap<int, TTF_Font*> fonts;
 
 public:
 	~FontSet();
 
-	void init(const string& path);
+	void init();
 	void clear();
 
 	TTF_Font* getFont(int height);
@@ -38,7 +38,6 @@ class WindowSys {
 public:
 	static constexpr char title[] = "Thrones";
 private:
-	static constexpr char fileFont[] = "Merriweather.otf";
 	static constexpr char fileIcon[] = "icon.ico";
 	static constexpr vec2i defaultWindowPos = { SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED };
 	static constexpr uint32 eventCheckTimeout = 50;
@@ -75,9 +74,11 @@ public:
 	vector<vec2i> displaySizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	void setScreen(Settings::Screen screen, const vec2i& size, const SDL_DisplayMode& mode, uint8 samples);
+	void setScreen(Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode, uint8 samples);
 	void setVsync(Settings::VSync vsync);
 	void setSmooth(Settings::Smooth smooth);
+	void setGamma(float gamma);
+	void setBrightness(float bright);
 	void resetSettings();
 
 	FileSys* getFileSys();

@@ -15,10 +15,6 @@ protected:
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
 
-private:
-	std::default_random_engine randGen;
-	std::uniform_int_distribution<uint> randDist;
-
 public:
 	Netcp();
 	virtual ~Netcp();
@@ -27,19 +23,14 @@ public:
 	virtual void tick();
 	bool sendData();
 
-	bool random();
 	template <class T> void push(T val);
-	template <class T> void push(const vector<T>&& lst);
+	template <class T> void push(const vector<T>& vec);
 protected:
 	void openSockets(const char* host, TCPsocket& sock, uint8 num);	// throws const char* error message
 	void closeSocket(TCPsocket& sock);
 	void closeSockets(TCPsocket& last);
 	void checkSocket();
 };
-
-inline bool Netcp::random() {
-	return randDist(randGen);
-}
 
 template <class T>
 inline void Netcp::push(T val) {
@@ -48,7 +39,7 @@ inline void Netcp::push(T val) {
 }
 
 template <class T>
-void Netcp::push(const vector<T>&& vec) {
+void Netcp::push(const vector<T>& vec) {
 	uint16 len = uint16(vec.size() * sizeof(T));
 	std::copy_n(reinterpret_cast<const uint8*>(vec.data()), len, sendb + sendSize);
 	sendSize += len;

@@ -111,10 +111,10 @@ if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES
 	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 	else()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-padded")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s -Wno-padded")
 	endif()
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-array-bounds -Wno-deprecated -Wno-float-equal -Wno-implicit-fallthrough -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")

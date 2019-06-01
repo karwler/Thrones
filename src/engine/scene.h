@@ -19,7 +19,7 @@ public:
 
 	void update() const;
 	static void updateUI();
-	vec3 direction(const vec2i& mPos) const;
+	vec3 direction(vec2i mPos) const;
 };
 
 struct Light {
@@ -41,7 +41,7 @@ struct ClickStamp {
 	ScrollArea* area;
 	vec2i mPos;
 
-	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, const vec2i& mPos = 0);
+	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i mPos = 0);
 };
 
 // defines change of object properties at a time
@@ -101,8 +101,8 @@ private:
 	bool useObject;
 
 public:
-	Animation(Object* object, const queue<Keyframe>& keyframes);
-	Animation(Camera* camera, const queue<Keyframe>& keyframes);
+	Animation(Object* object, queue<Keyframe> keyframes);
+	Animation(Camera* camera, queue<Keyframe> keyframes);
 
 	bool tick(float dSec);
 };
@@ -136,30 +136,31 @@ public:
 	void tick(float dSec);
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
-	void onMouseMove(const vec2i& mPos, const vec2i& mMov);
-	void onMouseDown(const vec2i& mPos, uint8 mBut);
-	void onMouseUp(const vec2i& mPos, uint8 mBut);
-	void onMouseWheel(const vec2i& wMov);
+	void onKeyUp(const SDL_KeyboardEvent& key);
+	void onMouseMove(vec2i mPos, vec2i mMov);
+	void onMouseDown(vec2i mPos, uint8 mBut);
+	void onMouseUp(vec2i mPos, uint8 mBut);
+	void onMouseWheel(vec2i wMov);
 	void onMouseLeave();
 	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
 	const Blueprint* blueprint(const string& name) const;
 	const Material* material(const string& name) const;
 	Camera* getCamera();
-	void setObjects(const vector<Object*>& objs);
+	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
 	Layout* getLayout();
 	Popup* getPopup();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(const Animation& anim);
-	const vec2i& getMouseMove() const;
-	bool cursorInClickRange(const vec2i& mPos, uint8 mBut);
-	vec3 pickerRay(const vec2i& mPos) const;
+	vec2i getMouseMove() const;
+	bool cursorInClickRange(vec2i mPos, uint8 mBut);
+	vec3 pickerRay(vec2i mPos) const;
 
 private:
-	Interactable* getSelected(const vec2i& mPos);
-	Interactable* getScrollOrObject(const vec2i& mPos, Widget* wgt) const;
+	Interactable* getSelected(vec2i mPos);
+	Interactable* getScrollOrObject(vec2i mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 
@@ -175,8 +176,8 @@ inline Camera* Scene::getCamera() {
 	return &camera;
 }
 
-inline void Scene::setObjects(const vector<Object*>& objs) {
-	objects = objs;
+inline void Scene::setObjects(vector<Object*>&& objs) {
+	objects = std::move(objs);
 }
 
 inline Layout* Scene::getLayout() {
@@ -195,11 +196,11 @@ inline void Scene::addAnimation(const Animation& anim) {
 	animations.push_back(anim);
 }
 
-inline const vec2i& Scene::getMouseMove() const {
+inline vec2i Scene::getMouseMove() const {
 	return mouseMove;
 }
 
-inline bool Scene::cursorInClickRange(const vec2i& mPos, uint8 mBut) {
+inline bool Scene::cursorInClickRange(vec2i mPos, uint8 mBut) {
 	return vec2f(mPos - stamps[mBut].mPos).length() <= clickThreshold;
 }
 
@@ -207,6 +208,6 @@ inline ScrollArea* Scene::getSelectedScrollArea() const {
 	return dynamic_cast<Widget*>(select) ? findFirstScrollArea(static_cast<Widget*>(select)) : nullptr;
 }
 
-inline vec3 Scene::pickerRay(const vec2i& mPos) const {
+inline vec3 Scene::pickerRay(vec2i mPos) const {
 	return camera.direction(mPos) * float(camera.zfar);
 }

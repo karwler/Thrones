@@ -31,6 +31,8 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	samples(4),
 	smooth(Smooth::nice),
+	gamma(1.f),
+	brightness(1.f),
 	size(800, 600),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
 	address(loopback),
@@ -66,6 +68,10 @@ Settings* FileSys::loadSettings() {
 			sets->smooth = valToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
 		else if (il.first == iniKeywordSamples)
 			sets->samples = uint8(sstoul(il.second));
+		else if (il.first == iniKeywordGamma)
+			sets->gamma = clampHigh(sstof(il.second), Settings::gammaMax);
+		else if (il.first == iniKeywordBrightness)
+			sets->brightness = clampHigh(sstof(il.second), 1.f);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -83,6 +89,8 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
 	text += makeIniLine(iniKeywordSamples, to_string(sets->samples));
 	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
+	text += makeIniLine(iniKeywordGamma, trimZero(to_string(sets->gamma)));
+	text += makeIniLine(iniKeywordBrightness, trimZero(to_string(sets->brightness)));
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
 	return writeTextFile(fileSettings, text);
@@ -98,11 +106,11 @@ vector<pair<string, Material>> FileSys::loadMtl(const string& file) {
 	for (const string& line : lines) {
 		if (!strncicmp(line, mtlKeywordNewmtl, newLen)) {
 			if (pair<string, Material> next(trim(line.substr(newLen)), Material()); mtl.back().first.empty())
-				mtl.back() = next;
+				mtl.back() = std::move(next);
 			else
-				mtl.push_back(next);
-		} else if (int c0 = toupper(line[0]); c0 == 'K') {
-			if (int c1 = toupper(line[1]); c1 == 'A')
+				mtl.push_back(std::move(next));
+		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
+			if (char c1 = char(toupper(line[1])); c1 == 'A')
 				mtl.back().second.ambient = stov<4>(&line[2], 1.f);
 			else if (c1 == 'D')
 				mtl.back().second.diffuse = stov<4>(&line[2], 1.f);
@@ -118,40 +126,45 @@ vector<pair<string, Material>> FileSys::loadMtl(const string& file) {
 		} else if (c0 == 'D')
 			mtl.back().second.ambient.a = strtof(&line[1], nullptr);
 	}
+	if (mtl.back().first.empty())
+		mtl.pop_back();
 	return mtl;
 }
 
-Blueprint FileSys::loadObj(const string& file) {
-	Blueprint obj;
+vector<pair<string, Blueprint>> FileSys::loadObj(const string& file) {
+	vector<pair<string, Blueprint>> obj(1);
 	vector<string> lines = readTextFile(file);
 	if (lines.empty())
 		return obj;
 
 	uint8 fill = 0;
+	array<ushort, Vertex::size> begins = { 0, 0, 0 };
 	for (const string& line : lines) {
-		if (int c0 = toupper(line[0]); c0 == 'V') {
-			if (int c1 = toupper(line[1]); c1 == 'T')
-				obj.tuvs.emplace_back(stov<2>(&line[2]));
+		if (char c0 = char(toupper(line[0])); c0 == 'V') {
+			if (char c1 = char(toupper(line[1])); c1 == 'T')
+				obj.back().second.tuvs.push_back(stov<2>(&line[2]));
 			else if (c1 == 'N')
-				obj.norms.emplace_back(stov<3>(&line[2]));
+				obj.back().second.norms.push_back(stov<3>(&line[2]));
 			else
-				obj.verts.emplace_back(stov<3>(&line[1]));
+				obj.back().second.verts.push_back(stov<3>(&line[1]));
 		} else if (c0 == 'F')
-			fill |= readFace(&line[1], obj);
+			fill |= readFace(&line[1], obj.back().second, begins);
 		else if (c0 == 'O') {
-			// TODO: split objects
+			begins = { ushort(begins[0] + obj.back().second.verts.size()), ushort(begins[1] + obj.back().second.tuvs.size()), ushort(begins[2] + obj.back().second.norms.size()) };
+			fillUpObj(fill, obj.back().second);
+			if (pair<string, Blueprint> next(trim(line.substr(1)), Blueprint()); obj.back().first.empty() || obj.back().second.empty())
+				obj.back() = std::move(next);
+			else
+				obj.push_back(std::move(next));
 		}
 	}
-	if (fill & 1)
-		obj.verts.emplace_back(0.f);
-	if (fill & 2)
-		obj.tuvs.emplace_back(0.f);
-	if (fill & 4)
-		obj.norms.emplace_back(0.f);
+	fillUpObj(fill, obj.back().second);
+	if (obj.back().first.empty() || obj.back().second.empty())
+		obj.pop_back();
 	return  obj;
 }
 
-uint8 FileSys::readFace(const char* str, Blueprint& obj) {
+uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins) {
 	array<ushort, Vertex::size> sizes = {
 		ushort(obj.verts.size()),
 		ushort(obj.tuvs.size()),
@@ -161,7 +174,7 @@ uint8 FileSys::readFace(const char* str, Blueprint& obj) {
 	uint8 v = 0, e = 0;
 	for (char* end; *str && v < face.size();) {
 		if (int n = int(strtol(str, &end, 0)); end != str) {
-			face[v][e] = resolveObjId(n, sizes[e]);
+			face[v][e] = resolveObjId(n, sizes[e] + begins[e]) - begins[e];
 			str = end;
 			e++;
 		} else if (*str == '/') {
@@ -169,6 +182,7 @@ uint8 FileSys::readFace(const char* str, Blueprint& obj) {
 			e++;
 		}
 		if (e && (*str != '/' || e >= Vertex::size)) {
+			std::copy(sizes.begin() + e, sizes.end(), face[v].begin() + e);
 			e = 0;
 			v++;
 		}
@@ -197,6 +211,16 @@ ushort FileSys::resolveObjId(int id, ushort size) {
 	return size;
 }
 
+void FileSys::fillUpObj(uint8& fill, Blueprint& obj) {
+	if (fill & 1)
+		obj.verts.emplace_back(0.f);
+	if (fill & 2)
+		obj.tuvs.emplace_back(0.f);
+	if (fill & 4)
+		obj.norms.emplace_back(0.f);
+	fill = 0;
+}
+
 vector<string> FileSys::listDir(const string& drc, FileType filter, const string& ext) {
 	vector<string> entries;
 #ifdef _WIN32
@@ -204,7 +228,7 @@ vector<string> FileSys::listDir(const string& drc, FileType filter, const string
 	if (HANDLE hFind = FindFirstFileW(stow(appDsep(drc) + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
 		do {
 			if (string fname = wtos(data.cFileName); !isDotName(fname) && atrcmp(data.dwFileAttributes, filter) && hasExt(fname, ext))
-				entries.push_back(fname);
+				entries.push_back(std::move(fname));
 		} while (FindNextFileW(hFind, &data));
 		FindClose(hFind);
 	}
@@ -212,7 +236,7 @@ vector<string> FileSys::listDir(const string& drc, FileType filter, const string
 	if (DIR* directory = opendir(drc.c_str())) {
 		while (dirent* entry = readdir(directory))
 			if (string fname = entry->d_name; !isDotName(fname) && dtycmp(drc, entry, filter, true) && hasExt(fname, ext))
-				entries.push_back(fname);
+				entries.push_back(std::move(fname));
 		closedir(directory);
 	}
 #endif

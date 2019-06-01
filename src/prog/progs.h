@@ -15,7 +15,7 @@ protected:
 		string text;
 		int length, height;
 
-		Text(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
+		Text(string str, int height = lineHeight, int margin = Label::defaultTextMargin);
 
 		static int strLength(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
 	};
@@ -28,11 +28,12 @@ public:
 	void eventEnter();
 	virtual void eventEscape() {}
 	virtual void eventWheel(int) {}
+	virtual void eventDrag() {}
 
 	virtual Layout* createLayout();
-	static Popup* createPopupMessage(const string& msg, BCall ccal, const string& ctxt = "Ok");
-	static Popup* createPopupChoice(const string& msg, BCall kcal, BCall ccal);
-	static pair<Popup*, Widget*> createPopupInput(const string& msg, BCall kcal);
+	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
+	static Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
+	static pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal);
 
 protected:
 	bool tryClosePopup();
@@ -63,6 +64,10 @@ public:
 
 	LabelEdit* inWidth;
 	LabelEdit* inHeight;
+	LabelEdit* inSurvival;
+	LabelEdit* inFavors;
+	LabelEdit* inDragonDist;
+	CheckBox* inDragonDiag;
 	array<LabelEdit*, Com::tileMax> inTiles;
 	array<LabelEdit*, Com::tileMax-1> inMiddles;
 	array<LabelEdit*, Com::pieceMax> inPieces;
@@ -87,8 +92,8 @@ public:
 	static string middleFortressString(const Com::Config& cfg);
 	static string pieceTotalString(const Com::Config& cfg);
 private:
-	static void setLines(vector<Widget*>& menu, const vector<vector<Widget*>>& lines, sizet& id);
-	static void setTitle(vector<Widget*>& menu, const string& title, sizet& id);
+	static void setLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
+	static void setTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
 
 inline string ProgHost::tileFortressString(const Com::Config& cfg) {
@@ -112,14 +117,14 @@ public:
 		ready
 	};
 
-	bool enemyReady;
 	vector<Com::Tile> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
 	Label* message;
+	bool enemyReady;
 private:
-	Layout* icons;
-	vector<uint16> counters;
 	uint8 selected;
 	Stage stage;
+	vector<uint16> counters;
+	Layout* icons;
 
 public:
 	ProgSetup();
@@ -127,6 +132,7 @@ public:
 
 	virtual void eventEscape() override;
 	virtual void eventWheel(int ymov) override;
+	virtual void eventDrag() override;
 
 	Stage getStage() const;
 	bool setStage(Stage stg);	// returns true if match is ready to load
@@ -164,7 +170,8 @@ class ProgMatch : public ProgState {
 public:
 	Label* message;
 private:
-	Draglet* favorIcon;
+	Label* favorIcon;
+	Label* negateIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 
 public:
@@ -172,6 +179,7 @@ public:
 
 	virtual void eventEscape() override;
 	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
+	void updateNegateIcon(bool on);
 	void setDragonIcon(bool on);
 	void deleteDragonIcon();
 
@@ -185,6 +193,8 @@ public:
 	SwitchBox* dspMode;
 	SwitchBox* msample;
 
+	static constexpr float gammaStepFactor = 10.f;
+	static constexpr float brightStepFactor = 10.f;
 private:
 	static constexpr char rv2iSeparator[] = " x ";
 	umap<string, uint32> pixelformats;
@@ -198,16 +208,16 @@ public:
 
 	SDL_DisplayMode currentMode() const;
 private:
-	static string sizeToFstr(const vec2i& size);
+	static string sizeToFstr(vec2i size);
 	static string dispToFstr(const SDL_DisplayMode& mode);
 };
 
-inline string ProgSettings::sizeToFstr(const vec2i& size) {
+inline string ProgSettings::sizeToFstr(vec2i size) {
 	return size.toString(rv2iSeparator);
 }
 
 inline string ProgSettings::dispToFstr(const SDL_DisplayMode& mode) {
-	return to_string(mode.w) + " x " + to_string(mode.h) + " | " + to_string(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
+	return to_string(mode.w) + rv2iSeparator + to_string(mode.h) + " | " + to_string(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
 }
 
 class ProgInfo : public ProgState {

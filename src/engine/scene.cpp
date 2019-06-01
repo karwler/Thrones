@@ -34,7 +34,7 @@ void Camera::updateUI() {
 	glLoadIdentity();
 }
 
-vec3 Camera::direction(const vec2i& mPos) const {
+vec3 Camera::direction(vec2i mPos) const {
 	vec2 res = World::winSys()->windowSize().glm();
 	vec3 dir = glm::normalize(lat - pos);
 
@@ -50,7 +50,7 @@ vec3 Camera::direction(const vec2i& mPos) const {
 
 // LIGHT
 
-Light::Light(GLenum id, const glm::vec4& ambient, const glm::vec4& diffuse, const glm::vec4& specular, const glm::vec4& position) :
+Light::Light(GLenum id, const vec4& ambient, const vec4& diffuse, const vec4& specular, const vec4& position) :
 	id(id),
 	ambient(ambient),
 	diffuse(diffuse),
@@ -69,7 +69,7 @@ void Light::update() const {
 
 // CLICK STAMP
 
-ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const vec2i& mPos) :
+ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, vec2i mPos) :
 	inter(inter),
 	area(area),
 	mPos(mPos)
@@ -86,15 +86,15 @@ Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot) 
 
 // ANIMATION
 
-Animation::Animation(Object* object, const queue<Keyframe>& keyframes) :
-	keyframes(keyframes),
+Animation::Animation(Object* object, queue<Keyframe> keyframes) :
+	keyframes(std::move(keyframes)),
 	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot),
 	object(object),
 	useObject(true)
 {}
 
-Animation::Animation(Camera* camera, const queue<Keyframe>& keyframes) :
-	keyframes(keyframes),
+Animation::Animation(Camera* camera, queue<Keyframe> keyframes) :
+	keyframes(std::move(keyframes)),
 	begin(0.f, Keyframe::CHG_NONE, camera->pos, camera->lat),
 	camera(camera),
 	useObject(false)
@@ -130,12 +130,9 @@ Scene::Scene() :
 		vector<pair<string, Material>> mtl = FileSys::loadMtl(appDsep(FileSys::dirObjs) + file);
 		materials.insert(mtl.begin(), mtl.end());
 	}
-
 	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG, "obj")) {
-		if (Blueprint bpr = FileSys::loadObj(appDsep(FileSys::dirObjs) + file); !bpr.empty())
-			bprints.emplace(delExt(file), bpr);
-		else
-			std::cerr << "failed to load object " << file << std::endl;
+		vector<pair<string, Blueprint>> obj = FileSys::loadObj(appDsep(FileSys::dirObjs) + file);
+		bprints.insert(obj.begin(), obj.end());
 	}
 }
 
@@ -195,10 +192,14 @@ void Scene::onResize() {
 }
 
 void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
-	if (capture)
+	if (dynamic_cast<LabelEdit*>(capture))
 		capture->onKeypress(key.keysym);
 	else if (!key.repeat)
 		switch (key.keysym.scancode) {
+		case SDL_SCANCODE_LALT:
+			World::game()->favorState.use = true;
+			World::game()->updateFavorState();
+			break;
 		case SDL_SCANCODE_RETURN:
 			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
 				World::prun(popup->kcall, nullptr);
@@ -208,37 +209,52 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 		}
 }
 
-void Scene::onMouseMove(const vec2i& mPos, const vec2i& mMov) {
+void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
+	if (!(dynamic_cast<LabelEdit*>(capture) || key.repeat))
+		switch (key.keysym.scancode) {
+		case SDL_SCANCODE_LALT:
+			World::game()->favorState.use = false;
+			World::game()->updateFavorState();
+			break;
+		}
+}
+
+void Scene::onMouseMove(vec2i mPos, vec2i mMov) {
 	mouseMove = mMov;
 	select = getSelected(mPos);
 
 	if (capture)
 		capture->onDrag(mPos, mMov);
+	else
+		World::state()->eventDrag();
+
 	layout->onMouseMove(mPos, mMov);
 	if (popup)
 		popup->onMouseMove(mPos, mMov);
 }
 
-void Scene::onMouseDown(const vec2i& mPos, uint8 mBut) {
+void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
 	select = getSelected(mPos);
 	stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
-	if (stamps[mBut].area)		// area goes first so widget can overwrite it's capture
+	if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
 		stamps[mBut].area->onHold(mPos, mBut);
 	if (stamps[mBut].inter != stamps[mBut].area)
 		stamps[mBut].inter->onHold(mPos, mBut);
+	if (!capture)	// can be set by previous onHold calls
+		World::state()->eventDrag();
 }
 
-void Scene::onMouseUp(const vec2i& mPos, uint8 mBut) {
+void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
 	if (capture)
 		capture->onUndrag(mBut);
 	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
 		stamps[mBut].inter->onClick(mPos, mBut);
 }
 
-void Scene::onMouseWheel(const vec2i& wMov) {
+void Scene::onMouseWheel(vec2i wMov) {
 	if (ScrollArea* box = getSelectedScrollArea())
 		box->onScroll(wMov * scrollFactorWheel);
 	else if (wMov.y)
@@ -277,7 +293,7 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	onMouseMove(mousePos(), 0);
 }
 
-Interactable* Scene::getSelected(const vec2i& mPos) {
+Interactable* Scene::getSelected(vec2i mPos) {
 	for (Layout* box = !popup ? layout.get() : popup.get();;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
@@ -290,7 +306,7 @@ Interactable* Scene::getSelected(const vec2i& mPos) {
 	}
 }
 
-Interactable* Scene::getScrollOrObject(const vec2i& mPos, Widget* wgt) const {
+Interactable* Scene::getScrollOrObject(vec2i mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
 	return !popup ? static_cast<Interactable*>(rayCast(pickerRay(mPos))) : static_cast<Interactable*>(popup.get());

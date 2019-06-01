@@ -9,6 +9,7 @@
 class Settings {
 public:
 	static constexpr char loopback[] = "127.0.0.1";
+	static constexpr float gammaMax = 2.f;
 
 	enum class Screen : uint8 {
 		window,
@@ -37,6 +38,8 @@ public:
 	VSync vsync;
 	uint8 samples;
 	Smooth smooth;
+	float gamma;
+	float brightness;
 	vec2i size;
 	SDL_DisplayMode mode;
 	string address;
@@ -99,6 +102,8 @@ private:
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordSamples[] = "samples";
 	static constexpr char iniKeywordSmooth[] = "smooth";
+	static constexpr char iniKeywordGamma[] = "gamma";
+	static constexpr char iniKeywordBrightness[] = "brightness";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
@@ -113,15 +118,16 @@ public:
 	Settings* loadSettings();
 	bool saveSettings(const Settings* sets);
 	static vector<pair<string, Material>> loadMtl(const string& file);
-	static Blueprint loadObj(const string& file);
+	static vector<pair<string, Blueprint>> loadObj(const string& file);
 
-	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD, const string& ext = emptyStr);
+	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD, const string& ext = "");
 	static bool createDir(const string& path);
 	static FileType fileType(const string& file, bool readLink = true);
 
 private:
-	static uint8 readFace(const char* str, Blueprint& obj);
+	static uint8 readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins);
 	static ushort resolveObjId(int id, ushort size);
+	static void fillUpObj(uint8& fill, Blueprint& obj);
 
 	static int setWorkingDir();
 #ifdef _WIN32

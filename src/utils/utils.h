@@ -57,7 +57,7 @@ struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
 	constexpr Rect(int x, int y, int w, int h);
-	constexpr Rect(const vec2i& pos, const vec2i& size);
+	constexpr Rect(vec2i pos, vec2i size);
 
 	vec2i& pos();
 	constexpr vec2i pos() const;
@@ -65,7 +65,7 @@ struct Rect : SDL_Rect {
 	constexpr vec2i size() const;
 	constexpr vec2i end() const;
 
-	bool contain(const vec2i& point) const;
+	bool contain(vec2i point) const;
 	vec4 crop(const Rect& rect);				// crop rect so it fits in the frame (aka set rect to the area where they overlap) and return how much was cut off (left, top, right, bottom)
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
@@ -78,7 +78,7 @@ inline constexpr Rect::Rect(int x, int y, int w, int h) :
 	SDL_Rect({ x, y, w, h })
 {}
 
-inline constexpr Rect::Rect(const vec2i& pos, const vec2i& size) :
+inline constexpr Rect::Rect(vec2i pos, vec2i size) :
 	SDL_Rect({ pos.x, pos.y, size.w, size.h })
 {}
 
@@ -102,7 +102,7 @@ inline constexpr vec2i Rect::end() const {
 	return pos() + size();
 }
 
-inline bool Rect::contain(const vec2i& point) const {
+inline bool Rect::contain(vec2i point) const {
 	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
 
@@ -122,16 +122,16 @@ public:
 	Texture();
 	Texture(const string& file);	// throws if load fails
 	Texture(SDL_Surface* img);		// ignores load fail
-	Texture(const vec2i& size, const vec4& pos, const vec4& end, bool vertical);	// creates gradient
+	Texture(vec2i size, const vec4& pos, const vec4& end, bool vertical);	// creates gradient
 
 	void close();
 	GLuint getID() const;
-	const vec2i getRes() const;
+	vec2i getRes() const;
 	bool valid() const;
 
 private:
 	bool load(SDL_Surface* img);
-	void loadGL(const vec2i& size, GLenum format, GLenum type, const void* pix);
+	void loadGL(vec2i size, GLenum format, GLenum type, const void* pix);
 };
 
 inline Texture::Texture() :
@@ -152,7 +152,7 @@ inline GLuint Texture::getID() const {
 	return id;
 }
 
-inline const vec2i Texture::getRes() const {
+inline vec2i Texture::getRes() const {
 	return res;
 }
 
@@ -164,14 +164,15 @@ inline bool Texture::valid() const {
 
 class Interactable {
 public:
+	Interactable() = default;
 	virtual ~Interactable() = default;
 
 	virtual void drawTop() const {}
-	virtual void onClick(const vec2i& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
-	virtual void onMouseMove(const vec2i&, const vec2i&) {}
-	virtual void onHold(const vec2i&, uint8) {}
-	virtual void onDrag(const vec2i&, const vec2i&) {}		// mouse move while left button down
-	virtual void onUndrag(uint8) {}							// get's called on mouse button up if instance is Scene's capture
+	virtual void onClick(vec2i mPos, uint8 mBut);		// dummy function to have an out-of-line virtual function
+	virtual void onMouseMove(vec2i, vec2i) {}
+	virtual void onHold(vec2i, uint8) {}
+	virtual void onDrag(vec2i, vec2i) {}	// mouse move while left button down
+	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
 	virtual void onKeypress(const SDL_Keysym&) {}
 	virtual void onText(const string&) {}
 };
@@ -194,14 +195,14 @@ private:
 	};
 
 	struct Comp {
-		bool operator()(const Node& a, const Node& b);
+		bool operator()(Node a, Node b);
 	};
 
 public:
 	static vector<uint16> travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
 };
 
-inline bool Dijkstra::Comp::operator()(const Node& a, const Node& b) {
+inline bool Dijkstra::Comp::operator()(Node a, Node b) {
 	return a.dst > b.dst;
 }
 
@@ -273,7 +274,7 @@ vector<T>& uniqueSort(vector<T>& vec) {
 
 template <class T>
 T popBack(vector<T>& vec) {
-	T t = vec.back();
+	T t = std::move(vec.back());
 	vec.pop_back();
 	return t;
 }

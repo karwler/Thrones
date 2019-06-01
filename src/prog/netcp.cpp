@@ -8,9 +8,7 @@ Netcp::Netcp() :
 	recvState(Code::none),
 	recvPos(0),
 	socks(nullptr),
-	socket(nullptr),
-	randGen(createRandomEngine()),
-	randDist(0, 1)
+	socket(nullptr)
 {}
 
 Netcp::~Netcp() {
@@ -113,9 +111,10 @@ void NetcpHost::tickWait() {
 		SDLNet_TCP_AddSocket(socks, socket);
 		tickfunc = &NetcpHost::tickGame;
 
+		std::default_random_engine randGen = createRandomEngine();
 		sendSize = World::game()->getConfig().dataSize(Code::setup);
 		World::game()->getConfig().toComData(sendb);
-		if (sendb[1] = random(); sendData()) {
+		if (sendb[1] = uint8(std::uniform_int_distribution<uint>(0, 1)(randGen)); sendData()) {
 			sendb[1] = !sendb[1];
 			World::game()->processCode(Code::setup, sendb + 1);
 			tickfunc = &NetcpHost::tickGame;

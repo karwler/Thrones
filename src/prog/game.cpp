@@ -2,10 +2,21 @@
 
 // RECORD
 
-Game::Record::Record(Piece* piece, bool attack, bool swap) :
-	piece(piece),
+Game::Record::Record(Piece* actor, Piece* victim, vec2s actorPos, vec2s victimPos, bool attack, bool swap, bool restore) :
+	actor(actor),
+	victim(victim),
+	actorPos(actorPos),
+	victimPos(victimPos),
 	attack(attack),
-	swap(swap)
+	swap(swap),
+	restore(restore)
+{}
+
+// FAVORING STATE
+
+Game::FavorState::FavorState() :
+	piece(nullptr),
+	use(false)
 {}
 
 // GAME
@@ -32,6 +43,8 @@ const array<uint16 (*)(uint16, uint16), Game::adjacentFull.size()> Game::adjacen
 };
 
 Game::Game() :
+	randGen(Com::createRandomEngine()),
+	randDist(0, Com::Config::randomLimit - 1),
 	gridat({}, { vec3() }, { vec3(0.f, 1.f, 0.f) }, {}),
 	bgrid(vec3(0.f), vec3(0.f), vec3(1.f), &gridat, World::scene()->material("gray"), nullptr, Object::INFO_SHOW | Object::INFO_LINES),
 	board(vec3(Com::Config::boardWidth / 2.f, -BoardObject::upperPoz, 0.f), vec3(0.f), vec3(Com::Config::boardWidth + 1.f, 1.f, Com::Config::boardWidth + 1.f), World::scene()->blueprint("plane"), World::scene()->material("dark brown"), nullptr, Object::INFO_FILL),
@@ -100,17 +113,20 @@ void Game::processCode(Com::Code code, const uint8* data) {
 	case Com::Code::move:
 		pieces.ene(reinterpret_cast<const uint16*>(data)[0])->pos = gtop(idToPos(reinterpret_cast<const uint16*>(data)[1]), BoardObject::upperPoz);
 		break;
-	case Com::Code::kill:
-		if (data[0])
-			pieces.ene(*reinterpret_cast<const uint16*>(data + 1))->disable();
-		else
-			pieces.own(*reinterpret_cast<const uint16*>(data + 1))->disable();
-		break;
+	case Com::Code::kill: {
+		Piece* piece = &pieces[*reinterpret_cast<const uint16*>(data)];
+		if (isOwnPiece(piece) && favorCount && getTile(ptog(piece->pos))->getType() == Com::Tile::forest)
+			static_cast<ProgMatch*>(World::state())->updateNegateIcon(true);
+		piece->disable();
+		break; }
 	case Com::Code::breach:
 		(tiles.begin() + *reinterpret_cast<const uint16*>(data + 1))->setBreached(data[0]);
 		break;
 	case Com::Code::record:
-		record = Record(pieces.ene(*reinterpret_cast<const uint16*>(data)), data[2], data[3]);
+		if (record = Record(&pieces[reinterpret_cast<const uint16*>(data)[0]], &pieces[reinterpret_cast<const uint16*>(data)[1]], idToPos(reinterpret_cast<const uint16*>(data)[2]), idToPos(reinterpret_cast<const uint16*>(data)[3]), data[8], data[9], data[10]); record.restore) {
+			record.actor->pos = gtop(record.actorPos, BoardObject::upperPoz);
+			record.victim->enable(record.victimPos);
+		}
 		myTurn = true;
 		prepareTurn();
 		break;
@@ -129,11 +145,11 @@ vector<Object*> Game::initObjects() {
 	screen.pos.z = -(config.objectSize / 2.f);
 
 	// prepare objects for setup
-	setTiles(tiles.ene(), -int16(config.homeHeight), nullptr, Object::INFO_TEXTURE);
+	setTiles(tiles.ene(), -int16(config.homeHeight), Object::INFO_TEXTURE);
 	setMidTiles();
-	setTiles(tiles.own(), 1, &Program::eventPlaceTileC, Object::INFO_TEXTURE | Object::INFO_RAYCAST);
-	setPieces(pieces.own(), &Program::eventClearPiece, &Program::eventMovePiece, World::scene()->material("ally"), Object::INFO_TEXTURE);
-	setPieces(pieces.ene(), nullptr, nullptr, World::scene()->material("enemy"), Object::INFO_TEXTURE);
+	setTiles(tiles.own(), 1, Object::INFO_TEXTURE | Object::INFO_RAYCAST);
+	setPieces(pieces.own(), &Program::eventMovePiece, World::scene()->material("ally"), Object::INFO_TEXTURE);
+	setPieces(pieces.ene(), nullptr, World::scene()->material("enemy"), Object::INFO_TEXTURE);
 
 	// collect array of references to all objects
 	initializer_list<Object*> others = { &board, &bgrid, &screen };
@@ -146,39 +162,33 @@ vector<Object*> Game::initObjects() {
 }
 
 void Game::uninitObjects() {
-	setTilesInteract(tiles.begin(), config.boardSize, false);
+	setTilesInteract(tiles.begin(), config.boardSize, Tile::Interactivity::off);
 	setPiecesInteract(pieces.begin(), config.piecesSize, false);
 }
 
 void Game::prepareMatch() {
 	// set interactivity and reassign callback events
-	for (Tile& it : tiles) {
-		it.setModeByInteract(myTurn);
-		it.clcall = nullptr;
-		it.crcall = nullptr;
-		it.ulcall = nullptr;
-	}
+	for (Tile& it : tiles)
+		it.setRaycast(myTurn);	// interactivity is already reset during setup phase
 	for (Piece* it = pieces.own(); it != pieces.ene(); it++) {
-		it->setModeByInteract(myTurn);
-		it->clcall = nullptr;
-		it->crcall = nullptr;
+		it->setRaycast(myTurn);
 		it->hgcall = &Program::eventFavorStart;
 		it->ulcall = &Program::eventMove;
 		it->urcall = it->canFire() ? &Program::eventFire : nullptr;
 	}
 	for (Piece* it = pieces.ene(); it != pieces.end(); it++) {
 		it->mode |= Object::INFO_SHOW;
-		it->setModeByInteract(myTurn);
+		it->setRaycast(myTurn);
 	}
 
 	// check for favor
 	Piece* throne = getOwnPieces(Com::Piece::throne);
 	if (vec2s pos = ptog(throne->pos); getTile(pos)->getType() == Com::Tile::fortress) {
 		throne->lastFortress = posToId(pos);
-		favorCount = favorLimit > 0;
+		favorCount = config.favorLimit > 0;
 	} else
 		favorCount = 0;
-	favorTotal = favorLimit;
+	favorTotal = config.favorLimit;
 
 	// rearange middle tiles
 	vector<Com::Tile> mid(config.homeWidth);
@@ -227,11 +237,11 @@ void Game::checkOwnTiles() const {
 		}
 		// check diversity in each row
 		for (uint8 i = 0; i < uint8(Com::Tile::fortress); i++)
-			if (!cnt[i])
+			if (!cnt[i] && config.tileAmounts[i])
 				throw firstUpper(Com::tileNames[i]) + " missing in row " + to_string(y);
 	}
-	if (empties > 1)
-		throw "Not all tiles were placed";
+	if (empties > config.tileAmounts[uint8(Com::Tile::fortress)])
+		throw string("Not all tiles were placed");
 }
 
 void Game::checkMidTiles() const {
@@ -279,19 +289,27 @@ void Game::takeOutFortress() {
 			it->setType(Com::Tile::empty);
 }
 
-void Game::placeFavor(Piece* piece) {
-	if (Tile* til = getTile(ptog(piece->pos)); til->getType() < Com::Tile::fortress && favorCount) {
-		World::scene()->effects[0].pos = vec3(piece->pos.x, World::scene()->effects[0].pos.y, piece->pos.z);
+void Game::updateFavorState() {
+	if (!favorState.piece || !favorState.use || !favorCount)
+		World::scene()->effects[0].mode &= ~Object::INFO_SHOW;
+	else if (Tile* til = getTile(ptog(favorState.piece->pos)); til->getType() < Com::Tile::fortress && til->getType() != Com::Tile::forest) {
+		World::scene()->effects[0].pos = vec3(favorState.piece->pos.x, World::scene()->effects[0].pos.y, favorState.piece->pos.z);
 		World::scene()->effects[0].mode |= Object::INFO_SHOW;
 	}
 }
 
 Com::Tile Game::pollFavor() {
 	if (World::scene()->effects[0].mode & Object::INFO_SHOW) {
-		World::scene()->effects[0].mode &= ~Object::INFO_SHOW;
+		favorState.piece = nullptr;
+		updateFavorState();
 		return getTile(ptog(World::scene()->effects[0].pos))->getType();
 	}
 	return Com::Tile::empty;
+}
+
+void Game::useFavor() {
+	favorCount--;
+	favorTotal--;
 }
 
 void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant) {
@@ -314,16 +332,16 @@ void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant) {
 			removePiece(occupant);
 			placePiece(piece, pos);
 		}
-		record = Record(piece, true, false);
+		record = Record(piece, occupant, spos, pos, true, false, false);
 	} else if (occupant) {	// switch ally
 		placePiece(occupant, spos);
 		placePiece(piece, pos);
-		record = Record(piece, false, true);
+		record = Record(piece, occupant, spos, pos, false, true, false);
 	} else {				// regular move
 		if (Tile* til = getTile(spos); til->isBreachedFortress())
 			updateFortress(til, false);	// restore fortress
 		placePiece(piece, pos);
-		record = Record(piece, false, false);
+		record = Record(piece, nullptr, spos, pos, false, false, false);
 	}
 	if (!checkWin())
 		endTurn();
@@ -341,13 +359,13 @@ void Game::pieceFire(Piece* killer, vec2s pos, Piece* piece) {
 
 	if (Tile* til = getTile(pos); til->isUnbreachedFortress()) {	// breach fortress
 		updateFortress(til, true);
-		record = Record(killer, true, false);
+		record = Record(killer, nullptr, kpos, pos, true, false, false);
 		endTurn();
 	} else {	// regular fire
 		if (til->isBreachedFortress())
 			updateFortress(til, false);	// restore fortress
 		removePiece(piece);
-		record = Record(killer, true, false);
+		record = Record(killer, piece, kpos, pos, true, false, false);
 		if (!checkWin())
 			endTurn();
 	}
@@ -363,40 +381,46 @@ void Game::placeDragon(vec2s pos, Piece* occupant) {
 	}
 }
 
-void Game::setBgrid() {
-	sizet i = 0;
-	gridat.verts.resize((config.homeWidth + 1) * 4);
-	for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y += config.homeWidth)
-		for (int16 x = 0; x <= config.homeWidth; x++)
-			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f));
-	for (int16 x = 0; x <= config.homeWidth; x += config.homeWidth)
-		for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y++)
-			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f));
-
-	i = 0;
-	gridat.elems.resize((config.homeWidth + 1) * 4);
-	for (uint16 ofs = 0; ofs <= uint16(gridat.verts.size()) / 2; ofs += uint16(gridat.verts.size()) / 2)
-		for (uint16 c = 0; c <= config.homeWidth; c++) {
-			gridat.elems[i++] = Vertex(ofs + c, 0, 0);
-			gridat.elems[i++] = Vertex(ofs + c + config.homeWidth + 1, 0, 0);
-		}
+void Game::negateAttack() {
+	useFavor();
+	record.actor->pos = gtop(record.actorPos, BoardObject::upperPoz);
+	record.victim->enable(record.victimPos);
+	record = Record(record.actor, record.victim, record.actorPos, record.victimPos, false, false, true);
+	endTurn();
 }
 
-void Game::setTiles(Tile* tiles, int16 yofs, OCall lcall, Object::Info mode) {
+void Game::setBgrid() {
+	uint16 i = 0;
+	uint16 boardHeight = config.homeHeight * 2 + 1;
+
+	gridat.verts.resize((config.homeWidth + boardHeight + 2) * 2);
+	for (int16 x = 0; x <= config.homeWidth; x++)
+		for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y += boardHeight)
+			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f));
+	for (int16 y = -int16(config.homeHeight); y <= config.homeHeight + 1; y++)
+		for (int16 x = 0; x <= config.homeWidth; x += config.homeWidth)
+			gridat.verts[i++] = gtop(vec2s(x, y), BoardObject::upperPoz) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f));
+
+	gridat.elems.resize(gridat.verts.size());
+	for (i = 0; i < gridat.elems.size(); i++)
+		gridat.elems[i] = Vertex(i, 0, 0);
+}
+
+void Game::setTiles(Tile* tiles, int16 yofs, Object::Info mode) {
 	sizet id = 0;
 	for (int16 y = yofs, yend = config.homeHeight + yofs; y < yend; y++)
 		for (int16 x = 0; x < config.homeWidth; x++)
-			tiles[id++] = Tile(gtop(vec2s(x, y), 0.f), config.objectSize, Com::Tile::empty, lcall, nullptr, nullptr, nullptr, nullptr, mode);
+			tiles[id++] = Tile(gtop(vec2s(x, y), 0.f), config.objectSize, Com::Tile::empty, nullptr, nullptr, nullptr, mode);
 }
 
 void Game::setMidTiles() {
 	for (int8 i = 0; i < config.homeWidth; i++)
-		*tiles.mid(i) = Tile(gtop(vec2s(i, 0), 0.f), config.objectSize, Com::Tile::empty, &Program::eventPlaceTileC, &Program::eventClearTile, nullptr, &Program::eventMoveTile, nullptr, Object::INFO_TEXTURE);
+		*tiles.mid(i) = Tile(gtop(vec2s(i, 0), 0.f), config.objectSize, Com::Tile::empty, nullptr, &Program::eventMoveTile, nullptr, Object::INFO_TEXTURE);
 }
 
-void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, const Material* mat, Object::Info mode) {
+void Game::setPieces(Piece* pieces, OCall ucall, const Material* mat, Object::Info mode) {
 	for (uint16 i = 0, t = 0, c = 0; i < config.numPieces; i++) {
-		pieces[i] = Piece(gtop(INT16_MIN, BoardObject::upperPoz), config.objectSize, Com::Piece(t), nullptr, rcall, nullptr, ucall, nullptr, mat, mode);
+		pieces[i] = Piece(gtop(INT16_MIN, BoardObject::upperPoz), config.objectSize, Com::Piece(t), nullptr, ucall, nullptr, mat, mode);
 		if (++c >= config.pieceAmounts[t]) {
 			c = 0;
 			t++;
@@ -404,19 +428,14 @@ void Game::setPieces(Piece* pieces, OCall rcall, OCall ucall, const Material* ma
 	}
 }
 
-void Game::setOwnTilesInteract(Tile::Interactivity lvl) {
-	for (Tile* it = tiles.own(); it != tiles.end(); it++)
-		it->setCalls(lvl);
-}
-
-void Game::setTilesInteract(Tile* tiles, uint16 num, bool on) {
+void Game::setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl) {
 	for (uint16 i = 0; i < num; i++)
-		tiles[i].setModeByInteract(on);
+		tiles[i].setInteractivity(lvl);
 }
 
 void Game::setPiecesInteract(Piece* pieces, uint16 num, bool on) {
 	for (uint16 i = 0; i < num; i++)
-		pieces[i].setModeByInteract(on);
+		pieces[i].setRaycast(on);
 }
 
 void Game::setPiecesVisible(Piece* pieces, bool on) {
@@ -454,18 +473,26 @@ bool Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool a
 	case Com::Piece::lancer:
 		return dtil->getType() == Com::Tile::plains && !attacking ? checkMoveByType(pos, dst, favor) : checkMoveBySingle(pos, dst, favor);
 	case Com::Piece::dragon:
-		return !attacking ? checkMoveByArea(pos, dst, favor, dragonDistLimit, spaceAvailible, adjacentStraight) : checkMoveBySingle(pos, dst, favor);
+		return !attacking ? checkMoveByArea(pos, dst, favor, config.dragonDist, spaceAvailible, config.dragonDiag ? adjacentFull.data() : adjacentStraight.data(), uint8(config.dragonDiag ? adjacentFull.size() : adjacentStraight.size())) : checkMoveBySingle(pos, dst, favor);
 	}
 	return checkMoveBySingle(pos, dst, favor);
 }
 
+bool Game::checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool(*stepable)(uint16), uint16(*const* vmov)(uint16, uint16), uint8 movSize) {
+	if (favor == Com::Tile::plains) {
+		useFavor();
+		dlim++;
+	}
+	return Dijkstra::travelDist(posToId(pos), dlim, config.homeWidth, config.boardSize, stepable, vmov, movSize)[posToId(dst)] <= dlim;
+}
+
 bool Game::spaceAvailible(uint16 pos) {
 	Piece* occ = World::game()->findPiece(World::game()->idToPos(pos));
-	return !occ || World::game()->isOwnPiece(occ) || (occ->getType() != Com::Piece::dragon && !occ->canFire());
+	return !occ || (World::game()->isOwnPiece(occ) && occ->getType() != Com::Piece::dragon && !occ->canFire());
 }
 
 bool Game::checkMoveByType(vec2s pos, vec2s dst, Com::Tile favor) {
-	vector<bool> visited(config.boardSize, 0);
+	vector<bool> visited(config.boardSize, false);
 	return checkAdjacentTilesByType(posToId(pos), posToId(dst), visited, getTile(pos)->getType()) || checkMoveBySingle(pos, dst, favor);
 }
 
@@ -507,14 +534,14 @@ bool Game::checkTilesByDistance(vec2s pos, vec2s dst, int16 dist) {
 bool Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) {
 	if (dtil->isUnbreachedFortress())
 		return true;
-	if (!victim || isOwnPiece(victim))
+	if (!victim || isOwnPiece(victim) || (record.restore && victim == record.victim))
 		return false;
 	if (killer->getType() == Com::Piece::throne)
 		return true;
 
 	switch (victim->getType()) {
 	case Com::Piece::warhorse:
-		return victim != record.piece || !(record.attack || record.swap);
+		return victim != record.actor || !(record.attack || record.swap);
 	case Com::Piece::elephant:
 		return dtil->getType() != Com::Tile::plains || killer->getType() == Com::Piece::dragon;
 	case Com::Piece::dragon:
@@ -531,11 +558,10 @@ bool Game::survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking, b
 	if ((piece->getType() == Com::Piece::ranger && src != Com::Tile::water && dst == Com::Tile::water) || (piece->getType() == Com::Piece::spearman && src != Com::Tile::mountain && dst == Com::Tile::mountain))
 		return true;
 	if ((switching && favor == Com::Tile::water) || favor == Com::Tile::mountain) {
-		favorCount--;
-		favorTotal--;
+		useFavor();
 		return true;
 	}
-	return netcp->random();
+	return randDist(randGen) < config.survivalPass;
 }
 
 void Game::failSurvivalCheck(Piece* piece) {
@@ -585,9 +611,9 @@ bool Game::doWin(bool win) {
 }
 
 void Game::prepareTurn() {
-	setOwnTilesInteract(myTurn ? Tile::Interactivity::raycast : Tile::Interactivity::none);
-	setMidTilesInteract(myTurn);
-	setTilesInteract(tiles.ene(), config.numTiles, myTurn);
+	setTilesInteract(tiles.ene(), config.numTiles, Tile::Interactivity(myTurn));
+	setMidTilesInteract(Tile::Interactivity(myTurn));
+	setOwnTilesInteract(Tile::Interactivity(myTurn));
 	setPiecesInteract(pieces.begin(), config.piecesSize, myTurn);
 
 	ProgMatch* pm = static_cast<ProgMatch*>(World::state());
@@ -598,11 +624,12 @@ void Game::prepareTurn() {
 
 void Game::endTurn() {
 	firstTurn = myTurn = false;
+	static_cast<ProgMatch*>(World::state())->updateNegateIcon(false);
 	prepareTurn();
 
 	netcp->push(Com::Code::record);
-	netcp->push(uint16(record.piece - pieces.own()));
-	netcp->push(vector<uint8>({ uint8(record.attack), uint8(record.swap) }));
+	netcp->push(vector<uint16>({ inversePieceId(record.actor), inversePieceId(record.victim), invertId(posToId(record.actorPos)), invertId(posToId(record.victimPos)) }));
+	netcp->push(vector<uint8>({ uint8(record.attack), uint8(record.swap), uint8(record.restore) }));
 	netcp->sendData();
 }
 
@@ -638,9 +665,8 @@ void Game::placePiece(Piece* piece, vec2s pos) {
 
 void Game::removePiece(Piece* piece) {
 	piece->disable();
-	bool mine = isOwnPiece(piece);
-	netcp->push(vector<uint8>({ uint8(Com::Code::kill), uint8(mine) }));
-	netcp->push(uint16(piece - (mine ? pieces.own() : pieces.ene())));
+	netcp->push(Com::Code::kill);
+	netcp->push(inversePieceId(piece));
 }
 
 void Game::updateFortress(Tile* fort, bool breached) {
@@ -652,35 +678,30 @@ void Game::updateFortress(Tile* fort, bool breached) {
 vector<Object*> Game::initDummyObjects() {
 	vector<Object*> objs = initObjects();
 
-	// columns 0 p, 2 f, 4 m, 6 w
-	for (int16 x = 0; x < 8; x += 2)
-		for (int16 y = 1; y <= config.homeHeight; y++)
-			getTile(vec2s(x, y))->setType(Com::Tile(x / 2));
+	uint8 t = 0;
+	vector<uint16> amts(config.tileAmounts.begin(), config.tileAmounts.end());
+	for (int16 x = 0; x < config.homeWidth; x++)
+		for (int16 y = 0; y < config.homeHeight; y++) {
+			if (outRange(vec2s(x, y), vec2s(1, 0), vec2s(config.homeWidth - 2, config.homeHeight - 2)) || !amts[uint8(Com::Tile::fortress)]) {
+				for (; !amts[t]; t++);
+				tiles.own(y * config.homeWidth + x)->setType(Com::Tile(t));
+				amts[t]--;
+			} else
+				amts.back()--;
+		}
 
-	// columns 1 f, 3 fftp
-	for (int16 y = 1; y <= config.homeHeight; y++)
-		getTile(vec2s(1, y))->setType(Com::Tile::forest);
-	for (int16 y = 1; y <= 2; y++)
-		getTile(vec2s(3, y))->setType(Com::Tile::forest);
-	getTile(vec2s(3, 4))->setType(Com::Tile::plains);
+	t = 0;
+	amts.assign(config.middleAmounts.begin(), config.middleAmounts.end());
+	for (uint16 i = 0; t < amts.size(); i++) {
+		for (; t < amts.size() && !amts[t]; t++);
+		if (t < amts.size()) {
+			tiles.mid(i)->setType(Com::Tile(t));
+			amts[t]--;
+		}
+	}
 
-	// columns 5 pm, 7 pw, 8 p
-	getTile(vec2s(5, 1))->setType(Com::Tile::plains);
-	for (int16 y = 2; y <= config.homeHeight; y++)
-		getTile(vec2s(5, y))->setType(Com::Tile::mountain);
-	getTile(vec2s(7, 1))->setType(Com::Tile::plains);
-	for (int16 y = 2; y <= config.homeHeight; y++)
-		getTile(vec2s(7, y))->setType(Com::Tile::water);
-	for (int16 y = 1; y <= config.homeHeight; y++)
-		getTile(vec2s(8, y))->setType(Com::Tile::plains);
-
-	// middle 0 p, 2 f, 4 m, 6 w
-	for (int16 i = 0; i < 8; i += 2)
-		getTile(vec2s(i, 0))->setType(Com::Tile(i / 2));
-
-	// pieces
-	for (uint16 i = 0; i < config.numPieces * 2; i += 2)
-		pieces.own(i/2)->pos = gtop(vec2s(i % config.homeWidth, 1 + i / config.homeWidth), BoardObject::upperPoz);
+	for (uint16 i = 0; i < config.numPieces; i++)
+		pieces.own(i)->pos = gtop(vec2s(i % config.homeWidth, 1 + i / config.homeWidth), BoardObject::upperPoz);
 	return objs;
 }
 #endif

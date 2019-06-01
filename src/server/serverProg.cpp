@@ -18,8 +18,8 @@ constexpr uint32 checkTimeout = 500;
 
 static bool running = true;
 
-static Config getConfig(Arguments&& args, uint16& port) {
-	umap<string, string>::iterator it = args.opts.find("p");
+static Config getConfig(const Arguments& args, uint16& port) {
+	umap<string, string>::const_iterator it = args.opts.find("p");
 	port = it != args.opts.end() ? uint16(sstoul(it->second)) : defaultPort;
 	
 	it = args.opts.find("c");
@@ -27,7 +27,7 @@ static Config getConfig(Arguments&& args, uint16& port) {
 
 	char* path = SDL_GetBasePath();
 	it = args.opts.find("f");
-	string file = it != args.opts.end() ? it->second : (path ? path : emptyStr) + defaultConfigFile;
+	string file = it != args.opts.end() ? it->second : (path ? path : string("")) + defaultConfigFile;
 	SDL_free(path);
 
 	Config ret;
@@ -49,14 +49,15 @@ static int connectionFail(const char* msg, int ret = -1) {
 
 static bool quitting() {
 #ifdef _WIN32
-	return _kbhit() && _getch() == 'q';
+	char cv = _kbhit() ? char(_getch()) : '\0';
 #else
 	fd_set fds;
 	FD_ZERO(&fds);
 	FD_SET(0, &fds);
 	timeval tv = { 0, 0 };
-	return select(1, &fds, nullptr, nullptr, &tv) && getchar() == 'q';
+	char cv = select(1, &fds, nullptr, nullptr, &tv) ? char(getchar()) : '\0';
 #endif
+	return cv == 'q' || cv == 'Q';
 }
 
 static void disconnectSocket(SDLNet_SocketSet sockets, TCPsocket& client) {
@@ -160,14 +161,14 @@ static void eventExit(int) {
 int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
-	termios oldt, newt;
-	tcgetattr(STDIN_FILENO, &oldt);
-	newt = oldt;
-	newt.c_lflag &= ~uint(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	termios termst;
+	tcgetattr(STDIN_FILENO, &termst);
+	tcflag_t oldLflag = termst.c_lflag;
+	termst.c_lflag &= ~uint(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
 #endif
 	uint16 port;
-	Config conf = getConfig(Arguments(argc, argv), port);	// TODO: to something with it
+	Config conf = getConfig(Arguments(argc, argv), port);
 
 	// init server
 	if (SDL_Init(0)) {
@@ -212,7 +213,8 @@ int main(int argc, char** argv) {
 	SDLNet_Quit();
 	SDL_Quit();
 #ifndef _WIN32
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	termst.c_lflag = oldLflag;
+	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
 #endif
 	return 0;
 }

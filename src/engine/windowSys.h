@@ -78,7 +78,6 @@ public:
 	void setVsync(Settings::VSync vsync);
 	void setSmooth(Settings::Smooth smooth);
 	void setGamma(float gamma);
-	void setBrightness(float bright);
 	void resetSettings();
 
 	FileSys* getFileSys();

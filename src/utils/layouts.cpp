@@ -190,7 +190,7 @@ void ScrollArea::onHold(vec2i mPos, uint8 mBut) {
 void ScrollArea::onDrag(vec2i mPos, vec2i mMov) {
 	if (draggingSlider)
 		setSlider(mPos.y - diffSliderMouse);
-	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_RIGHT))
+	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)
 		moveListPos(-mMov);
 	else
 		moveListPos(mMov * vec2i::swap(0, -1, !vertical));

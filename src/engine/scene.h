@@ -137,7 +137,7 @@ public:
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onKeyUp(const SDL_KeyboardEvent& key);
-	void onMouseMove(vec2i mPos, vec2i mMov);
+	void onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat);
 	void onMouseDown(vec2i mPos, uint8 mBut);
 	void onMouseUp(vec2i mPos, uint8 mBut);
 	void onMouseWheel(vec2i wMov);

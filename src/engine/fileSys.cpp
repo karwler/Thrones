@@ -32,7 +32,6 @@ Settings::Settings() :
 	samples(4),
 	smooth(Smooth::nice),
 	gamma(1.f),
-	brightness(1.f),
 	size(800, 600),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
 	address(loopback),
@@ -49,29 +48,48 @@ FileSys::FileSys() {
 		std::cerr << "failed to find object directory" << std::endl;
 	if (fileType(dirTexs) != FTYPE_DIR)
 		std::cerr << "failed to find texture directory" << std::endl;
+#ifdef DEBUG
+	if (Date date = Date::now(); ofLog = fopen(string("log_" + date.toString('-', '_', '-') + ".txt").c_str(), "wb"))
+		writeLog(date.toString() + linend);
+	else
+		std::cerr << "failed to open log stream" << std::endl;
+#endif
+}
+#ifdef DEBUG
+FileSys::~FileSys() {
+	if (ofLog)
+		fclose(ofLog);
 }
 
+void FileSys::writeLog(const string& str) {
+	if (ofLog) {
+		bool ok = fwrite(str.c_str(), sizeof(*str.c_str()), str.length(), ofLog) == str.length();
+		if (ok)
+			ok = fwrite(linend, sizeof(*linend), sizeof(linend) / sizeof(*linend) - 1, ofLog) == sizeof(linend) / sizeof(*linend) - 1;
+		if (!ok)
+			std::cerr << "error during logging" << std::endl;
+	}
+}
+#endif
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
 	for (const string& line : readTextFile(fileSettings)) {
 		if (pairStr il = readIniLine(line); il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
 		else if (il.first == iniKeywordScreen)
-			sets->screen = valToEnum<Settings::Screen>(Settings::screenNames, il.second);
+			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
 		else if (il.first == iniKeywordSize)
 			sets->size = vec2i::get(il.second, strtoul, 0);
 		else if (il.first == iniKeywordMode)
 			sets->mode = strToDisp(il.second);
 		else if (il.first == iniKeywordVsync)
-			sets->vsync = Settings::VSync(valToEnum<int8>(Settings::vsyncNames, il.second) - 1);
+			sets->vsync = Settings::VSync(strToEnum<int8>(Settings::vsyncNames, il.second) - 1);
 		else if (il.first == iniKeywordSmooth)
-			sets->smooth = valToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
+			sets->smooth = strToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
 		else if (il.first == iniKeywordSamples)
 			sets->samples = uint8(sstoul(il.second));
 		else if (il.first == iniKeywordGamma)
 			sets->gamma = clampHigh(sstof(il.second), Settings::gammaMax);
-		else if (il.first == iniKeywordBrightness)
-			sets->brightness = clampHigh(sstof(il.second), 1.f);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -90,7 +108,6 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordSamples, to_string(sets->samples));
 	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
 	text += makeIniLine(iniKeywordGamma, trimZero(to_string(sets->gamma)));
-	text += makeIniLine(iniKeywordBrightness, trimZero(to_string(sets->brightness)));
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, to_string(sets->port));
 	return writeTextFile(fileSettings, text);

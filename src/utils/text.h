@@ -130,14 +130,6 @@ inline wstring appDsep(const wstring& path) {
 	return !path.empty() && path.back() == dsep ? path : path + wchar(dsep);
 }
 #endif
-inline string childPath(const string& parent, const string& child) {
-#ifdef _WIN32
-	return std::all_of(parent.begin(), parent.end(), [](char c) -> bool { return c == dsep; }) && isDriveLetter(child) ? child : appDsep(parent) + child;
-#else
-	return appDsep(parent) + child;
-#endif
-}
-
 inline bool isDotName(const string& str) {
 	return str[0] == '.' && (str[1] == '\0' || (str[1] == '.' && str[2] == '\0'));
 }
@@ -163,7 +155,7 @@ inline string dispToStr(const SDL_DisplayMode& mode) {
 }
 
 inline bool stob(const string& str) {
-	return str == "true" || str == "1";
+	return str == "true" || str == "yes" || str == "1";
 }
 
 inline string btos(bool b) {
@@ -173,11 +165,6 @@ inline string btos(bool b) {
 template <class T, sizet N>
 T strToEnum(const array<string, N>& names, const string& str) {
 	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str); }) - names.begin());
-}
-
-template <class T, sizet N, class V>
-T valToEnum(const array<V, N>& arr, const V& val) {
-	return T(std::find(arr.begin(), arr.end(), val) - arr.begin());
 }
 
 inline long sstol(const string& str, int base = 0) {
@@ -233,6 +220,12 @@ glm::vec<L, float, glm::highp> stov(const char* str, float fill = 0.f) {
 	while (i < L)
 		gvn[i++] = fill;
 	return gvn;
+}
+
+template <class T>
+string ntosPadded(T num, uint pad) {
+	string str = to_string(num);
+	return str.length() < pad ? string(pad - str.length(), '0') + str : str;
 }
 
 // files

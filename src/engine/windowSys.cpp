@@ -75,11 +75,11 @@ int WindowSys::start() {
 
 void WindowSys::init() {
 	if (SDL_Init(SDL_INIT_VIDEO))
-		throw std::runtime_error(string("failed to initialize video:\n") + SDL_GetError());
+		throw std::runtime_error(string("failed to initialize video:") + linend + SDL_GetError());
 	if (TTF_Init())
-		throw std::runtime_error(string("failed to initialize fonts:\n") + TTF_GetError());
+		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
 	if (SDLNet_Init())
-		throw std::runtime_error(string("failed to initialize networking:\n") + SDLNet_GetError());
+		throw std::runtime_error(string("failed to initialize networking:") + linend + SDLNet_GetError());
 	SDL_StopTextInput();	// for some reason TextInput is on
 
 	fileSys.reset(new FileSys);
@@ -153,7 +153,7 @@ void WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
 	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->size.x, sets->size.y, flags)))
-		throw std::runtime_error(string("failed to create window:\n") + SDL_GetError());
+		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
 
 	curDisplay = SDL_GetWindowDisplayIndex(window);
 	checkResolution(sets->size, displaySizes());
@@ -163,7 +163,6 @@ void WindowSys::createWindow() {
 	else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 	setGamma(sets->gamma);
-	SDL_SetWindowBrightness(window, sets->brightness);
 
 	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
 		SDL_SetWindowIcon(window, icon);
@@ -172,7 +171,7 @@ void WindowSys::createWindow() {
 
 	// create context and set up rendering
 	if (!(context = SDL_GL_CreateContext(window)))
-		throw std::runtime_error(string("failed to create context:\n") + SDL_GetError());
+		throw std::runtime_error(string("failed to create context:") + linend + SDL_GetError());
 	setSwapInterval();
 
 	updateViewport();
@@ -201,7 +200,7 @@ void WindowSys::destroyWindow() {
 void WindowSys::handleEvent(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_MOUSEMOTION:
-		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel));
+		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel), event.motion.state);
 		break;
 	case SDL_MOUSEBUTTONDOWN:
 		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button);
@@ -340,11 +339,6 @@ void WindowSys::setGamma(float gamma) {
 	uint16 ramp[256];
 	SDL_CalculateGammaRamp(sets->gamma, ramp);
 	SDL_SetWindowGammaRamp(window, ramp, ramp, ramp);
-}
-
-void WindowSys::setBrightness(float bright) {
-	sets->brightness = clampHigh(bright, 1.f);
-	SDL_SetWindowBrightness(window, sets->brightness);
 }
 
 void WindowSys::resetSettings() {

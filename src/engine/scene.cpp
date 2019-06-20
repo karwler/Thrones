@@ -219,14 +219,14 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 		}
 }
 
-void Scene::onMouseMove(vec2i mPos, vec2i mMov) {
+void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat) {
 	mouseMove = mMov;
 	select = getSelected(mPos);
 
 	if (capture)
 		capture->onDrag(mPos, mMov);
-	else
-		World::state()->eventDrag();
+	else if (mStat)
+		World::state()->eventDrag(mStat);
 
 	layout->onMouseMove(mPos, mMov);
 	if (popup)
@@ -244,7 +244,7 @@ void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
 	if (stamps[mBut].inter != stamps[mBut].area)
 		stamps[mBut].inter->onHold(mPos, mBut);
 	if (!capture)	// can be set by previous onHold calls
-		World::state()->eventDrag();
+		World::state()->eventDrag(SDL_BUTTON(mBut));
 }
 
 void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
@@ -252,6 +252,8 @@ void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
 		capture->onUndrag(mBut);
 	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
 		stamps[mBut].inter->onClick(mPos, mBut);
+	if (!capture)
+		World::state()->eventUndrag();
 }
 
 void Scene::onMouseWheel(vec2i wMov) {
@@ -279,7 +281,7 @@ void Scene::resetLayouts() {
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
 	layout->postInit();
-	onMouseMove(mousePos(), 0);
+	onMouseMove(mousePos(), 0, 0);
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
@@ -290,7 +292,7 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	capture = newCapture;
 	if (capture)
 		capture->onClick(mousePos(), SDL_BUTTON_LEFT);
-	onMouseMove(mousePos(), 0);
+	onMouseMove(mousePos(), 0, 0);
 }
 
 Interactable* Scene::getSelected(vec2i mPos) {

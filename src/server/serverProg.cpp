@@ -41,7 +41,7 @@ static Config getConfig(const Arguments& args, uint16& port) {
 }
 
 static int connectionFail(const char* msg, int ret = -1) {
-	std::cerr << msg << '\n' << SDLNet_GetError() << std::endl;
+	std::cerr << msg << linend << SDLNet_GetError() << std::endl;
 	SDLNet_Quit();
 	SDL_Quit();
 	return ret;
@@ -69,7 +69,7 @@ static void disconnectSocket(SDLNet_SocketSet sockets, TCPsocket& client) {
 }
 
 static void disconnectPlayers(SDLNet_SocketSet sockets, TCPsocket* players) {
-	std::cout << "disconnecting\n" << std::endl;
+	std::cout << "disconnecting" << linend << std::endl;
 	for (uint8 i = 0; i < maxPlayers; i++)
 		disconnectSocket(sockets, players[i]);
 }
@@ -172,11 +172,11 @@ int main(int argc, char** argv) {
 
 	// init server
 	if (SDL_Init(0)) {
-		std::cerr << "failed to initialize SDL:\n" << SDL_GetError() << std::endl;
+		std::cerr << "failed to initialize SDL:" << linend << SDL_GetError() << std::endl;
 		return -1;
 	}
 	if (SDLNet_Init()) {
-		std::cerr << "failed to initialize networking:\n" << SDLNet_GetError() << std::endl;
+		std::cerr << "failed to initialize networking:" << linend << SDLNet_GetError() << std::endl;
 		SDL_Quit();
 		return -1;
 	}
@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
 	TCPsocket players[maxPlayers] = { nullptr, nullptr };
 	SDLNet_SocketSet sockets = SDLNet_AllocSocketSet(maxPlayers + 1);
 	SDLNet_TCP_AddSocket(sockets, server);
-	std::cout << "press 'q' to exit\n" << std::endl;
+	std::cout << "press 'q' to exit" << linend << std::endl;
 
 	signal(SIGINT, eventExit);
 	signal(SIGABRT, eventExit);

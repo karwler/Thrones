@@ -39,7 +39,6 @@ public:
 	uint8 samples;
 	Smooth smooth;
 	float gamma;
-	float brightness;
 	vec2i size;
 	SDL_DisplayMode mode;
 	string address;
@@ -103,7 +102,6 @@ private:
 	static constexpr char iniKeywordSamples[] = "samples";
 	static constexpr char iniKeywordSmooth[] = "smooth";
 	static constexpr char iniKeywordGamma[] = "gamma";
-	static constexpr char iniKeywordBrightness[] = "brightness";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
@@ -112,9 +110,18 @@ private:
 #else
 	array<string, 3> dirFonts;
 #endif
+#ifdef DEBUG
+	FILE* ofLog;
+#endif
 public:
 	FileSys();
+#ifdef DEBUG
+	~FileSys();
 
+	void writeLog(const string& str);
+#else
+	void writeLog(const string&) {}
+#endif
 	Settings* loadSettings();
 	bool saveSettings(const Settings* sets);
 	static vector<pair<string, Material>> loadMtl(const string& file);

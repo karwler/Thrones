@@ -141,7 +141,7 @@ inline Texture::Texture() :
 
 inline Texture::Texture(const string& file) {
 	if (!load(SDL_LoadBMP(file.c_str())))
-		throw std::runtime_error("failed to load texture " + file + '\n' + SDL_GetError());
+		throw std::runtime_error("failed to load texture " + file + linend + SDL_GetError());
 }
 
 inline Texture::Texture(SDL_Surface* img) {

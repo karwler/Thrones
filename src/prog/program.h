@@ -65,8 +65,6 @@ public:
 	void eventSetSmooth(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
-	void eventSetBrightnessSL(Button* but);
-	void eventSetBrightnessLE(Button* but);
 	void eventResetSettings(Button* but);
 	void eventOpenInfo(Button* but = nullptr);
 

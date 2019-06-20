@@ -235,6 +235,12 @@ glm::vec<L, float, glm::highp> stov(const char* str, float fill = 0.f) {
 	return gvn;
 }
 
+template <class T>
+string ntosPadded(T num, uint pad) {
+	string str = to_string(num);
+	return str.length() < pad ? string(pad - str.length(), '0') + str : str;
+}
+
 // files
 
 vector<string> readTextFile(const string& file);

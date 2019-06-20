@@ -28,7 +28,8 @@ public:
 	void eventEnter();
 	virtual void eventEscape() {}
 	virtual void eventWheel(int) {}
-	virtual void eventDrag() {}
+	virtual void eventDrag(uint32) {}
+	virtual void eventUndrag() {}
 
 	virtual Layout* createLayout();
 	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
@@ -125,6 +126,8 @@ private:
 	Stage stage;
 	vector<uint16> counters;
 	Layout* icons;
+	BoardObject* lastHold;	// last object that the cursor was dragged over
+	uint8 lastButton;		// last button that was used on lastHold (0 for none)
 
 public:
 	ProgSetup();
@@ -132,7 +135,8 @@ public:
 
 	virtual void eventEscape() override;
 	virtual void eventWheel(int ymov) override;
-	virtual void eventDrag() override;
+	virtual void eventDrag(uint32 mStat) override;
+	virtual void eventUndrag() override;
 
 	Stage getStage() const;
 	bool setStage(Stage stg);	// returns true if match is ready to load
@@ -140,6 +144,7 @@ public:
 	void incdecIcon(uint8 type, bool inc, bool isTile);
 	uint16 getCount(uint8 type) const;
 	uint8 getSelected() const;
+	void selectNext(bool fwd);
 
 	virtual Layout* createLayout() override;
 private:
@@ -147,6 +152,7 @@ private:
 	static Layout* getPicons();
 	Layout* createSidebar(int& sideLength) const;
 	void setSelected(uint8 sel);
+	uint8 findNextSelect(bool fwd);
 	void switchIcon(uint8 type, bool on, bool isTile);
 };
 
@@ -164,6 +170,10 @@ inline uint16 ProgSetup::getCount(uint8 type) const {
 
 inline uint8 ProgSetup::getSelected() const {
 	return selected;
+}
+
+inline void ProgSetup::selectNext(bool fwd) {
+	setSelected(findNextSelect(fwd));
 }
 
 class ProgMatch : public ProgState {

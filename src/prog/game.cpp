@@ -172,9 +172,9 @@ void Game::prepareMatch() {
 		it.setRaycast(myTurn);	// interactivity is already reset during setup phase
 	for (Piece* it = pieces.own(); it != pieces.ene(); it++) {
 		it->setRaycast(myTurn);
-		it->hgcall = &Program::eventFavorStart;
-		it->ulcall = &Program::eventMove;
-		it->urcall = it->canFire() ? &Program::eventFire : nullptr;
+		it->setHgcall(&Program::eventFavorStart);
+		it->setUlcall(&Program::eventMove);
+		it->setUrcall(it->canFire() ? &Program::eventFire : nullptr);
 	}
 	for (Piece* it = pieces.ene(); it != pieces.end(); it++) {
 		it->mode |= Object::INFO_SHOW;

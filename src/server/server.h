@@ -14,6 +14,22 @@
 #undef main
 #endif
 
+struct Date {
+	uint8 sec, min, hour;
+	uint8 day, month;
+	uint8 wday;
+	int16 year;
+
+	Date(uint8 second, uint8 minute, uint8 hour, uint8 day, uint8 month, int16 year, uint8 weekDay);
+
+	static Date now();
+	string toString(char ts = ':', char sep = ' ', char ds = '.') const;
+};
+
+inline string Date::toString(char ts, char sep, char ds) const {
+	return to_string(year) + ds + ntosPadded(month, 2) + ds + ntosPadded(day, 2) + sep + ntosPadded(hour, 2) + ts + ntosPadded(min, 2) + ts + ntosPadded(sec, 2);
+}
+
 namespace Com {
 
 enum class Tile : uint8 {

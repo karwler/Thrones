@@ -157,7 +157,7 @@ void Tile::setBreached(bool yes) {
 
 void Tile::setInteractivity(Interactivity lvl) {
 	setRaycast(lvl != Interactivity::off);
-	ulcall = lvl == Interactivity::tiling && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
+	setUlcall(lvl == Interactivity::tiling && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr);
 }
 
 // TILE COL

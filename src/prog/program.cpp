@@ -387,18 +387,6 @@ void Program::eventSetGammaLE(Button* but) {
 	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->gamma * ProgSettings::gammaStepFactor));
 }
 
-void Program::eventSetBrightnessSL(Button* but) {
-	World::winSys()->setBrightness(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::brightStepFactor);
-	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(trimZero(to_string(World::sets()->brightness)));
-}
-
-void Program::eventSetBrightnessLE(Button* but) {
-	LabelEdit* le = static_cast<LabelEdit*>(but);
-	World::winSys()->setBrightness(sstof(le->getText()));
-	le->setText(trimZero(to_string(World::sets()->brightness)));
-	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->brightness * ProgSettings::brightStepFactor));
-}
-
 void Program::eventResetSettings(Button*) {
 	World::winSys()->resetSettings();
 }

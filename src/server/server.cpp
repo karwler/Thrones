@@ -2,6 +2,22 @@
 #include <ctime>
 using namespace Com;
 
+Date::Date(uint8 second, uint8 minute, uint8 hour, uint8 day, uint8 month, int16 year, uint8 weekDay) :
+	sec(second),
+	min(minute),
+	hour(hour),
+	day(day),
+	month(month),
+	wday(weekDay),
+	year(year)
+{}
+
+Date Date::now() {
+	time_t rawt = time(nullptr);
+	struct tm* tim = localtime(&rawt);
+	return Date(uint8(tim->tm_sec), uint8(tim->tm_min), uint8(tim->tm_hour), uint8(tim->tm_mday), uint8(tim->tm_mon + 1), int16(tim->tm_year + 1900), uint8(tim->tm_wday ? tim->tm_wday : 7));
+}
+
 Config::Config(string name) :
 	name(std::move(name)),
 	homeWidth(9),

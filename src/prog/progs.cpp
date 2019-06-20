@@ -309,7 +309,9 @@ void ProgHost::setTitle(vector<Widget*>& menu, string&& title, sizet& id) {
 
 ProgSetup::ProgSetup() :
 	enemyReady(false),
-	selected(0)
+	selected(0),
+	lastHold(nullptr),
+	lastButton(0)
 {}
 
 void ProgSetup::eventEscape() {
@@ -321,13 +323,21 @@ void ProgSetup::eventWheel(int ymov) {
 	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
 }
 
-void ProgSetup::eventDrag() {
-	if (uint32 mst = SDL_GetMouseState(nullptr, nullptr); mst & (SDL_BUTTON(SDL_BUTTON_LEFT) | SDL_BUTTON(SDL_BUTTON_RIGHT))) {
-		if (stage == Stage::tiles || stage == Stage::middles)
-			mst & SDL_BUTTON(SDL_BUTTON_LEFT) ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
+void ProgSetup::eventDrag(uint32 mStat) {
+	BoardObject* curHold = dynamic_cast<BoardObject*>(World::scene()->select);
+	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
+	if ((curHold && curHold != lastHold) || (curButton && curButton != lastButton)) {
+		if (stage <= Stage::middles)
+			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
 		else if (stage == Stage::pieces)
-			mst & SDL_BUTTON(SDL_BUTTON_LEFT) ? World::program()->eventPlacePieceH() : World::program()->eventClearPiece();
+			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlacePieceH() : World::program()->eventClearPiece();
 	}
+	lastHold = curHold;
+	lastButton = curButton;
+}
+
+void ProgSetup::eventUndrag() {
+	lastHold = nullptr;
 }
 
 bool ProgSetup::setStage(ProgSetup::Stage stg) {
@@ -368,6 +378,17 @@ void ProgSetup::setSelected(uint8 sel) {
 	static_cast<Draglet*>(icons->getWidget(selected + 1))->setSelected(false);
 	selected = sel;
 	static_cast<Draglet*>(icons->getWidget(selected + 1))->setSelected(true);
+}
+
+uint8 ProgSetup::findNextSelect(bool fwd) {
+	uint8 m = btom<uint8>(fwd);
+	for (uint8 i = selected + m; i < counters.size(); i += m)
+		if (counters[i])
+			return i;
+	for (uint8 i = fwd ? 0 : uint8(counters.size() - 1); i != selected; i += m)
+		if (counters[i])
+			return i;
+	return selected;
 }
 
 Layout* ProgSetup::createLayout() {
@@ -414,9 +435,10 @@ Layout* ProgSetup::createSidebar(int& sideLength) const {
 }
 
 void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
-	if (!inc && counters[type] == 1)
+	if (!inc && counters[type] == 1) {
 		switchIcon(type, false, isTile);
-	else if (inc && !counters[type])
+		setSelected(findNextSelect(true));
+	} else if (inc && !counters[type])
 		switchIcon(type, true, isTile);
 	counters[type] += btom<uint16>(inc);
 }
@@ -554,38 +576,34 @@ Layout* ProgSettings::createLayout() {
 		"VSync",
 		"Multisamples",
 		"Smooth",
-		"Gamma",
-		"Brightness"
+		"Gamma"
 	};
+	std::reverse(txs.begin(), txs.end());
 	sizet lnc = txs.size();
 	int descLength = findMaxLength(txs.begin(), txs.end());
 
 	vector<Widget*> lx[] = { {
-		new Label(descLength, txs[0]),
+		new Label(descLength, popBack(txs)),
 		screen = new SwitchBox(1.f, Settings::screenNames.data(), Settings::screenNames.size(), Settings::screenNames[uint8(World::sets()->screen)])
 	}, {
-		new Label(descLength, txs[1]),
+		new Label(descLength, popBack(txs)),
 		winSize = new SwitchBox(1.f, winsiz.data(), winsiz.size(), World::sets()->size.toString(rv2iSeparator))
 	}, {
-		new Label(descLength, txs[2]),
+		new Label(descLength, popBack(txs)),
 		dspMode = new SwitchBox(1.f, dmodes.data(), dmodes.size(), dispToFstr(World::sets()->mode))
 	}, {
-		new Label(descLength, txs[3]),
+		new Label(descLength, popBack(txs)),
 		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync)
 	}, {
-		new Label(descLength, txs[4]),
+		new Label(descLength, popBack(txs)),
 		msample = new SwitchBox(1.f, samples.data(), samples.size(), to_string(World::sets()->samples))
 	}, {
-		new Label(descLength, txs[5]),
+		new Label(descLength, popBack(txs)),
 		new SwitchBox(1.f, Settings::smoothNames.data(), Settings::smoothNames.size(), Settings::smoothNames[uint8(World::sets()->smooth)], &Program::eventSetSmooth)
 	}, {
-		new Label(descLength, txs[6]),
+		new Label(descLength, popBack(txs)),
 		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), &Program::eventSetGammaSL),
 		new LabelEdit(Text::strLength("0.0"), trimZero(to_string(World::sets()->gamma)), &Program::eventSetGammaLE)
-	},  {
-		new Label(descLength, txs[7]),
-		new Slider(1.f, int(World::sets()->brightness * brightStepFactor), 0, int(brightStepFactor), &Program::eventSetBrightnessSL),
-		new LabelEdit(Text::strLength("0.0"), trimZero(to_string(World::sets()->brightness)), &Program::eventSetBrightnessLE)
 	}, };
 	vector<Widget*> lns(lnc + 2);
 	for (sizet i = 0; i < lnc; i++)

@@ -170,16 +170,16 @@ inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
 // square object on a single plane
 class BoardObject : public Object {
 public:
+	static constexpr float upperPoz = 0.001f;
+private:
+	static const vec4 moveIconColor, fireIconColor;
+
 	enum class DragState : uint8 {
 		none,
 		move,
 		fire
 	} dragState;
 	OCall hgcall, ulcall, urcall;
-
-	static constexpr float upperPoz = 0.001f;
-private:
-	static const vec4 moveIconColor, fireIconColor;
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
@@ -191,10 +191,25 @@ public:
 	virtual void onUndrag(uint8 mBut) override;
 
 	void setRaycast(bool on);
+	void setHgcall(OCall call);
+	void setUlcall(OCall call);
+	void setUrcall(OCall call);
 };
 
 inline void BoardObject::setRaycast(bool on) {
 	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
+}
+
+inline void BoardObject::setHgcall(OCall call) {
+	hgcall = call;
+}
+
+inline void BoardObject::setUlcall(OCall call) {
+	ulcall = call;
+}
+
+inline void BoardObject::setUrcall(OCall call) {
+	urcall = call;
 }
 
 // piece of terrain

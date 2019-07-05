@@ -25,7 +25,8 @@ Config::Config(string name) :
 	survivalPass(randomLimit / 2),
 	favorLimit(4),
 	dragonDist(4),
-	dragonDiag(false),
+	dragonDiag(true),
+	multistage(false),
 	tileAmounts({ 11, 10, 7, 7, 1 }),
 	middleAmounts({ 1, 1, 1, 1 }),
 	pieceAmounts({ 2, 2, 2, 1, 1, 2, 1, 2, 1, 1 }),
@@ -93,7 +94,7 @@ uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, 
 	return total;
 }
 
-uint8* Config::toComData(uint8* data) const {
+void Config::toComData(uint8* data) const {
 	data[0] = uint8(Code::setup);	// leave second byte free for first turn indicator
 
 	uint16* sp = reinterpret_cast<uint16*>(data + 2);
@@ -105,6 +106,7 @@ uint8* Config::toComData(uint8* data) const {
 	*bp++ = favorLimit;
 	*bp++ = dragonDist;
 	*bp++ = dragonDiag;
+	*bp++ = multistage;
 
 	sp = std::copy(tileAmounts.begin(), tileAmounts.end(), reinterpret_cast<uint16*>(bp));
 	sp = std::copy(middleAmounts.begin(), middleAmounts.end(), sp);
@@ -116,7 +118,6 @@ uint8* Config::toComData(uint8* data) const {
 	bp = std::copy(capturers.begin(), capturers.end(), reinterpret_cast<uint8*>(sp));
 	*bp++ = shiftLeft;
 	*bp++ = shiftNear;
-	return data;
 }
 
 void Config::fromComData(const uint8* data) {
@@ -129,6 +130,7 @@ void Config::fromComData(const uint8* data) {
 	favorLimit = *bp++;
 	dragonDist = *bp++;
 	dragonDiag = *bp++;
+	multistage = *bp++;
 
 	sp = reinterpret_cast<const uint16*>(bp);
 	std::copy_n(sp, tileAmounts.size(), tileAmounts.begin());
@@ -155,7 +157,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::full:
 		return sizeof(Code);
 	case Code::setup:
-		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + sizeof(uint8) * 4 + tileAmounts.size() * sizeof(tileAmounts[0]) + middleAmounts.size() * sizeof(middleAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
+		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + sizeof(uint8) * 5 + tileAmounts.size() * sizeof(tileAmounts[0]) + middleAmounts.size() * sizeof(middleAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
 	case Code::tiles:
 		return tileCompressionEnd();
 	case Code::pieces:
@@ -167,7 +169,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::breach:
 		return sizeof(Code) + sizeof(bool) + sizeof(uint16);
 	case Code::record:
-		return sizeof(Code) + sizeof(uint16) * 4 + sizeof(bool) * 3;
+		return sizeof(Code) + sizeof(uint8) + sizeof(uint16) * 2;
 	case Code::win:
 		return sizeof(Code) + sizeof(bool);
 	}
@@ -181,6 +183,7 @@ string Config::toIniText() const {
 	text += makeIniLine(keywordFavors, to_string(favorLimit));
 	text += makeIniLine(keywordDragonDist, to_string(dragonDist));
 	text += makeIniLine(keywordDragonDiag, btos(dragonDiag));
+	text += makeIniLine(keywordMultistage, btos(multistage));
 	writeAmounts(text, keywordTile, tileNames, tileAmounts);
 	writeAmounts(text, keywordMiddle, tileNames, middleAmounts);
 	writeAmounts(text, keywordPiece, pieceNames, pieceAmounts);
@@ -201,7 +204,9 @@ void Config::fromIniLine(const string& line) {
 	else if (!strcicmp(it.first, keywordDragonDist))
 		dragonDist = uint8(sstoul(it.second));
 	else if (!strcicmp(it.first, keywordDragonDiag))
-		dragonDiag = uint8(sstoul(it.second));
+		dragonDiag = stob(it.second);
+	else if (!strcicmp(it.first, keywordMultistage))
+		multistage = stob(it.second);
 	else if (!strncicmp(it.first, keywordTile, strlen(keywordTile)))
 		readAmount(it, keywordTile, tileNames, tileAmounts);
 	else if (!strncicmp(it.first, keywordMiddle, strlen(keywordMiddle)))

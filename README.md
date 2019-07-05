@@ -46,6 +46,7 @@ It's possible to change the following game rules:
 - fate's favor limit: 0 - 255 (per player)  
 - dragon move step limit: 0 - 255  
 - dragon step diagonal: whether a dragon can make diagonal steps  
+- multistage turns: whether firing pieces can move and fire in a single turn  
 - max total piece amount: 189 (per player)  
 - tile/piece amounts are adjusted to fit the board size  
 - amount of simultaneous fortress captures required to win  
@@ -59,5 +60,4 @@ Other client settings are stored in the "settings.ini" file in the game client's
 
 ## To do  
 - add move indicator  
-- test firing on fortress  
 - alternate game modes  

@@ -3,15 +3,47 @@
 #include "netcp.h"
 #include "utils/objects.h"
 
+struct FavorState {
+	Piece* piece;	// when dragging piece
+	bool use;		// when holding down lalt
+
+	FavorState();
+};
+
+class Record {
+public:
+	enum Action : uint8 {
+		ACT_NONE = 0,
+		ACT_MOVE = 1,
+		ACT_SWAP = 2,
+		ACT_ATCK = 4,
+		ACT_FIRE = 8
+	};
+
+	Piece* actor;	// the moved piece/the killer
+	Piece* swapper;	// who swapped with acter
+	Action action;
+
+public:
+	Record(Piece* actor = nullptr, Piece* swapper = nullptr, Action action = ACT_NONE);
+
+	void update(Piece* doActor, Piece* didSwap, Action didActions);
+	void updateProtectionColors(bool on) const;
+	bool isProtectedMember(Piece* pce) const;
+private:
+	void updateProtectionColor(Piece* pce, bool on) const;
+	bool pieceProtected(Piece* pce) const;		// piece mustn't be nullptr
+};
+ENUM_OPERATIONS(Record::Action, uint8)
+
+inline bool Record::pieceProtected(Piece* pce) const {
+	return pce->getType() == Com::Piece::warhorse && (action & (ACT_SWAP | ACT_ATCK | ACT_FIRE));
+}
+
 // handles game logic
 class Game {
 public:
-	struct FavorState {
-		Piece* piece;	// when dragging piece
-		bool use;		// when holding down lalt
-
-		FavorState();
-	} favorState;	// favor state when dragging piece
+	FavorState favorState;	// favor state when dragging piece
 
 	static const vec2 screenPosUp, screenPosDown;
 	static constexpr char messageTurnGo[] = "Your turn";
@@ -32,14 +64,7 @@ private:
 	TileCol tiles;
 	PieceCol pieces;
 
-	struct Record {
-		Piece* actor;				// the moved piece/the killer
-		Piece* victim;				// the attacked/restored piece	
-		vec2s actorPos, victimPos;	// necessary for restoring
-		bool attack, swap, restore;
-
-		Record(Piece* actor = nullptr, Piece* victim = nullptr, vec2s actorPos = INT16_MIN, vec2s victimPos = INT16_MIN, bool attack = false, bool swap = false, bool restore = false);
-	} record;	// what happened the previous turn
+	Record ownRec, eneRec;	// what happened the previous turn
 	bool myTurn, firstTurn;
 	uint8 favorCount, favorTotal;
 
@@ -73,9 +98,9 @@ public:
 #endif
 	void uninitObjects();
 	void prepareMatch();
-	void setOwnTilesInteract(Tile::Interactivity lvl);
-	void setMidTilesInteract(Tile::Interactivity lvl);
-	void setOwnPiecesInteract(bool on);
+	void setOwnTilesInteract(Tile::Interactivity lvl, bool dim = false);
+	void setMidTilesInteract(Tile::Interactivity lvl, bool dim = false);
+	void setOwnPiecesInteract(bool on, bool dim = false);
 	void setOwnPiecesVisible(bool on);
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^
@@ -90,7 +115,7 @@ public:
 	void pieceMove(Piece* piece, vec2s pos, Piece* occupant);
 	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
 	void placeDragon(vec2s pos, Piece* occupant);
-	void negateAttack();
+	void endTurn();
 
 private:
 	void connect(Netcp* net);
@@ -99,8 +124,8 @@ private:
 	void setMidTiles();
 	void setTiles(Tile* tiles, int16 yofs, Object::Info mode);
 	void setPieces(Piece* pieces, OCall ucall, const Material* mat, Object::Info mode);
-	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl);
-	static void setPiecesInteract(Piece* pieces, uint16 num, bool on);
+	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl, bool dim = false);
+	static void setPiecesInteract(Piece* pieces, uint16 num, bool on, bool dim = false);
 	void setPiecesVisible(Piece* pieces, bool on);
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
@@ -109,6 +134,7 @@ private:
 	Com::Tile pollFavor();
 	void useFavor();
 
+	void concludeAction();
 	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor);
 	bool checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor);
 	bool checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
@@ -127,7 +153,6 @@ private:
 	bool doWin(bool win);	// always returns true
 
 	void prepareTurn();
-	void endTurn();
 	void placePiece(Piece* piece, vec2s pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
@@ -188,16 +213,16 @@ inline uint8 Game::getFavorTotal() const {
 	return favorTotal;
 }
 
-inline void Game::setOwnTilesInteract(Tile::Interactivity lvl) {
-	setTilesInteract(tiles.own(), config.numTiles, lvl);
+inline void Game::setOwnTilesInteract(Tile::Interactivity lvl, bool dim) {
+	setTilesInteract(tiles.own(), config.numTiles, lvl, dim);
 }
 
-inline void Game::setMidTilesInteract(Tile::Interactivity lvl) {
-	setTilesInteract(tiles.mid(), config.homeWidth, lvl);
+inline void Game::setMidTilesInteract(Tile::Interactivity lvl, bool dim) {
+	setTilesInteract(tiles.mid(), config.homeWidth, lvl, dim);
 }
 
-inline void Game::setOwnPiecesInteract(bool on) {
-	setPiecesInteract(pieces.own(), config.numPieces, on);
+inline void Game::setOwnPiecesInteract(bool on, bool dim) {
+	setPiecesInteract(pieces.own(), config.numPieces, on, dim);
 }
 
 inline void Game::setOwnPiecesVisible(bool on) {

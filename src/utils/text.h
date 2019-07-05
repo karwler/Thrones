@@ -81,11 +81,7 @@ inline int strncicmp(const string& a, const string& b, sizet n) {	// case insens
 	return strncasecmp(a.c_str(), b.c_str(), n);
 #endif
 }
-#ifdef _WIN32
-inline bool isDriveLetter(const string& path) {
-	return path.length() >= 2 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && std::all_of(path.begin() + 2, path.end(), [](char c) -> bool { return c == dsep; });
-}
-#endif
+
 inline bool isSpace(char c) {
 	return (c > '\0' && c <= ' ') || c == 0x7F;
 }

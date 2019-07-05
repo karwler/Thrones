@@ -215,7 +215,7 @@ Label::~Label() {
 Rect Label::draw() const {
 	Rect frm = Picture::draw();
 	if (textTex.valid())
-		drawTexture(&textTex, textRect(), frm);
+		drawTexture(&textTex, textRect(), frm, colorTexture * dimFactor);
 	return frm;
 }
 
@@ -315,7 +315,7 @@ void Draglet::onUndrag(uint8 mBut) {
 SwitchBox::SwitchBox(Size relSize, const string* opts, sizet ocnt, string curOption, BCall call, Alignment alignment, const Texture* bgTex, const vec4& color, bool showColor, int textMargin, int bgMargin, Layout* parent, sizet id) :
 	Label(relSize, std::move(curOption), call, call, alignment, bgTex, color, showColor, textMargin, bgMargin, parent, id),
 	options(opts, opts + ocnt),
-	curOpt(sizet(std::find(options.begin(), options.end(), curOption) - options.begin()))
+	curOpt(sizet(std::find(options.begin(), options.end(), text) - options.begin()))
 {
 	if (curOpt >= options.size())
 		curOpt = 0;
@@ -323,9 +323,9 @@ SwitchBox::SwitchBox(Size relSize, const string* opts, sizet ocnt, string curOpt
 
 void SwitchBox::onClick(vec2i mPos, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
-		shiftOption(true);
+		shiftOption(1);
 	else if (mBut == SDL_BUTTON_RIGHT)
-		shiftOption(false);
+		shiftOption(-1);
 	Button::onClick(mPos, mBut);
 }
 
@@ -333,9 +333,8 @@ bool SwitchBox::selectable() const {
 	return true;
 }
 
-void SwitchBox::shiftOption(bool fwd) {
-	if (curOpt += btom<sizet>(fwd); curOpt >= options.size())
-		curOpt = fwd ? 0 : options.size() - 1;
+void SwitchBox::shiftOption(long mov) {
+	curOpt = cycle(curOpt, options.size(), mov);
 	setText(options[curOpt]);
 }
 

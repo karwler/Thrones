@@ -60,34 +60,7 @@ struct Keyframe {
 
 	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3());
 };
-
-inline constexpr Keyframe::Change operator~(Keyframe::Change a) {
-	return Keyframe::Change(~uint8(a));
-}
-
-inline constexpr Keyframe::Change operator&(Keyframe::Change a, Keyframe::Change b) {
-	return Keyframe::Change(uint8(a) & uint8(b));
-}
-
-inline constexpr Keyframe::Change operator&=(Keyframe::Change& a, Keyframe::Change b) {
-	return a = Keyframe::Change(uint8(a) & uint8(b));
-}
-
-inline constexpr Keyframe::Change operator^(Keyframe::Change a, Keyframe::Change b) {
-	return Keyframe::Change(uint8(a) ^ uint8(b));
-}
-
-inline constexpr Keyframe::Change operator^=(Keyframe::Change& a, Keyframe::Change b) {
-	return a = Keyframe::Change(uint8(a) ^ uint8(b));
-}
-
-inline constexpr Keyframe::Change operator|(Keyframe::Change a, Keyframe::Change b) {
-	return Keyframe::Change(uint8(a) | uint8(b));
-}
-
-inline constexpr Keyframe::Change operator|=(Keyframe::Change& a, Keyframe::Change b) {
-	return a = Keyframe::Change(uint8(a) | uint8(b));
-}
+ENUM_OPERATIONS(Keyframe::Change, uint8)
 
 // a sequence of keyframes applied to an object
 class Animation {

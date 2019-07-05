@@ -55,34 +55,7 @@ enum FileType : uint8 {
 	FTYPE_OTH = 0x4,
 	FTYPE_STD = FTYPE_REG | FTYPE_DIR
 };
-
-inline constexpr FileType operator~(FileType a) {
-	return FileType(~uint8(a));
-}
-
-inline constexpr FileType operator&(FileType a, FileType b) {
-	return FileType(uint8(a) & uint8(b));
-}
-
-inline constexpr FileType operator&=(FileType& a, FileType b) {
-	return a = FileType(uint8(a) & uint8(b));
-}
-
-inline constexpr FileType operator^(FileType a, FileType b) {
-	return FileType(uint8(a) ^ uint8(b));
-}
-
-inline constexpr FileType operator^=(FileType& a, FileType b) {
-	return a = FileType(uint8(a) ^ uint8(b));
-}
-
-inline constexpr FileType operator|(FileType a, FileType b) {
-	return FileType(uint8(a) | uint8(b));
-}
-
-inline constexpr FileType operator|=(FileType& a, FileType b) {
-	return a = FileType(uint8(a) | uint8(b));
-}
+ENUM_OPERATIONS(FileType, uint8)
 
 // handles all filesystem interactions
 class FileSys {
@@ -133,7 +106,7 @@ public:
 
 private:
 	static uint8 readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins);
-	static ushort resolveObjId(int id, ushort size);
+	static ushort resolveObjId(int id, ushort ofs, ushort size);
 	static void fillUpObj(uint8& fill, Blueprint& obj);
 
 	static int setWorkingDir();

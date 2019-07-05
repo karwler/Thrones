@@ -109,6 +109,7 @@ public:
 	uint8 favorLimit;
 	uint8 dragonDist;
 	bool dragonDiag;
+	bool multistage;
 	array<uint16, tileMax> tileAmounts;
 	array<uint16, tileMax-1> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
@@ -133,6 +134,7 @@ private:
 	static constexpr char keywordFavors[] = "favors";
 	static constexpr char keywordDragonDist[] = "dragon_dist";
 	static constexpr char keywordDragonDiag[] = "dragon_diag";
+	static constexpr char keywordMultistage[] = "multistage";
 	static constexpr char keywordTile[] = "tile_";
 	static constexpr char keywordMiddle[] = "middle_";
 	static constexpr char keywordPiece[] = "piece_";
@@ -150,7 +152,7 @@ public:
 
 	void updateValues();
 	Config& checkValues();
-	uint8* toComData(uint8* data) const;
+	void toComData(uint8* data) const;
 	void fromComData(const uint8* data);
 	uint16 dataSize(Code code) const;
 	uint16 tileCompressionEnd() const;

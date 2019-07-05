@@ -12,21 +12,11 @@ struct Material {
 	Material(const vec4& ambient = vec4(0.f, 0.f, 0.f, 1.f), const vec4& diffuse = vec4(0.f, 0.f, 0.f, 1.f), const vec4& specular = vec4(0.f, 0.f, 0.f, 1.f), const vec4& emission = vec4(0.f, 0.f, 0.f, 1.f), float shine = 0.f);
 
 	void updateColor() const;
-	void updateColorDiffuse(const vec4& difu) const;
-	void updateColorEmission(const vec4& emis) const;
 	static void updateColor(const vec4& ambient, const vec4& diffuse, const vec4& specular, const vec4& emission, float shine);
 };
 
 inline void Material::updateColor() const {
 	updateColor(ambient, diffuse, specular, emission, shine);
-}
-
-inline void Material::updateColorDiffuse(const vec4& difu) const {
-	updateColor(ambient, difu, specular, emission, shine);
-}
-
-inline void Material::updateColorEmission(const vec4& emis) const {
-	updateColor(ambient, diffuse, specular, emis, shine);
 }
 
 // indices of vertex, uv, normal for a point
@@ -80,7 +70,7 @@ struct Blueprint {
 	Blueprint() = default;
 	Blueprint(vector<vec3> verts, vector<vec2> tuvs, vector<vec3> norms, vector<Vertex> elems);
 
-	void draw(GLenum mode) const;
+	void draw(GLenum mode = GL_TRIANGLES) const;
 	bool empty() const;
 };
 
@@ -135,51 +125,39 @@ public:
 	virtual void draw() const;
 
 protected:
+	void updateTransform() const;
 	static void updateTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+	void updateTexture() const;
 	static void updateTexture(const Texture* tex, Info mode);
 };
+ENUM_OPERATIONS(Object::Info, uint8)
 
-inline constexpr Object::Info operator~(Object::Info a) {
-	return Object::Info(~uint8(a));
+inline void Object::updateTransform() const {
+	updateTransform(pos, rot, scl);
 }
 
-inline constexpr Object::Info operator&(Object::Info a, Object::Info b) {
-	return Object::Info(uint8(a) & uint8(b));
-}
-
-inline constexpr Object::Info operator&=(Object::Info& a, Object::Info b) {
-	return a = Object::Info(uint8(a) & uint8(b));
-}
-
-inline constexpr Object::Info operator^(Object::Info a, Object::Info b) {
-	return Object::Info(uint8(a) ^ uint8(b));
-}
-
-inline constexpr Object::Info operator^=(Object::Info& a, Object::Info b) {
-	return a = Object::Info(uint8(a) ^ uint8(b));
-}
-
-inline constexpr Object::Info operator|(Object::Info a, Object::Info b) {
-	return Object::Info(uint8(a) | uint8(b));
-}
-
-inline constexpr Object::Info operator|=(Object::Info& a, Object::Info b) {
-	return a = Object::Info(uint8(a) | uint8(b));
+inline void Object::updateTexture() const {
+	updateTexture(tex, mode);
 }
 
 // square object on a single plane
 class BoardObject : public Object {
 public:
 	static constexpr float upperPoz = 0.001f;
+
+	float diffuseFactor;
+	float emissionFactor;
+	OCall hgcall, ulcall, urcall;
+
 private:
 	static const vec4 moveIconColor, fireIconColor;
+	static const vec4 emissionSelect;
 
 	enum class DragState : uint8 {
 		none,
 		move,
 		fire
 	} dragState;
-	OCall hgcall, ulcall, urcall;
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
@@ -190,35 +168,16 @@ public:
 	virtual void onHold(vec2i mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
-	void setRaycast(bool on);
-	void setHgcall(OCall call);
-	void setUlcall(OCall call);
-	void setUrcall(OCall call);
+	void setRaycast(bool on, bool dim = false);
 };
-
-inline void BoardObject::setRaycast(bool on) {
-	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
-}
-
-inline void BoardObject::setHgcall(OCall call) {
-	hgcall = call;
-}
-
-inline void BoardObject::setUlcall(OCall call) {
-	ulcall = call;
-}
-
-inline void BoardObject::setUrcall(OCall call) {
-	urcall = call;
-}
 
 // piece of terrain
 class Tile : public BoardObject {
 public:
 	enum class Interactivity : uint8 {
-		off,
-		on,
-		tiling
+		ignore,
+		recognize,
+		interact
 	};
 
 private:
@@ -235,9 +194,10 @@ public:
 	void setType(Com::Tile newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
+	bool isPenetrable() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
-	void setInteractivity(Interactivity lvl);
+	void setInteractivity(Interactivity lvl, bool dim = false);
 private:
 	static Info getModeShow(Info mode, Com::Tile type);
 };
@@ -252,6 +212,10 @@ inline bool Tile::isBreachedFortress() const {
 
 inline bool Tile::isUnbreachedFortress() const {
 	return type == Com::Tile::fortress && !breached;
+}
+
+inline bool Tile::isPenetrable() const {
+	return type != Com::Tile::fortress || breached;
 }
 
 inline bool Tile::getBreached() const {

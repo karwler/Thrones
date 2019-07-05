@@ -10,6 +10,8 @@ protected:
 	static constexpr int superHeight = 40;
 	static constexpr int superSpacing = 10;
 	static constexpr int iconSize = 64;
+	static constexpr char arrowLeft[] = "<";
+	static constexpr char arrowRight[] = ">";
 
 	struct Text {
 		string text;
@@ -17,7 +19,7 @@ protected:
 
 		Text(string str, int height = lineHeight, int margin = Label::defaultTextMargin);
 
-		static int strLength(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
+		static int strLen(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
 	};
 	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight, int margin = Label::defaultTextMargin);
 	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight, int margin = Label::defaultTextMargin);
@@ -44,7 +46,7 @@ template<class T>
 int ProgState::findMaxLength(T pos, T end, int height, int margin) {
 	int width = 0;
 	for (; pos != end; pos++)
-		if (int len = Text::strLength(*pos, height, margin); len > width)
+		if (int len = Text::strLen(*pos, height, margin); len > width)
 			width = len;
 	return width;
 }
@@ -65,7 +67,8 @@ public:
 
 	LabelEdit* inWidth;
 	LabelEdit* inHeight;
-	LabelEdit* inSurvival;
+	Slider* inSurvivalSL;
+	LabelEdit* inSurvivalLE;
 	LabelEdit* inFavors;
 	LabelEdit* inDragonDist;
 	CheckBox* inDragonDiag;
@@ -126,8 +129,8 @@ private:
 	Stage stage;
 	vector<uint16> counters;
 	Layout* icons;
-	BoardObject* lastHold;	// last object that the cursor was dragged over
-	uint8 lastButton;		// last button that was used on lastHold (0 for none)
+	vec2s lastHold;		// position of last object that the cursor was dragged over
+	uint8 lastButton;	// last button that was used on lastHold (0 for none)
 
 public:
 	ProgSetup();
@@ -181,7 +184,7 @@ public:
 	Label* message;
 private:
 	Label* favorIcon;
-	Label* negateIcon;
+	Label* turnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 
 public:
@@ -189,7 +192,7 @@ public:
 
 	virtual void eventEscape() override;
 	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
-	void updateNegateIcon(bool on);
+	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
 	void deleteDragonIcon();
 

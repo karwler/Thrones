@@ -150,7 +150,7 @@ public:
 
 	void updateValues();
 	Config& checkValues();
-	uint8* toComData(uint8* data) const;
+	void toComData(uint8* data) const;
 	void fromComData(const uint8* data);
 	uint16 dataSize(Code code) const;
 	uint16 tileCompressionEnd() const;

@@ -25,7 +25,7 @@ Config::Config(string name) :
 	survivalPass(randomLimit / 2),
 	favorLimit(4),
 	dragonDist(4),
-	dragonDiag(false),
+	dragonDiag(true),
 	tileAmounts({ 11, 10, 7, 7, 1 }),
 	middleAmounts({ 1, 1, 1, 1 }),
 	pieceAmounts({ 2, 2, 2, 1, 1, 2, 1, 2, 1, 1 }),
@@ -93,7 +93,7 @@ uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, 
 	return total;
 }
 
-uint8* Config::toComData(uint8* data) const {
+void Config::toComData(uint8* data) const {
 	data[0] = uint8(Code::setup);	// leave second byte free for first turn indicator
 
 	uint16* sp = reinterpret_cast<uint16*>(data + 2);
@@ -116,7 +116,6 @@ uint8* Config::toComData(uint8* data) const {
 	bp = std::copy(capturers.begin(), capturers.end(), reinterpret_cast<uint8*>(sp));
 	*bp++ = shiftLeft;
 	*bp++ = shiftNear;
-	return data;
 }
 
 void Config::fromComData(const uint8* data) {
@@ -167,7 +166,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::breach:
 		return sizeof(Code) + sizeof(bool) + sizeof(uint16);
 	case Code::record:
-		return sizeof(Code) + sizeof(uint16) * 4 + sizeof(bool) * 3;
+		return sizeof(Code) + sizeof(uint8) + sizeof(uint16) * 2;
 	case Code::win:
 		return sizeof(Code) + sizeof(bool);
 	}

@@ -291,7 +291,7 @@ public:
 	virtual bool selectable() const override;
 	sizet getCurOpt() const;
 private:
-	void shiftOption(bool fwd);
+	void shiftOption(long mov);
 };
 
 inline sizet SwitchBox::getCurOpt() const {

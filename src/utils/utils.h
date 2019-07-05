@@ -51,6 +51,29 @@ inline vec2i mousePos() {
 	return p;
 }
 
+#define ENUM_OPERATIONS(EType, IType) \
+	inline constexpr EType operator~(EType a) { \
+		return EType(~IType(a)); \
+	} \
+	inline constexpr EType operator&(EType a, EType b) { \
+		return EType(IType(a) & IType(b)); \
+	} \
+	inline constexpr EType operator&=(EType& a, EType b) { \
+		return a = EType(IType(a) & IType(b)); \
+	} \
+	inline constexpr EType operator^(EType a, EType b) { \
+		return EType(IType(a) ^ IType(b)); \
+	} \
+	inline constexpr EType operator^=(EType& a, EType b) { \
+		return a = EType(IType(a) ^ IType(b)); \
+	} \
+	inline constexpr EType operator|(EType a, EType b) { \
+		return EType(IType(a) | IType(b)); \
+	} \
+	inline constexpr EType operator|=(EType& a, EType b) { \
+		return a = EType(IType(a) | IType(b)); \
+	}
+
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {

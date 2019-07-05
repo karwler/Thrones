@@ -59,5 +59,4 @@ Other client settings are stored in the "settings.ini" file in the game client's
 
 ## To do  
 - add move indicator  
-- test firing on fortress  
 - alternate game modes  

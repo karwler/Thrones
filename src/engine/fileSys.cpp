@@ -191,7 +191,7 @@ uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Ver
 	uint8 v = 0, e = 0;
 	for (char* end; *str && v < face.size();) {
 		if (int n = int(strtol(str, &end, 0)); end != str) {
-			face[v][e] = resolveObjId(n, sizes[e] + begins[e]) - begins[e];
+			face[v][e] = resolveObjId(n, begins[e], sizes[e]);
 			str = end;
 			e++;
 		} else if (*str == '/') {
@@ -220,11 +220,11 @@ uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Ver
 	return fill;
 }
 
-ushort FileSys::resolveObjId(int id, ushort size) {
-	if (ushort pid = ushort(id - 1); id > 0 && pid < size)
-		return pid;
-	if (ushort eid = size + ushort(id); id < 0 && eid < size)
-		return eid;
+ushort FileSys::resolveObjId(int id, ushort ofs, ushort size) {
+	if (ushort pid = id - ofs; id > 0 && pid <= size)
+		return pid - 1;
+	if (id < 0 && -id <= size)
+		return size - id;
 	return size;
 }
 

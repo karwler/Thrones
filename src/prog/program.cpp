@@ -105,13 +105,20 @@ void Program::eventConfigNew(Button*) {
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
+void Program::eventUpdateSurvivalSL(Button* but) {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	uint8 prc = static_cast<Slider*>(but)->getVal();
+	ph->confs[ph->curConf].survivalPass = prc;
+	ph->inSurvivalLE->setText(to_string(prc) + '%');
+}
+
 void Program::eventUpdateConfig(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	Com::Config& cfg = ph->confs[ph->curConf];
 
 	cfg.homeWidth = uint16(sstol(ph->inWidth->getText()));
 	cfg.homeHeight = uint16(sstol(ph->inHeight->getText()));
-	cfg.survivalPass = uint8(sstoul(ph->inSurvival->getText()));
+	cfg.survivalPass = uint8(sstoul(ph->inSurvivalLE->getText()));
 	cfg.favorLimit = uint8(sstoul(ph->inFavors->getText()));
 	cfg.dragonDist = uint8(sstoul(ph->inDragonDist->getText()));
 	cfg.dragonDiag = ph->inDragonDiag->on;
@@ -134,7 +141,8 @@ void Program::eventUpdateConfig(Button*) {
 void Program::updateConfigWidgets(ProgHost* ph, const Com::Config& cfg) {
 	ph->inWidth->setText(to_string(cfg.homeWidth));
 	ph->inHeight->setText(to_string(cfg.homeHeight));
-	ph->inSurvival->setText(to_string(cfg.survivalPass) + '%');
+	ph->inSurvivalSL->setVal(cfg.survivalPass);
+	ph->inSurvivalLE->setText(to_string(cfg.survivalPass) + '%');
 	ph->inFavors->setText(to_string(cfg.favorLimit));
 	ph->inDragonDist->setText(to_string(cfg.dragonDist));
 	ph->inDragonDiag->on = cfg.dragonDiag;
@@ -201,7 +209,7 @@ void Program::placeTile(Tile* tile, uint8 type) {
 
 	// place the tile
 	tile->setType(Com::Tile(type));
-	tile->setInteractivity(Tile::Interactivity::tiling);
+	tile->setInteractivity(Tile::Interactivity::interact);
 	ps->incdecIcon(type, false, true);
 }
 
@@ -243,9 +251,9 @@ void Program::eventMoveTile(BoardObject* obj) {
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
 		Com::Tile desType = dst->getType();
 		dst->setType(src->getType());
-		dst->setInteractivity(Tile::Interactivity::tiling);
+		dst->setInteractivity(Tile::Interactivity::interact);
 		src->setType(desType);
-		src->setInteractivity(Tile::Interactivity::tiling);
+		src->setInteractivity(Tile::Interactivity::interact);
 	}
 }
 
@@ -264,7 +272,7 @@ void Program::eventClearTile() {
 	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select); til && til->getType() != Com::Tile::empty) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
 		til->setType(Com::Tile::empty);
-		til->setInteractivity(Tile::Interactivity::tiling);
+		til->setInteractivity(Tile::Interactivity::interact);
 	}
 }
 
@@ -320,6 +328,10 @@ void Program::eventOpenMatch() {
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 }
 
+void Program::eventEndTurn(Button*) {
+	game.endTurn();
+}
+
 void Program::eventPlaceDragon(Button*) {
 	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
@@ -341,10 +353,6 @@ void Program::eventFire(BoardObject* obj) {
 	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.pieceFire(static_cast<Piece*>(obj), pos, pce);
-}
-
-void Program::eventNegateAttack(Button*) {
-	game.negateAttack();
 }
 
 void Program::eventExitGame(Button*) {
@@ -403,6 +411,14 @@ void Program::eventClosePopup(Button*) {
 
 void Program::eventExit(Button*) {
 	World::winSys()->close();
+}
+
+void Program::eventSBNext(Button* but) {
+	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() - 1))->onClick(0, SDL_BUTTON_LEFT);
+}
+
+void Program::eventSBPrev(Button* but) {
+	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() + 1))->onClick(0, SDL_BUTTON_RIGHT);
 }
 
 void Program::setState(ProgState* newState) {

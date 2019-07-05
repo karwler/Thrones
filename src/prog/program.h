@@ -31,6 +31,7 @@ public:
 	void eventConfigCopy(Button* but = nullptr);
 	void eventConfigNewInput(Button* but = nullptr);
 	void eventConfigNew(Button* but = nullptr);
+	void eventUpdateSurvivalSL(Button* but);
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
 	void eventExitHost(Button* but = nullptr);
@@ -51,11 +52,11 @@ public:
 
 	// game match
 	void eventOpenMatch();
+	void eventEndTurn(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
 	void eventFavorStart(BoardObject* obj);
 	void eventMove(BoardObject* obj);
 	void eventFire(BoardObject* obj);
-	void eventNegateAttack(Button* but = nullptr);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -71,7 +72,9 @@ public:
 	// other
 	void eventClosePopup(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
-	
+	void eventSBNext(Button* but);
+	void eventSBPrev(Button* but);
+
 	ProgState* getState();
 	Game* getGame();
 

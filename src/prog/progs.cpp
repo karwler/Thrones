@@ -4,11 +4,11 @@
 
 ProgState::Text::Text(string str, int height, int margin) :
 	text(std::move(str)),
-	length(strLength(text, height, margin)),
+	length(strLen(text, height, margin)),
 	height(height)
 {}
 
-int ProgState::Text::strLength(const string& str, int height, int margin) {
+int ProgState::Text::strLen(const string& str, int height, int margin) {
 	return World::winSys()->textLength(str, height) + margin * 2;
 }
 
@@ -149,23 +149,26 @@ Layout* ProgHost::createLayout() {
 	for (sizet i = 0; i < confs.size(); i++)
 		cfgNames[i] = confs[i].name;
 
-	Text back("Back", superHeight);
-	Text cfgt("Configuration: ", lineHeight);
-	Text copy("Copy");
-	Text newc("New");
-	Text port("Port:", lineHeight);
+	Text back("Back");
+	Text port("Port:");
 	vector<Widget*> top0 = {
 		new Label(back.length, back.text, &Program::eventExitHost),
-		new Label(1.f, "Open", &Program::eventHostServer, nullptr, Label::Alignment::center)
+		new Label(1.f, "Open", &Program::eventHostServer, nullptr, Label::Alignment::center),
+		new Label(port.length, port.text),
+		new LabelEdit(World::winSys()->textLength("00000", lineHeight), to_string(World::sets()->port), &Program::eventUpdatePort, nullptr, nullptr, LabelEdit::TextType::uInt)
 	};
+	Text cfgt("Configuration: ");
+	Text aleft(arrowLeft);
+	Text aright(arrowRight);
+	Text copy("Copy");
+	Text newc("New");
 	vector<Widget*> top1 = {
 		new Label(cfgt.length, cfgt.text),
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
 		new SwitchBox(1.f, cfgNames.data(), cfgNames.size(), cfgNames[curConf], &Program::eventSwitchConfig, Label::Alignment::center),
+		new Label(aright.length, aright.text, &Program::eventSBNext),
 		new Label(copy.length, copy.text, &Program::eventConfigCopyInput),
-		new Label(newc.length, newc.text, &Program::eventConfigNewInput),
-		new Widget(superSpacing),
-		new Label(port.length, port.text),
-		new LabelEdit(World::winSys()->textLength("00000", lineHeight), to_string(World::sets()->port), &Program::eventUpdatePort, nullptr, nullptr, LabelEdit::TextType::uInt),
+		new Label(newc.length, newc.text, &Program::eventConfigNewInput)
 	};
 	if (confs.size() > 1) {
 		Text dele("Del");
@@ -180,6 +183,7 @@ Layout* ProgHost::createLayout() {
 		"Fate's Favors limit",
 		"Dragon move limit",
 		"Dragon step diagonal",
+		"Multistage turns",
 		"Fortresses captured",
 		"Thrones killed",
 		"Capturers",
@@ -197,7 +201,8 @@ Layout* ProgHost::createLayout() {
 		inHeight = new LabelEdit(1.f, to_string(confs[curConf].homeHeight), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::sInt)
 	}, {
 		new Label(descLength, popBack(txs)),
-		inSurvival = new LabelEdit(1.f, to_string(confs[curConf].survivalPass) + '%', &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig)
+		inSurvivalSL = new Slider(1.f, confs[curConf].survivalPass, 0, 100, &Program::eventUpdateSurvivalSL),
+		inSurvivalLE = new LabelEdit(Text::strLen("100%"), to_string(confs[curConf].survivalPass) + '%', &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig)
 	}, {
 		new Label(descLength, popBack(txs)),
 		inFavors = new LabelEdit(1.f, to_string(confs[curConf].favorLimit), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, LabelEdit::TextType::uInt)
@@ -207,6 +212,9 @@ Layout* ProgHost::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		inDragonDiag = new CheckBox(lineHeight, confs[curConf].dragonDiag, &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig)
+	}, {
+		new Label(descLength, popBack(txs)),
+		inMultistage = new CheckBox(lineHeight, confs[curConf].multistage, &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig)
 	} };
 
 	vector<vector<Widget*>> lines1(Com::tileMax);
@@ -283,9 +291,12 @@ Layout* ProgHost::createLayout() {
 	setLines(menu, lines5, id);
 	setLines(menu, lineR, id);
 
+	vector<Widget*> topb = {
+		new Layout(lineHeight, std::move(top0), false),
+		new Layout(lineHeight, std::move(top1), false)
+	};
 	vector<Widget*> cont = {
-		new Layout(superHeight, std::move(top0), false),
-		new Layout(lineHeight, std::move(top1), false),
+		new Layout(lineHeight * 2 + Layout::defaultItemSpacing, std::move(topb)),
 		new ScrollArea(1.f, std::move(menu))
 	};
 	return new Layout(1.f, std::move(cont), true, superSpacing);
@@ -297,7 +308,7 @@ void ProgHost::setLines(vector<Widget*>& menu, vector<vector<Widget*>>& lines, s
 }
 
 void ProgHost::setTitle(vector<Widget*>& menu, string&& title, sizet& id) {
-	int tlen = Text::strLength(title);
+	int tlen = Text::strLen(title);
 	vector<Widget*> line = {
 		new Label(tlen, std::move(title)),
 		new Widget()
@@ -310,7 +321,7 @@ void ProgHost::setTitle(vector<Widget*>& menu, string&& title, sizet& id) {
 ProgSetup::ProgSetup() :
 	enemyReady(false),
 	selected(0),
-	lastHold(nullptr),
+	lastHold(INT16_MIN),
 	lastButton(0)
 {}
 
@@ -324,9 +335,10 @@ void ProgSetup::eventWheel(int ymov) {
 }
 
 void ProgSetup::eventDrag(uint32 mStat) {
-	BoardObject* curHold = dynamic_cast<BoardObject*>(World::scene()->select);
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
-	if ((curHold && curHold != lastHold) || (curButton && curButton != lastButton)) {
+	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->select);
+	vec2s curHold = bo ? World::game()->ptog(bo->pos) : INT16_MIN;
+	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
 			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
 		else if (stage == Stage::pieces)
@@ -337,32 +349,32 @@ void ProgSetup::eventDrag(uint32 mStat) {
 }
 
 void ProgSetup::eventUndrag() {
-	lastHold = nullptr;
+	lastHold = INT16_MIN;
 }
 
 bool ProgSetup::setStage(ProgSetup::Stage stg) {
 	switch (stage = stg) {
 	case Stage::tiles:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::tiling);
-		World::game()->setMidTilesInteract(Tile::Interactivity::off);
+		World::game()->setOwnTilesInteract(Tile::Interactivity::interact);
+		World::game()->setMidTilesInteract(Tile::Interactivity::ignore, true);
 		World::game()->setOwnPiecesVisible(false);
 		counters = World::game()->countOwnTiles();
 		break;
 	case Stage::middles:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::off);
-		World::game()->setMidTilesInteract(Tile::Interactivity::tiling);
+		World::game()->setOwnTilesInteract(Tile::Interactivity::ignore, true);
+		World::game()->setMidTilesInteract(Tile::Interactivity::interact);
 		World::game()->setOwnPiecesVisible(false);
 		counters = World::game()->countMidTiles();
 		break;
 	case Stage::pieces:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::on);
-		World::game()->setMidTilesInteract(Tile::Interactivity::off);
+		World::game()->setOwnTilesInteract(Tile::Interactivity::recognize);
+		World::game()->setMidTilesInteract(Tile::Interactivity::ignore, true);
 		World::game()->setOwnPiecesVisible(true);
 		counters = World::game()->countOwnPieces();
 		break;
 	case Stage::ready:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::off);
-		World::game()->setMidTilesInteract(Tile::Interactivity::off);
+		World::game()->setOwnTilesInteract(Tile::Interactivity::ignore);
+		World::game()->setMidTilesInteract(Tile::Interactivity::ignore);
 		World::game()->setOwnPiecesInteract(false);
 		counters.clear();
 		return true;
@@ -471,14 +483,9 @@ void ProgMatch::updateFavorIcon(bool on, uint8 cnt, uint8 tot) {
 	favorIcon->setText("FF: " + to_string(cnt) + '/' + to_string(tot));
 }
 
-void ProgMatch::updateNegateIcon(bool on) {
-	if (on) {
-		negateIcon->setLcall(&Program::eventNegateAttack);
-		negateIcon->setDim(1.f);
-	} else {
-		negateIcon->setLcall(nullptr);
-		negateIcon->setDim(0.5f);
-	}
+void ProgMatch::updateTurnIcon(bool on) {
+	turnIcon->setLcall(on ? &Program::eventEndTurn : nullptr);
+	turnIcon->setDim(on ? 1.f : 0.5f);
 }
 
 void ProgMatch::setDragonIcon(bool on) {
@@ -500,14 +507,14 @@ void ProgMatch::deleteDragonIcon() {
 
 Layout* ProgMatch::createLayout() {
 	// sidebar
-	int sideLength = Text::strLength("FF: 00/00");
+	int sideLength = Text::strLen("FF: 00/00");
 	vector<Widget*> left = {
 		new Label(lineHeight, "Exit", &Program::eventExitGame),
 		new Widget(0),
 		favorIcon = new Label(lineHeight, "FF: 0/0"),	// text is updated after the icon has a parent
-		negateIcon = new Label(lineHeight, "Negate")
+		turnIcon = new Label(lineHeight, "End turn")
 	};
-	updateNegateIcon(false);
+	updateTurnIcon(World::game()->getMyTurn());
 	
 	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->pos).hasNot(INT16_MIN))
 		dragonIcon = nullptr;
@@ -568,6 +575,8 @@ Layout* ProgSettings::createLayout() {
 	vector<string> samples = { "0", "1", "2", "4" };
 
 	// setting buttons, labels and action fields for labels
+	Text aleft(arrowLeft);
+	Text aright(arrowRight);
 	Text aptx("Apply", lineHeight);
 	vector<string> txs = {
 		"Screen",
@@ -584,26 +593,36 @@ Layout* ProgSettings::createLayout() {
 
 	vector<Widget*> lx[] = { {
 		new Label(descLength, popBack(txs)),
-		screen = new SwitchBox(1.f, Settings::screenNames.data(), Settings::screenNames.size(), Settings::screenNames[uint8(World::sets()->screen)])
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+		screen = new SwitchBox(1.f, Settings::screenNames.data(), Settings::screenNames.size(), Settings::screenNames[uint8(World::sets()->screen)]),
+		new Label(aright.length, aright.text, &Program::eventSBNext)
 	}, {
 		new Label(descLength, popBack(txs)),
-		winSize = new SwitchBox(1.f, winsiz.data(), winsiz.size(), World::sets()->size.toString(rv2iSeparator))
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+		winSize = new SwitchBox(1.f, winsiz.data(), winsiz.size(), World::sets()->size.toString(rv2iSeparator)),
+		new Label(aright.length, aright.text, &Program::eventSBNext)
 	}, {
 		new Label(descLength, popBack(txs)),
-		dspMode = new SwitchBox(1.f, dmodes.data(), dmodes.size(), dispToFstr(World::sets()->mode))
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+		dspMode = new SwitchBox(1.f, dmodes.data(), dmodes.size(), dispToFstr(World::sets()->mode)),
+		new Label(aright.length, aright.text, &Program::eventSBNext)
 	}, {
 		new Label(descLength, popBack(txs)),
-		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync)
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+		new SwitchBox(1.f, Settings::vsyncNames.data(), Settings::vsyncNames.size(), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync),
+		new Label(aright.length, aright.text, &Program::eventSBNext)
 	}, {
 		new Label(descLength, popBack(txs)),
-		msample = new SwitchBox(1.f, samples.data(), samples.size(), to_string(World::sets()->samples))
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+		msample = new SwitchBox(1.f, samples.data(), samples.size(), to_string(World::sets()->samples)),
+		new Label(aright.length, aright.text, &Program::eventSBNext)
 	}, {
 		new Label(descLength, popBack(txs)),
 		new SwitchBox(1.f, Settings::smoothNames.data(), Settings::smoothNames.size(), Settings::smoothNames[uint8(World::sets()->smooth)], &Program::eventSetSmooth)
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), &Program::eventSetGammaSL),
-		new LabelEdit(Text::strLength("0.0"), trimZero(to_string(World::sets()->gamma)), &Program::eventSetGammaLE)
+		new LabelEdit(Text::strLen("0.0"), trimZero(to_string(World::sets()->gamma)), &Program::eventSetGammaLE)
 	}, };
 	vector<Widget*> lns(lnc + 2);
 	for (sizet i = 0; i < lnc; i++)

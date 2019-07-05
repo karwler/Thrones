@@ -62,8 +62,8 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const Blueprin
 void Object::draw() const {
 	if (mode & INFO_SHOW) {
 		mat->updateColor();
-		updateTexture(tex, mode);
-		updateTransform(pos, rot, scl);
+		updateTexture();
+		updateTransform();
 		bpr->draw(!(mode & INFO_LINES) ? GL_TRIANGLES : GL_LINES);
 	}
 }
@@ -89,32 +89,34 @@ void Object::updateTexture(const Texture* tex, Info mode) {
 
 const vec4 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
 const vec4 BoardObject::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
+const vec4 BoardObject::emissionSelect(0.1f, 0.1f, 0.1f, 1.f);
 
 BoardObject::BoardObject(const vec3& pos, float size, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, const Texture* tex, Info mode) :
 	Object(pos, vec3(0.f), vec3(size, 1.f, size), World::scene()->blueprint("plane"), mat, tex, mode),
-	dragState(DragState::none),
+	diffuseFactor(1.f),
+	emissionFactor(0.f),
 	hgcall(hgcall),
 	ulcall(ulcall),
-	urcall(urcall)
+	urcall(urcall),
+	dragState(DragState::none)
 {}
 
 void BoardObject::draw() const {
-	if (dragState != DragState::move)
-		Object::draw();
+	if (dragState != DragState::move && (mode & INFO_SHOW)) {
+		Material::updateColor(mat->ambient, mat->diffuse * vec4(diffuseFactor, diffuseFactor, diffuseFactor, 1.f), mat->specular, mat->emission * (World::scene()->select != this ? vec4(emissionFactor, emissionFactor, emissionFactor, 1.f) : emissionSelect), mat->shine);
+		updateTexture();
+		updateTransform();
+		bpr->draw();
+	}
 }
 
 void BoardObject::drawTop() const {
-	if (dragState != DragState::none) {
+	if (dragState != DragState::none && (mode & INFO_SHOW)) {
 		vec3 ray = World::scene()->pickerRay(mousePos());
-		if (dragState == DragState::move) {
-			mat->updateColorDiffuse(mat->diffuse * moveIconColor);
-			updateTexture(tex, mode);
-		} else {
-			mat->updateColorDiffuse(fireIconColor);
-			updateTexture(World::winSys()->texture("crosshair"), mode);
-		}
+		Material::updateColor(mat->ambient, dragState == DragState::move ? mat->diffuse * moveIconColor : fireIconColor, mat->specular, mat->emission * vec4(emissionFactor, emissionFactor, emissionFactor, 1.f), mat->shine);
+		updateTexture(dragState == DragState::move ? tex : World::winSys()->texture("crosshair"), mode);
 		updateTransform(World::scene()->getCamera()->pos + ray * (pos.y - upperPoz * 2.f - World::scene()->getCamera()->pos.y / ray.y), rot, scl);
-		bpr->draw(GL_TRIANGLES);
+		bpr->draw();
 	}
 }
 
@@ -132,6 +134,11 @@ void BoardObject::onUndrag(uint8 mBut) {
 		World::scene()->capture = nullptr;
 		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this);
 	}
+}
+
+void BoardObject::setRaycast(bool on, bool dim) {
+	on ? mode |= INFO_RAYCAST : mode &= ~INFO_RAYCAST;
+	diffuseFactor = on || !dim ? 1.f : 0.6f;
 }
 
 // TILE
@@ -152,12 +159,12 @@ void Tile::setType(Com::Tile newType) {
 
 void Tile::setBreached(bool yes) {
 	breached = yes;
-	mat = World::scene()->material(breached ? "rubble" : Com::tileNames[uint8(type)]);
+	diffuseFactor = breached ? 0.6f : 1.f;
 }
 
-void Tile::setInteractivity(Interactivity lvl) {
-	setRaycast(lvl != Interactivity::off);
-	setUlcall(lvl == Interactivity::tiling && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr);
+void Tile::setInteractivity(Interactivity lvl, bool dim) {
+	setRaycast(lvl != Interactivity::ignore, dim);
+	ulcall = lvl == Interactivity::interact && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
 }
 
 // TILE COL

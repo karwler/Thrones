@@ -18,70 +18,41 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format < b.format;
 }
 
-// RECT
-
-vec4 Rect::crop(const Rect& rect) {
-	Rect isct;
-	if (!SDL_IntersectRect(this, &rect, &isct)) {
-		*this = Rect(0);
-		return vec4(0.f);
-	}
-
-	float width = float(w), height = float(h);
-	vec2i te = end(), ie = isct.end();
-	vec4 crop;
-	crop.x = isct.x > x ? float(isct.x - x) / width : 0.f;
-	crop.y = isct.y > y ? float(isct.y - y) / height : 0.f;
-	crop.z = ie.x < te.x ? float(w - (te.x - ie.x)) / width : 1.f;
-	crop.a = ie.y < te.y ? float(h - (te.y - ie.y)) / height : 1.f;
-	*this = isct;
-	return crop;
-}
-
 // TEXTURE
 
-Texture::Texture(vec2i size, const vec4& pos, const vec4& end, bool vertical) {
-	vec4* pix = new vec4[uint(size.area())];
-	if (vec2f last = size - 1; vertical) {
-		for (int y = 0; y < size.y; y++)
-			std::fill_n(pix + y * size.x, size.x, linearTransition(pos, end, float(y) / last.y));
-	} else {
-		for (int x = 0; x < size.x; x++)
-			pix[x] = linearTransition(pos, end, float(x) / last.x);
-		for (int y = 1; y < size.y; y++)
-			std::copy_n(pix, size.x, pix + y * size.x);
-	}
-	loadGL(size, GL_RGBA, GL_FLOAT, pix);
-	delete[] pix;
+Texture::Texture(SDL_Surface* img) {
+	if (img) {
+		id = loadGL(res = vec2i(img->w, img->h), GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
+		SDL_FreeSurface(img);
+	} else
+		*this = Texture();
+}
+
+Texture::Texture(vec2i size, GLint iform, GLenum pform, const uint8* pix) :
+	id(loadGL(size, iform, pform, GL_UNSIGNED_BYTE, pix, GL_REPEAT, GL_LINEAR)),
+	res(size)
+{
+	glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void Texture::close() {
 	if (valid()) {
-		glDeleteTextures(1, &id);
+		free();
 		*this = Texture();
 	}
 }
 
-bool Texture::load(SDL_Surface* img) {
-	if (img) {
-		loadGL(vec2i(img->w, img->h), GL_BGRA, GL_UNSIGNED_BYTE, img->pixels);
-		SDL_FreeSurface(img);
-		return true;
-	}
-	*this = Texture();
-	return false;
-}
-
-void Texture::loadGL(vec2i size, GLenum format, GLenum type, const void* pix) {
-	res = size;
+GLuint Texture::loadGL(vec2i size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter) {
+	GLuint id;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, res.x, res.y, 0, format, type, pix);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, iformat, size.x, size.y, 0, pformat, type, pix);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+	return id;
 }
 
 // INTERACTABLE
@@ -89,11 +60,6 @@ void Texture::loadGL(vec2i size, GLenum format, GLenum type, const void* pix) {
 void Interactable::onClick(vec2i, uint8) {}
 
 // DIJKSTRA
-
-Dijkstra::Node::Node(uint16 id, uint16 dst) :
-	id(id),
-	dst(dst)
-{}
 
 vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize) {
 	// init graph
@@ -124,14 +90,4 @@ vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, uint16 width, uint1
 		}
 	} while (!nodes.empty());
 	return dist;
-}
-
-// OTHER
-
-mat4 makeTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
-	mat4 trans = glm::translate(mat4(1.f), pos);
-	trans = glm::rotate(trans, rot.x, vec3(1.f, 0.f, 0.f));
-	trans = glm::rotate(trans, rot.y, vec3(0.f, 1.f, 0.f));
-	trans = glm::rotate(trans, rot.z, vec3(0.f, 0.f, 1.f));
-	return trans = glm::scale(trans, vec3(scl.x, scl.y, scl.z));
 }

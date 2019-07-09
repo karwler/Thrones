@@ -1,82 +1,52 @@
 #pragma once
 
+#include "oven/oven.h"
 #include "utils.h"
 
-struct Material {
-	vec4 ambient;
-	vec4 diffuse;
-	vec4 specular;
-	vec4 emission;
-	float shine;
+// vertex data for raycast detection
+class CMesh {
+public:
+	uint16* elems;
+	vec3* verts;
+	uint16 esiz;
 
-	Material(const vec4& ambient = vec4(0.f, 0.f, 0.f, 1.f), const vec4& diffuse = vec4(0.f, 0.f, 0.f, 1.f), const vec4& specular = vec4(0.f, 0.f, 0.f, 1.f), const vec4& emission = vec4(0.f, 0.f, 0.f, 1.f), float shine = 0.f);
+private:
+	static constexpr uint16 defaultElementSize = 6;
+	static constexpr uint16 defaultVertexSize = 4;
+	static constexpr uint16 defaultElements[defaultElementSize] = {
+		0, 1, 2,
+		0, 2, 3
+	};
+	static const vec3 defaultVertices[defaultVertexSize];
 
-	void updateColor() const;
-	static void updateColor(const vec4& ambient, const vec4& diffuse, const vec4& specular, const vec4& emission, float shine);
+public:
+	CMesh();
+	CMesh(uint16 ec, uint16 vc);
+
+	void free();
+	static CMesh makeDefault(const vec3& ofs = vec3(0.f));
 };
-
-inline void Material::updateColor() const {
-	updateColor(ambient, diffuse, specular, emission, shine);
-}
-
-// indices of vertex, uv, normal for a point
-struct Vertex {
-	static constexpr uint8 size = 3;
-
-	ushort v, t, n;
-
-	Vertex() = default;
-	Vertex(ushort v, ushort t, ushort n);
-
-	ushort& operator[](uint8 i);
-	ushort operator[](uint8 i) const;
-	ushort* begin();
-	const ushort* begin() const;
-	ushort* end();
-	const ushort* end() const;
-};
-
-inline ushort& Vertex::operator[](uint8 i) {
-	return reinterpret_cast<ushort*>(this)[i];
-}
-
-inline ushort Vertex::operator[](uint8 i) const {
-	return reinterpret_cast<const ushort*>(this)[i];
-}
-
-inline ushort* Vertex::begin() {
-	return reinterpret_cast<ushort*>(this);
-}
-
-inline const ushort* Vertex::begin() const {
-	return reinterpret_cast<const ushort*>(this);
-}
-
-inline ushort* Vertex::end() {
-	return reinterpret_cast<ushort*>(this) + size;
-}
-
-inline const ushort* Vertex::end() const {
-	return reinterpret_cast<const ushort*>(this) + size;
-}
 
 // vertex data that's shared between objects
-struct Blueprint {
-	vector<vec3> verts;
-	vector<vec2> tuvs;		// must contain at least one dummy element
-	vector<vec3> norms;		// ^
-	vector<Vertex> elems;	// size must be a multiple of 3 if not INFO_LINES, otherwise 2
+class GMesh {
+public:
+	GLuint vao;
+	uint16 ecnt;	// number of elements
+	uint8 shape;	// GLenum for how to handle elements
 
-	Blueprint() = default;
-	Blueprint(vector<vec3> verts, vector<vec2> tuvs, vector<vec3> norms, vector<Vertex> elems);
+	static constexpr GLenum elemType = GL_UNSIGNED_SHORT;
+private:
+	static constexpr uint psiz = 3, pofs = 0;
+	static constexpr uint nsiz = 3, nofs = 3;
+	static constexpr uint tsiz = 2, tofs = 6;
 
-	void draw(GLenum mode = GL_TRIANGLES) const;
-	bool empty() const;
+public:
+	GMesh();
+	GMesh(const vector<float>& vertices, const vector<uint16>& elements, uint8 shape = GL_TRIANGLES);
+
+	void free();
+	static void setVertex(float* verts, uint16 id, const vec3& pos, const vec3& nrm, const vec2& tuv);
 };
-
-inline bool Blueprint::empty() const {
-	return elems.empty() || verts.empty() || tuvs.empty() || norms.empty();
-}
 
 #define DCLASS_CONSTRUCT(Class, Base) \
 	Class() = default; \
@@ -101,57 +71,49 @@ inline bool Blueprint::empty() const {
 // 3D object with triangles
 class Object : public Interactable {
 public:
-	enum Info : uint8 {
-		INFO_NONE    = 0x0,
-		INFO_SHOW    = 0x1,	// draw at all
-		INFO_TEXTURE = 0x2,	// draw texture
-		INFO_LINES   = 0x4,	// draw lines
-		INFO_RAYCAST = 0x8,	// be detected by raycast
-		INFO_FILL    = INFO_SHOW | INFO_TEXTURE
-	};
-
 	static const vec4 defaultColor;
 
-	const Blueprint* bpr;
-	const Material* mat;
-	const Texture* tex;
+	const GMesh* mesh;
+	const Material* matl;
+	const CMesh* coli;
+	GLuint tex;
 	vec3 pos, rot, scl;
-	Info mode;
+	bool show;		// if drawn
+	bool rigid;		// if affected by raycast
 
 public:
 	DCLASS_CONSTRUCT(Object, Interactable)
-	Object(const vec3& pos, const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const Blueprint* bpr = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL);
+	Object(const vec3& pos, const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = false, bool show = true);
 
 	virtual void draw() const;
 
 protected:
+	void updateColor() const;
+	static void updateColor(const vec3& diffuse, const vec3& specular, const vec3& emission, float shininess, float alpha, GLuint texture);
 	void updateTransform() const;
 	static void updateTransform(const vec3& pos, const vec3& rot, const vec3& scl);
-	void updateTexture() const;
-	static void updateTexture(const Texture* tex, Info mode);
 };
-ENUM_OPERATIONS(Object::Info, uint8)
 
 inline void Object::updateTransform() const {
 	updateTransform(pos, rot, scl);
 }
 
-inline void Object::updateTexture() const {
-	updateTexture(tex, mode);
+inline void Object::updateColor() const {
+	updateColor(matl->diffuse, matl->specular, matl->emission, matl->shininess, matl->alpha, tex);
 }
 
 // square object on a single plane
 class BoardObject : public Object {
 public:
 	static constexpr float upperPoz = 0.001f;
+	static constexpr float emissionSelect = 0.1f;
 
 	float diffuseFactor;
-	float emissionFactor;
 	OCall hgcall, ulcall, urcall;
+	float emissionFactor;
 
 private:
-	static const vec4 moveIconColor, fireIconColor;
-	static const vec4 emissionSelect;
+	static const vec3 moveIconColor, fireIconColor;
 
 	enum class DragState : uint8 {
 		none,
@@ -161,7 +123,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
-	BoardObject(const vec3& pos, float size = 1.f, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const Material* mat = nullptr, const Texture* tex = nullptr, Info mode = INFO_FILL | INFO_RAYCAST);
+	BoardObject(const vec3& pos, float rot = 0.f, float size = 1.f, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = true, bool show = true);
 
 	virtual void draw() const override;
 	virtual void drawTop() const override;
@@ -186,9 +148,10 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Tile, BoardObject)
-	Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, Info mode);
+	Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, bool rigid, bool show);
 
-	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
+	virtual void onHover() override;
+	virtual void onUnhover() override;
 
 	Com::Tile getType() const;
 	void setType(Com::Tile newType);
@@ -199,7 +162,7 @@ public:
 	void setBreached(bool yes);
 	void setInteractivity(Interactivity lvl, bool dim = false);
 private:
-	static Info getModeShow(Info mode, Com::Tile type);
+	static bool getShow(bool show, Com::Tile type);
 };
 
 inline Com::Tile Tile::getType() const {
@@ -222,8 +185,8 @@ inline bool Tile::getBreached() const {
 	return breached;
 }
 
-inline Object::Info Tile::getModeShow(Info mode, Com::Tile type) {
-	return type != Com::Tile::empty ? mode | INFO_SHOW : mode & ~INFO_SHOW;
+inline bool Tile::getShow(bool show, Com::Tile type) {
+	return show && type != Com::Tile::empty;
 }
 
 // tiles on a board
@@ -314,15 +277,15 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Piece, BoardObject)
-	Piece(const vec3& pos, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* mat, Info mode);
+	Piece(const vec3& pos, float rot, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* matl, bool rigid, bool show);
 
-	virtual void onText(const string& str) override;	// dummy function to have an out-of-line virtual function
+	virtual void onHover() override;
+	virtual void onUnhover() override;
 
 	Com::Piece getType() const;
-	void setType(Com::Piece newType);
-	void setModeByOn(bool on);
-	bool canFire() const;
+	uint8 firingDistance() const;	// 0 if non-firing piece
 	bool active() const;
+	void setActive(bool on);
 	void enable(vec2s bpos);
 	void disable();
 };
@@ -331,12 +294,12 @@ inline Com::Piece Piece::getType() const {
 	return type;
 }
 
-inline void Piece::setModeByOn(bool on) {
-	on ? mode |= INFO_SHOW | INFO_RAYCAST : mode &= ~(INFO_SHOW | INFO_RAYCAST);
+inline uint8 Piece::firingDistance() const {
+	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet ? uint8(type) - int16(Com::Piece::crossbowman) + 1 : 0;
 }
 
-inline bool Piece::canFire() const {
-	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet;
+inline void Piece::setActive(bool on) {
+	show = rigid = on;
 }
 
 // pieces on a board

@@ -59,8 +59,8 @@ private:
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
 
-	Blueprint gridat;
-	Object bgrid, board, screen;
+	GMesh gridat;
+	Object ground, board, bgrid, screen, ffpad;
 	TileCol tiles;
 	PieceCol pieces;
 
@@ -70,11 +70,14 @@ private:
 
 public:
 	Game();
+	~Game();
 
 	Tile* getTile(vec2s pos);
 	bool isHomeTile(Tile* til) const;
 	bool isEnemyTile(Tile* til) const;
+	PieceCol& getPieces();
 	Piece* getOwnPieces(Com::Piece type);
+	Piece* getEnePieces();
 	Piece* findPiece(vec2s pos);
 	bool isOwnPiece(Piece* pce) const;
 	Object* getScreen();
@@ -83,12 +86,12 @@ public:
 	uint8 getFavorCount() const;
 	uint8 getFavorTotal() const;
 	vec2s ptog(const vec3& p) const;
-	vec3 gtop(vec2s p, float z) const;
+	vec3 gtop(vec2s p, float z = 0.f) const;
 
 	void connect();
 	void conhost(const Com::Config& cfg);
 	void disconnect();
-	void disconnect(const string& msg);
+	void disconnect(string&& msg);
 	void tick();
 	void processCode(Com::Code code, const uint8* data);
 	void sendSetup();
@@ -105,6 +108,8 @@ public:
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^
 	void checkOwnPieces() const;	// ^
+	void highlightMoveTiles(Piece* pce);	// nullptr to disable
+	void highlightFireTiles(Piece* pce);	// ^
 	vector<uint16> countOwnTiles() const;
 	vector<uint16> countMidTiles() const;
 	vector<uint16> countOwnPieces() const;
@@ -122,8 +127,8 @@ private:
 	Piece* getPieces(Piece* pieces, Com::Piece type);
 	void setBgrid();
 	void setMidTiles();
-	void setTiles(Tile* tiles, int16 yofs, Object::Info mode);
-	void setPieces(Piece* pieces, OCall ucall, const Material* mat, Object::Info mode);
+	void setTiles(Tile* tiles, int16 yofs, bool inter);
+	void setPieces(Piece* pieces, float rot, OCall ucall, const Material* matl);
 	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl, bool dim = false);
 	static void setPiecesInteract(Piece* pieces, uint16 num, bool on, bool dim = false);
 	void setPiecesVisible(Piece* pieces, bool on);
@@ -131,19 +136,21 @@ private:
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf);
 	static Com::Tile decompressTile(const uint8* src, uint16 i);
-	Com::Tile pollFavor();
+	Com::Tile pollFavor();	// resets FF indicator
+	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
 	void useFavor();
 
 	void concludeAction();
 	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor);
-	bool checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor);
-	bool checkMoveByArea(vec2s pos, vec2s dst, Com::Tile favor, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
+	template <class F, class... A> bool checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args);
+	uset<uint16> collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed);
+	uset<uint16> collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
+	uset<uint16> collectTilesByType(vec2s pos, Com::Tile favor, bool& favorUsed);
+	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type) const;
 	static bool spaceAvailible(uint16 pos);
 	static bool spaceAvailibleDummy(uint16 pos);
-	bool checkMoveByType(vec2s pos, vec2s dst, Com::Tile favor);
-	bool checkAdjacentTilesByType(uint16 pos, uint16 dst, vector<bool>& visited, Com::Tile type) const;
 	bool checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
-	static bool checkTilesByDistance(vec2s pos, vec2s dst, int16 dist);
+	uset<uint16> collectTilesByDistance(vec2s pos, int16 dist);
 	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
 	bool survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking, bool switching, Com::Tile favor);	// in this case "attacking" only refers to attack by movement
 	void failSurvivalCheck(Piece* piece);	// pass null for soft fail
@@ -165,6 +172,10 @@ private:
 	uint16 inversePieceId(Piece* piece) const;
 };
 
+inline Game::~Game() {
+	gridat.free();
+}
+
 inline void Game::connect() {
 	connect(new Netcp);
 }
@@ -185,8 +196,16 @@ inline bool Game::isEnemyTile(Tile* til) const {
 	return til < tiles.mid();
 }
 
+inline PieceCol& Game::getPieces() {
+	return pieces;
+}
+
 inline Piece* Game::getOwnPieces(Com::Piece type) {
 	return getPieces(pieces.own(), type);
+}
+
+inline Piece* Game::getEnePieces() {
+	return pieces.ene();
 }
 
 inline bool Game::isOwnPiece(Piece* pce) const {
@@ -248,8 +267,12 @@ inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
 	return Com::Tile((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
-inline bool Game::checkMoveBySingle(vec2s pos, vec2s dst, Com::Tile favor) {
-	return checkMoveByArea(pos, dst, favor, 1, spaceAvailibleDummy, adjacentFull.data(), uint8(adjacentFull.size()));
+inline Com::Tile Game::checkFavor() {
+	return ffpad.show ? getTile(ptog(ffpad.pos))->getType() : Com::Tile::empty;
+}
+
+inline uset<uint16> Game::collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed) {
+	return collectTilesByArea(pos, favor, favorUsed, 1, spaceAvailibleDummy, adjacentFull.data(), uint8(adjacentFull.size()));
 }
 
 inline bool Game::spaceAvailibleDummy(uint16) {
@@ -285,5 +308,5 @@ inline uint16 Game::inverseTileId(const Tile* tile) const {
 }
 
 inline uint16 Game::inversePieceId(Piece* piece) const {
-	return isOwnPiece(piece) ? uint16(piece - pieces.own()) + config.numPieces : uint16(piece - pieces.ene());
+	return piece ? isOwnPiece(piece) ? uint16(piece - pieces.own()) + config.numPieces : uint16(piece - pieces.ene()) : UINT16_MAX;
 }

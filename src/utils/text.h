@@ -1,15 +1,25 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#ifdef DEBUG
+#define MALLOC_CHECK_ 2
+#endif
 #include <SDL2/SDL.h>
+#ifdef main
+#undef main
+#endif
+#include <glm/glm.hpp>
 #include <algorithm>
 #include <array>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #ifdef _WIN32
-#include <windows.h>
+namespace Win {
+#include <windows.h>	// needs to be here to prevent conflicts with SDL_net
+}
 #else
 #include <strings.h>
 #endif
@@ -36,30 +46,56 @@ using sizet = size_t;
 using pdift = ptrdiff_t;
 
 using std::array;
-using std::initializer_list;
 using std::pair;
 using std::string;
 using std::wstring;
-using std::to_string;
 using std::vector;
 
 template <class... T> using umap = std::unordered_map<T...>;
 template <class... T> using uset = std::unordered_set<T...>;
 using pairStr = pair<string, string>;
 
+using glm::mat3;
+using glm::mat4;
+using glm::vec2;
+using glm::vec3;
+using glm::vec4;
+
 #ifdef _WIN32
-constexpr char dsep = '\\';
-constexpr char dseps[] = "\\";
 constexpr char linend[] = "\r\n";
 #else
-constexpr char dsep = '/';
-constexpr char dseps[] = "/";
 constexpr char linend[] = "\n";
 #endif
+constexpr char defaultReadMode[] = "rb";
+constexpr char defaultWriteMode[] = "wb";
 
 // utility
 
+#define ENUM_OPERATIONS(EType, IType) \
+	inline constexpr EType operator~(EType a) { \
+		return EType(~IType(a)); \
+	} \
+	inline constexpr EType operator&(EType a, EType b) { \
+		return EType(IType(a) & IType(b)); \
+	} \
+	inline constexpr EType operator&=(EType& a, EType b) { \
+		return a = EType(IType(a) & IType(b)); \
+	} \
+	inline constexpr EType operator|(EType a, EType b) { \
+		return EType(IType(a) | IType(b)); \
+	} \
+	inline constexpr EType operator|=(EType& a, EType b) { \
+		return a = EType(IType(a) | IType(b)); \
+	} \
+	inline constexpr EType operator^(EType a, EType b) { \
+		return EType(IType(a) ^ IType(b)); \
+	} \
+	inline constexpr EType operator^=(EType& a, EType b) { \
+		return a = EType(IType(a) ^ IType(b)); \
+	}
+
 bool hasExt(const string& path, const string& ext);
+string filename(const string& path);
 string readWordM(const char*& pos);
 
 inline string readWord(const char* pos) {
@@ -79,6 +115,14 @@ inline int strncicmp(const string& a, const string& b, sizet n) {	// case insens
 	return _strnicmp(a.c_str(), b.c_str(), n);
 #else
 	return strncasecmp(a.c_str(), b.c_str(), n);
+#endif
+}
+
+inline bool isDsep(char c) {
+#ifdef _WIN32
+	return c == '\\' || c == '/';
+#else
+	return c == '/';
 #endif
 }
 
@@ -104,28 +148,15 @@ inline string firstUpper(string str) {
 }
 
 inline string trim(const string& str) {
-	string::const_iterator pos = std::find_if(str.begin(), str.end(), [](char c) -> bool { return uchar(c) > ' '; });
-	return string(pos, std::find_if(str.rbegin(), std::make_reverse_iterator(pos), [](char c) -> bool { return uchar(c) > ' '; }).base());
-}
-
-inline string trimZero(const string& str) {
-	sizet id = str.find_last_not_of('0');
-	return str.substr(0, str[id] == '.' ? id : id + 1);
+	string::const_iterator pos = std::find_if(str.begin(), str.end(), notSpace);
+	return string(pos, std::find_if(str.rbegin(), std::make_reverse_iterator(pos), notSpace).base());
 }
 
 inline string delExt(const string& path) {
-	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || c == dsep; });
+	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
 	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : "";
 }
 
-inline string appDsep(const string& path) {
-	return !path.empty() && path.back() == dsep ? path : path + dsep;
-}
-#ifdef _WIN32
-inline wstring appDsep(const wstring& path) {
-	return !path.empty() && path.back() == dsep ? path : path + wchar(dsep);
-}
-#endif
 inline bool isDotName(const string& str) {
 	return str[0] == '.' && (str[1] == '\0' || (str[1] == '.' && str[2] == '\0'));
 }
@@ -135,19 +166,30 @@ inline bool isDotName(const string& str) {
 #ifdef _WIN32
 string wtos(const wchar* wstr);
 wstring stow(const string& str);
-#else
+#endif
+SDL_DisplayMode strToDisp(const string& str);
+
 inline string stos(const char* str) {	// dummy function for Arguments::setArgs
 	return str;
 }
-#endif
-SDL_DisplayMode strToDisp(const string& str);
 
 inline const char* pixelformatName(uint32 format) {
 	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
 }
 
+inline string toStr(float num) {
+	string str = std::to_string(num);
+	sizet id = str.find_last_not_of('0');
+	return str.substr(0, str[id] == '.' ? id : id + 1);
+}
+
+template <class T>
+string toStr(T num) {
+	return std::to_string(num);
+}
+
 inline string dispToStr(const SDL_DisplayMode& mode) {
-	return to_string(mode.w) + ' ' + to_string(mode.h) + ' ' + to_string(mode.refresh_rate) + ' ' + to_string(mode.format);
+	return toStr(mode.w) + ' ' + toStr(mode.h) + ' ' + toStr(mode.refresh_rate) + ' ' + toStr(mode.format);
 }
 
 inline bool stob(const string& str) {
@@ -163,32 +205,52 @@ T strToEnum(const array<string, N>& names, const string& str) {
 	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str); }) - names.begin());
 }
 
+inline long sstol(const char* str, int base = 0) {
+	return strtol(str, nullptr, base);
+}
+
 inline long sstol(const string& str, int base = 0) {
-	return strtol(str.c_str(), nullptr, base);
+	return sstol(str.c_str(), base);
+}
+
+inline llong sstoll(const char* str, int base = 0) {
+	return strtoll(str, nullptr, base);
 }
 
 inline llong sstoll(const string& str, int base = 0) {
-	return strtoll(str.c_str(), nullptr, base);
+	return sstoll(str.c_str(), base);
+}
+
+inline ulong sstoul(const char* str, int base = 0) {
+	return strtoul(str, nullptr, base);
 }
 
 inline ulong sstoul(const string& str, int base = 0) {
-	return strtoul(str.c_str(), nullptr, base);
+	return sstoul(str.c_str(), base);
+}
+
+inline ullong sstoull(const char* str, int base = 0) {
+	return strtoull(str, nullptr, base);
 }
 
 inline ullong sstoull(const string& str, int base = 0) {
-	return strtoull(str.c_str(), nullptr, base);
+	return sstoull(str.c_str(), base);
+}
+
+inline float sstof(const char* str) {
+	return strtof(str, nullptr);
 }
 
 inline float sstof(const string& str) {
-	return strtof(str.c_str(), nullptr);
+	return sstof(str.c_str());
+}
+
+inline double sstod(const char* str) {
+	return strtod(str, nullptr);
 }
 
 inline double sstod(const string& str) {
-	return strtod(str.c_str(), nullptr);
-}
-
-inline ldouble sstold(const string& str) {
-	return strtold(str.c_str(), nullptr);
+	return sstod(str.c_str());
 }
 
 template <class T>
@@ -220,14 +282,20 @@ glm::vec<L, float, glm::highp> stov(const char* str, float fill = 0.f) {
 
 template <class T>
 string ntosPadded(T num, uint pad) {
-	string str = to_string(num);
+	string str = toStr(num);
 	return str.length() < pad ? string(pad - str.length(), '0') + str : str;
+}
+
+template <class U, class S>	// U has to be an unsigned type and S has to be the signed equivalent of U
+U cycle(U pos, U siz, S mov) {
+	U rst = pos + U(mov % S(siz));
+	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
 }
 
 // files
 
-vector<string> readTextFile(const string& file);
-bool writeTextFile(const string& file, const string& text);
+vector<string> readFileLines(const string& file);
+bool writeFile(const string& file, const string& text);
 string readIniTitle(const string& line);
 pairStr readIniLine(const string& line);
 
@@ -235,49 +303,87 @@ inline string makeIniLine(const string& key, const string& val) {
 	return key + '=' + val + linend;
 }
 
+template <class T = string>
+T readFile(const string& file) {
+	T data;
+	FILE* ifh = fopen(file.c_str(), defaultReadMode);
+	if (!ifh)
+		return data;
+	fseek(ifh, 0, SEEK_END);
+	ulong len = ulong(ftell(ifh));
+	fseek(ifh, 0, SEEK_SET);
+
+	data.resize(len);
+	if (sizet read = fread(data.data(), sizeof(*data.data()), data.size(), ifh); read != len)
+		data.resize(read);
+	fclose(ifh);
+	return data;
+}
+
 // command line arguments
-struct Arguments {
+class Arguments {
+private:
 	vector<string> vals;
 	uset<string> flags;
 	umap<string, string> opts;
 
+public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(PWSTR pCmdLine);
-	Arguments(int argc, wchar** argv);
-#else
-	Arguments(int argc, char** argv);
+	Arguments(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt);
+	Arguments(int argc, wchar** argv, const uset<string>& flg, const uset<string>& opt);
 #endif
+	Arguments(int argc, char** argv, const uset<string>& flg, const uset<string>& opt);
 
 #ifdef _WIN32
-	void setArgs(PWSTR pCmdLine);
+	void setArgs(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt);
 #endif
-	template <class C, class F> void setArgs(int argc, C** argv, F conv);
+	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<string>& flg, const uset<string>& opt);
+
+	const vector<string>& getVals() const;
+	const uset<string>& getFlags() const;
+	bool hasFlag(const char* key) const;
+	const umap<string, string>& getOpts() const;
+	const char* getOpt(const char* key) const;
 };
 #ifdef _WIN32
-inline Arguments::Arguments(PWSTR pCmdLine) {
-	setArgs(pCmdLine);
+inline Arguments::Arguments(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt) {
+	setArgs(pCmdLine, flg, opt);
 }
 
-inline Arguments::Arguments(int argc, wchar** argv) {
-	setArgs(argc - 1, argv + 1, wtos);
-}
-#else
-inline Arguments::Arguments(int argc, char** argv) {
-	setArgs(argc - 1, argv + 1, stos);
+inline Arguments::Arguments(int argc, wchar** argv, const uset<string>& flg, const uset<string>& opt) {
+	setArgs(argc - 1, argv + 1, wtos, flg, opt);
 }
 #endif
+inline Arguments::Arguments(int argc, char** argv, const uset<string>& flg, const uset<string>& opt) {
+	setArgs(argc - 1, argv + 1, stos, flg, opt);
+}
+
 template <class C, class F>
-void Arguments::setArgs(int argc, C** argv, F conv) {
+void Arguments::setArgs(int argc, C** argv, F conv, const uset<string>& flg, const uset<string>& opt) {
 	for (int i = 0; i < argc; i++) {
 		if (argv[i][0] == '-') {
-			C* flg = argv[i] + (argv[i][1] == '-' ? 2 : 1);
-			if (int ni = i + 1; ni < argc && argv[ni][0] != '-')
-				opts.emplace(conv(flg), conv(argv[++i]));
+			if (string key = conv(argv[i] + 1); opt.count(key) && i + 1 < argc)
+				opts.emplace(key, conv(argv[++i]));
+			else if (flg.count(key))
+				flags.insert(key);
 			else
-				flags.insert(conv(flg));
+				vals.push_back(conv(argv[i]));
 		} else
 			vals.push_back(conv(argv[i]));
 	}
-	opts.emplace("", "");	// for if getOpt fails
+	vals.shrink_to_fit();
+}
+
+inline const vector<string>& Arguments::getVals() const {
+	return vals;
+}
+
+inline bool Arguments::hasFlag(const char* key) const {
+	return flags.count(key);
+}
+
+inline const char* Arguments::getOpt(const char* key) const {
+	umap<string, string>::const_iterator it = opts.find(key);
+	return it != opts.end() ? it->second.c_str() : nullptr;
 }

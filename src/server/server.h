@@ -6,13 +6,7 @@
 #else
 #include <SDL2/SDL_net.h>
 #endif
-#include <iostream>
 #include <random>
-
-// get rid of SDL's main
-#ifdef main
-#undef main
-#endif
 
 struct Date {
 	uint8 sec, min, hour;
@@ -27,7 +21,7 @@ struct Date {
 };
 
 inline string Date::toString(char ts, char sep, char ds) const {
-	return to_string(year) + ds + ntosPadded(month, 2) + ds + ntosPadded(day, 2) + sep + ntosPadded(hour, 2) + ts + ntosPadded(min, 2) + ts + ntosPadded(sec, 2);
+	return toStr(year) + ds + ntosPadded(month, 2) + ds + ntosPadded(day, 2) + sep + ntosPadded(hour, 2) + ts + ntosPadded(min, 2) + ts + ntosPadded(sec, 2);
 }
 
 namespace Com {
@@ -125,9 +119,9 @@ public:
 	float objectSize;	// width and height of a tile/piece
 	
 private:
-	static constexpr uint16 minWidth = 3;	// TODO: can be lower if no fortress
+	static constexpr uint16 minWidth = 4;
 	static constexpr uint16 maxWidth = 71;
-	static constexpr uint16 minHeight = 3;
+	static constexpr uint16 minHeight = 2;
 	static constexpr uint16 maxHeight = 35;
 	static constexpr char keywordSize[] = "size";
 	static constexpr char keywordSurvival[] = "survival";
@@ -190,7 +184,7 @@ void Config::readAmount(const pairStr& it, const string& word, const array<strin
 template <sizet N, sizet S>
 void Config::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
 	for (sizet i = 0; i < amts.size(); i++)
-		text += makeIniLine(word + names[i], to_string(amts[i]));
+		text += makeIniLine(word + names[i], toStr(amts[i]));
 }
 
 vector<Config> loadConfs(const string& file);

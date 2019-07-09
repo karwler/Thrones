@@ -5,8 +5,19 @@ if(CMAKE_CONFIGURATION_TYPES)
 	set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
 endif()
 
+# additional stuff
+set(DATA_NAME "game_data")
+string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
+set(OVEN_NAME "toven")
+
 # source files
 set(SRC_FILES
+	"rsc/shaders/gui.frag"
+	"rsc/shaders/gui.vert"
+	"rsc/shaders/scene.frag"
+	"rsc/shaders/scene.vert"
+	"src/engine/audioSys.cpp"
+	"src/engine/audioSys.h"
 	"src/engine/fileSys.cpp"
 	"src/engine/fileSys.h"
 	"src/engine/scene.cpp"
@@ -15,6 +26,8 @@ set(SRC_FILES
 	"src/engine/windowSys.h"
 	"src/engine/world.cpp"
 	"src/engine/world.h"
+	"src/oven/oven.cpp"
+	"src/oven/oven.h"
 	"src/prog/game.cpp"
 	"src/prog/game.h"
 	"src/prog/netcp.cpp"
@@ -82,6 +95,7 @@ endif()
 # set main target
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+add_dependencies(${PROJECT_NAME} ${DATA_NAME})
 
 # include directories and link libraries
 include_directories("${CMAKE_SOURCE_DIR}/src")
@@ -98,8 +112,8 @@ endif()
 # target properties
 set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
 set_target_properties(${PROJECT_NAME} PROPERTIES
-								RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
-								RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
+						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
+						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
 
 if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
 	if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
@@ -111,53 +125,50 @@ if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES
 	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 	else()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -s -Wno-padded")
+		if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s")
+		endif()
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-padded")
 	endif()
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	set_target_properties(${PROJECT_NAME} PROPERTIES
-									OUTPUT_NAME ${PROJECT_NAME}
-									LINK_FLAGS "/SUBSYSTEM:WINDOWS")
+							OUTPUT_NAME ${PROJECT_NAME}
+							LINK_FLAGS "/SUBSYSTEM:WINDOWS")
 else()
 	string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
 	set_target_properties(${PROJECT_NAME} PROPERTIES
-									OUTPUT_NAME ${PROJECT_NAME_LOWER})
+							OUTPUT_NAME ${PROJECT_NAME_LOWER})
 endif()
 
 # post buils commands
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	foreach(dll_file ${DLL_FILES})
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIB_DIR}/${dll_file}" ${EXECUTABLE_OUTPUT_PATH})
+							COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIB_DIR}/${dll_file}" ${EXECUTABLE_OUTPUT_PATH})
 	endforeach()
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/debug_run.bat" ${EXECUTABLE_OUTPUT_PATH})
-else()
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/debug_run.sh" ${EXECUTABLE_OUTPUT_PATH})
 endif()
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-#					COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/rsc/icon.ico" ${EXECUTABLE_OUTPUT_PATH}
-					COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/rsc/data" ${EXECUTABLE_OUTPUT_PATH})
 
-# filter file for ms visual studio
-foreach(source IN LISTS SRC_FILES)
-	get_filename_component(source_dir ${source} PATH)
-	string(REPLACE "/" ";" dirs "${source_dir}")
-	list(GET dirs 0 dir0)
-	
-	if(${dir0} MATCHES "rsc")
-		set(filter_path "Source")
-	else()
-		list(REMOVE_AT dirs 0)
-		list(INSERT dirs 0 "Source")
-		string(REPLACE ";" "\\" filter_path "${dirs}")
-	endif()
-	source_group("${filter_path}" FILES ${source})
-endforeach()
+# game data copier target
+file(GLOB ASSET_WAV LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/audio/*.wav")
+file(GLOB ASSET_DAT LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/data/*")
+file(GLOB ASSET_MTL LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/materials/*.mtl")
+file(GLOB ASSET_OBJ LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/objects/*.obj")
+file(GLOB ASSET_SHD LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/shaders/*.frag" "${CMAKE_SOURCE_DIR}/rsc/shaders/*.vert")
+file(GLOB ASSET_BMP LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/textures/*.bmp")
+set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_BMP})
+add_custom_target(${DATA_NAME} ALL
+					SOURCES ${DATA_SRC}
+					COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/rsc/data" "${EXECUTABLE_OUTPUT_PATH}/data"
+					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -a "${EXECUTABLE_OUTPUT_PATH}/data/audio.dat" ${ASSET_WAV}
+					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -m "${EXECUTABLE_OUTPUT_PATH}/data/materials.dat" ${ASSET_MTL}
+					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -o "${EXECUTABLE_OUTPUT_PATH}/data/objects.dat" ${ASSET_OBJ}
+					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -s "${EXECUTABLE_OUTPUT_PATH}/data/shaders.dat" ${ASSET_SHD}
+					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -t "${EXECUTABLE_OUTPUT_PATH}/data/textures.dat" ${ASSET_BMP})
+add_dependencies(${DATA_NAME} ${OVEN_NAME})
 
 # set server program target
 set(SERVER_SRC
@@ -166,8 +177,6 @@ set(SERVER_SRC
 	"src/server/serverProg.cpp"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
-
-string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
 add_executable(${SERVER_NAME} ${SERVER_SRC})
 target_compile_features(${SERVER_NAME} PUBLIC cxx_std_17)
 
@@ -178,24 +187,81 @@ else()
 endif()
 
 set_target_properties(${SERVER_NAME} PROPERTIES
-								RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
-								RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
+						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
+						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	set_target_properties(${SERVER_NAME} PROPERTIES
-									OUTPUT_NAME ${SERVER_NAME}
-									LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+							OUTPUT_NAME ${SERVER_NAME}
+							LINK_FLAGS "/SUBSYSTEM:CONSOLE")
 else()
 	string(TOLOWER ${SERVER_NAME} SERVER_NAME_LOWER)
 	set_target_properties(${SERVER_NAME} PROPERTIES
-									OUTPUT_NAME ${SERVER_NAME_LOWER})
+							OUTPUT_NAME ${SERVER_NAME_LOWER})
 endif()
 
-foreach(source IN LISTS SERVER_SRC)
-	get_filename_component(source_dir ${source} PATH)
-	string(REPLACE "/" ";" dirs "${source_dir}")
-	
-	list(REMOVE_AT dirs 0)
-	list(INSERT dirs 0 "Source")
-	string(REPLACE ";" "\\" filter_path "${dirs}")
-	source_group("${filter_path}" FILES ${source})
-endforeach()
+# set asset building program target
+set(OVEN_SRC
+	"src/oven/oven.cpp"
+	"src/oven/oven.h"
+	"src/oven/ovenProg.cpp"
+	"src/utils/text.cpp"
+	"src/utils/text.h")
+add_executable(${OVEN_NAME} ${OVEN_SRC})
+target_compile_features(${OVEN_NAME} PUBLIC cxx_std_17)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	target_link_libraries(${OVEN_NAME} ${LIB_SDL2})
+else()
+	target_link_libraries(${OVEN_NAME} SDL2)
+endif()
+
+set_target_properties(${OVEN_NAME} PROPERTIES
+						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
+						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+	set_target_properties(${OVEN_NAME} PROPERTIES
+							OUTPUT_NAME ${OVEN_NAME}
+							LINK_FLAGS "/SUBSYSTEM:CONSOLE")
+else()
+	set_target_properties(${OVEN_NAME} PROPERTIES
+							OUTPUT_NAME ${OVEN_NAME})
+endif()
+
+# I don't know how to make these work in a function
+if(MSVC)
+	foreach(source IN LISTS SRC_FILES)
+		get_filename_component(dirs ${source} PATH)
+		string(REPLACE "/" ";" dirs "${dirs}")
+		list(REMOVE_AT dirs 0)
+		list(INSERT dirs 0 "Source")
+		string(REPLACE ";" "\\" dirs "${dirs}")
+		source_group("${dirs}" FILES ${source})
+	endforeach()
+
+	foreach(source IN LISTS DATA_SRC)
+		get_filename_component(dirs ${source} PATH)
+		string(REPLACE "${CMAKE_SOURCE_DIR}/rsc" "" dirs "${dirs}")
+		string(REPLACE "/" ";" dirs "${dirs}")
+		list(INSERT dirs 0 "Source")
+		string(REPLACE ";" "\\" dirs "${dirs}")
+		source_group("${dirs}" FILES ${source})
+	endforeach()
+
+	foreach(source IN LISTS SERVER_SRC)
+		get_filename_component(dirs ${source} PATH)
+		string(REPLACE "/" ";" dirs "${dirs}")
+		list(REMOVE_AT dirs 0)
+		list(INSERT dirs 0 "Source")
+		string(REPLACE ";" "\\" dirs "${dirs}")
+		source_group("${dirs}" FILES ${source})
+	endforeach()
+
+	foreach(source IN LISTS OVEN_SRC)
+		get_filename_component(dirs ${source} PATH)
+		string(REPLACE "/" ";" dirs "${dirs}")
+		list(REMOVE_AT dirs 0)
+		list(INSERT dirs 0 "Source")
+		string(REPLACE ";" "\\" dirs "${dirs}")
+		source_group("${dirs}" FILES ${source})
+	endforeach()
+endif()

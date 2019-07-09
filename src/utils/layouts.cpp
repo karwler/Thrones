@@ -14,10 +14,9 @@ Layout::~Layout() {
 	clear(widgets);
 }
 
-Rect Layout::draw() const {
+void Layout::draw() const {
 	for (Widget* it : widgets)
 		it->draw();
-	return Rect();
 }
 
 void Layout::tick(float dSec) {
@@ -56,11 +55,6 @@ void Layout::postInit() {
 		it->postInit();
 }
 
-void Layout::onMouseMove(vec2i mPos, vec2i mMov) {
-	for (Widget* it : widgets)
-		it->onMouseMove(mPos, mMov);
-}
-
 void Layout::initWidgets(vector<Widget*>&& wgts) {
 	clear(widgets);
 	widgets = std::move(wgts);
@@ -90,11 +84,11 @@ vec2i Layout::position() const {
 }
 
 vec2i Layout::size() const {
-	return parent ? parent->wgtSize(pcID) : World::winSys()->windowSize();
+	return parent ? parent->wgtSize(pcID) : World::window()->getView();
 }
 
 Rect Layout::frame() const {
-	return parent ? parent->frame() : Rect(0, World::winSys()->windowSize());
+	return parent ? parent->frame() : Rect(0, World::window()->getView());
 }
 
 vec2i Layout::wgtPosition(sizet id) const {
@@ -120,23 +114,23 @@ Popup::Popup(const cvec2<Size>& relSize, vector<Widget*> children, BCall kcall, 
 	sizeY(relSize.y)
 {}
 
-Rect Popup::draw() const {
-	drawRect(Rect(0, World::winSys()->windowSize()), colorDim);	// dim other widgets
-	drawRect(rect(), colorNormal);	// draw background
-	return Layout::draw();
+void Popup::draw() const {
+	drawRect(Rect(0, World::window()->getView()), colorDim, World::scene()->blank());	// dim other widgets
+	drawRect(rect(), colorNormal, World::scene()->blank());	// draw background
+	Layout::draw();
 }
 
 vec2i Popup::position() const {
-	return (World::winSys()->windowSize() - size()) / 2;
+	return (World::window()->getView() - size()) / 2;
 }
 
 vec2i Popup::size() const {
-	vec2f res = World::winSys()->windowSize();
+	vec2f res = World::window()->getView();
 	return vec2i(relSize.usePix ? relSize.pix : relSize.prc * res.x, sizeY.usePix ? sizeY.pix : sizeY.prc * res.y);
 }
 
 Rect Popup::frame() const {
-	return Rect(0, World::winSys()->windowSize());
+	return Rect(0, World::window()->getView());
 }
 
 // SCROLL AREA
@@ -149,14 +143,14 @@ ScrollArea::ScrollArea(Size relSize, vector<Widget*> children, bool vertical, in
 	diffSliderMouse(0)
 {}
 
-Rect ScrollArea::draw() const {
+void ScrollArea::draw() const {
 	vec2t vis = visibleWidgets();	// get index interval of items on screen and draw children
 	for (sizet i = vis.b; i < vis.t; i++)
 		widgets[i]->draw();
 
-	drawRect(barRect(), colorDark);		// draw scroll bar
-	drawRect(sliderRect(), colorLight);	// draw scroll slider
-	return Rect();
+	Rect frm = frame();
+	drawRect(barRect(), frm, colorDark, World::scene()->blank());		// draw scroll bar
+	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// draw scroll slider
 }
 
 void ScrollArea::tick(float dSec) {
@@ -271,4 +265,9 @@ vec2t ScrollArea::visibleWidgets() const {
 	ival.t = ival.b + 1;	// last is one greater than the actual last index
 	for (int end = listPos[vertical] + size()[vertical]; ival.t < widgets.size() && wgtRPos(ival.t) <= end; ival.t++);
 	return ival;
+}
+
+void ScrollArea::moveListPos(vec2i mov) {
+	listPos = vec2i(listPos + mov).clamp(0, listLim());
+	World::scene()->updateSelect(mousePos());
 }

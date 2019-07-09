@@ -1,10 +1,6 @@
 #pragma once
 
 #include "utils/objects.h"
-#ifndef _WIN32
-#include <dirent.h>
-#include <sys/stat.h>
-#endif
 
 class Settings {
 public:
@@ -26,18 +22,12 @@ public:
 	};
 	static const array<string, 3> vsyncNames;	// add 1 to vsync value to get name
 
-	enum class Smooth : uint8 {
-		off,
-		fast,
-		nice
-	};
-	static const array<string, sizet(Smooth::nice)+1> smoothNames;
-
 	bool maximized;
+	uint8 avolume;
+	uint8 display;
 	Screen screen;
 	VSync vsync;
-	uint8 samples;
-	Smooth smooth;
+	uint8 msamples;
 	float gamma;
 	vec2i size;
 	SDL_DisplayMode mode;
@@ -48,89 +38,42 @@ public:
 	Settings();
 };
 
-enum FileType : uint8 {
-	FTYPE_NON = 0x0,
-	FTYPE_REG = 0x1,
-	FTYPE_DIR = 0x2,
-	FTYPE_OTH = 0x4,
-	FTYPE_STD = FTYPE_REG | FTYPE_DIR
-};
-ENUM_OPERATIONS(FileType, uint8)
-
 // handles all filesystem interactions
 class FileSys {
-public:
-	static constexpr char dirObjs[] = "objects";
-	static constexpr char dirTexs[] = "textures";
-	static constexpr char extIni[] = ".ini";
 private:
+	static constexpr char fileAudios[] = "data/audio.dat";
+	static constexpr char fileMaterials[] = "data/materials.dat";
+	static constexpr char fileObjects[] = "data/objects.dat";
 	static constexpr char fileSettings[] = "settings.ini";
+	static constexpr char fileShaders[] = "data/shaders.dat";
+	static constexpr char fileTextures[] = "data/textures.dat";
 
-	static constexpr char mtlKeywordNewmtl[] = "newmtl";
 	static constexpr char iniKeywordMaximized[] = "maximized";
+	static constexpr char iniKeywordDisplay[] = "display";
 	static constexpr char iniKeywordScreen[] = "screen";
 	static constexpr char iniKeywordSize[] = "size";
 	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
-	static constexpr char iniKeywordSamples[] = "samples";
-	static constexpr char iniKeywordSmooth[] = "smooth";
+	static constexpr char iniKeywordMsamples[] = "samples";
 	static constexpr char iniKeywordGamma[] = "gamma";
+	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
-#ifdef _WIN32	// os's font directories
-	array<string, 2> dirFonts;
-#else
-	array<string, 3> dirFonts;
-#endif
-#ifdef DEBUG
-	FILE* ofLog;
-#endif
+	static constexpr char errorAudios[] = "failed to load sounds";
+	static constexpr char errorFile[] = "failed to load ";
+	static constexpr char errorMaterials[] = "failed to load materials";
+	static constexpr char errorObjects[] = "failed to load objects";
+	static constexpr char errorShaders[] = "failed to load shaders";
+	static constexpr char errorTextures[] = "failed to load textures";
+
 public:
-	FileSys();
-#ifdef DEBUG
-	~FileSys();
-
-	void writeLog(const string& str);
-#else
-	void writeLog(const string&) {}
-#endif
-	Settings* loadSettings();
-	bool saveSettings(const Settings* sets);
-	static vector<pair<string, Material>> loadMtl(const string& file);
-	static vector<pair<string, Blueprint>> loadObj(const string& file);
-
-	static vector<string> listDir(const string& drc, FileType filter = FTYPE_STD, const string& ext = "");
-	static bool createDir(const string& path);
-	static FileType fileType(const string& file, bool readLink = true);
-
-private:
-	static uint8 readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins);
-	static ushort resolveObjId(int id, ushort ofs, ushort size);
-	static void fillUpObj(uint8& fill, Blueprint& obj);
-
 	static int setWorkingDir();
-#ifdef _WIN32
-	static bool atrcmp(DWORD attrs, FileType filter);
-#else
-	static FileType stmtoft(const string& file, int (*statfunc)(const char*, struct stat*));
-	static bool dtycmp(const string& drc, const dirent* entry, FileType filter, bool readLink);
-#endif
+	static Settings* loadSettings();
+	static bool saveSettings(const Settings* sets);
+	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
+	static umap<string, Material> loadMaterials();
+	static umap<string, GMesh> loadObjects();
+	static umap<string, string> loadShaders();
+	static umap<string, Texture> loadTextures();
 };
-
-inline bool FileSys::createDir(const string& path) {
-#ifdef _WIN32
-	return CreateDirectoryW(stow(path).c_str(), 0);
-#else
-	return !mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-#endif
-}
-#ifdef _WIN32
-inline bool FileSys::atrcmp(DWORD attrs, FileType filter) {
-	return attrs & FILE_ATTRIBUTE_DIRECTORY ? filter & FTYPE_DIR : filter & FTYPE_REG;
-}
-#else
-inline FileType FileSys::fileType(const string& file, bool readLink) {
-	return stmtoft(file, readLink ? stat : lstat);
-}
-#endif

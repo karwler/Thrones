@@ -2,15 +2,24 @@
 #include <clocale>
 #include <locale>
 
+Arguments World::args;
 WindowSys World::windowSys;
-Arguments World::arguments;
 
-const string& World::getOpt(const string& key) {
-	umap<string, string>::const_iterator it = arguments.opts.find(key);
-	return it != arguments.opts.end() ? it->second : arguments.opts[""];
+#ifdef _WIN32
+inline void World::setArgs(Win::PWSTR pCmdLine) {
+#else
+inline void World::setArgs(int argc, char** argv) {
+#endif
+	uset<string> flags = { argAddress, argConnect, argPort, argSetup };
+	uset<string> opts = { argAddress, argPort };
+#ifdef _WIN32
+	args.setArgs(pCmdLine, flags, opts);
+#else
+	args.setArgs(argc, argv, stos, flags, opts);
+#endif
 }
 #ifdef _WIN32
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int WINAPI wWinMain(Win::HINSTANCE hInstance, Win::HINSTANCE hPrevInstance, Win::PWSTR pCmdLine, int nCmdShow) {
 	World::setArgs(pCmdLine);
 #else
 int main(int argc, char** argv) {
@@ -20,5 +29,5 @@ int main(int argc, char** argv) {
 	std::locale::global(std::locale(""));
 	std::cout.imbue(std::locale());
 	std::cerr.imbue(std::locale());
-	return World::winSys()->start();
+	return World::window()->start();
 }

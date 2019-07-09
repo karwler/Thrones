@@ -1,5 +1,4 @@
-#include "fileSys.h"
-#include <map>
+#include "world.h"
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -19,18 +18,13 @@ const array<string, Settings::vsyncNames.size()> Settings::vsyncNames = {
 	"synchronized"
 };
 
-const array<string, Settings::smoothNames.size()> Settings::smoothNames = {
-	"off",
-	"fast",
-	"nice"
-};
-
 Settings::Settings() :
 	maximized(false),
+	avolume(0),
+	display(0),
 	screen(Screen::window),
 	vsync(VSync::synchronized),
-	samples(4),
-	smooth(Smooth::nice),
+	msamples(4),
 	gamma(1.f),
 	size(800, 600),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
@@ -39,227 +33,6 @@ Settings::Settings() :
 {}
 
 // FILE SYS
-
-FileSys::FileSys() {
-	// check if all (more or less) necessary files and directories exist
-	if (setWorkingDir())
-		std::cerr << "failed to set working directory" << std::endl;
-	if (fileType(dirObjs) != FTYPE_DIR)
-		std::cerr << "failed to find object directory" << std::endl;
-	if (fileType(dirTexs) != FTYPE_DIR)
-		std::cerr << "failed to find texture directory" << std::endl;
-#ifdef DEBUG
-	if (Date date = Date::now(); ofLog = fopen(string("log_" + date.toString('-', '_', '-') + ".txt").c_str(), "wb"))
-		writeLog(date.toString() + linend);
-	else
-		std::cerr << "failed to open log stream" << std::endl;
-#endif
-}
-#ifdef DEBUG
-FileSys::~FileSys() {
-	if (ofLog)
-		fclose(ofLog);
-}
-
-void FileSys::writeLog(const string& str) {
-	if (ofLog) {
-		bool ok = fwrite(str.c_str(), sizeof(*str.c_str()), str.length(), ofLog) == str.length();
-		if (ok)
-			ok = fwrite(linend, sizeof(*linend), sizeof(linend) / sizeof(*linend) - 1, ofLog) == sizeof(linend) / sizeof(*linend) - 1;
-		if (!ok)
-			std::cerr << "error during logging" << std::endl;
-	}
-}
-#endif
-Settings* FileSys::loadSettings() {
-	Settings* sets = new Settings();
-	for (const string& line : readTextFile(fileSettings)) {
-		if (pairStr il = readIniLine(line); il.first == iniKeywordMaximized)
-			sets->maximized = stob(il.second);
-		else if (il.first == iniKeywordScreen)
-			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
-		else if (il.first == iniKeywordSize)
-			sets->size = vec2i::get(il.second, strtoul, 0);
-		else if (il.first == iniKeywordMode)
-			sets->mode = strToDisp(il.second);
-		else if (il.first == iniKeywordVsync)
-			sets->vsync = Settings::VSync(strToEnum<int8>(Settings::vsyncNames, il.second) - 1);
-		else if (il.first == iniKeywordSmooth)
-			sets->smooth = strToEnum<Settings::Smooth>(Settings::smoothNames, il.second);
-		else if (il.first == iniKeywordSamples)
-			sets->samples = uint8(sstoul(il.second));
-		else if (il.first == iniKeywordGamma)
-			sets->gamma = clampHigh(sstof(il.second), Settings::gammaMax);
-		else if (il.first == iniKeywordAddress)
-			sets->address = il.second;
-		else if (il.first == iniKeywordPort)
-			sets->port = uint16(stoul(il.second));
-	}
-	return sets;
-}
-
-bool FileSys::saveSettings(const Settings* sets) {
-	string text;
-	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
-	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
-	text += makeIniLine(iniKeywordSize, sets->size.toString());
-	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
-	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
-	text += makeIniLine(iniKeywordSamples, to_string(sets->samples));
-	text += makeIniLine(iniKeywordSmooth, Settings::smoothNames[uint8(sets->smooth)]);
-	text += makeIniLine(iniKeywordGamma, trimZero(to_string(sets->gamma)));
-	text += makeIniLine(iniKeywordAddress, sets->address);
-	text += makeIniLine(iniKeywordPort, to_string(sets->port));
-	return writeTextFile(fileSettings, text);
-}
-
-vector<pair<string, Material>> FileSys::loadMtl(const string& file) {
-	vector<pair<string, Material>> mtl(1);
-	vector<string> lines = readTextFile(file);
-	if (lines.empty())
-		return mtl;
-	
-	sizet newLen = strlen(mtlKeywordNewmtl);
-	for (const string& line : lines) {
-		if (!strncicmp(line, mtlKeywordNewmtl, newLen)) {
-			if (pair<string, Material> next(trim(line.substr(newLen)), Material()); mtl.back().first.empty())
-				mtl.back() = std::move(next);
-			else
-				mtl.push_back(std::move(next));
-		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
-			if (char c1 = char(toupper(line[1])); c1 == 'A')
-				mtl.back().second.ambient = stov<4>(&line[2], 1.f);
-			else if (c1 == 'D')
-				mtl.back().second.diffuse = stov<4>(&line[2], 1.f);
-			else if (c1 == 'S')
-				mtl.back().second.specular = stov<4>(&line[2], 1.f);
-			else if (c1 == 'E')
-				mtl.back().second.emission = stov<4>(&line[2], 1.f);
-			else if (c1 == 'R')
-				mtl.back().second.ambient.a = strtof(&line[1], nullptr);	// perhaps reverse? (Tr = 1 - d)
-		} else if (c0 == 'N') {
-			if (toupper(line[1]) == 'S')
-				mtl.back().second.shine = strtof(&line[2], nullptr);
-		} else if (c0 == 'D')
-			mtl.back().second.ambient.a = strtof(&line[1], nullptr);
-	}
-	if (mtl.back().first.empty())
-		mtl.pop_back();
-	return mtl;
-}
-
-vector<pair<string, Blueprint>> FileSys::loadObj(const string& file) {
-	vector<pair<string, Blueprint>> obj(1);
-	vector<string> lines = readTextFile(file);
-	if (lines.empty())
-		return obj;
-
-	uint8 fill = 0;
-	array<ushort, Vertex::size> begins = { 0, 0, 0 };
-	for (const string& line : lines) {
-		if (char c0 = char(toupper(line[0])); c0 == 'V') {
-			if (char c1 = char(toupper(line[1])); c1 == 'T')
-				obj.back().second.tuvs.push_back(stov<2>(&line[2]));
-			else if (c1 == 'N')
-				obj.back().second.norms.push_back(stov<3>(&line[2]));
-			else
-				obj.back().second.verts.push_back(stov<3>(&line[1]));
-		} else if (c0 == 'F')
-			fill |= readFace(&line[1], obj.back().second, begins);
-		else if (c0 == 'O') {
-			begins = { ushort(begins[0] + obj.back().second.verts.size()), ushort(begins[1] + obj.back().second.tuvs.size()), ushort(begins[2] + obj.back().second.norms.size()) };
-			fillUpObj(fill, obj.back().second);
-			if (pair<string, Blueprint> next(trim(line.substr(1)), Blueprint()); obj.back().first.empty() || obj.back().second.empty())
-				obj.back() = std::move(next);
-			else
-				obj.push_back(std::move(next));
-		}
-	}
-	fillUpObj(fill, obj.back().second);
-	if (obj.back().first.empty() || obj.back().second.empty())
-		obj.pop_back();
-	return  obj;
-}
-
-uint8 FileSys::readFace(const char* str, Blueprint& obj, const array<ushort, Vertex::size>& begins) {
-	array<ushort, Vertex::size> sizes = {
-		ushort(obj.verts.size()),
-		ushort(obj.tuvs.size()),
-		ushort(obj.norms.size())
-	};
-	array<Vertex, 3> face;
-	uint8 v = 0, e = 0;
-	for (char* end; *str && v < face.size();) {
-		if (int n = int(strtol(str, &end, 0)); end != str) {
-			face[v][e] = resolveObjId(n, begins[e], sizes[e]);
-			str = end;
-			e++;
-		} else if (*str == '/') {
-			face[v][e] = sizes[e];
-			e++;
-		}
-		if (e && (*str != '/' || e >= Vertex::size)) {
-			std::copy(sizes.begin() + e, sizes.end(), face[v].begin() + e);
-			e = 0;
-			v++;
-		}
-		if (*str)
-			str++;
-	}
-	if (v < face.size())
-		return 0;
-	
-	std::swap(face[1], face[2]);	// model is CW, need CCW
-	obj.elems.insert(obj.elems.end(), face.begin(), face.end());
-
-	uint8 fill = 0;
-	for (const Vertex& it : face)
-		for (uint8 i = 0; i < 3; i++)
-			if (it[i] == sizes[i])
-				fill |= 1 << i;
-	return fill;
-}
-
-ushort FileSys::resolveObjId(int id, ushort ofs, ushort size) {
-	if (ushort pid = id - ofs; id > 0 && pid <= size)
-		return pid - 1;
-	if (id < 0 && -id <= size)
-		return size - id;
-	return size;
-}
-
-void FileSys::fillUpObj(uint8& fill, Blueprint& obj) {
-	if (fill & 1)
-		obj.verts.emplace_back(0.f);
-	if (fill & 2)
-		obj.tuvs.emplace_back(0.f);
-	if (fill & 4)
-		obj.norms.emplace_back(0.f);
-	fill = 0;
-}
-
-vector<string> FileSys::listDir(const string& drc, FileType filter, const string& ext) {
-	vector<string> entries;
-#ifdef _WIN32
-	WIN32_FIND_DATAW data;
-	if (HANDLE hFind = FindFirstFileW(stow(appDsep(drc) + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
-		do {
-			if (string fname = wtos(data.cFileName); !isDotName(fname) && atrcmp(data.dwFileAttributes, filter) && hasExt(fname, ext))
-				entries.push_back(std::move(fname));
-		} while (FindNextFileW(hFind, &data));
-		FindClose(hFind);
-	}
-#else
-	if (DIR* directory = opendir(drc.c_str())) {
-		while (dirent* entry = readdir(directory))
-			if (string fname = entry->d_name; !isDotName(fname) && dtycmp(drc, entry, filter, true) && hasExt(fname, ext))
-				entries.push_back(std::move(fname));
-		closedir(directory);
-	}
-#endif
-	std::sort(entries.begin(), entries.end());
-	return entries;
-}
 
 int FileSys::setWorkingDir() {
 	char* path = SDL_GetBasePath();
@@ -273,41 +46,206 @@ int FileSys::setWorkingDir() {
 	SDL_free(path);
 	return err;
 }
-#ifdef _WIN32
-FileType FileSys::fileType(const string& file, bool readLink) {
-	DWORD attrib = GetFileAttributesW(stow(file).c_str());
-	if (attrib == INVALID_FILE_ATTRIBUTES)
-		return FTYPE_NON;
-	if (attrib & FILE_ATTRIBUTE_DIRECTORY)
-		return FTYPE_DIR;
-	return FTYPE_REG;
-}
-#else
-FileType FileSys::stmtoft(const string& file, int (*statfunc)(const char*, struct stat*)) {
-	struct stat ps;
-	if (statfunc(file.c_str(), &ps))
-		return FTYPE_NON;
 
-	switch (ps.st_mode & S_IFMT) {
-	case S_IFDIR:
-		return FTYPE_DIR;
-	case S_IFREG:
-		return FTYPE_REG;
+Settings* FileSys::loadSettings() {
+	Settings* sets = new Settings();
+	for (const string& line : readFileLines(fileSettings)) {
+		if (pairStr il = readIniLine(line); il.first == iniKeywordMaximized)
+			sets->maximized = stob(il.second);
+		else if (il.first == iniKeywordDisplay)
+			sets->display = clampHigh(uint8(sstoul(il.second)), uint8(SDL_GetNumVideoDisplays()));
+		else if (il.first == iniKeywordScreen)
+			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
+		else if (il.first == iniKeywordSize)
+			sets->size = vec2i::get(il.second, strtoul, 0);
+		else if (il.first == iniKeywordMode)
+			sets->mode = strToDisp(il.second);
+		else if (il.first == iniKeywordVsync)
+			sets->vsync = Settings::VSync(strToEnum<int8>(Settings::vsyncNames, il.second) - 1);
+		else if (il.first == iniKeywordMsamples)
+			sets->msamples = uint8(sstoul(il.second));
+		else if (il.first == iniKeywordGamma)
+			sets->gamma = std::clamp(sstof(il.second), 0.f, Settings::gammaMax);
+		else if (il.first == iniKeywordAVolume)
+			sets->avolume = clampHigh(uint8(sstoul(il.second)), uint8(SDL_MIX_MAXVOLUME));
+		else if (il.first == iniKeywordAddress)
+			sets->address = il.second;
+		else if (il.first == iniKeywordPort)
+			sets->port = uint16(sstoul(il.second));
 	}
-	return FTYPE_OTH;
+	return sets;
 }
 
-bool FileSys::dtycmp(const string& drc, const dirent* entry, FileType filter, bool readLink) {
-	switch (entry->d_type) {
-	case DT_DIR:
-		return filter & FTYPE_DIR;
-	case DT_REG:
-		return filter & FTYPE_REG;
-	case DT_LNK:
-		return filter & (readLink ? stmtoft(drc + entry->d_name, stat) : FTYPE_OTH);
-	case DT_UNKNOWN:
-		return filter & stmtoft(drc + entry->d_name, readLink ? stat : lstat);
-	}
-	return filter & FTYPE_OTH;
+bool FileSys::saveSettings(const Settings* sets) {
+	string text;
+	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
+	text += makeIniLine(iniKeywordDisplay, toStr(sets->display));
+	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
+	text += makeIniLine(iniKeywordSize, sets->size.toString());
+	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
+	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
+	text += makeIniLine(iniKeywordMsamples, toStr(sets->msamples));
+	text += makeIniLine(iniKeywordGamma, toStr(sets->gamma));
+	text += makeIniLine(iniKeywordAVolume, toStr(sets->avolume));
+	text += makeIniLine(iniKeywordAddress, sets->address);
+	text += makeIniLine(iniKeywordPort, toStr(sets->port));
+	return writeFile(fileSettings, text);
 }
-#endif
+
+umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
+	World::window()->writeLog("loading audio");
+	FILE* ifh = fopen(fileAudios, defaultReadMode);
+	if (!ifh) {
+		std::cerr << errorAudios << std::endl;
+		World::window()->writeLog(errorAudios);
+		return {};
+	}
+	uint16 size;
+	fread(&size, sizeof(size), 1, ifh);
+	umap<string, Sound> auds(size);
+
+	uint8 ibuf[audioHeaderSize];
+	uint32* up = reinterpret_cast<uint32*>(ibuf + 2);
+	uint16* sp = reinterpret_cast<uint16*>(ibuf + 6);
+	string name;
+	Sound sound;
+	for (uint16 i = 0; i < size; i++) {
+		fread(ibuf, sizeof(*ibuf), audioHeaderSize, ifh);
+		name.resize(ibuf[0]);
+		sound.channels = ibuf[1];
+		sound.length = up[0];
+		sound.frequency = sp[0];
+		sound.format = sp[1];
+		sound.samples = sp[2];
+
+		sound.data = static_cast<uint8*>(SDL_malloc(sound.length));
+		fread(name.data(), sizeof(*name.data()), name.length(), ifh);
+		fread(sound.data, sizeof(*sound.data), sound.length, ifh);
+		if (sound.convert(spec))
+			auds.emplace(std::move(name), sound);
+		else {
+			sound.free();
+			std::cerr << errorFile << name << std::endl;
+			World::window()->writeLog(errorFile + name);
+		}
+	}
+	fclose(ifh);
+	return auds;
+}
+
+umap<string, Material> FileSys::loadMaterials() {
+	World::window()->writeLog("loading materials");
+	FILE* ifh = fopen(fileMaterials, defaultReadMode);
+	if (!ifh) {
+		std::cerr << errorMaterials << std::endl;
+		World::window()->writeLog(errorMaterials);
+		return { pair("", Material()) };
+	}
+	uint16 size;
+	fread(&size, sizeof(size), 1, ifh);
+	umap<string, Material> mtls(size + 1);
+	mtls.emplace();
+
+	uint8 len;
+	string name;
+	Material matl;
+	for (uint16 i = 0; i < size; i++) {
+		fread(&len, sizeof(len), 1, ifh);
+		name.resize(len);
+		fread(name.data(), sizeof(*name.data()), name.length(), ifh);
+		fread(&matl, sizeof(matl), 1, ifh);
+		mtls.emplace(std::move(name), matl);
+	}
+	return mtls;
+}
+
+umap<string, GMesh> FileSys::loadObjects() {
+	World::window()->writeLog("loading objects");
+	FILE* ifh = fopen(fileObjects, defaultReadMode);
+	if (!ifh) {
+		std::cerr << errorObjects << std::endl;
+		World::window()->writeLog(errorObjects);
+		return umap<string, GMesh>({ pair("", GMesh()) });
+	}
+	uint16 size;
+	fread(&size, sizeof(size), 1, ifh);
+	umap<string, GMesh> mshs(size + 1);
+	mshs.emplace();
+
+	uint8 ibuf[objectHeaderSize];
+	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);
+	string name;
+	vector<float> verts;
+	vector<uint16> elems;
+	for (uint16 i = 0; i < size; i++) {
+		fread(ibuf, sizeof(*ibuf), objectHeaderSize, ifh);
+		name.resize(ibuf[0]);
+		elems.resize(sp[0]);
+		verts.resize(sp[1]);
+
+		fread(name.data(), sizeof(*name.data()), name.length(), ifh);
+		fread(elems.data(), sizeof(*elems.data()), elems.size(), ifh);
+		fread(verts.data(), sizeof(*verts.data()), verts.size(), ifh);
+		mshs.emplace(std::move(name), GMesh(verts, elems));
+	}
+	fclose(ifh);
+	return mshs;
+}
+
+umap<string, string> FileSys::loadShaders() {
+	World::window()->writeLog("loading shaders");
+	FILE* ifh = fopen(fileShaders, defaultReadMode);
+	if (!ifh) {
+		std::cerr << errorShaders << std::endl;
+		World::window()->writeLog(errorShaders);
+		return umap<string, string>({ pair("", "") });
+	}
+	uint8 size;
+	fread(&size, sizeof(size), 1, ifh);
+	umap<string, string> shds(size);
+
+	uint8 ibuf[shaderHeaderSize];
+	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);
+	string name, text;
+	for (uint8 i = 0; i < size; i++) {
+		fread(ibuf, sizeof(*ibuf), shaderHeaderSize, ifh);
+		name.resize(*ibuf);
+		text.resize(*sp);
+
+		fread(name.data(), sizeof(*name.data()), name.length(), ifh);
+		fread(text.data(), sizeof(*text.data()), text.length(), ifh);
+		shds.emplace(std::move(name), std::move(text));
+	}
+	return shds;
+}
+
+umap<string, Texture> FileSys::loadTextures() {
+	World::window()->writeLog("loading textures");
+	FILE* ifh = fopen(fileTextures, defaultReadMode);
+	if (!ifh) {
+		std::cerr << errorTextures << std::endl;
+		World::window()->writeLog(errorTextures);
+		return { pair("", Texture::loadBlank()) };
+	}
+	uint16 size;
+	fread(&size, sizeof(size), 1, ifh);
+	umap<string, Texture> texs(size + 1);
+	texs.emplace("", Texture::loadBlank());
+
+	uint8 ibuf[textureHeaderSize];
+	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);
+	vector<uint8> pixels;
+	string name;
+	for (uint16 i = 0; i < size; i++) {
+		fread(ibuf, sizeof(*ibuf), textureHeaderSize, ifh);
+		name.resize(ibuf[0]);
+		vec2i res(sp[0], sp[1]);
+		pixels.resize(uint(int(sp[2]) * res.y));
+
+		fread(name.data(), sizeof(*name.data()), name.length(), ifh);
+		fread(pixels.data(), sizeof(*pixels.data()), pixels.size(), ifh);
+		texs.emplace(std::move(name), Texture(res, sp[3], sp[4], pixels.data()));
+	}
+	fclose(ifh);
+	return texs;
+}

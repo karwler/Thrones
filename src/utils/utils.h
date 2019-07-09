@@ -15,8 +15,13 @@
 #include <queue>
 #include <set>
 
-// to make life easier
-using std::queue;
+// forward declaraions and aliases
+class BoardObject;
+class Button;
+class Layout;
+class Program;
+class ProgState;
+class ShaderGUI;
 
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using sset = std::set<T...>;
@@ -26,13 +31,6 @@ using vec2i = cvec2<int>;
 using vec2f = cvec2<float>;
 using vec2d = cvec2<double>;
 using vec2t = cvec2<sizet>;
-
-// forward declaraions
-class BoardObject;
-class Button;
-class Layout;
-class Program;
-class ProgState;
 
 using BCall = void (Program::*)(Button*);
 using OCall = void (Program::*)(BoardObject*);
@@ -51,29 +49,6 @@ inline vec2i mousePos() {
 	return p;
 }
 
-#define ENUM_OPERATIONS(EType, IType) \
-	inline constexpr EType operator~(EType a) { \
-		return EType(~IType(a)); \
-	} \
-	inline constexpr EType operator&(EType a, EType b) { \
-		return EType(IType(a) & IType(b)); \
-	} \
-	inline constexpr EType operator&=(EType& a, EType b) { \
-		return a = EType(IType(a) & IType(b)); \
-	} \
-	inline constexpr EType operator^(EType a, EType b) { \
-		return EType(IType(a) ^ IType(b)); \
-	} \
-	inline constexpr EType operator^=(EType& a, EType b) { \
-		return a = EType(IType(a) ^ IType(b)); \
-	} \
-	inline constexpr EType operator|(EType a, EType b) { \
-		return EType(IType(a) | IType(b)); \
-	} \
-	inline constexpr EType operator|=(EType& a, EType b) { \
-		return a = EType(IType(a) | IType(b)); \
-	}
-
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
@@ -89,7 +64,6 @@ struct Rect : SDL_Rect {
 	constexpr vec2i end() const;
 
 	bool contain(vec2i point) const;
-	vec4 crop(const Rect& rect);				// crop rect so it fits in the frame (aka set rect to the area where they overlap) and return how much was cut off (left, top, right, bottom)
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
@@ -142,33 +116,28 @@ private:
 	vec2i res;
 
 public:
-	Texture();
-	Texture(const string& file);	// throws if load fails
-	Texture(SDL_Surface* img);		// ignores load fail
-	Texture(vec2i size, const vec4& pos, const vec4& end, bool vertical);	// creates gradient
+	Texture(GLuint id = 0, vec2i res = 0);
+	Texture(SDL_Surface* img);											// for text
+	Texture(vec2i size, GLint iform, GLenum pform, const uint8* pix);	// for image
 
 	void close();
+	void free();
 	GLuint getID() const;
 	vec2i getRes() const;
 	bool valid() const;
 
+	static Texture loadBlank(const vec3& color = vec3(1.f));
 private:
-	bool load(SDL_Surface* img);
-	void loadGL(vec2i size, GLenum format, GLenum type, const void* pix);
+	static GLuint loadGL(vec2i size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter);
 };
 
-inline Texture::Texture() :
-	id(0),
-	res(0)
+inline Texture::Texture(GLuint id, vec2i res) :
+	id(id),
+	res(res)
 {}
 
-inline Texture::Texture(const string& file) {
-	if (!load(SDL_LoadBMP(file.c_str())))
-		throw std::runtime_error("failed to load texture " + file + linend + SDL_GetError());
-}
-
-inline Texture::Texture(SDL_Surface* img) {
-	load(img);
+inline void Texture::free() {
+	glDeleteTextures(1, &id);
 }
 
 inline GLuint Texture::getID() const {
@@ -183,6 +152,10 @@ inline bool Texture::valid() const {
 	return res.hasNot(0);
 }
 
+inline Texture Texture::loadBlank(const vec3& color) {
+	return Texture(loadGL(1, GL_RGB8, GL_BGR, GL_FLOAT, &color, GL_CLAMP_TO_EDGE, GL_NEAREST), 1);
+}
+
 // for Object and Widget
 
 class Interactable {
@@ -192,12 +165,13 @@ public:
 
 	virtual void drawTop() const {}
 	virtual void onClick(vec2i mPos, uint8 mBut);		// dummy function to have an out-of-line virtual function
-	virtual void onMouseMove(vec2i, vec2i) {}
 	virtual void onHold(vec2i, uint8) {}
 	virtual void onDrag(vec2i, vec2i) {}	// mouse move while left button down
 	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
+	virtual void onHover() {}
+	virtual void onUnhover() {}
 	virtual void onKeypress(const SDL_Keysym&) {}
-	virtual void onText(const string&) {}
+	virtual void onText(const char*) {}
 };
 
 // for travel distance on game board
@@ -209,7 +183,7 @@ private:
 		uint16 dst;
 
 		Node() = default;
-		Node(uint16 id, uint16 dst);
+		constexpr Node(uint16 id, uint16 dst);
 	};
 
 	struct Adjacent {
@@ -225,13 +199,28 @@ public:
 	static vector<uint16> travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
 };
 
+inline constexpr Dijkstra::Node::Node(uint16 id, uint16 dst) :
+	id(id),
+	dst(dst)
+{}
+
 inline bool Dijkstra::Comp::operator()(Node a, Node b) {
 	return a.dst > b.dst;
 }
 
 // geometry?
 
-mat4 makeTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+struct Attenuation {
+	float linear;
+	float quadratic;
+
+	constexpr Attenuation(float range);
+};
+
+inline constexpr Attenuation::Attenuation(float range) :
+	linear(4.5f / range),
+	quadratic(75.f / (range * range))
+{}
 
 template <class T>
 bool inRange(const T& val, const T& min, const T& max) {
@@ -271,14 +260,6 @@ const T& clampHigh(const T& val, const T& max) {
 template <class T>
 cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
 	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
-}
-
-template <class U, class S>	// U has to be an unsigned type and S has to be the signed equivalent of U
-U cycle(U pos, U siz, S mov) {
-	U rst = pos + U(mov);
-	if (rst < siz)
-		return rst;
-	return mov >= S(0) ? (rst - siz) % siz : (siz - U(-mov)) % siz;
 }
 
 template <class T>

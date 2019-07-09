@@ -6,33 +6,36 @@
 // additional data for rendering objects
 class Camera {
 public:
-	vec3 pos, lat;
-	float fov, znear, zfar;
-	
+	static constexpr float fov = 45.f;
+	static constexpr float znear = 0.1f;
+	static constexpr float zfar = 100.f;
 	static const vec3 posSetup, posMatch;
 	static const vec3 latSetup, latMatch;
-private:
 	static const vec3 up;
 
+	vec3 pos, lat;
+private:
+	mat4 proj;
+
 public:
-	Camera(const vec3& pos = posSetup, const vec3& lat = latSetup, float fov = 45.f, float znear = 1.f, float zfar = 20.f);
+	Camera(const vec3& pos, const vec3& lat = vec3(0.f));
 
 	void update() const;
-	static void updateUI();
+	void updateProjection();	// requires the gui shader to be in use
+	const mat4& getOrtho() const;
 	vec3 direction(vec2i mPos) const;
 };
 
 struct Light {
-	GLenum id;
-	vec4 ambient;
-	vec4 diffuse;
-	vec4 specular;
-	vec4 position;
+	vec3 position;
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+	Attenuation att;
 
-	Light() = default;
-	Light(GLenum id, const vec4& ambient = vec4(0.f, 0.f, 0.f, 1.f), const vec4& diffuse = vec4(1.f, 1.f, 1.f, 1.f), const vec4& specular = vec4(1.f, 1.f, 1.f, 1.f), const vec4& position = vec4(0.f, 4.f, 5.f, 0.f));
+	Light(const vec3& position, const vec3& ambient = vec3(1.f), const vec3& diffuse = vec3(1.f), const vec3& specular = vec3(1.f), Attenuation att = 100.f);
 
-	void update() const;
+	void update() const;	// requires the scene shader to be in use
 };
 
 // saves what widget is being clicked on with what button at what position
@@ -47,9 +50,9 @@ struct ClickStamp {
 // defines change of object properties at a time
 struct Keyframe {
 	enum Change : uint8 {
-		CHG_NONE = 0x0,
-		CHG_POS  = 0x1,
-		CHG_ROT  = 0x2,
+		CHG_NONE = 0,
+		CHG_POS  = 1,
+		CHG_ROT  = 2,
 		CHG_LAT  = CHG_ROT
 	};
 
@@ -65,7 +68,7 @@ ENUM_OPERATIONS(Keyframe::Change, uint8)
 // a sequence of keyframes applied to an object
 class Animation {
 private:
-	queue<Keyframe> keyframes;
+	std::queue<Keyframe> keyframes;
 	Keyframe begin;		// initial state of the object
 	union {
 		Object* object;
@@ -74,8 +77,8 @@ private:
 	bool useObject;
 
 public:
-	Animation(Object* object, queue<Keyframe> keyframes);
-	Animation(Camera* camera, queue<Keyframe> keyframes);
+	Animation(Object* object, std::queue<Keyframe>&& keyframes);
+	Animation(Camera* camera, std::queue<Keyframe>&& keyframes);
 
 	bool tick(float dSec);
 };
@@ -85,40 +88,46 @@ class Scene {
 public:
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
-	vector<Object> effects;	// extra objects that'll get drawn on top without culling and have no interactivity. first element is the favor indicator
 private:
-	vec2i mouseMove;
+	vec2i mouseMove;	// last recorded cursor position difference
+	uint32 moveTime;	// timestamp of last recorded mouseMove
 	Camera camera;
 	vector<Object*> objects;
 	uptr<Layout> layout;
 	uptr<Popup> popup;
 	array<ClickStamp, SDL_BUTTON_X2+1> stamps;	// data about last mouse click (indexes are mouse button numbers
 	vector<Animation> animations;
-	vector<Light> lights;
-	umap<string, Blueprint> bprints;
+	Light light;
+	umap<string, GMesh> meshes;
 	umap<string, Material> materials;
+	umap<string, Texture> texes;
+	umap<string, CMesh> collims;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
-	static constexpr GLbitfield clearSet = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
-
+	static constexpr uint32 moveTimeout = 50;
 public:
 	Scene();
+	~Scene();
 
 	void draw();
 	void tick(float dSec);
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onKeyUp(const SDL_KeyboardEvent& key);
-	void onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat);
+	void onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time);
 	void onMouseDown(vec2i mPos, uint8 mBut);
 	void onMouseUp(vec2i mPos, uint8 mBut);
 	void onMouseWheel(vec2i wMov);
 	void onMouseLeave();
-	void onText(const string& str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
+	void onText(const char* str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
 
-	const Blueprint* blueprint(const string& name) const;
+	const CMesh* collim(const string& name) const;
+	const GMesh* mesh(const string& name) const;
 	const Material* material(const string& name) const;
+	const Texture* getTex(const string& name) const;
+	GLuint texture(const string& name) const;
+	GLuint blank() const;
 	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
@@ -131,17 +140,20 @@ public:
 	bool cursorInClickRange(vec2i mPos, uint8 mBut);
 	vec3 pickerRay(vec2i mPos) const;
 
+	void updateSelect(vec2i mPos);
 private:
+	void unselect();
 	Interactable* getSelected(vec2i mPos);
 	Interactable* getScrollOrObject(vec2i mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
+	template <class T> static const T& findAsset(const umap<string, T>& assets, const string& name);
 
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 };
 
-inline void Scene::onText(const string& str) {
+inline void Scene::onText(const char* str) {
 	capture->onText(str);
 }
 
@@ -170,7 +182,7 @@ inline void Scene::addAnimation(const Animation& anim) {
 }
 
 inline vec2i Scene::getMouseMove() const {
-	return mouseMove;
+	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : 0;
 }
 
 inline bool Scene::cursorInClickRange(vec2i mPos, uint8 mBut) {
@@ -182,5 +194,35 @@ inline ScrollArea* Scene::getSelectedScrollArea() const {
 }
 
 inline vec3 Scene::pickerRay(vec2i mPos) const {
-	return camera.direction(mPos) * float(camera.zfar);
+	return camera.direction(mPos) * Camera::zfar;
+}
+
+inline const CMesh* Scene::collim(const string& name) const {
+	return &findAsset(collims, name);
+}
+
+inline const GMesh* Scene::mesh(const string& name) const {
+	return &findAsset(meshes, name);
+}
+
+inline const Material* Scene::material(const string& name) const {
+	return &findAsset(materials, name);
+}
+
+inline const Texture* Scene::getTex(const string& name) const {
+	return &findAsset(texes, name);
+}
+
+inline GLuint Scene::texture(const string& name) const {
+	return findAsset(texes, name).getID();
+}
+
+inline GLuint Scene::blank() const {
+	return texes.at("").getID();
+}
+
+template <class T>
+const T& Scene::findAsset(const umap<string, T>& assets, const string& name) {
+	typename umap<string, T>::const_iterator it = assets.find(name);
+	return it != assets.end() ? it->second : assets.at("");
 }

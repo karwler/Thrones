@@ -37,15 +37,33 @@ inline void Size::set(float percent) {
 	prc = percent;
 }
 
+// vertex data for widgets
+class Rectangle {
+public:
+	GLuint vao;
+
+	static constexpr uint corners = 4;
+private:
+	static constexpr uint stride = 2;
+	static constexpr float vertices[corners * stride] = {
+		0.f, 0.f,
+		1.f, 0.f,
+		1.f, 1.f,
+		0.f, 1.f,
+	};
+
+public:
+	void init(ShaderGUI* gui);
+	void free(ShaderGUI* gui);
+};
+
 // can be used as spacer
 class Widget : public Interactable {
-public:
+protected:
 	static const vec4 colorNormal;
 	static const vec4 colorDark;
 	static const vec4 colorLight;
-	static const vec4 colorSelect;
-protected:
-	static const vec4 colorTexture;
+	static const vec4 colorTooltip;
 
 	Layout* parent;	// every widget that isn't a Layout should have a parent
 	sizet pcID;		// this widget's id in parent's widget list
@@ -55,10 +73,10 @@ public:
 	Widget(Size relSize = 1.f, Layout* parent = nullptr, sizet id = SIZE_MAX);	// parent and id should be set by Layout
 	virtual ~Widget() override = default;
 
-	virtual Rect draw() const;	// returns frame for possible futher reuse
+	virtual void draw() const {}	// returns frame for possible futher reuse
 	virtual void tick(float) {}
 	virtual void onResize() {}
-	virtual void postInit() {}	// gets called after parent is set and all set up
+	virtual void postInit() {}		// gets called after parent is set and all set up
 	virtual void onScroll(vec2i) {}
 
 	sizet getID() const;
@@ -73,8 +91,10 @@ public:
 	virtual bool selectable() const;
 
 protected:
-	static void drawRect(const Rect& rect, const vec4& color, int z = 0);
-	static void drawTexture(const Texture* tex, Rect rect, const Rect& frame, const vec4& color = colorTexture, int z = 0);
+	static void drawRect(const Rect& rect, const vec4& color, GLuint tex, float z = 0.f);
+	static void drawRect(const Rect& rect, Rect frame, const vec4& color, GLuint tex, float z = 0.f);
+private:
+	static void drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z = 0.f);
 };
 
 inline sizet Widget::getID() const {
@@ -93,46 +113,48 @@ inline Rect Widget::rect() const {
 	return Rect(position(), size());
 }
 
-// visible widget with texture and background color
-class Picture : public Widget {
-public:
-	static constexpr int defaultIconMargin = 2;
+inline void Widget::drawRect(const Rect& rect, const vec4& color, GLuint tex, float z) {
+	drawRect(rect, vec4(0.f, 0.f, 1.f, 1.f), color, tex, z);
+}
 
-	const Texture* bgTex;	// managed by WindowSys
-	vec4 color;
-	float dimFactor;
-protected:
-	int bgMargin;
-	bool showColor;
-
-public:
-	Picture(Size relSize = 1.f, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
-	virtual ~Picture() override = default;
-
-	virtual Rect draw() const override;
-
-	Rect texRect() const;
-	void setDim(float factor);
-};
-
-inline void Picture::setDim(float factor) {
-	dimFactor = factor;
+inline void Widget::drawRect(const Rect& rect, Rect frame, const vec4& color, GLuint tex, float z) {
+	frame = rect.intersect(frame);
+	drawRect(frame, vec4(float(frame.x - rect.x) / float(rect.w), float(frame.y - rect.y) / float(rect.h), float(frame.w) / float(rect.w), float(frame.h) / float(rect.h)), color, tex, z);
 }
 
 // clickable widget with function calls for left and right click (it's rect is drawn so you can use it like a spacer with color)
-class Button : public Picture {
+class Button : public Widget {
+public:
+	vec4 color;
 protected:
+	vec4 dimFactor;
 	BCall lcall, rcall;
+	Texture tipTex;		// memory is handled by the button
+	GLuint bgTex;
+
+private:
+	static constexpr float selectFactor = 1.2f;
+	static constexpr vec2i tooltipMargin = { 4, 1 };
+	static constexpr int cursorMargin = 2;
 
 public:
-	Button(Size relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
-	virtual ~Button() override = default;
+	Button(Size relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	virtual ~Button() override;
 
+	virtual void draw() const override;
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onHover() override;
+	virtual void onUnhover() override;
 
 	virtual bool selectable() const override;
+	void setDim(float factor);
 	void setLcall(BCall pcl);
+	void drawTooltip() const;
 };
+
+inline void Button::setDim(float factor) {
+	dimFactor = vec4(factor, factor, factor, dimFactor.a);
+}
 
 inline void Button::setLcall(BCall pcl) {
 	lcall = pcl;
@@ -144,10 +166,10 @@ public:
 	bool on;
 
 public:
-	CheckBox(Size relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	CheckBox(Size relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~CheckBox() override = default;
 
-	virtual Rect draw() const override;
+	virtual void draw() const override;
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
 
 	Rect boxRect() const;
@@ -172,10 +194,10 @@ private:
 	int diffSliderMouse;
 
 public:
-	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall leftCall = nullptr, BCall rightCall = nullptr, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Slider() override = default;
 
-	virtual Rect draw() const override;
+	virtual void draw() const override;
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
 	virtual void onHold(vec2i mPos, uint8 mBut) override;
 	virtual void onDrag(vec2i mPos, vec2i mMov) override;
@@ -213,29 +235,29 @@ public:
 		center,
 		right
 	};
-
-	static constexpr int defaultTextMargin = 5;
+	static constexpr int textMargin = 5;
 
 protected:
 	string text;
 	Texture textTex;	// managed by Label
-	int textMargin;
 	Alignment align;	// text alignment
+	bool showBG;
 
 public:
-	Label(Size relSize = 1.f, string text = "", BCall leftCall = nullptr, BCall rightCall = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, const vec4& color = colorNormal, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Label(Size relSize = 1.f, string text = "", BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Label() override;
 
-	virtual Rect draw() const override;
+	virtual void draw() const override;
 	virtual void onResize() override;
 	virtual void postInit() override;
 
 	const string& getText() const;
-	virtual void setText(string str);
+	virtual void setText(string&& str);
+	virtual void setText(const string& str);
 	Rect textRect() const;
 protected:
 	static vec2i textPos(const Texture& text, Alignment alignment, vec2i pos, vec2i siz, int margin);
-	vec2i textPos() const;
+	virtual vec2i textPos() const;
 	void updateTextTex();
 };
 
@@ -247,24 +269,20 @@ inline Rect Label::textRect() const {
 	return Rect(textPos(), textTex.getRes());
 }
 
-inline vec2i Label::textPos() const {
-	return textPos(textTex, align, position(), size(), textMargin);
-}
-
 // a weird thing for game related icons
 class Draglet : public Label {
 private:
-	static constexpr float selectFactor = 1.2f;
-	static const vec4 borderColor;
+	static constexpr int olSize = 3;
 
 	bool dragging;
 	bool selected;
+	BCall hcall;
 
 public:
-	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, bool showColor = true, const vec4& color = colorNormal, const Texture* bgTex = nullptr, string text = "", Alignment alignment = Alignment::left, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = colorNormal, const Texture& tooltip = Texture(), string text = "", Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
-	virtual Rect draw() const override;
+	virtual void draw() const override;
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
 	virtual void onHold(vec2i mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
@@ -280,76 +298,62 @@ inline void Draglet::setSelected(bool on) {
 class SwitchBox : public Label {
 private:
 	vector<string> options;
-	sizet curOpt;
+	uint curOpt;
 
 public:
-	SwitchBox(Size relSize = 1.f, const string* opts = nullptr, sizet ocnt = 0, string curOption = "", BCall call = nullptr, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, const vec4& color = colorNormal, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(Size relSize = 1.f, const string* opts = nullptr, uint ocnt = 0, string curOption = "", BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
 
 	virtual bool selectable() const override;
-	sizet getCurOpt() const;
+	virtual void setText(const string& str) override;
+	uint getCurOpt() const;
+	void setCurOpt(uint id);
 private:
-	void shiftOption(long mov);
+	void shiftOption(int mov);
 };
 
-inline sizet SwitchBox::getCurOpt() const {
+inline uint SwitchBox::getCurOpt() const {
 	return curOpt;
 }
 
 // for editing a line of text (ignores Label's align), (calls Button's lcall on text confirm rather than on click and dcall when enter is pressed)
 class LabelEdit : public Label {
-public:
-	enum class TextType : uint8 {
-		text,
-		sInt,
-		sIntSpaced,
-		uInt,
-		uIntSpaced,
-		sFloat,
-		sFloatSpaced,
-		uFloat,
-		uFloatSpaced
-	};
-
 private:
-	TextType textType;
-	int textOfs;	// text's horizontal offset
-	string oldText;
-	sizet cpos;		// caret position
-	BCall ecall;
-
 	static constexpr int caretWidth = 4;
 
+	string oldText;
+	BCall ecall;
+	uint cpos;		// caret position
+	int textOfs;	// text's horizontal offset
+
 public:
-	LabelEdit(Size relSize = 1.f, string line = "", BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, TextType type = TextType::text, Alignment alignment = Alignment::left, const Texture* bgTex = nullptr, const vec4& color = colorNormal, bool showColor = true, int textMargin = defaultTextMargin, int bgMargin = defaultIconMargin, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(Size relSize = 1.f, string line = "", BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void drawTop() const override;
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
 	virtual void onKeypress(const SDL_Keysym& key) override;
-	virtual void onText(const string& str) override;
+	virtual void onText(const char* str) override;
 
+	virtual bool selectable() const override;
 	const string& getOldText() const;
-	virtual void setText(string str) override;
+	virtual void setText(string&& str) override;
+	virtual void setText(const string& str) override;
 
 	void confirm();
 	void cancel();
 
+protected:
+	virtual vec2i textPos() const override;
 private:
+	void onTextReset();
 	int caretPos() const;	// caret's relative x position
-	void setCPos(sizet cp);
+	void setCPos(uint cp);
 
-	sizet findWordStart();	// returns index of first character of word before cpos
-	sizet findWordEnd();		// returns index of character after last character of word after cpos
-	void cleanText();
-	void cleanSIntSpacedText();
-	void cleanUIntSpacedText();
-	void cleanSFloatText();
-	void cleanSFloatSpacedText();
-	void cleanUFloatText();
-	void cleanUFloatSpacedText();
+	uint findWordStart();	// returns index of first character of word before cpos
+	uint findWordEnd();		// returns index of character after last character of word after cpos
 };
 
 inline const string& LabelEdit::getOldText() const {

@@ -6,6 +6,8 @@
 // for handling program state specific things that occur in all states
 class ProgState {
 protected:
+	static constexpr int tooltipLimit = 600;
+	static constexpr int tooltipHeight = 16;
 	static constexpr int lineHeight = 30;
 	static constexpr int superHeight = 40;
 	static constexpr int superSpacing = 10;
@@ -17,12 +19,14 @@ protected:
 		string text;
 		int length, height;
 
-		Text(string str, int height = lineHeight, int margin = Label::defaultTextMargin);
+		Text(string str, int height = lineHeight);
 
-		static int strLen(const string& str, int height = lineHeight, int margin = Label::defaultTextMargin);
+		static int strLen(const string& str, int height = lineHeight);
 	};
-	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight, int margin = Label::defaultTextMargin);
-	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight, int margin = Label::defaultTextMargin);
+	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight);
+	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight);
+	static Texture makeTooltip(const string& text, int limit = tooltipLimit, int height = tooltipHeight);
+	static Texture makeTooltip(const vector<string>& lines, int limit = tooltipLimit, int height = tooltipHeight);
 
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
@@ -43,10 +47,10 @@ protected:
 };
 
 template<class T>
-int ProgState::findMaxLength(T pos, T end, int height, int margin) {
+int ProgState::findMaxLength(T pos, T end, int height) {
 	int width = 0;
 	for (; pos != end; pos++)
-		if (int len = Text::strLen(*pos, height, margin); len > width)
+		if (int len = Text::strLen(*pos, height); len > width)
 			width = len;
 	return width;
 }
@@ -102,15 +106,15 @@ private:
 };
 
 inline string ProgHost::tileFortressString(const Com::Config& cfg) {
-	return to_string(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
 }
 
 inline string ProgHost::middleFortressString(const Com::Config& cfg) {
-	return to_string(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+	return toStr(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
 }
 
 inline string ProgHost::pieceTotalString(const Com::Config& cfg) {
-	return to_string(cfg.numPieces) + '/' + to_string(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
+	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
 }
 
 class ProgSetup : public ProgState {
@@ -151,11 +155,11 @@ public:
 	void selectNext(bool fwd);
 
 	virtual Layout* createLayout() override;
+	void setSelected(uint8 sel);
 private:
 	static Layout* getTicons();
 	static Layout* getPicons();
 	Layout* createSidebar(int& sideLength) const;
-	void setSelected(uint8 sel);
 	uint8 findNextSelect(bool fwd);
 	void switchIcon(uint8 type, bool on, bool isTile);
 };
@@ -202,15 +206,15 @@ public:
 
 class ProgSettings : public ProgState {
 public:
+	LabelEdit* display;
 	SwitchBox* screen;
 	SwitchBox* winSize;
 	SwitchBox* dspMode;
-	SwitchBox* msample;
 
 	static constexpr float gammaStepFactor = 10.f;
 	static constexpr float brightStepFactor = 10.f;
-private:
 	static constexpr char rv2iSeparator[] = " x ";
+private:
 	umap<string, uint32> pixelformats;
 
 public:
@@ -221,17 +225,11 @@ public:
 	virtual Layout* createLayout() override;
 
 	SDL_DisplayMode currentMode() const;
-private:
-	static string sizeToFstr(vec2i size);
 	static string dispToFstr(const SDL_DisplayMode& mode);
 };
 
-inline string ProgSettings::sizeToFstr(vec2i size) {
-	return size.toString(rv2iSeparator);
-}
-
 inline string ProgSettings::dispToFstr(const SDL_DisplayMode& mode) {
-	return to_string(mode.w) + rv2iSeparator + to_string(mode.h) + " | " + to_string(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
+	return toStr(mode.w) + rv2iSeparator + toStr(mode.h) + " | " + toStr(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
 }
 
 class ProgInfo : public ProgState {

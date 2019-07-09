@@ -8,34 +8,30 @@ const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, 2.f);
 const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, 1.f);
 const vec3 Camera::up(0.f, 1.f, 0.f);
 
-Camera::Camera(const vec3& pos, const vec3& lat, float fov, float znear, float zfar) :
+Camera::Camera(const vec3& pos, const vec3& lat) :
 	pos(pos),
-	lat(lat),
-	fov(fov),
-	znear(znear),
-	zfar(zfar)
-{}
-
-void Camera::update() const {
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(double(fov), vec2d(World::winSys()->windowSize()).ratio(), double(znear), double(zfar));
-	gluLookAt(double(pos.x), double(pos.y), double(pos.z), double(lat.x), double(lat.y), double(lat.z), double(up.x), double(up.y), double(up.z));
-	glMatrixMode(GL_MODELVIEW);
+	lat(lat)
+{
+	glUseProgram(World::gui()->program);
+	updateProjection();
 }
 
-void Camera::updateUI() {
-	vec2d res = World::winSys()->windowSize();
+void Camera::update() const {
+	mat4 cviewMat = proj * glm::lookAt(pos, lat, up);
+	glUniformMatrix4fv(World::space()->pview, 1, GL_FALSE, glm::value_ptr(cviewMat));
+	glUniform3fv(World::space()->viewPos, 1, glm::value_ptr(pos));
+}
 
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0, res.x, res.y, 0.0, -1.0, 1.0);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+void Camera::updateProjection() {
+	vec2i res = World::window()->getView();
+	proj = glm::perspective(glm::radians(fov), vec2f(res).ratio(), znear, zfar);
+
+	vec2 hsiz(float(res.x / 2), float(res.y / 2));
+	glUniform2fv(World::gui()->pview, 1, glm::value_ptr(hsiz));
 }
 
 vec3 Camera::direction(vec2i mPos) const {
-	vec2 res = World::winSys()->windowSize().glm();
+	vec2 res = World::window()->getView().glm();
 	vec3 dir = glm::normalize(lat - pos);
 
 	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
@@ -50,21 +46,24 @@ vec3 Camera::direction(vec2i mPos) const {
 
 // LIGHT
 
-Light::Light(GLenum id, const vec4& ambient, const vec4& diffuse, const vec4& specular, const vec4& position) :
-	id(id),
+Light::Light(const vec3& position, const vec3& ambient, const vec3& diffuse, const vec3& specular, Attenuation att) :
+	position(position),
 	ambient(ambient),
 	diffuse(diffuse),
 	specular(specular),
-	position(position)
+	att(att)
 {
-	glEnable(id);
+	glUseProgram(World::space()->program);
+	update();
 }
 
 void Light::update() const {
-	glLightfv(GL_LIGHT0, GL_AMBIENT, glm::value_ptr(ambient));
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, glm::value_ptr(diffuse));
-	glLightfv(GL_LIGHT0, GL_SPECULAR, glm::value_ptr(specular));
-	glLightfv(GL_LIGHT0, GL_POSITION, glm::value_ptr(position));
+	glUniform3fv(World::space()->lightPos, 1, glm::value_ptr(position));
+	glUniform3fv(World::space()->lightAmbient, 1, glm::value_ptr(ambient));
+	glUniform3fv(World::space()->lightDiffuse, 1, glm::value_ptr(diffuse));
+	glUniform3fv(World::space()->lightSpecular, 1, glm::value_ptr(specular));
+	glUniform1f(World::space()->lightLinear, att.linear);
+	glUniform1f(World::space()->lightQuadratic, att.quadratic);
 }
 
 // CLICK STAMP
@@ -86,14 +85,14 @@ Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot) 
 
 // ANIMATION
 
-Animation::Animation(Object* object, queue<Keyframe> keyframes) :
+Animation::Animation(Object* object, std::queue<Keyframe>&& keyframes) :
 	keyframes(std::move(keyframes)),
 	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot),
 	object(object),
 	useObject(true)
 {}
 
-Animation::Animation(Camera* camera, queue<Keyframe> keyframes) :
+Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
 	keyframes(std::move(keyframes)),
 	begin(0.f, Keyframe::CHG_NONE, camera->pos, camera->lat),
 	camera(camera),
@@ -123,50 +122,45 @@ Scene::Scene() :
 	select(nullptr),
 	capture(nullptr),
 	mouseMove(0),
+	camera(Camera::posSetup, Camera::latSetup),
 	layout(new Layout),	// dummy layout in case a function gets called preemptively
-	lights({ Light(GL_LIGHT0) })
-{
-	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG, "mtl")) {
-		vector<pair<string, Material>> mtl = FileSys::loadMtl(appDsep(FileSys::dirObjs) + file);
-		materials.insert(mtl.begin(), mtl.end());
-	}
-	for (const string& file : FileSys::listDir(FileSys::dirObjs, FTYPE_REG, "obj")) {
-		vector<pair<string, Blueprint>> obj = FileSys::loadObj(appDsep(FileSys::dirObjs) + file);
-		bprints.insert(obj.begin(), obj.end());
-	}
+	light(vec3(5.f, 4.f, 3.f), vec3(1.f, 0.98f, 0.92f), vec3(1.f, 0.99f, 0.92f), vec3(1.f), 100.f),
+	meshes(FileSys::loadObjects()),
+	materials(FileSys::loadMaterials()),
+	texes(FileSys::loadTextures()),
+	collims({
+		pair("", CMesh()),
+		pair("tile", CMesh::makeDefault()),
+		pair("piece", CMesh::makeDefault(vec3(0.f, BoardObject::upperPoz, 0.f)))
+	})
+{}
+
+Scene::~Scene() {
+	for (auto& [name, tex] : texes)
+		tex.free();
+	for (auto& [name, mesh] : meshes)
+		mesh.free();
+	for (auto& [name, mesh] : collims)
+		mesh.free();
 }
 
 void Scene::draw() {
-	glClear(clearSet);
-
-	// draw objects
+	glUseProgram(World::space()->program);
 	camera.update();
-	glEnable(GL_LIGHTING);
-	glLoadIdentity();
-	for (Light& it : lights)
-		it.update();
-
 	for (Object* it : objects)
 		it->draw();
-	glDisable(GL_CULL_FACE);
-	for (Object& it : effects)
-		it.draw();
-	glEnable(GL_CULL_FACE);
 	if (dynamic_cast<Object*>(capture))
 		capture->drawTop();
-	glDisable(GL_LIGHTING);
 
-	// draw UI
-	Camera::updateUI();
-	glDisable(GL_POLYGON_SMOOTH);
-
+	glUseProgram(World::gui()->program);
+	World::gui()->bindRect();
 	layout->draw();
 	if (popup)
 		popup->draw();
 	if (dynamic_cast<Widget*>(capture))
 		capture->drawTop();
-	if (World::sets()->smooth != Settings::Smooth::off)
-		glEnable(GL_POLYGON_SMOOTH);
+	if (Button* but = dynamic_cast<Button*>(select))
+		but->drawTooltip();
 }
 
 void Scene::tick(float dSec) {
@@ -183,9 +177,8 @@ void Scene::tick(float dSec) {
 }
 
 void Scene::onResize() {
-	for (Light& it : lights)	// lights need to be reenabled when recreating window
-		glEnable(it.id);
-
+	glUseProgram(World::gui()->program);
+	camera.updateProjection();
 	layout->onResize();
 	if (popup)
 		popup->onResize();
@@ -197,8 +190,8 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 	else if (!key.repeat)
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_LALT:
-			World::game()->favorState.use = true;
-			World::game()->updateFavorState();
+			if (World::game()->favorState.use = true; Piece* pce = dynamic_cast<Piece*>(capture))
+				World::program()->eventFavorStart(pce);
 			break;
 		case SDL_SCANCODE_RETURN:
 			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
@@ -213,24 +206,20 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 	if (!(dynamic_cast<LabelEdit*>(capture) || key.repeat))
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_LALT:
-			World::game()->favorState.use = false;
-			World::game()->updateFavorState();
-			break;
+			if (World::game()->favorState.use = false; Piece* pce = dynamic_cast<Piece*>(capture))
+				World::program()->eventFavorStart(pce);
 		}
 }
 
-void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat) {
+void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time) {
 	mouseMove = mMov;
-	select = getSelected(mPos);
+	moveTime = time;
 
+	updateSelect(mPos);
 	if (capture)
 		capture->onDrag(mPos, mMov);
 	else if (mStat)
 		World::state()->eventDrag(mStat);
-
-	layout->onMouseMove(mPos, mMov);
-	if (popup)
-		popup->onMouseMove(mPos, mMov);
 }
 
 void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
@@ -264,27 +253,26 @@ void Scene::onMouseWheel(vec2i wMov) {
 }
 
 void Scene::onMouseLeave() {
-	for (ClickStamp& it : stamps) {
-		it.inter = nullptr;
-		it.area = nullptr;
-	}
+	for (ClickStamp& it : stamps)
+		it.inter = it.area = nullptr;
+	unselect();
 }
 
 void Scene::resetLayouts() {
 	// clear scene
-	World::winSys()->clearFonts();
-	onMouseLeave();	// reset stamps
-	select = nullptr;
+	World::fonts()->clear();
+	onMouseLeave();	// reset stamps and select
 	capture = nullptr;
 	popup.reset();
 
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
 	layout->postInit();
-	onMouseMove(mousePos(), 0, 0);
+	onMouseMove(mousePos(), 0, 0, 0);
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
+	unselect();	// preemptive to avoid dangling pointer
 	popup.reset(newPopup);
 	if (popup)
 		popup->postInit();
@@ -292,7 +280,23 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	capture = newCapture;
 	if (capture)
 		capture->onClick(mousePos(), SDL_BUTTON_LEFT);
-	onMouseMove(mousePos(), 0, 0);
+	onMouseMove(mousePos(), 0, 0, 0);
+}
+
+void Scene::unselect() {
+	if (select) {
+		select->onUnhover();
+		select = nullptr;
+	}
+}
+
+void Scene::updateSelect(vec2i mPos) {
+	if (Interactable* cur = getSelected(mPos); cur != select) {
+		if (select)
+			select->onUnhover();
+		if (select = cur)
+			select->onHover();
+	}
 }
 
 Interactable* Scene::getSelected(vec2i mPos) {
@@ -328,12 +332,16 @@ Object* Scene::rayCast(const vec3& ray) const {
 	float min = FLT_MAX;
 	Object* mob = nullptr;
 	for (Object* obj : objects) {
-		if (!(obj->mode & Object::INFO_RAYCAST))
+		if (!obj->rigid)	// assuming that obj->coli is set
 			continue;
 
-		mat4 trans = makeTransform(obj->pos, obj->rot, obj->scl);
-		for (sizet i = 0; i < obj->bpr->elems.size(); i += 3)
-			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->bpr->verts[obj->bpr->elems[i].v], 1.f), trans * vec4(obj->bpr->verts[obj->bpr->elems[i+1].v], 1.f), trans * vec4(obj->bpr->verts[obj->bpr->elems[i+2].v], 1.f), t) && t <= min) {
+		mat4 trans = glm::translate(mat4(1.f), obj->pos);
+		trans = glm::rotate(trans, obj->rot.x, vec3(1.f, 0.f, 0.f));
+		trans = glm::rotate(trans, obj->rot.y, vec3(0.f, 1.f, 0.f));
+		trans = glm::rotate(trans, obj->rot.z, vec3(0.f, 0.f, 1.f));
+		trans = glm::scale(trans, obj->scl);
+		for (uint16 i = 0; i < obj->coli->esiz; i += 3)
+			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->coli->verts[obj->coli->elems[i]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+1]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+2]], 1.f), t) && t <= min) {
 				min = t;
 				mob = obj;
 			}
@@ -362,14 +370,4 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 
 	t = f * glm::dot(e2, q);
 	return t > FLT_EPSILON;
-}
-
-const Blueprint* Scene::blueprint(const string& name) const {
-	umap<string, Blueprint>::const_iterator it = bprints.find(name);
-	return it != bprints.end() ? &it->second : nullptr;
-}
-
-const Material* Scene::material(const string& name) const {
-	umap<string, Material>::const_iterator it = materials.find(name);
-	return it != materials.end() ? &it->second : nullptr;
 }

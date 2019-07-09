@@ -38,6 +38,7 @@ public:
 
 	// game setup
 	void eventOpenSetup();
+	void eventIconSelect(Button* but);
 	void eventPlaceTileH();
 	void eventPlaceTileD(Button* but);
 	void eventPlacePieceH();
@@ -63,9 +64,11 @@ public:
 	void eventOpenSettings(Button* but = nullptr);
 	void eventApplySettings(Button* but = nullptr);
 	void eventSetVsync(Button* but);
-	void eventSetSmooth(Button* but);
+	void eventSetSamples(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
+	void eventSetVolumeSL(Button* but);
+	void eventSetVolumeLE(Button* but);
 	void eventResetSettings(Button* but);
 	void eventOpenInfo(Button* but = nullptr);
 
@@ -87,10 +90,6 @@ private:
 	BoardObject* pickBob(vec2s& pos, Piece*& pce);
 	Piece* extractPiece(BoardObject* bob, vec2s pos);
 };
-
-inline Program::Program() :
-	state(new ProgState)	// necessary as a placeholder to prevent nullptr exceptions
-{}
 
 inline ProgState* Program::getState() {
 	return state.get();

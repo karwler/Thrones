@@ -1,15 +1,9 @@
 #pragma once
 
 #include "text.h"
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
-
-using glm::mat4;
-using glm::vec2;
-using glm::vec3;
-using glm::vec4;
 
 template <class T>
 struct cvec2 {
@@ -192,7 +186,7 @@ cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 
 template<class T>
 inline string cvec2<T>::toString(const char* sep) const {
-	return to_string(x) + sep + to_string(y);
+	return toStr(x) + sep + toStr(y);
 }
 
 template<class T>

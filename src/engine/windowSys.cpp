@@ -2,21 +2,15 @@
 
 // FONT SET
 
-FontSet::~FontSet() {
-	for (const auto& [size, font] : fonts)
-		TTF_CloseFont(font);
-}
-
-void FontSet::init() {
-	clear();
-	TTF_Font* tmp = TTF_OpenFont(fileFont, fontTestHeight);
-	if (!tmp)
+FontSet::FontSet() :
+	fontData(readFile<vector<uint8>>(fileFont))
+{
+	if (!(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight)))
 		throw std::runtime_error(TTF_GetError());
-
 	int size;	// get approximate height scale factor
-	TTF_SizeUTF8(tmp, fontTestString, nullptr, &size);
-	heightScale = float(fontTestHeight) / float(size);
-	TTF_CloseFont(tmp);
+	heightScale = !TTF_SizeUTF8(logFont, fontTestString, nullptr, &size) ? float(fontTestHeight) / float(size) : fallbackScale;
+	if (TTF_CloseFont(logFont); !(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, logSize)))
+		throw std::runtime_error(TTF_GetError());
 }
 
 void FontSet::clear() {
@@ -25,19 +19,17 @@ void FontSet::clear() {
 	fonts.clear();
 }
 
-TTF_Font* FontSet::addSize(int size) {
-	TTF_Font* font = TTF_OpenFont(fileFont, size);
+TTF_Font* FontSet::getFont(int height) {
+	height = int(float(height) * heightScale);
+	if (umap<int, TTF_Font*>::iterator it = fonts.find(height); it != fonts.end())
+		return it->second;
+
+	TTF_Font* font = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, height);
 	if (font)
-		fonts.emplace(size, font);
+		fonts.emplace(height, font);
 	else
 		std::cerr << TTF_GetError() << std::endl;
 	return font;
-}
-
-TTF_Font* FontSet::getFont(int height) {
-	height = int(float(height) * heightScale);
-	umap<int, TTF_Font*>::iterator it = fonts.find(height);
-	return it != fonts.end() ? it->second : addSize(height);	// load font if it hasn't been loaded yet
 }
 
 int FontSet::length(const string& text, int height) {
@@ -47,13 +39,135 @@ int FontSet::length(const string& text, int height) {
 	return len;
 }
 
+void FontSet::writeLog(string&& text, vec2i res) {
+	logLines.push_back(std::move(text));
+	if (uint maxl = uint(res.y / int(float(logSize) / heightScale)); logLines.size() > maxl)
+		logLines.erase(logLines.begin(), logLines.begin() + pdift(logLines.size() - maxl));
+
+	string str;
+	for (const string& it : logLines)
+		str += it + '\n';
+	str.pop_back();
+	logTex.close();
+	if (logTex = TTF_RenderUTF8_Blended_Wrapped(logFont, str.c_str(), logColor, uint(res.x)); logTex.valid()) {
+		glBindTexture(GL_TEXTURE_2D, logTex.getID());
+		glColor4f(1.f, 1.f, 1.f, 1.f);
+
+		glBegin(GL_QUADS);
+		glTexCoord2i(0, 0);
+		glVertex2i(0, 0);
+		glTexCoord2i(1, 0);
+		glVertex2i(logTex.getRes().x, 0);
+		glTexCoord2i(1, 1);
+		glVertex2i(logTex.getRes().x, logTex.getRes().y);
+		glTexCoord2i(0, 1);
+		glVertex2i(0, logTex.getRes().y);
+		glEnd();
+	}
+}
+
+void FontSet::closeLog() {
+	logTex.close();
+	TTF_CloseFont(logFont);
+	logLines.clear();
+}
+
+// SHADERS
+
+Shader::Shader(const string& srcVert, const string& srcFrag) {
+	GLuint vert = loadShader(srcVert, GL_VERTEX_SHADER);
+	GLuint frag = loadShader(srcFrag, GL_FRAGMENT_SHADER);
+
+	program = glCreateProgram();
+	glAttachShader(program, vert);
+	glAttachShader(program, frag);
+	glLinkProgram(program);
+	glDetachShader(program, vert);
+	glDetachShader(program, frag);
+	glDeleteShader(vert);
+	glDeleteShader(frag);
+
+	GLint result;
+	if (glGetProgramiv(program, GL_LINK_STATUS, &result); result == GL_FALSE) {
+		GLint infoLen;
+		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &infoLen);
+
+		string err;
+		err.resize(sizet(infoLen));
+		glGetProgramInfoLog(program, infoLen, nullptr, err.data());
+		throw std::runtime_error(err);
+	}
+}
+
+GLuint Shader::loadShader(const string& source, GLenum type) {
+	const char* src = source.c_str();
+	GLuint shader = glCreateShader(type);
+	glShaderSource(shader, 1, &src, nullptr);
+	glCompileShader(shader);
+
+	GLint result;
+	if (glGetShaderiv(shader, GL_COMPILE_STATUS, &result); result == GL_FALSE) {
+		GLint infoLen;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
+
+		string err;
+		err.resize(sizet(infoLen));
+		glGetShaderInfoLog(shader, infoLen, nullptr, err.data());
+		throw std::runtime_error(err);
+	}
+	return shader;
+}
+
+ShaderScene::ShaderScene(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag)
+{
+	glUseProgram(program);
+	pview = glGetUniformLocation(program, "pview");
+	trans = glGetUniformLocation(program, "trans");
+	rotscl = glGetUniformLocation(program, "rotscl");
+	vertex = glGetAttribLocation(program, "vertex");
+	uvloc = glGetAttribLocation(program, "uvloc");
+	normal = glGetAttribLocation(program, "normal");
+	materialDiffuse = glGetUniformLocation(program, "material.diffuse");
+	materialEmission = glGetUniformLocation(program, "material.emission");
+	materialSpecular = glGetUniformLocation(program, "material.specular");
+	materialShininess = glGetUniformLocation(program, "material.shininess");
+	materialAlpha = glGetUniformLocation(program, "material.alpha");
+	texsamp = glGetUniformLocation(program, "texsamp");
+	viewPos = glGetUniformLocation(program, "viewPos");
+	lightPos = glGetUniformLocation(program, "light.pos");
+	lightAmbient = glGetUniformLocation(program, "light.ambient");
+	lightDiffuse = glGetUniformLocation(program, "light.diffuse");
+	lightSpecular = glGetUniformLocation(program, "light.specular");
+	lightLinear = glGetUniformLocation(program, "light.linear");
+	lightQuadratic = glGetUniformLocation(program, "light.quadratic");
+	glUniform1i(texsamp, 0);
+}
+
+ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag)
+{
+	glUseProgram(program);
+	pview = glGetUniformLocation(program, "pview");
+	rect = glGetUniformLocation(program, "rect");
+	uvrc = glGetUniformLocation(program, "uvrc");
+	zloc = glGetUniformLocation(program, "zloc");
+	vertex = glGetAttribLocation(program, "vertex");
+	uvloc = glGetAttribLocation(program, "uvloc");
+	color = glGetUniformLocation(program, "color");
+	texsamp = glGetUniformLocation(program, "texsamp");
+	glUniform1i(texsamp, 0);
+	wrect.init(this);
+}
+
 // WINDOW SYS
 
 WindowSys::WindowSys() :
 	window(nullptr),
 	context(nullptr),
 	dSec(0.f),
-	run(true)
+	run(true),
+	cursor(nullptr)
 {}
 
 int WindowSys::start() {
@@ -74,35 +188,40 @@ int WindowSys::start() {
 }
 
 void WindowSys::init() {
-	if (SDL_Init(SDL_INIT_VIDEO))
-		throw std::runtime_error(string("failed to initialize video:") + linend + SDL_GetError());
+	if (int err = FileSys::setWorkingDir())
+		throw std::runtime_error("failed to set working directory (" + toStr(err) + ')');
+	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO))
+		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
 	if (TTF_Init())
 		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
 	if (SDLNet_Init())
 		throw std::runtime_error(string("failed to initialize networking:") + linend + SDLNet_GetError());
+	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	SDL_StopTextInput();	// for some reason TextInput is on
 
-	fileSys.reset(new FileSys);
-	sets.reset(fileSys->loadSettings());
-	fonts.init();
+	sets.reset(FileSys::loadSettings());
+	fonts.reset(new FontSet);
 	createWindow();
+	try {
+		audio.reset(new AudioSys);
+	} catch (const std::runtime_error& err) {
+		std::cerr << err.what() << std::endl;
+		writeLog(err.what());
+		audio.reset();
+	}
 	scene.reset(new Scene);
 	program.reset(new Program);
-
-	for (const string& file : FileSys::listDir(FileSys::dirTexs, FTYPE_REG, "bmp")) {
-		try {
-			texes.emplace(delExt(file), appDsep(FileSys::dirTexs) + file);
-		} catch (const std::runtime_error& e) {
-			std::cerr << e.what() << std::endl;
-		}
-	}
+	fonts->closeLog();
 }
 
 void WindowSys::exec() {
 	program->start();
 	for (uint32 oldTime = SDL_GetTicks(); run;) {
-		setDSec(oldTime);
+		uint32 newTime = SDL_GetTicks();
+		dSec = float(newTime - oldTime) / ticksPerSec;
+		oldTime = newTime;
 
+		glClear(clearSet);
 		scene->draw();
 		SDL_GL_SwapWindow(window);
 
@@ -113,18 +232,16 @@ void WindowSys::exec() {
 		for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
 			handleEvent(event);
 	}
-	fileSys->saveSettings(sets.get());
+	FileSys::saveSettings(sets.get());
 }
 
 void WindowSys::cleanup() {
-	for (auto& [name, tex] : texes)
-		tex.close();
-
 	program.reset();
 	scene.reset();
 	destroyWindow();
-	fonts.clear();
-	fileSys.reset();
+	audio.reset();
+	fonts.reset();
+	sets.reset();
 
 	SDLNet_Quit();
 	TTF_Quit();
@@ -132,8 +249,6 @@ void WindowSys::cleanup() {
 }
 
 void WindowSys::createWindow() {
-	destroyWindow();	// make sure old window (if exists) is destroyed
-
 	uint32 flags = SDL_WINDOW_OPENGL;
 	switch (sets->screen) {
 	case Settings::Screen::borderless:
@@ -147,34 +262,50 @@ void WindowSys::createWindow() {
 	}
 
 	// create new window
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, sets->samples != 0);
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sets->samples);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, sets->msamples != 0);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sets->msamples);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
-	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sets->size.x, sets->size.y, flags)))
+	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
-
-	curDisplay = SDL_GetWindowDisplayIndex(window);
+	checkCurDisplay();
 	checkResolution(sets->size, displaySizes());
 	checkResolution(sets->mode, displayModes());
-	if (sets->screen <= Settings::Screen::borderless)
+	if (sets->screen <= Settings::Screen::borderless) {
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
-	else if (sets->screen == Settings::Screen::fullscreen)
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
+	} else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
-	setGamma(sets->gamma);
+	SDL_SetWindowBrightness(window, sets->gamma);
 
+	// load icons
 	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
+	if (SDL_Surface* icon = SDL_LoadBMP(fileCursor)) {
+		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
+			cursorHeight = uint8(icon->h);
+			SDL_SetCursor(cursor);
+		} else
+			cursorHeight = fallbackCursorSize;
+		SDL_FreeSurface(icon);
+	} else
+		cursorHeight = fallbackCursorSize;
 
 	// create context and set up rendering
 	if (!(context = SDL_GL_CreateContext(window)))
 		throw std::runtime_error(string("failed to create context:") + linend + SDL_GetError());
 	setSwapInterval();
-
+	glewExperimental = GL_TRUE;
+	glewInit();
 	updateViewport();
+
 	glClearColor(colorClear[0], colorClear[1], colorClear[2], colorClear[3]);
 	glClearDepth(1.0);
 	glEnable(GL_DEPTH_TEST);
@@ -184,23 +315,35 @@ void WindowSys::createWindow() {
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
 	glFrontFace(GL_CCW);
-	glShadeModel(GL_SMOOTH);
-	sets->samples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
-	updateSmooth();
+	glEnable(GL_TEXTURE_2D);
+	sets->msamples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
+
+	umap<string, string> sources = FileSys::loadShaders();
+	space.reset(new ShaderScene(sources.at(fileSceneVert), sources.at(fileSceneFrag)));
+	gui.reset(new ShaderGUI(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
+	glActiveTexture(GL_TEXTURE0);
+
+	// for startup log
+	glUseProgram(0);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, curView.x, curView.y, 0, -1.0, 1.0);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
 }
 
 void WindowSys::destroyWindow() {
-	if (window) {
-		SDL_GL_DeleteContext(context);
-		SDL_DestroyWindow(window);
-		window = nullptr;
-	}
+	space.reset();
+	gui.reset();
+	SDL_FreeCursor(cursor);
+	SDL_GL_DeleteContext(context);
+	SDL_DestroyWindow(window);
 }
 
 void WindowSys::handleEvent(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_MOUSEMOTION:
-		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel), event.motion.state);
+		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel), event.motion.state, event.motion.timestamp);
 		break;
 	case SDL_MOUSEBUTTONDOWN:
 		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button);
@@ -230,6 +373,7 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 
 void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	switch (winEvent.event) {
+	case SDL_WINDOWEVENT_RESIZED:
 	case SDL_WINDOWEVENT_SIZE_CHANGED:
 		updateViewport();
 		scene->onResize();
@@ -237,13 +381,11 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	case SDL_WINDOWEVENT_LEAVE:
 		scene->onMouseLeave();
 		break;
-	case SDL_WINDOWEVENT_MOVED:
-		if (int newDisp = SDL_GetWindowDisplayIndex(window); curDisplay != newDisp) {
-			if (curDisplay = newDisp; sets->screen <= Settings::Screen::borderless) {
-				if (!checkResolution(sets->size, displaySizes()))
-					SDL_SetWindowSize(window, sets->size.x, sets->size.y);
-			} else if (sets->screen == Settings::Screen::fullscreen && !checkResolution(sets->mode, displayModes()))
-				SDL_SetWindowDisplayMode(window, &sets->mode);
+	case SDL_WINDOWEVENT_MOVED:	// doesn't work on windows for some reason
+		if (checkCurDisplay() && sets->screen <= Settings::Screen::borderless && !checkResolution(sets->size, displaySizes())) {
+			SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+			updateViewport();
+			scene->onResize();
 		}
 		break;
 	case SDL_WINDOWEVENT_CLOSE:
@@ -251,10 +393,16 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	}
 }
 
-void WindowSys::setDSec(uint32& oldTicks) {
-	uint32 newTime = SDL_GetTicks();
-	dSec = float(newTime - oldTicks) / ticksPerSec;
-	oldTicks = newTime;
+void WindowSys::writeLog(string&& text) {
+	glUseProgram(0);
+	glClear(clearSet);
+	fonts->writeLog(std::move(text), curView);
+	SDL_GL_SwapWindow(window);
+}
+
+void WindowSys::setVsync(Settings::VSync vsync) {
+	sets->vsync = vsync;
+	setSwapInterval();
 }
 
 void WindowSys::setSwapInterval() {
@@ -280,85 +428,68 @@ bool WindowSys::trySetSwapInterval() {
 	return true;
 }
 
-void WindowSys::updateSmooth() const {
-	GLenum hmode = sets->smooth == Settings::Smooth::nice ? GL_NICEST : GL_FASTEST;
-	if (sets->smooth == Settings::Smooth::off) {
-		glDisable(GL_POINT_SMOOTH);
-		glDisable(GL_LINE_SMOOTH);
-		glDisable(GL_POLYGON_SMOOTH);
-	} else {
-		glEnable(GL_POINT_SMOOTH);
-		glHint(GL_POINT_SMOOTH_HINT, hmode);
-		glEnable(GL_LINE_SMOOTH);
-		glHint(GL_LINE_SMOOTH_HINT, hmode);
-		glEnable(GL_POLYGON_SMOOTH);
-		glHint(GL_POLYGON_SMOOTH_HINT, hmode);
-	}
-	glHint(GL_PERSPECTIVE_CORRECTION_HINT, hmode);
-}
-
-const Texture* WindowSys::texture(const string& name) const {
-	umap<string, Texture>::const_iterator it = texes.find(name);
-	return it != texes.end() ? &it->second : nullptr;
-}
-
-void WindowSys::setScreen(Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode, uint8 samples) {
+void WindowSys::setScreen(uint8 display, Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode) {
+	sets->display = clampHigh(display, uint8(SDL_GetNumVideoDisplays()));
+	sets->screen = screen;
 	sets->size = size;
 	checkResolution(sets->size, displaySizes());
 	sets->mode = mode;
 	checkResolution(sets->mode, displayModes());
-	if (sets->screen = screen; samples != sets->samples) {
-		sets->samples = samples;
-		createWindow();
-	} else if (sets->screen <= Settings::Screen::borderless) {
-		SDL_SetWindowFullscreen(window, 0);
-		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
-		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
-		SDL_SetWindowPosition(window, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED);
-	} else  if (sets->screen == Settings::Screen::fullscreen) {
-		SDL_SetWindowDisplayMode(window, &sets->mode);
-		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-	} else
-		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-	updateViewport();
+	setWindowMode();
 	scene->onResize();
 }
 
-void WindowSys::setVsync(Settings::VSync vsync) {
-	sets->vsync = vsync;
-	setSwapInterval();
-}
-
-void WindowSys::setSmooth(Settings::Smooth smooth) {
-	sets->smooth = smooth;
-	updateSmooth();
+void WindowSys::setWindowMode() {
+	if (sets->screen <= Settings::Screen::borderless) {
+		SDL_SetWindowFullscreen(window, 0);
+		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
+		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
+	} else  if (sets->screen == Settings::Screen::fullscreen) {
+		SDL_SetWindowDisplayMode(window, &sets->mode);
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+	} else {
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
+		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+	}
+	updateViewport();
 }
 
 void WindowSys::setGamma(float gamma) {
-	sets->gamma = clampHigh(gamma, Settings::gammaMax);
-	uint16 ramp[256];
-	SDL_CalculateGammaRamp(sets->gamma, ramp);
-	SDL_SetWindowGammaRamp(window, ramp, ramp, ramp);
+	sets->gamma = std::clamp(gamma, 0.f, Settings::gammaMax);
+	SDL_SetWindowBrightness(window, sets->gamma);
 }
 
 void WindowSys::resetSettings() {
 	sets.reset(new Settings);
-	createWindow();
+	checkCurDisplay();
+	setWindowMode();
+	setSwapInterval();
+	SDL_SetWindowBrightness(window, sets->gamma);
 	scene->resetLayouts();
+}
+
+bool WindowSys::checkCurDisplay() {
+	if (int disp = SDL_GetWindowDisplayIndex(window); disp >= 0 && sets->display != disp) {
+		sets->display = uint8(disp);
+		return true;
+	}
+	return false;
 }
 
 vector<vec2i> WindowSys::displaySizes() const {
 	vector<vec2i> sizes;
-	for (int im = 0; im < SDL_GetNumDisplayModes(curDisplay); im++)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(curDisplay, im, &mode))
+	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
 			sizes.emplace_back(mode.w, mode.h);
 	return uniqueSort(sizes);
 }
 
 vector<SDL_DisplayMode> WindowSys::displayModes() const {
 	vector<SDL_DisplayMode> mods;
-	for (int im = 0; im < SDL_GetNumDisplayModes(curDisplay); im++)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(curDisplay, im, &mode))
+	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
 			mods.push_back(mode);
 	return uniqueSort(mods);
 }

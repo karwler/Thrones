@@ -63,10 +63,10 @@ Config& Config::checkValues() {
 		tileAmounts[i]++;
 		tileAmounts[uint8(Tile::fortress)]--;
 	}
-	floorAmounts(calcSum(middleAmounts, middleAmounts.size()), middleAmounts.data(), homeWidth / 2, tileAmounts.size() - 1);
+	floorAmounts(calcSum(middleAmounts), middleAmounts.data(), homeWidth / 2, middleAmounts.size() - 1);
 
 	uint16 plim = hsize < maxNumPieces ? hsize : maxNumPieces;
-	uint16 psize = floorAmounts(calcSum(pieceAmounts), pieceAmounts.data(), plim, tileAmounts.size() - 1);
+	uint16 psize = floorAmounts(calcSum(pieceAmounts), pieceAmounts.data(), plim, pieceAmounts.size() - 1);
 	
 	if (!winFortress && !winThrone)
 		winFortress = winThrone = 1;
@@ -178,17 +178,17 @@ uint16 Config::dataSize(Code code) const {
 
 string Config::toIniText() const {
 	string text = '[' + name + ']' + linend;
-	text += makeIniLine(keywordSize, to_string(homeWidth) + ' ' + to_string(homeHeight));
-	text += makeIniLine(keywordSurvival, to_string(survivalPass));
-	text += makeIniLine(keywordFavors, to_string(favorLimit));
-	text += makeIniLine(keywordDragonDist, to_string(dragonDist));
+	text += makeIniLine(keywordSize, toStr(homeWidth) + ' ' + toStr(homeHeight));
+	text += makeIniLine(keywordSurvival, toStr(survivalPass));
+	text += makeIniLine(keywordFavors, toStr(favorLimit));
+	text += makeIniLine(keywordDragonDist, toStr(dragonDist));
 	text += makeIniLine(keywordDragonDiag, btos(dragonDiag));
 	text += makeIniLine(keywordMultistage, btos(multistage));
 	writeAmounts(text, keywordTile, tileNames, tileAmounts);
 	writeAmounts(text, keywordMiddle, tileNames, middleAmounts);
 	writeAmounts(text, keywordPiece, pieceNames, pieceAmounts);
-	text += makeIniLine(keywordWinFortress, to_string(winFortress));
-	text += makeIniLine(keywordWinThrone, to_string(winThrone));
+	text += makeIniLine(keywordWinFortress, toStr(winFortress));
+	text += makeIniLine(keywordWinThrone, toStr(winThrone));
 	text += makeIniLine(keywordCapturers, capturersString());
 	text += makeIniLine(keywordShift, string(shiftLeft ? keywordLeft : keywordRight) + ' ' + (shiftNear ? keywordNear : keywordFar));
 	return text;
@@ -260,7 +260,7 @@ void Config::readShift(const string& line) {
 
 vector<Config> Com::loadConfs(const string& file) {
 	vector<Config> confs;
-	for (const string& line : readTextFile(file)) {
+	for (const string& line : readFileLines(file)) {
 		if (string title = readIniTitle(line); !title.empty())
 			confs.emplace_back(std::move(title));
 		else
@@ -273,7 +273,7 @@ void Com::saveConfs(const vector<Config>& confs, const string& file) {
 	string text;
 	for (const Config& cfg : confs)
 		text += cfg.toIniText() + linend;
-	writeTextFile(file, text);
+	writeFile(file, text);
 }
 
 void Com::sendRejection(TCPsocket server) {

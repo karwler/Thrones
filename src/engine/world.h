@@ -6,46 +6,49 @@
 class World {
 public:
 	static constexpr char argAddress[] = "s";
-	static constexpr char argPort[] = "p";
 	static constexpr char argConnect[] = "c";
+	static constexpr char argPort[] = "p";
 	static constexpr char argSetup[] = "d";
 
+	static Arguments args;
 private:
-	static WindowSys windowSys;		// the thing on which everything runs
-	static Arguments arguments;
+	static WindowSys windowSys;		// the thing ontop of which everything runs
 
 public:
-	static FileSys* fileSys();
-	static WindowSys* winSys();
-	static Scene* scene();
+	static WindowSys* window();
+	static AudioSys* audio();
+	static FontSet* fonts();
+	static Game* game();
 	static Program* program();
 	static ProgState* state();
-	static Game* game();
 	static Settings* sets();
+	static Scene* scene();
+	static ShaderScene* space();
+	static ShaderGUI* gui();
 
-	static const vector<string>& getVals();
-	static bool hasFlag(const string& flg);
-	static const string& getOpt(const string& key);
 #ifdef _WIN32
-	static void setArgs(PWSTR pCmdLine);
+	static void setArgs(Win::PWSTR pCmdLine);
 #else
 	static void setArgs(int argc, char** argv);
 #endif
 	template <class F, class... A> static void prun(F func, A... args);
-private:
-	template <class C, class F, class... A> static void run(C* obj, F func, A... args);
+	static void play(const string& name);
 };
 
-inline FileSys* World::fileSys() {
-	return windowSys.getFileSys();
-}
-
-inline WindowSys* World::winSys() {
+inline WindowSys* World::window() {
 	return &windowSys;
 }
 
-inline Scene* World::scene() {
-	return windowSys.getScene();
+inline AudioSys* World::audio() {
+	return windowSys.getAudio();
+}
+
+inline FontSet* World::fonts() {
+	return windowSys.getFonts();
+}
+
+inline Game* World::game() {
+	return windowSys.getProgram()->getGame();
 }
 
 inline Program* World::program() {
@@ -56,37 +59,29 @@ inline ProgState* World::state() {
 	return windowSys.getProgram()->getState();
 }
 
-inline Game* World::game() {
-	return windowSys.getProgram()->getGame();
+inline Scene* World::scene() {
+	return windowSys.getScene();
 }
 
 inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
-inline const vector<string>& World::getVals() {
-	return arguments.vals;
+inline ShaderScene* World::space() {
+	return windowSys.getSpace();
 }
 
-inline bool World::hasFlag(const string& flg) {
-	return arguments.flags.count(flg);
+inline ShaderGUI* World::gui() {
+	return windowSys.getGUI();
 }
-#ifdef _WIN32
-inline void World::setArgs(PWSTR pCmdLine) {
-	arguments.setArgs(pCmdLine);
-}
-#else
-inline void World::setArgs(int argc, char** argv) {
-	arguments.setArgs(argc, argv, stos);
-}
-#endif
+
 template <class F, class... A>
 void World::prun(F func, A... args) {
-	run(program(), func, args...);
+	if (func)
+		(program()->*func)(args...);
 }
 
-template <class C, class F, class... A>
-void World::run(C* obj, F func, A... args) {
-	if (func)
-		(obj->*func)(args...);
+inline void World::play(const string& name) {
+	if (windowSys.getAudio())
+		windowSys.getAudio()->play(name);
 }

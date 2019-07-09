@@ -15,19 +15,22 @@ enum class WaitResult : uint8 {
 };
 
 constexpr uint32 checkTimeout = 500;
+constexpr char argConfig[] = "c";
+constexpr char argFile[] = "f";
+constexpr char argPort[] = "p";
 
 static bool running = true;
 
 static Config getConfig(const Arguments& args, uint16& port) {
-	umap<string, string>::const_iterator it = args.opts.find("p");
-	port = it != args.opts.end() ? uint16(sstoul(it->second)) : defaultPort;
+	const char* cfstr = args.getOpt(argPort);
+	port = cfstr ? uint16(sstoul(cfstr)) : defaultPort;
 	
-	it = args.opts.find("c");
-	string name = it != args.opts.end() ? it->second : Config::defaultName;
+	cfstr = args.getOpt(argConfig);
+	string name = cfstr ? cfstr : Config::defaultName;
 
+	cfstr = args.getOpt(argFile);
 	char* path = SDL_GetBasePath();
-	it = args.opts.find("f");
-	string file = it != args.opts.end() ? it->second : (path ? path : string("")) + defaultConfigFile;
+	string file = cfstr ? cfstr : string(path ? path : "") + defaultConfigFile;
 	SDL_free(path);
 
 	Config ret;
@@ -168,7 +171,7 @@ int main(int argc, char** argv) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
 #endif
 	uint16 port;
-	Config conf = getConfig(Arguments(argc, argv), port);
+	Config conf = getConfig(Arguments(argc, argv, {}, { argConfig, argFile, argPort }), port);
 
 	// init server
 	if (SDL_Init(0)) {

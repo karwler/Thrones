@@ -59,6 +59,10 @@ bool ProgState::tryClosePopup() {
 	return false;
 }
 
+void ProgState::eventCameraReset() {
+	World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
+}
+
 Layout* ProgState::createLayout() {
 	return nullptr;
 }
@@ -92,7 +96,7 @@ Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
 }
 
 pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal) {
-	LabelEdit* ledit = new LabelEdit(1.f, "", kcal, &Program::eventClosePopup, kcal);
+	LabelEdit* ledit = new LabelEdit(1.f, string(), kcal, &Program::eventClosePopup, kcal);
 	vector<Widget*> bot = {
 		new Label(1.f, "Ok", kcal, nullptr, Texture(), Label::Alignment::center),
 		new Label(1.f, "Cancel", &Program::eventClosePopup, nullptr, Texture(), Label::Alignment::center)
@@ -174,7 +178,7 @@ ProgHost::ProgHost() :
 
 void ProgHost::eventEscape() {
 	if (!tryClosePopup())
-		World::program()->eventExitGame();
+		World::program()->eventOpenMainMenu();
 }
 
 Layout* ProgHost::createLayout() {
@@ -185,10 +189,10 @@ Layout* ProgHost::createLayout() {
 	Text back("Back");
 	Text port("Port:");
 	vector<Widget*> top0 = {
-		new Label(back.length, back.text, &Program::eventExitHost),
+		new Label(back.length, back.text, &Program::eventOpenMainMenu),
 		new Label(1.f, "Open", &Program::eventHostServer, nullptr, Texture(), Label::Alignment::center),
 		new Label(port.length, port.text),
-		new LabelEdit(World::fonts()->length("00000", lineHeight), toStr(World::sets()->port), &Program::eventUpdatePort)
+		new LabelEdit(Text::strLen("00000") + LabelEdit::caretWidth, toStr(World::sets()->port), &Program::eventUpdatePort)
 	};
 	Text cfgt("Configuration: ");
 	Text aleft(arrowLeft);
@@ -251,7 +255,7 @@ Layout* ProgHost::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		inSurvivalSL = new Slider(1.f, confs[curConf].survivalPass, 0, 100, &Program::eventUpdateSurvivalSL, nullptr, makeTooltip(tips.back())),
-		inSurvivalLE = new LabelEdit(Text::strLen("100%"), toStr(confs[curConf].survivalPass) + '%', &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, makeTooltip(popBack(tips)))
+		inSurvivalLE = new LabelEdit(Text::strLen("100%") + LabelEdit::caretWidth, toStr(confs[curConf].survivalPass) + '%', &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		inFavors = new LabelEdit(1.f, toStr(confs[curConf].favorLimit), &Program::eventUpdateConfig, nullptr, &Program::eventUpdateConfig, makeTooltip(popBack(tips)))
@@ -379,6 +383,11 @@ void ProgSetup::eventEscape() {
 		stage > Stage::tiles && stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventClosePopup));
 }
 
+void ProgSetup::eventNumpress(uint8 num) {
+	if (num < counters.size())
+		setSelected(num);
+}
+
 void ProgSetup::eventWheel(int ymov) {
 	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
 }
@@ -386,7 +395,7 @@ void ProgSetup::eventWheel(int ymov) {
 void ProgSetup::eventDrag(uint32 mStat) {
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
 	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->select);
-	vec2s curHold = bo ? World::game()->ptog(bo->pos) : INT16_MIN;
+	vec2s curHold = bo ? World::game()->ptog(bo->getPos()) : INT16_MIN;
 	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
 			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
@@ -429,7 +438,9 @@ bool ProgSetup::setStage(ProgSetup::Stage stg) {
 		return true;
 	}
 	World::scene()->resetLayouts();
-	setSelected(0);
+
+	selected = 0;	// like setSelected but without crashing
+	static_cast<Draglet*>(icons->getWidget(selected + 1))->setSelected(true);
 	for (uint8 i = 0; i < counters.size(); i++)
 		switchIcon(i, counters[i], stage != Stage::pieces);
 	return false;
@@ -456,8 +467,8 @@ Layout* ProgSetup::createLayout() {
 	// center piece
 	vector<Widget*> midl = {
 		new Widget(1.f),
-		message = new Label(superHeight, "", nullptr, nullptr, Texture(), Label::Alignment::center, false),
-		new Widget(6.f),
+		message = new Label(superHeight, string(), nullptr, nullptr, Texture(), Label::Alignment::center, false),
+		new Widget(10.f),
 		icons = stage == Stage::pieces ? getPicons() : getTicons()
 	};
 
@@ -516,6 +527,14 @@ void ProgMatch::eventEscape() {
 		World::program()->eventExitGame();
 }
 
+void ProgMatch::eventWheel(int ymov) {
+	World::scene()->getCamera()->zoom(ymov);
+}
+
+void ProgMatch::eventCameraReset() {
+	World::scene()->getCamera()->setPos(Camera::posMatch, Camera::latMatch);
+}
+
 void ProgMatch::updateFavorIcon(bool on, uint8 cnt, uint8 tot) {
 	favorIcon->setDim(on && cnt ? 1.f : 0.5f);
 	favorIcon->setText("FF: " + toStr(cnt) + '/' + toStr(tot));
@@ -538,9 +557,11 @@ void ProgMatch::setDragonIcon(bool on) {
 	}
 }
 
-void ProgMatch::deleteDragonIcon() {
-	dragonIcon->getParent()->deleteWidget(dragonIcon->getID());
-	dragonIcon = nullptr;
+void ProgMatch::decreaseDragonIcon() {
+	if (!--unplacedDragons) {
+		dragonIcon->getParent()->deleteWidget(dragonIcon->getID());
+		dragonIcon = nullptr;
+	}
 }
 
 Layout* ProgMatch::createLayout() {
@@ -554,12 +575,15 @@ Layout* ProgMatch::createLayout() {
 	};
 	updateTurnIcon(World::game()->getMyTurn());
 	
-	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->pos).hasNot(INT16_MIN))
-		dragonIcon = nullptr;
-	else {
-		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, World::scene()->texture(Com::pieceNames[uint8(Com::Piece::dragon)])) }, false, 0));
+	unplacedDragons = 0;
+	for (Piece* pce = World::game()->getOwnPieces(Com::Piece::dragon); pce->getType() == Com::Piece::dragon; pce++)
+		if (World::game()->ptog(pce->getPos()).has(INT16_MIN))
+			unplacedDragons++;
+	if (unplacedDragons) {
+		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, World::scene()->texture(Com::pieceNames[uint8(Com::Piece::dragon)]), vec4(1.f)) }, false, 0));
 		setDragonIcon(World::game()->getMyTurn());
-	}
+	} else
+		dragonIcon = nullptr;
 
 	// middle and root layout
 	vector<Widget*> midl = {
@@ -638,7 +662,7 @@ Layout* ProgSettings::createLayout() {
 	std::reverse(tips.begin(), tips.end());
 	sizet lnc = txs.size();
 	int descLength = findMaxLength(txs.begin(), txs.end());
-	int slleLength = Text::strLen("000");
+	int slleLength = Text::strLen("000") + LabelEdit::caretWidth;
 
 	vector<Widget*> lx[] = { {
 		new Label(descLength, popBack(txs)),

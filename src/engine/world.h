@@ -23,7 +23,7 @@ public:
 	static ProgState* state();
 	static Settings* sets();
 	static Scene* scene();
-	static ShaderScene* space();
+	static ShaderGeometry* geom();
 	static ShaderGUI* gui();
 
 #ifdef _WIN32
@@ -67,8 +67,8 @@ inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
-inline ShaderScene* World::space() {
-	return windowSys.getSpace();
+inline ShaderGeometry* World::geom() {
+	return windowSys.getGeom();
 }
 
 inline ShaderGUI* World::gui() {

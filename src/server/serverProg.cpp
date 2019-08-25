@@ -30,7 +30,7 @@ static Config getConfig(const Arguments& args, uint16& port) {
 
 	cfstr = args.getOpt(argFile);
 	char* path = SDL_GetBasePath();
-	string file = cfstr ? cfstr : string(path ? path : "") + defaultConfigFile;
+	string file = cfstr ? cfstr : (path ? string(path) : string()) + defaultConfigFile;
 	SDL_free(path);
 
 	Config ret;
@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
 		if (cont = waitForPlayers(sockets, players, server, conf); cont == WaitResult::ready)
 			cont = runGame(sockets, players, server);
 		disconnectPlayers(sockets, players);
-	};
+	}
 	SDLNet_TCP_DelSocket(sockets, server);
 	SDLNet_TCP_Close(server);
 	SDLNet_FreeSocketSet(sockets);

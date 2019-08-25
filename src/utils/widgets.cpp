@@ -456,7 +456,7 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 	case SDL_SCANCODE_X:	// cut text
 		if (key.mod & KMOD_CTRL) {
 			SDL_SetClipboardText(text.c_str());
-			setText("");
+			setText(string());
 		}
 		break;
 	case SDL_SCANCODE_Z:	// set text to old text
@@ -493,7 +493,7 @@ void LabelEdit::setText(const string& str) {
 
 void LabelEdit::onTextReset() {
 	updateTextTex();
-	cpos = text.length();
+	cpos = uint(text.length());
 	textOfs = 0;
 }
 

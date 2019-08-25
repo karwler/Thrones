@@ -16,10 +16,39 @@ constexpr char messageUsage[] = "usage: tobjtobob <-a|-m|-o|-s|-t> <destination 
 
 // OBJ FILE DATA
 
+struct Element {
+	uint p, t, n;
+
+	Element() = default;
+	Element(uint p, uint t, uint n);
+
+	uint& operator[](uint i);
+	uint* begin();
+	uint* end();
+};
+
+Element::Element(uint p, uint t, uint n) :
+	p(p),
+	t(t),
+	n(n)
+{}
+
+uint& Element::operator[](uint i) {
+	return reinterpret_cast<uint*>(this)[i];
+}
+
+uint* Element::begin() {
+	return reinterpret_cast<uint*>(this);
+}
+
+uint* Element::end() {
+	return reinterpret_cast<uint*>(this) + 3;
+}
+
 struct Blueprint {
 	string name;
 	vector<uint16> elems;
-	vector<float> data;
+	vector<Vertex> data;
 
 	Blueprint(Blueprint&& bpr);
 	Blueprint(string&& name);
@@ -167,7 +196,7 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 				mtls.back().second.emission = stov<3>(&line[2], 1.f);
 		} else if (c0 == 'N') {
 			if (toupper(line[1]) == 'S')
-				mtls.back().second.shininess = sstof(&line[2]) * 128.f / 1000.f;
+				mtls.back().second.shininess = sstof(&line[2]) / 1000.f * 128.f;
 		} else if (c0 == 'D')
 			mtls.back().second.alpha = sstof(&line[1]);
 		else if (c0 == 'T' && toupper(line[1]) == 'R')
@@ -205,11 +234,9 @@ static uint resolveObjId(int id, uint size) {
 	return 0;
 }
 
-static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, umap<string, uint16>& elems, Blueprint& obj) {
+static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, uint16>>& elems, Blueprint& obj) {
 	uint sizes[3] = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
-	string fid;
-	fid.resize(3 * sizeof(uint));
-	array<array<uint, 3>, 3> face;
+	array<Element, 3> face;
 	uint8 v = 0, e = 0;
 
 	for (char* end; *str && v < face.size();) {
@@ -233,20 +260,19 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 
 	std::swap(face[1], face[2]);	// model is CW, need CCW
 	for (v = 0; v < face.size(); v++) {
-		if (!face[v][2]) {
+		if (!face[v].n) {
 			vec3 normal = glm::normalize(glm::cross(verts[face[cycle(v, uint8(face.size()), int8(-1))][0]] - verts[face[v][0]], verts[face[cycle(v, uint8(face.size()), int8(-2))][0]] - verts[face[v][0]]));
 			if (vector<vec3>::iterator it = std::find(norms.begin(), norms.end(), normal); it == norms.end()) {
-				face[v][2] = uint(norms.size());
+				face[v].n = uint(norms.size());
 				norms.push_back(normal);
 			} else
-				face[v][2] = uint(it - norms.begin());
+				face[v].n = uint(it - norms.begin());
 		}
 
-		std::copy_n(reinterpret_cast<char*>(face[v].data()), face[v].size(), fid.data());
-		if (umap<string, uint16>::iterator ei = elems.find(fid); ei == elems.end()) {
-			obj.elems.push_back(uint16(obj.data.size() / vertexDataStride));
-			obj.data.insert(obj.data.end(), { verts[face[v][0]].x, verts[face[v][0]].y, verts[face[v][0]].z, norms[face[v][2]].x, norms[face[v][2]].y, norms[face[v][2]].z, tuvs[face[v][1]].x, tuvs[face[v][1]].y });
-			elems.emplace(fid, obj.elems.back());
+		if (vector<pair<Element, uint16>>::iterator ei = std::find_if(elems.begin(), elems.end(), [&face, v](const pair<Element, uint16>& it) -> bool { return it.first.p == face[v].p && it.first.t == face[v].t && it.first.n == face[v].n; }); ei == elems.end()) {
+			obj.elems.push_back(uint16(obj.data.size()));
+			obj.data.emplace_back(verts[face[v].p], norms[face[v].n], tuvs[face[v].t]);
+			elems.emplace_back(face[v], obj.elems.back());
 		} else
 			obj.elems.push_back(ei->second);
 	}
@@ -261,7 +287,7 @@ static void loadObj(const char* file, vector<Blueprint>& bprs) {
 	vector<vec3> verts = { vec3(0.f) };
 	vector<vec2> tuvs = { vec2(0.f) };
 	vector<vec3> norms = { vec3(0.f) };
-	umap<string, uint16> elems;	// mapping of current object's face ids to blueprint elements (string is a placeholder for uint[3])
+	vector<pair<Element, uint16>> elems;	// mapping of current object's face ids to blueprint elements
 	bprs.emplace_back(filename(delExt(file)));
 
 	for (const string& line : lines) {

@@ -75,14 +75,14 @@ inline Shader::~Shader() {
 	glDeleteProgram(program);
 }
 
-class ShaderScene : public Shader {
+class ShaderGeometry : public Shader {
 public:
-	GLint pview, trans, rotscl, vertex, uvloc, normal, texsamp, viewPos;
+	GLint pview, model, normat, vertex, uvloc, normal, texsamp, viewPos;
 	GLint materialDiffuse, materialEmission, materialSpecular, materialShininess, materialAlpha;
-	GLint lightPos, lightAmbient, lightDiffuse, lightSpecular, lightLinear, lightQuadratic;
+	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
 public:
-	ShaderScene(const string& srcVert, const string& srcFrag);
+	ShaderGeometry(const string& srcVert, const string& srcFrag);
 };
 
 class ShaderGUI : public Shader {
@@ -99,10 +99,6 @@ public:
 	void bindRect() const;
 };
 
-inline ShaderGUI::~ShaderGUI() {
-	wrect.free(this);
-}
-
 inline void ShaderGUI::bindRect() const {
 	glBindVertexArray(wrect.vao);
 }
@@ -114,16 +110,14 @@ public:
 private:
 	static constexpr char fileIcon[] = "data/thrones.bmp";
 	static constexpr char fileCursor[] = "data/cursor.bmp";
-	static constexpr char fileSceneVert[] = "scene.vert";
-	static constexpr char fileSceneFrag[] = "scene.frag";
+	static constexpr char fileSceneVert[] = "geometry.vert";
+	static constexpr char fileSceneFrag[] = "geometry.frag";
 	static constexpr char fileGuiVert[] = "gui.vert";
 	static constexpr char fileGuiFrag[] = "gui.frag";
 
-	static constexpr vec2i defaultWindowPos = { SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED };
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
-	static constexpr GLclampf colorClear[4] = { 0.f, 0.f, 0.f, 1.f };
-	static constexpr GLbitfield clearSet = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
+	static constexpr float resolutionRatioLimit = 1.5f;
 	static constexpr uint8 fallbackCursorSize = 18;
 	
 	uptr<AudioSys> audio;
@@ -132,7 +126,7 @@ private:
 	uptr<Settings> sets;
 	SDL_Window* window;
 	SDL_GLContext context;
-	uptr<ShaderScene> space;
+	uptr<ShaderGeometry> geom;
 	uptr<ShaderGUI> gui;
 	uptr<FontSet> fonts;
 	vec2i curView;
@@ -164,7 +158,7 @@ public:
 	Program* getProgram();
 	Scene* getScene();
 	Settings* getSets();
-	ShaderScene* getSpace();
+	ShaderGeometry* getGeom();
 	ShaderGUI* getGUI();
 
 private:
@@ -221,8 +215,8 @@ inline Settings* WindowSys::getSets() {
 	return sets.get();
 }
 
-inline ShaderScene* WindowSys::getSpace() {
-	return space.get();
+inline ShaderGeometry* WindowSys::getGeom() {
+	return geom.get();
 }
 
 inline ShaderGUI* WindowSys::getGUI() {

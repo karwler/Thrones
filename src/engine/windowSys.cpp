@@ -118,13 +118,13 @@ GLuint Shader::loadShader(const string& source, GLenum type) {
 	return shader;
 }
 
-ShaderScene::ShaderScene(const string& srcVert, const string& srcFrag) :
+ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag)
 {
 	glUseProgram(program);
 	pview = glGetUniformLocation(program, "pview");
-	trans = glGetUniformLocation(program, "trans");
-	rotscl = glGetUniformLocation(program, "rotscl");
+	model = glGetUniformLocation(program, "model");
+	normat = glGetUniformLocation(program, "normat");
 	vertex = glGetAttribLocation(program, "vertex");
 	uvloc = glGetAttribLocation(program, "uvloc");
 	normal = glGetAttribLocation(program, "normal");
@@ -138,7 +138,6 @@ ShaderScene::ShaderScene(const string& srcVert, const string& srcFrag) :
 	lightPos = glGetUniformLocation(program, "light.pos");
 	lightAmbient = glGetUniformLocation(program, "light.ambient");
 	lightDiffuse = glGetUniformLocation(program, "light.diffuse");
-	lightSpecular = glGetUniformLocation(program, "light.specular");
 	lightLinear = glGetUniformLocation(program, "light.linear");
 	lightQuadratic = glGetUniformLocation(program, "light.quadratic");
 	glUniform1i(texsamp, 0);
@@ -158,6 +157,11 @@ ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
 	texsamp = glGetUniformLocation(program, "texsamp");
 	glUniform1i(texsamp, 0);
 	wrect.init(this);
+}
+
+ShaderGUI::~ShaderGUI() {
+	glUseProgram(program);
+	wrect.free(this);
 }
 
 // WINDOW SYS
@@ -221,7 +225,7 @@ void WindowSys::exec() {
 		dSec = float(newTime - oldTime) / ticksPerSec;
 		oldTime = newTime;
 
-		glClear(clearSet);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		scene->draw();
 		SDL_GL_SwapWindow(window);
 
@@ -306,7 +310,7 @@ void WindowSys::createWindow() {
 	glewInit();
 	updateViewport();
 
-	glClearColor(colorClear[0], colorClear[1], colorClear[2], colorClear[3]);
+	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClearDepth(1.0);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -319,7 +323,7 @@ void WindowSys::createWindow() {
 	sets->msamples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
 
 	umap<string, string> sources = FileSys::loadShaders();
-	space.reset(new ShaderScene(sources.at(fileSceneVert), sources.at(fileSceneFrag)));
+	geom.reset(new ShaderGeometry(sources.at(fileSceneVert), sources.at(fileSceneFrag)));
 	gui.reset(new ShaderGUI(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
 	glActiveTexture(GL_TEXTURE0);
 
@@ -333,7 +337,7 @@ void WindowSys::createWindow() {
 }
 
 void WindowSys::destroyWindow() {
-	space.reset();
+	geom.reset();
 	gui.reset();
 	SDL_FreeCursor(cursor);
 	SDL_GL_DeleteContext(context);
@@ -395,7 +399,7 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 
 void WindowSys::writeLog(string&& text) {
 	glUseProgram(0);
-	glClear(clearSet);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	fonts->writeLog(std::move(text), curView);
 	SDL_GL_SwapWindow(window);
 }
@@ -481,7 +485,7 @@ bool WindowSys::checkCurDisplay() {
 vector<vec2i> WindowSys::displaySizes() const {
 	vector<vec2i> sizes;
 	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode) && float(mode.w) / float(mode.h) >= resolutionRatioLimit)
 			sizes.emplace_back(mode.w, mode.h);
 	return uniqueSort(sizes);
 }

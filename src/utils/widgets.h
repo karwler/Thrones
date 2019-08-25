@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "utils.h"
 
@@ -244,7 +244,7 @@ protected:
 	bool showBG;
 
 public:
-	Label(Size relSize = 1.f, string text = "", BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Label(Size relSize = 1.f, string text = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Label() override;
 
 	virtual void draw() const override;
@@ -279,7 +279,7 @@ private:
 	BCall hcall;
 
 public:
-	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = colorNormal, const Texture& tooltip = Texture(), string text = "", Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = colorNormal, const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;
@@ -301,7 +301,7 @@ private:
 	uint curOpt;
 
 public:
-	SwitchBox(Size relSize = 1.f, const string* opts = nullptr, uint ocnt = 0, string curOption = "", BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(Size relSize = 1.f, const string* opts = nullptr, uint ocnt = 0, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
@@ -320,16 +320,17 @@ inline uint SwitchBox::getCurOpt() const {
 
 // for editing a line of text (ignores Label's align), (calls Button's lcall on text confirm rather than on click and dcall when enter is pressed)
 class LabelEdit : public Label {
-private:
+public:
 	static constexpr int caretWidth = 4;
 
+private:
 	string oldText;
 	BCall ecall;
 	uint cpos;		// caret position
 	int textOfs;	// text's horizontal offset
 
 public:
-	LabelEdit(Size relSize = 1.f, string line = "", BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(Size relSize = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void drawTop() const override;

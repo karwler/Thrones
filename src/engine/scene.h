@@ -9,33 +9,60 @@ public:
 	static constexpr float fov = 45.f;
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
+	static constexpr float pmaxSetup = PI / 2.f - PI / 10.f, pmaxMatch = PI / 2.f - PI / 20.f;
+	static constexpr float ymaxSetup = -PI / 3.f, ymaxMatch = PI * 2.f;
 	static const vec3 posSetup, posMatch;
 	static const vec3 latSetup, latMatch;
-	static const vec3 up;
+	static const vec3 up, center;
 
-	vec3 pos, lat;
+	bool moving;	// whether the camera is currently moving (animation)
+	float pmax, ymax;
 private:
+	vec2 prot;			// pitch and yaw record of position relative to lat
+	float lyaw;			// yaw record of lat relative to the board's center
+	float pdst, ldst;	// relative distance of pos/lat to lat/center
+	vec3 pos, lat;
 	mat4 proj;
 
 public:
-	Camera(const vec3& pos, const vec3& lat = vec3(0.f));
+	Camera(const vec3& pos, const vec3& lat, float pmax, float ymax);
 
-	void update() const;
-	void updateProjection();	// requires the gui shader to be in use
-	const mat4& getOrtho() const;
+	void updateView() const;
+	void updateProjection();
+	const vec3& getPos() const;
+	const vec3& getLat() const;
+	void setPos(const vec3& newPos, const vec3& newLat);
+	void rotate(vec2 dRot, float dYaw);
 	vec3 direction(vec2i mPos) const;
+private:
+	void updateRotations(const vec3& pvec, const vec3& lvec);
+	static float calcPitch(const vec3& pos, float dist);
+	static float calcYaw(const vec3& pos, float dist);
 };
+
+inline const vec3& Camera::getPos() const {
+	return pos;
+}
+
+inline const vec3& Camera::getLat() const {
+	return lat;
+}
+
+inline float Camera::calcPitch(const vec3& pos, float dist) {
+	return std::asin(pos.y / dist);
+}
+
+inline float Camera::calcYaw(const vec3& pos, float dist) {
+	return std::acos(pos.x / dist) * (pos.z >= 0.f ? -1.f : 1.f);
+}
 
 struct Light {
 	vec3 position;
-	vec3 ambient;
-	vec3 diffuse;
-	vec3 specular;
-	Attenuation att;
+	vec3 color;
+	float linear;
+	float quadratic;
 
-	Light(const vec3& position, const vec3& ambient = vec3(1.f), const vec3& diffuse = vec3(1.f), const vec3& specular = vec3(1.f), Attenuation att = 100.f);
-
-	void update() const;	// requires the scene shader to be in use
+	Light(const vec3& position, const vec3& color = vec3(1.f), float range = 100.f);
 };
 
 // saves what widget is being clicked on with what button at what position
@@ -51,17 +78,17 @@ struct ClickStamp {
 struct Keyframe {
 	enum Change : uint8 {
 		CHG_NONE = 0,
-		CHG_POS  = 1,
-		CHG_ROT  = 2,
-		CHG_LAT  = CHG_ROT
+		CHG_POS = 1,
+		CHG_ROT = 2,
+		CHG_SCL = 4,
+		CHG_LAT = CHG_ROT
 	};
 
-	vec3 pos;
-	vec3 rot;		// lat if applied to camera
-	float time;		// time difference between this and previous keyframe
-	Change change;	// what members get affected
+	vec3 pos, rot, scl;	// rot = lat if applied to camera
+	float time;			// time difference between this and previous keyframe
+	Change change;		// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3());
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec3& scl = vec3());
 };
 ENUM_OPERATIONS(Keyframe::Change, uint8)
 
@@ -81,7 +108,13 @@ public:
 	Animation(Camera* camera, std::queue<Keyframe>&& keyframes);
 
 	bool tick(float dSec);
+	void append(Animation& ani);
+	bool operator==(const Animation& ani) const;
 };
+
+inline bool Animation::operator==(const Animation& ani) const {
+	return useObject == ani.useObject && (useObject ? object == ani.object : camera == ani.camera);
+}
 
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
@@ -95,7 +128,7 @@ private:
 	vector<Object*> objects;
 	uptr<Layout> layout;
 	uptr<Popup> popup;
-	array<ClickStamp, SDL_BUTTON_X2+1> stamps;	// data about last mouse click (indexes are mouse button numbers
+	array<ClickStamp, SDL_BUTTON_X2> stamps;	// data about last mouse click (indices are mouse button numbers
 	vector<Animation> animations;
 	Light light;
 	umap<string, GMesh> meshes;
@@ -135,7 +168,7 @@ public:
 	Popup* getPopup();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
-	void addAnimation(const Animation& anim);
+	void addAnimation(Animation&& anim);
 	vec2i getMouseMove() const;
 	bool cursorInClickRange(vec2i mPos, uint8 mBut);
 	vec3 pickerRay(vec2i mPos) const;
@@ -148,9 +181,9 @@ private:
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	template <class T> static const T& findAsset(const umap<string, T>& assets, const string& name);
-
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
+	void simulateMouseMove();
 };
 
 inline void Scene::onText(const char* str) {
@@ -177,16 +210,12 @@ inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
 	setPopup(popcap.first, popcap.second);
 }
 
-inline void Scene::addAnimation(const Animation& anim) {
-	animations.push_back(anim);
-}
-
 inline vec2i Scene::getMouseMove() const {
 	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : 0;
 }
 
 inline bool Scene::cursorInClickRange(vec2i mPos, uint8 mBut) {
-	return vec2f(mPos - stamps[mBut].mPos).length() <= clickThreshold;
+	return vec2f(mPos - stamps[mBut-1].mPos).length() <= clickThreshold;
 }
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {

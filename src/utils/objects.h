@@ -77,9 +77,12 @@ public:
 	const Material* matl;
 	const CMesh* coli;
 	GLuint tex;
-	vec3 pos, rot, scl;
 	bool show;		// if drawn
 	bool rigid;		// if affected by raycast
+private:
+	vec3 pos, rot, scl;
+	mat4 trans;
+	mat3 normat;
 
 public:
 	DCLASS_CONSTRUCT(Object, Interactable)
@@ -87,15 +90,48 @@ public:
 
 	virtual void draw() const;
 
+	const vec3& getPos() const;
+	void setPos(const vec3& vec);
+	const vec3& getRot() const;
+	void setRot(const vec3& vec);
+	const vec3& getScl() const;
+	void setScl(const vec3& vec);
+	const mat4& getTrans() const;
+
 protected:
 	void updateColor() const;
 	static void updateColor(const vec3& diffuse, const vec3& specular, const vec3& emission, float shininess, float alpha, GLuint texture);
 	void updateTransform() const;
 	static void updateTransform(const vec3& pos, const vec3& rot, const vec3& scl);
+	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const vec3& rot, const vec3& scl);
 };
 
-inline void Object::updateTransform() const {
-	updateTransform(pos, rot, scl);
+inline const vec3& Object::getPos() const {
+	return pos;
+}
+
+inline void Object::setPos(const vec3& vec) {
+	setTransform(trans, normat, pos = vec, rot, scl);
+}
+
+inline const vec3& Object::getRot() const {
+	return rot;
+}
+
+inline void Object::setRot(const vec3& vec) {
+	setTransform(trans, normat, pos, rot = vec, scl);
+}
+
+inline const vec3& Object::getScl() const {
+	return scl;
+}
+
+inline void Object::setScl(const vec3& vec) {
+	setTransform(trans, normat, pos, rot, scl = vec);
+}
+
+inline const mat4& Object::getTrans() const {
+	return trans;
 }
 
 inline void Object::updateColor() const {
@@ -109,7 +145,7 @@ public:
 	static constexpr float emissionSelect = 0.1f;
 
 	float diffuseFactor;
-	OCall hgcall, ulcall, urcall;
+	GCall hgcall, ulcall, urcall;
 	float emissionFactor;
 
 private:
@@ -123,7 +159,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
-	BoardObject(const vec3& pos, float rot = 0.f, float size = 1.f, OCall hgcall = nullptr, OCall ulcall = nullptr, OCall urcall = nullptr, const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = true, bool show = true);
+	BoardObject(const vec3& pos, float rot = 0.f, float size = 1.f, GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = true, bool show = true);
 
 	virtual void draw() const override;
 	virtual void drawTop() const override;
@@ -148,13 +184,14 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Tile, BoardObject)
-	Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, bool rigid, bool show);
+	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
 
 	virtual void onHover() override;
 	virtual void onUnhover() override;
 
 	Com::Tile getType() const;
 	void setType(Com::Tile newType);
+	void setTypeSilent(Com::Tile newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
 	bool isPenetrable() const;
@@ -277,7 +314,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Piece, BoardObject)
-	Piece(const vec3& pos, float rot, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* matl, bool rigid, bool show);
+	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
 
 	virtual void onHover() override;
 	virtual void onUnhover() override;

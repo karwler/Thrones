@@ -26,7 +26,7 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	msamples(4),
 	gamma(1.f),
-	size(800, 600),
+	size(1280, 720),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
 	address(loopback),
 	port(Com::defaultPort)
@@ -167,6 +167,7 @@ umap<string, GMesh> FileSys::loadObjects() {
 		World::window()->writeLog(errorObjects);
 		return umap<string, GMesh>({ pair("", GMesh()) });
 	}
+	glUseProgram(World::space()->program);
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, GMesh> mshs(size + 1);

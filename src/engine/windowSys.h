@@ -77,9 +77,9 @@ inline Shader::~Shader() {
 
 class ShaderScene : public Shader {
 public:
-	GLint pview, trans, rotscl, vertex, uvloc, normal, texsamp, viewPos;
+	GLint pview, model, normat, vertex, uvloc, normal, texsamp, viewPos;
 	GLint materialDiffuse, materialEmission, materialSpecular, materialShininess, materialAlpha;
-	GLint lightPos, lightAmbient, lightDiffuse, lightSpecular, lightLinear, lightQuadratic;
+	GLint lightPos, lightColor, lightLinear, lightQuadratic;
 
 public:
 	ShaderScene(const string& srcVert, const string& srcFrag);
@@ -99,10 +99,6 @@ public:
 	void bindRect() const;
 };
 
-inline ShaderGUI::~ShaderGUI() {
-	wrect.free(this);
-}
-
 inline void ShaderGUI::bindRect() const {
 	glBindVertexArray(wrect.vao);
 }
@@ -119,11 +115,9 @@ private:
 	static constexpr char fileGuiVert[] = "gui.vert";
 	static constexpr char fileGuiFrag[] = "gui.frag";
 
-	static constexpr vec2i defaultWindowPos = { SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED };
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
-	static constexpr GLclampf colorClear[4] = { 0.f, 0.f, 0.f, 1.f };
-	static constexpr GLbitfield clearSet = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
+	static constexpr float resolutionRatioLimit = 1.5f;
 	static constexpr uint8 fallbackCursorSize = 18;
 	
 	uptr<AudioSys> audio;

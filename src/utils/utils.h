@@ -33,9 +33,11 @@ using vec2d = cvec2<double>;
 using vec2t = cvec2<sizet>;
 
 using BCall = void (Program::*)(Button*);
-using OCall = void (Program::*)(BoardObject*);
+using GCall = void (Program::*)(BoardObject*);
 
 // general wrappers
+
+constexpr float PI = float(M_PI);
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 
@@ -210,18 +212,6 @@ inline bool Dijkstra::Comp::operator()(Node a, Node b) {
 
 // geometry?
 
-struct Attenuation {
-	float linear;
-	float quadratic;
-
-	constexpr Attenuation(float range);
-};
-
-inline constexpr Attenuation::Attenuation(float range) :
-	linear(4.5f / range),
-	quadratic(75.f / (range * range))
-{}
-
 template <class T>
 bool inRange(const T& val, const T& min, const T& max) {
 	return val >= min && val <= max;
@@ -263,8 +253,12 @@ cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
 }
 
 template <class T>
-T linearTransition(const T& start, const T& end, float factor) {
+T lerp(const T& start, const T& end, float factor) {
 	return start + (end - start) * factor;
+}
+
+inline glm::quat makeQuat(const vec3& rot) {
+	return glm::quat(vec3(rot.x, 0.f, 0.f)) * glm::quat(vec3(0.f, rot.y, 0.f)) *glm::quat(vec3(0.f, 0.f, rot.z));	// for unknown reasons the glm::quat euler constructor doesn't work as expected
 }
 
 // container stuff

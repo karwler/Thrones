@@ -379,6 +379,11 @@ void ProgSetup::eventEscape() {
 		stage > Stage::tiles && stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventClosePopup));
 }
 
+void ProgSetup::eventNumpress(uint8 num) {
+	if (num < counters.size())
+		setSelected(num);
+}
+
 void ProgSetup::eventWheel(int ymov) {
 	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
 }
@@ -386,7 +391,7 @@ void ProgSetup::eventWheel(int ymov) {
 void ProgSetup::eventDrag(uint32 mStat) {
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
 	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->select);
-	vec2s curHold = bo ? World::game()->ptog(bo->pos) : INT16_MIN;
+	vec2s curHold = bo ? World::game()->ptog(bo->getPos()) : INT16_MIN;
 	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
 			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
@@ -457,7 +462,7 @@ Layout* ProgSetup::createLayout() {
 	vector<Widget*> midl = {
 		new Widget(1.f),
 		message = new Label(superHeight, "", nullptr, nullptr, Texture(), Label::Alignment::center, false),
-		new Widget(6.f),
+		new Widget(10.f),
 		icons = stage == Stage::pieces ? getPicons() : getTicons()
 	};
 
@@ -554,7 +559,7 @@ Layout* ProgMatch::createLayout() {
 	};
 	updateTurnIcon(World::game()->getMyTurn());
 	
-	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->pos).hasNot(INT16_MIN))
+	if (World::game()->ptog(World::game()->getOwnPieces(Com::Piece::dragon)->getPos()).hasNot(INT16_MIN))
 		dragonIcon = nullptr;
 	else {
 		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, World::scene()->texture(Com::pieceNames[uint8(Com::Piece::dragon)])) }, false, 0));

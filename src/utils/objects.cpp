@@ -101,7 +101,9 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const GMesh* m
 	scl(scl),
 	show(show),
 	rigid(rigid)
-{}
+{
+	setTransform(trans, normat, pos, rot, scl);
+}
 
 void Object::draw() const {
 	if (show) {
@@ -121,15 +123,22 @@ void Object::updateColor(const vec3& diffuse, const vec3& specular, const vec3& 
 	glBindTexture(GL_TEXTURE_2D, texture);
 }
 
-void Object::updateTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
-	mat4 rotscl = glm::rotate(mat4(1.f), rot.x, vec3(1.f, 0.f, 0.f));
-	rotscl = glm::rotate(rotscl, rot.y, vec3(0.f, 1.f, 0.f));
-	rotscl = glm::rotate(rotscl, rot.z, vec3(0.f, 0.f, 1.f));
-	rotscl = glm::scale(rotscl, scl);
-	mat4 trans = glm::translate(mat4(1.f), pos) * rotscl;
+void Object::updateTransform() const {
+	glUniformMatrix4fv(World::space()->model, 1, GL_FALSE, glm::value_ptr(trans));
+	glUniformMatrix3fv(World::space()->normat, 1, GL_FALSE, glm::value_ptr(normat));
+}
 
-	glUniformMatrix4fv(World::space()->trans, 1, GL_FALSE, glm::value_ptr(trans));
-	glUniformMatrix4fv(World::space()->rotscl, 1, GL_FALSE, glm::value_ptr(rotscl));
+void Object::updateTransform(const vec3& pos, const vec3& rot, const vec3& scl) {
+	mat4 trans;
+	mat3 normat;
+	setTransform(trans, normat, pos, rot, scl);
+	glUniformMatrix4fv(World::space()->model, 1, GL_FALSE, glm::value_ptr(trans));
+	glUniformMatrix3fv(World::space()->normat, 1, GL_FALSE, glm::value_ptr(normat));
+}
+
+void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const vec3& rot, const vec3& scl) {
+	model = glm::translate(mat4(1.f), pos) * glm::scale(glm::mat4_cast(makeQuat(rot)), scl);
+	norm = glm::transpose(glm::inverse(mat3(model)));
 }
 
 // GAME OBJECT
@@ -137,7 +146,7 @@ void Object::updateTransform(const vec3& pos, const vec3& rot, const vec3& scl) 
 const vec3 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f);
 const vec3 BoardObject::fireIconColor(1.f, 0.1f, 0.1f);
 
-BoardObject::BoardObject(const vec3& pos, float rot, float size, OCall hgcall, OCall ulcall, OCall urcall, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
+BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, GCall ulcall, GCall urcall, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
 	Object(pos, vec3(0.f, rot, 0.f), vec3(size, 1.f, size), mesh, matl, tex, coli, rigid, show),
 	diffuseFactor(1.f),
 	hgcall(hgcall),
@@ -161,7 +170,7 @@ void BoardObject::drawTop() const {
 		vec3 ray = World::scene()->pickerRay(mousePos());
 		const GMesh* tmesh = dragState == DragState::move ? mesh : World::scene()->mesh("plane");
 		glBindVertexArray(tmesh->vao);
-		updateTransform(World::scene()->getCamera()->pos + ray * (pos.y - upperPoz * 2.f - World::scene()->getCamera()->pos.y / ray.y), rot, scl);
+		updateTransform(World::scene()->getCamera()->getPos() + ray * (getPos().y - upperPoz * 2.f - World::scene()->getCamera()->getPos().y / ray.y), getRot(), getScl());
 		updateColor(dragState == DragState::move ? matl->diffuse * moveIconColor : fireIconColor, matl->specular, vec3(0.f), matl->shininess, 0.9f, dragState == DragState::move ? tex : World::scene()->texture("crosshair"));
 		glDrawElements(tmesh->shape, tmesh->ecnt, GMesh::elemType, nullptr);
 	}
@@ -190,28 +199,32 @@ void BoardObject::setRaycast(bool on, bool dim) {
 
 // TILE
 
-Tile::Tile(const vec3& pos, float size, Com::Tile type, OCall hgcall, OCall ulcall, OCall urcall, bool rigid, bool show) :
-	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, World::scene()->mesh("plane"), World::scene()->material(type != Com::Tile::empty ? Com::tileNames[uint8(type)] : ""), World::scene()->blank(), World::scene()->collim("tile"), rigid, getShow(show, type)),
+Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show) :
+	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, World::scene()->mesh("tile"), World::scene()->material(type != Com::Tile::empty ? Com::tileNames[uint8(type)] : ""), World::scene()->blank(), World::scene()->collim("tile"), rigid, getShow(show, type)),
 	type(type),
 	breached(false)
 {}
 
 void Tile::onHover() {
 	emissionFactor += emissionSelect;
-	if (Piece* pce = World::game()->findPiece(World::game()->ptog(pos)))
+	if (Piece* pce = World::game()->findPiece(World::game()->ptog(getPos())))
 		pce->emissionFactor += emissionSelect;
 }
 
 void Tile::onUnhover() {
 	emissionFactor -= emissionSelect;
-	if (Piece* pce = World::game()->findPiece(World::game()->ptog(pos)))
+	if (Piece* pce = World::game()->findPiece(World::game()->ptog(getPos())))
 		pce->emissionFactor -= emissionSelect;
 }
 
 void Tile::setType(Com::Tile newType) {
+	setTypeSilent(newType);
+	show = matl;
+}
+
+void Tile::setTypeSilent(Com::Tile newType) {
 	type = newType;
-	show = newType != Com::Tile::empty;
-	matl = show ? World::scene()->material(Com::tileNames[uint8(newType)]) : nullptr;
+	matl = type != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(type)]) : nullptr;
 }
 
 void Tile::setBreached(bool yes) {
@@ -246,7 +259,7 @@ void TileCol::update(const Com::Config& conf) {
 
 // PIECE
 
-Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, OCall hgcall, OCall ulcall, OCall urcall, const Material* matl, bool rigid, bool show) :
+Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show) :
 	BoardObject(pos, rot, size, hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), World::scene()->collim("piece"), rigid, show),
 	lastFortress(INT16_MAX),
 	type(type)
@@ -254,20 +267,20 @@ Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, OCall hgca
 
 void Piece::onHover() {
 	emissionFactor += emissionSelect;
-	World::game()->getTile(World::game()->ptog(pos))->emissionFactor += emissionSelect;
+	World::game()->getTile(World::game()->ptog(getPos()))->emissionFactor += emissionSelect;
 }
 
 void Piece::onUnhover() {
 	emissionFactor -= emissionSelect;
-	World::game()->getTile(World::game()->ptog(pos))->emissionFactor -= emissionSelect;
+	World::game()->getTile(World::game()->ptog(getPos()))->emissionFactor -= emissionSelect;
 }
 
 bool Piece::active() const {
-	return World::game()->ptog(pos).hasNot(INT16_MIN) && show && rigid;
+	return World::game()->ptog(getPos()).hasNot(INT16_MIN) && show && rigid;
 }
 
 void Piece::enable(vec2s bpos) {
-	pos = World::game()->gtop(bpos);
+	setPos(World::game()->gtop(bpos));
 	setActive(true);
 	World::scene()->updateSelect(mousePos());
 }
@@ -275,7 +288,7 @@ void Piece::enable(vec2s bpos) {
 void Piece::disable() {
 	setActive(false);
 	World::scene()->updateSelect(mousePos());
-	pos = World::game()->gtop(INT16_MIN);
+	setPos(World::game()->gtop(INT16_MIN));
 }
 
 // PIECE COL

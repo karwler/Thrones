@@ -2,23 +2,26 @@
 
 // CAMERA
 
-const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 9.f, 8.f);
-const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 12.f, 5.f);
-const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, 2.f);
+const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 8.f, 7.f);
+const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 10.f, 8.f);
+const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, 2.5f);
 const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, 1.f);
 const vec3 Camera::up(0.f, 1.f, 0.f);
+const vec3 Camera::center(Com::Config::boardWidth / 2.f, 0.f, 0.f);
 
-Camera::Camera(const vec3& pos, const vec3& lat) :
-	pos(pos),
-	lat(lat)
+Camera::Camera(const vec3& pos, const vec3& lat, float pmax, float ymax) :
+	moving(false),
+	pmax(pmax),
+	ymax(ymax)
 {
-	glUseProgram(World::gui()->program);
 	updateProjection();
+	setPos(pos, lat);
 }
 
-void Camera::update() const {
-	mat4 cviewMat = proj * glm::lookAt(pos, lat, up);
-	glUniformMatrix4fv(World::space()->pview, 1, GL_FALSE, glm::value_ptr(cviewMat));
+void Camera::updateView() const {
+	mat4 projview = proj * glm::lookAt(pos, lat, up);
+	glUseProgram(World::space()->program);
+	glUniformMatrix4fv(World::space()->pview, 1, GL_FALSE, glm::value_ptr(projview));
 	glUniform3fv(World::space()->viewPos, 1, glm::value_ptr(pos));
 }
 
@@ -27,7 +30,34 @@ void Camera::updateProjection() {
 	proj = glm::perspective(glm::radians(fov), vec2f(res).ratio(), znear, zfar);
 
 	vec2 hsiz(float(res.x / 2), float(res.y / 2));
+	glUseProgram(World::gui()->program);
 	glUniform2fv(World::gui()->pview, 1, glm::value_ptr(hsiz));
+}
+
+void Camera::setPos(const vec3& newPos, const vec3& newLat) {
+	pos = newPos;
+	lat = newLat;
+
+	vec3 pvec = pos - lat, lvec = lat - center;
+	pdst = glm::length(pvec);
+	ldst = glm::length(vec2(lvec.x, lvec.z));
+	updateRotations(pvec, lvec);
+	updateView();
+}
+
+void Camera::updateRotations(const vec3& pvec, const vec3& lvec) {
+	prot = vec2(calcPitch(pvec, pdst), calcYaw(pvec, glm::length(vec2(pvec.x, pvec.z))));
+	lyaw = calcYaw(lvec, ldst);
+}
+
+void Camera::rotate(vec2 dRot, float dYaw) {
+	prot = vec2(std::clamp(prot.x + dRot.x, 0.f, pmax), std::clamp(prot.y + dRot.y, -PI - ymax, ymax));
+	pos = makeQuat(vec3(0.f, prot.y, prot.x)) * vec3(pdst, 0.f, 0.f);
+	lat = glm::quat(vec3(0.f, lyaw + dYaw, 0.f)) * vec3(ldst, 0.f, 0.f);
+	updateRotations(pos, lat);
+	lat += center;
+	pos += lat;
+	updateView();
 }
 
 vec3 Camera::direction(vec2i mPos) const {
@@ -46,24 +76,17 @@ vec3 Camera::direction(vec2i mPos) const {
 
 // LIGHT
 
-Light::Light(const vec3& position, const vec3& ambient, const vec3& diffuse, const vec3& specular, Attenuation att) :
+Light::Light(const vec3& position, const vec3& color, float range) :
 	position(position),
-	ambient(ambient),
-	diffuse(diffuse),
-	specular(specular),
-	att(att)
+	color(color),
+	linear(4.5f / range),
+	quadratic(75.f / (range * range))
 {
 	glUseProgram(World::space()->program);
-	update();
-}
-
-void Light::update() const {
 	glUniform3fv(World::space()->lightPos, 1, glm::value_ptr(position));
-	glUniform3fv(World::space()->lightAmbient, 1, glm::value_ptr(ambient));
-	glUniform3fv(World::space()->lightDiffuse, 1, glm::value_ptr(diffuse));
-	glUniform3fv(World::space()->lightSpecular, 1, glm::value_ptr(specular));
-	glUniform1f(World::space()->lightLinear, att.linear);
-	glUniform1f(World::space()->lightQuadratic, att.quadratic);
+	glUniform3fv(World::space()->lightColor, 1, glm::value_ptr(color));
+	glUniform1f(World::space()->lightLinear, linear);
+	glUniform1f(World::space()->lightQuadratic, quadratic);
 }
 
 // CLICK STAMP
@@ -76,9 +99,10 @@ ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, vec2i mPos) :
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot) :
+Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec3& scl) :
 	pos(pos),
 	rot(rot),
+	scl(scl),
 	time(time),
 	change(change)
 {}
@@ -87,33 +111,51 @@ Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot) 
 
 Animation::Animation(Object* object, std::queue<Keyframe>&& keyframes) :
 	keyframes(std::move(keyframes)),
-	begin(0.f, Keyframe::CHG_NONE, object->pos, object->rot),
+	begin(0.f, Keyframe::CHG_NONE, object->getPos(), object->getRot(), object->getScl()),
 	object(object),
 	useObject(true)
 {}
 
 Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
 	keyframes(std::move(keyframes)),
-	begin(0.f, Keyframe::CHG_NONE, camera->pos, camera->lat),
+	begin(0.f, Keyframe::CHG_NONE, camera->getPos(), camera->getLat()),
 	camera(camera),
 	useObject(false)
-{}
+{
+	camera->moving = true;
+}
 
 bool Animation::tick(float dSec) {
 	begin.time += dSec;
 
-	float td = clampHigh(begin.time / keyframes.front().time, 1.f);
-	if (keyframes.front().change & Keyframe::CHG_POS)
-		(useObject ? object->pos : camera->pos) = linearTransition(begin.pos, keyframes.front().pos, td);
-	if (keyframes.front().change & Keyframe::CHG_ROT)
-		(useObject ? object->rot : camera->lat) = linearTransition(begin.rot, keyframes.front().rot, td);
+	if (float td = keyframes.front().time > 0.f ? clampHigh(begin.time / keyframes.front().time, 1.f) : 1.f; useObject) {
+		if (keyframes.front().change & Keyframe::CHG_POS)
+			object->setPos(lerp(begin.pos, keyframes.front().pos, td));
+		if (keyframes.front().change & Keyframe::CHG_ROT)
+			object->setRot(lerp(begin.rot, keyframes.front().rot, td));
+		if (keyframes.front().change & Keyframe::CHG_SCL)
+			object->setScl(lerp(begin.scl, keyframes.front().scl, td));
+	} else
+		camera->setPos(keyframes.front().change & Keyframe::CHG_POS ? lerp(begin.pos, keyframes.front().pos, td) : camera->getPos(), keyframes.front().change & Keyframe::CHG_ROT ? lerp(begin.rot, keyframes.front().rot, td) : camera->getLat());
 
-	if (float ovhead = begin.time - keyframes.front().time; ovhead >= 0.f)
+	if (begin.time >= keyframes.front().time) {
+		float ovhead = begin.time - keyframes.front().time;
 		if (keyframes.pop(); !keyframes.empty()) {
-			begin = Keyframe(0.f, Keyframe::CHG_NONE, keyframes.front().pos, keyframes.front().rot);
+			begin = Keyframe(0.f, Keyframe::CHG_NONE, useObject ? object->getPos() : camera->getPos(), useObject ? object->getRot() : camera->getLat(), useObject ? object->getScl() : vec3());
 			return tick(ovhead);
 		}
-	return !keyframes.empty();
+		if (!useObject)
+			camera->moving = false;
+		return false;
+	}
+	return true;
+}
+
+void Animation::append(Animation& ani) {
+	while (!ani.keyframes.empty()) {
+		keyframes.push(ani.keyframes.front());
+		ani.keyframes.pop();
+	}
 }
 
 // SCENE
@@ -122,9 +164,9 @@ Scene::Scene() :
 	select(nullptr),
 	capture(nullptr),
 	mouseMove(0),
-	camera(Camera::posSetup, Camera::latSetup),
+	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
 	layout(new Layout),	// dummy layout in case a function gets called preemptively
-	light(vec3(5.f, 4.f, 3.f), vec3(1.f, 0.98f, 0.92f), vec3(1.f, 0.99f, 0.92f), vec3(1.f), 100.f),
+	light(vec3(Com::Config::boardWidth / 2.f, 5.f, 0.5f), vec3(1.f, 0.98f, 0.92f), 140.f),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
 	texes(FileSys::loadTextures()),
@@ -136,6 +178,7 @@ Scene::Scene() :
 {}
 
 Scene::~Scene() {
+	glUseProgram(World::space()->program);
 	for (auto& [name, tex] : texes)
 		tex.free();
 	for (auto& [name, mesh] : meshes)
@@ -146,7 +189,6 @@ Scene::~Scene() {
 
 void Scene::draw() {
 	glUseProgram(World::space()->program);
-	camera.update();
 	for (Object* it : objects)
 		it->draw();
 	if (dynamic_cast<Object*>(capture))
@@ -177,8 +219,8 @@ void Scene::tick(float dSec) {
 }
 
 void Scene::onResize() {
-	glUseProgram(World::gui()->program);
 	camera.updateProjection();
+	camera.updateView();
 	layout->onResize();
 	if (popup)
 		popup->onResize();
@@ -189,9 +231,18 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 		capture->onKeypress(key.keysym);
 	else if (!key.repeat)
 		switch (key.keysym.scancode) {
+		case SDL_SCANCODE_1: case SDL_SCANCODE_2: case SDL_SCANCODE_3: case SDL_SCANCODE_4: case SDL_SCANCODE_5: case SDL_SCANCODE_6: case SDL_SCANCODE_7: case SDL_SCANCODE_8: case SDL_SCANCODE_9: case SDL_SCANCODE_0:
+			World::state()->eventNumpress(key.keysym.scancode - SDL_SCANCODE_1);
+			break;
 		case SDL_SCANCODE_LALT:
 			if (World::game()->favorState.use = true; Piece* pce = dynamic_cast<Piece*>(capture))
 				World::program()->eventFavorStart(pce);
+			break;
+		case SDL_SCANCODE_C:
+			if (dynamic_cast<ProgMatch*>(World::state()))
+				camera.setPos(Camera::posMatch, Camera::latMatch);
+			else
+				camera.setPos(Camera::posSetup, Camera::latSetup);
 			break;
 		case SDL_SCANCODE_RETURN:
 			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
@@ -212,6 +263,11 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 }
 
 void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time) {
+	if ((mStat & SDL_BUTTON_MMASK) && !camera.moving) {
+		vec2 rot(glm::radians(float(mMov.y) / 2.f), glm::radians(float(-mMov.x) / 2.f));
+		camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
+		return;
+	}
 	mouseMove = mMov;
 	moveTime = time;
 
@@ -226,21 +282,28 @@ void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
+	uint8 mbi = mBut - 1;
 	select = getSelected(mPos);
-	stamps[mBut] = ClickStamp(select, getSelectedScrollArea(), mPos);
-	if (stamps[mBut].area)	// area goes first so widget can overwrite it's capture
-		stamps[mBut].area->onHold(mPos, mBut);
-	if (stamps[mBut].inter != stamps[mBut].area)
-		stamps[mBut].inter->onHold(mPos, mBut);
+	stamps[mbi] = ClickStamp(select, getSelectedScrollArea(), mPos);
+	if (stamps[mbi].area)	// area goes first so widget can overwrite it's capture
+		stamps[mbi].area->onHold(mPos, mBut);
+	if (stamps[mbi].inter != stamps[mbi].area)
+		stamps[mbi].inter->onHold(mPos, mBut);
 	if (!capture)	// can be set by previous onHold calls
 		World::state()->eventDrag(SDL_BUTTON(mBut));
+	if (mBut == SDL_BUTTON_MIDDLE)
+		SDL_SetRelativeMouseMode(SDL_TRUE);
 }
 
 void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
+	if (mBut == SDL_BUTTON_MIDDLE) {	// in case camera was being moved
+		SDL_SetRelativeMouseMode(SDL_FALSE);
+		simulateMouseMove();
+	}
 	if (capture)
 		capture->onUndrag(mBut);
-	if (select && stamps[mBut].inter == select && cursorInClickRange(mPos, mBut))
-		stamps[mBut].inter->onClick(mPos, mBut);
+	if (uint8 mbi = mBut - 1; select && stamps[mbi].inter == select && cursorInClickRange(mPos, mBut))
+		stamps[mbi].inter->onClick(mPos, mBut);
 	if (!capture)
 		World::state()->eventUndrag();
 }
@@ -268,7 +331,7 @@ void Scene::resetLayouts() {
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
 	layout->postInit();
-	onMouseMove(mousePos(), 0, 0, 0);
+	simulateMouseMove();
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
@@ -280,7 +343,14 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	capture = newCapture;
 	if (capture)
 		capture->onClick(mousePos(), SDL_BUTTON_LEFT);
-	onMouseMove(mousePos(), 0, 0, 0);
+	simulateMouseMove();
+}
+
+void Scene::addAnimation(Animation&& anim) {
+	if (vector<Animation>::iterator it = std::find(animations.begin(), animations.end(), anim); it == animations.end())
+		animations.push_back(anim);
+	else
+		it->append(anim);
 }
 
 void Scene::unselect() {
@@ -335,13 +405,9 @@ Object* Scene::rayCast(const vec3& ray) const {
 		if (!obj->rigid)	// assuming that obj->coli is set
 			continue;
 
-		mat4 trans = glm::translate(mat4(1.f), obj->pos);
-		trans = glm::rotate(trans, obj->rot.x, vec3(1.f, 0.f, 0.f));
-		trans = glm::rotate(trans, obj->rot.y, vec3(0.f, 1.f, 0.f));
-		trans = glm::rotate(trans, obj->rot.z, vec3(0.f, 0.f, 1.f));
-		trans = glm::scale(trans, obj->scl);
+		const mat4& trans = obj->getTrans();
 		for (uint16 i = 0; i < obj->coli->esiz; i += 3)
-			if (float t; rayIntersectsTriangle(camera.pos, ray, trans * vec4(obj->coli->verts[obj->coli->elems[i]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+1]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+2]], 1.f), t) && t <= min) {
+			if (float t; rayIntersectsTriangle(camera.getPos(), ray, trans * vec4(obj->coli->verts[obj->coli->elems[i]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+1]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+2]], 1.f), t) && t <= min) {
 				min = t;
 				mob = obj;
 			}
@@ -370,4 +436,10 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 
 	t = f * glm::dot(e2, q);
 	return t > FLT_EPSILON;
+}
+
+void Scene::simulateMouseMove() {
+	vec2i pos;
+	uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
+	onMouseMove(pos, 0, state, SDL_GetTicks());
 }

@@ -1,17 +1,17 @@
 newmtl ground
 Kd 0.5 0.5 0.5
 Ks 0.3 0.5 0.3
-Ns 600
+Ns 200
 
 newmtl board
 Kd 0.3 0.3 0.3
 Ks 0.3 0.3 0.3
-Ns 600
+Ns 300
 
 newmtl screen
 Kd 0.6 0.6 0.6
 Ks 0.5 0.5 0.5
-Ns 600
+Ns 300
 
 newmtl grid
 Kd 1 0.757 0.145
@@ -20,42 +20,42 @@ Ns 400
 
 newmtl plains
 Kd 0.09 0.6 0.09
-Ks 0.5 0.5 0.5
-Ke 0.09 0.6 0.09
-Ns 250
+Ks 0.3 0.3 0.3
+Ke 1 1 1
+Ns 200
 
 newmtl forest
-Kd 0 0.38 0
-Ks 0.5 0.5 0.5
-Ke 0 0.38 0
-Ns 250
+Kd 0 0.4 0
+Ks 0.2 0.2 0.2
+Ke 1 1 1
+Ns 200
 
 newmtl mountain
 Kd 0.3 0.3 0.3
-Ks 0.5 0.5 0.5
-Ke 0.3 0.3 0.3
-Ns 250
+Ks 0.2 0.2 0.2
+Ke 1 1 1
+Ns 200
 
 newmtl water
 Kd 0.09 0.45 0.6
-Ks 0.5 0.5 0.5
-Ke 0.09 0.45 0.6
-Ns 250
+Ks 0.2 0.2 0.2
+Ke 1 1 1
+Ns 200
 
 newmtl fortress
 Kd 0.384 0.193 0.055
-Ks 0.5 0.5 0.5
-Ke 0.384 0.193 0.055
-Ns 250
+Ks 0.2 0.2 0.2
+Ke 1 1 1
+Ns 200
 
 newmtl ally
 Kd 0.5 0.1 0
 Ks 0.6 0.6 0.6
 Ke 0.5 0.1 0
-Ns 250
+Ns 300
 
 newmtl enemy
 Kd 0 0.1 0.5
 Ks 0.6 0.6 0.6
 Ke 0 0.1 0.5
-Ns 250
+Ns 300

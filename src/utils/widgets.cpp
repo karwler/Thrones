@@ -493,7 +493,7 @@ void LabelEdit::setText(const string& str) {
 
 void LabelEdit::onTextReset() {
 	updateTextTex();
-	cpos = text.length();
+	cpos = uint(text.length());
 	textOfs = 0;
 }
 

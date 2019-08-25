@@ -33,6 +33,7 @@ public:
 
 	void eventEnter();
 	virtual void eventEscape() {}
+	virtual void eventNumpress(uint8) {}
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
@@ -142,6 +143,7 @@ public:
 	virtual ~ProgSetup() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventNumpress(uint8 num) override;
 	virtual void eventWheel(int ymov) override;
 	virtual void eventDrag(uint32 mStat) override;
 	virtual void eventUndrag() override;

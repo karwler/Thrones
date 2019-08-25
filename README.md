@@ -16,10 +16,11 @@ The game starts with the setup, which consists of the following phases:
 3. placing your pieces  
 
 Press "Next" or "Prev" to switch between phases.  
-You can place tiles/pieces by dragging them from the icon bar or using the mouse wheel to select one and holding the left mouse button and dragging across the board, switch their positions by dragging them using the left mouse button or clear them by holding the right mouse button and dragging. Fortress tiles will be places automatically, where no tiles were placed.  
+You can place tiles/pieces by dragging them from the icon bar or by using the mouse wheel/number keys to select one and holding the left mouse button and dragging across the board, switch their positions by dragging them using the left mouse button or clear them by holding the right mouse button and dragging. Fortress tiles will be places automatically, where no tiles were placed.  
 After the setup the server program determines the first player, the middle row tiles will be rearranged accordingly and the actual match starts.  
 You can move pieces by dragging them using the left mouse button and fire by dragging a piece using the right mouse button.  
 To use a move/attack/fire fate's favor, hold down the left alt key while dragging the piece. To negate an attack, use the "Negate" button.  
+The camera can be rotated by holding down the middle mouse button and reset by pressing C.  
 
 Tile colors:  
 plains : light green  

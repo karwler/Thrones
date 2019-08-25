@@ -123,8 +123,8 @@ ShaderScene::ShaderScene(const string& srcVert, const string& srcFrag) :
 {
 	glUseProgram(program);
 	pview = glGetUniformLocation(program, "pview");
-	trans = glGetUniformLocation(program, "trans");
-	rotscl = glGetUniformLocation(program, "rotscl");
+	model = glGetUniformLocation(program, "model");
+	normat = glGetUniformLocation(program, "normat");
 	vertex = glGetAttribLocation(program, "vertex");
 	uvloc = glGetAttribLocation(program, "uvloc");
 	normal = glGetAttribLocation(program, "normal");
@@ -136,9 +136,7 @@ ShaderScene::ShaderScene(const string& srcVert, const string& srcFrag) :
 	texsamp = glGetUniformLocation(program, "texsamp");
 	viewPos = glGetUniformLocation(program, "viewPos");
 	lightPos = glGetUniformLocation(program, "light.pos");
-	lightAmbient = glGetUniformLocation(program, "light.ambient");
-	lightDiffuse = glGetUniformLocation(program, "light.diffuse");
-	lightSpecular = glGetUniformLocation(program, "light.specular");
+	lightColor = glGetUniformLocation(program, "light.color");
 	lightLinear = glGetUniformLocation(program, "light.linear");
 	lightQuadratic = glGetUniformLocation(program, "light.quadratic");
 	glUniform1i(texsamp, 0);
@@ -158,6 +156,11 @@ ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
 	texsamp = glGetUniformLocation(program, "texsamp");
 	glUniform1i(texsamp, 0);
 	wrect.init(this);
+}
+
+ShaderGUI::~ShaderGUI() {
+	glUseProgram(program);
+	wrect.free(this);
 }
 
 // WINDOW SYS
@@ -221,7 +224,7 @@ void WindowSys::exec() {
 		dSec = float(newTime - oldTime) / ticksPerSec;
 		oldTime = newTime;
 
-		glClear(clearSet);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		scene->draw();
 		SDL_GL_SwapWindow(window);
 
@@ -306,7 +309,7 @@ void WindowSys::createWindow() {
 	glewInit();
 	updateViewport();
 
-	glClearColor(colorClear[0], colorClear[1], colorClear[2], colorClear[3]);
+	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClearDepth(1.0);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -395,7 +398,7 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 
 void WindowSys::writeLog(string&& text) {
 	glUseProgram(0);
-	glClear(clearSet);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	fonts->writeLog(std::move(text), curView);
 	SDL_GL_SwapWindow(window);
 }
@@ -482,7 +485,8 @@ vector<vec2i> WindowSys::displaySizes() const {
 	vector<vec2i> sizes;
 	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
 		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
-			sizes.emplace_back(mode.w, mode.h);
+			if (float(mode.w) / float(mode.h) >= resolutionRatioLimit)
+				sizes.emplace_back(mode.w, mode.h);
 	return uniqueSort(sizes);
 }
 

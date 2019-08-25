@@ -154,7 +154,7 @@ inline string trim(const string& str) {
 
 inline string delExt(const string& path) {
 	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
-	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : "";
+	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : string();
 }
 
 inline bool isDotName(const string& str) {
@@ -341,9 +341,7 @@ public:
 	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<string>& flg, const uset<string>& opt);
 
 	const vector<string>& getVals() const;
-	const uset<string>& getFlags() const;
 	bool hasFlag(const char* key) const;
-	const umap<string, string>& getOpts() const;
 	const char* getOpt(const char* key) const;
 };
 #ifdef _WIN32

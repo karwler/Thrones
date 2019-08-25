@@ -177,7 +177,7 @@ T Config::calcSum(const array<T, S>& nums, sizet size) {
 
 template <sizet N, sizet S>
 void Config::readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts) {
-	if (uint8 id = strToEnum<uint8>(names, it.first.substr(0, word.length())); id < amts.size())
+	if (uint8 id = strToEnum<uint8>(names, it.first.substr(word.length())); id < amts.size())
 		amts[id] = uint16(sstol(it.second));
 }
 

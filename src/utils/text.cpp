@@ -10,7 +10,7 @@ bool hasExt(const string& path, const string& ext) {
 
 string filename(const string& path) {
 	if (path[0] == '\0' || (isDsep(path[0]) && path[1] == '\0'))
-		return "";
+		return string();
 
 	string::const_iterator end = isDsep(path.back()) ? path.end() - 1 : path.end();
 	return string(std::find_if(std::make_reverse_iterator(end), path.rend(), isDsep).base(), end);
@@ -29,7 +29,7 @@ string readWordM(const char*& pos) {
 string wtos(const wchar* src) {
 	int len = Win::WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
 	if (len <= 1)
-		return "";
+		return string();
 	len--;
 	
 	string dst;
@@ -41,7 +41,7 @@ string wtos(const wchar* src) {
 wstring stow(const string& src) {
 	int len = Win::MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0);
 	if (len <= 0)
-		return L"";
+		return wstring();
 
 	wstring dst;
 	dst.resize(len);
@@ -82,7 +82,7 @@ bool writeFile(const string& file, const string& text) {
 string readIniTitle(const string& line) {
 	sizet li = line.find_first_of('[');
 	sizet ri = line.find_last_of(']');
-	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : "";
+	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : string();
 }
 
 pairStr readIniLine(const string& line) {

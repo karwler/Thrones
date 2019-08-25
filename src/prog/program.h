@@ -34,7 +34,6 @@ public:
 	void eventUpdateSurvivalSL(Button* but);
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
-	void eventExitHost(Button* but = nullptr);
 
 	// game setup
 	void eventOpenSetup();

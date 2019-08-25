@@ -6,7 +6,6 @@ constexpr uint audioHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16)
 constexpr uint objectHeaderSize = sizeof(uint8) + sizeof(uint16) * 2;
 constexpr uint shaderHeaderSize = sizeof(uint8) + sizeof(uint16);
 constexpr uint textureHeaderSize = sizeof(uint8) + sizeof(uint16) * 5;
-constexpr uint vertexDataStride = 8;	// position, normal. uv
 
 struct Sound {
 	static constexpr SDL_AudioSpec defaultSpec = { 48000, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
@@ -35,4 +34,13 @@ struct Material {
 	float alpha;
 
 	Material(const vec3& diffuse = vec3(1.f), const vec3& emission = vec3(0.f), const vec3& specular = vec3(1.f), float shininess = 32.f, float alpha = 1.f);
+};
+
+struct Vertex {
+	vec3 pos;
+	vec3 nrm;
+	vec2 tuv;
+
+	Vertex() = default;
+	Vertex(const vec3& pos, const vec3& nrm, vec2 tuv);
 };

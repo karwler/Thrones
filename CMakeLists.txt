@@ -12,10 +12,10 @@ set(OVEN_NAME "toven")
 
 # source files
 set(SRC_FILES
+	"rsc/shaders/geometry.frag"
+	"rsc/shaders/geometry.vert"
 	"rsc/shaders/gui.frag"
 	"rsc/shaders/gui.vert"
-	"rsc/shaders/scene.frag"
-	"rsc/shaders/scene.vert"
 	"src/engine/audioSys.cpp"
 	"src/engine/audioSys.h"
 	"src/engine/fileSys.cpp"

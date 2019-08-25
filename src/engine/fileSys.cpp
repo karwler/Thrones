@@ -26,7 +26,7 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	msamples(4),
 	gamma(1.f),
-	size(800, 600),
+	size(1280, 720),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
 	address(loopback),
 	port(Com::defaultPort)
@@ -139,7 +139,7 @@ umap<string, Material> FileSys::loadMaterials() {
 	if (!ifh) {
 		std::cerr << errorMaterials << std::endl;
 		World::window()->writeLog(errorMaterials);
-		return { pair("", Material()) };
+		return { pair(string(), Material()) };
 	}
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
@@ -165,8 +165,9 @@ umap<string, GMesh> FileSys::loadObjects() {
 	if (!ifh) {
 		std::cerr << errorObjects << std::endl;
 		World::window()->writeLog(errorObjects);
-		return umap<string, GMesh>({ pair("", GMesh()) });
+		return umap<string, GMesh>({ pair(string(), GMesh()) });
 	}
+	glUseProgram(World::geom()->program);
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, GMesh> mshs(size + 1);
@@ -175,7 +176,7 @@ umap<string, GMesh> FileSys::loadObjects() {
 	uint8 ibuf[objectHeaderSize];
 	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);
 	string name;
-	vector<float> verts;
+	vector<Vertex> verts;
 	vector<uint16> elems;
 	for (uint16 i = 0; i < size; i++) {
 		fread(ibuf, sizeof(*ibuf), objectHeaderSize, ifh);
@@ -198,7 +199,7 @@ umap<string, string> FileSys::loadShaders() {
 	if (!ifh) {
 		std::cerr << errorShaders << std::endl;
 		World::window()->writeLog(errorShaders);
-		return umap<string, string>({ pair("", "") });
+		return umap<string, string>({ pair(string(), string()) });
 	}
 	uint8 size;
 	fread(&size, sizeof(size), 1, ifh);
@@ -225,12 +226,12 @@ umap<string, Texture> FileSys::loadTextures() {
 	if (!ifh) {
 		std::cerr << errorTextures << std::endl;
 		World::window()->writeLog(errorTextures);
-		return { pair("", Texture::loadBlank()) };
+		return { pair(string(), Texture::loadBlank()) };
 	}
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, Texture> texs(size + 1);
-	texs.emplace("", Texture::loadBlank());
+	texs.emplace(string(), Texture::loadBlank());
 
 	uint8 ibuf[textureHeaderSize];
 	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);

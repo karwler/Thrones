@@ -78,6 +78,7 @@ void Program::eventConfigDelete(Button*) {
 	ph->confs.erase(ph->confs.begin() + pdift(ph->curConf));
 	if (ph->curConf >= ph->confs.size())
 		ph->curConf--;
+	Com::saveConfs(ph->confs, Com::defaultConfigFile);
 	World::scene()->resetLayouts();
 }
 
@@ -93,6 +94,7 @@ void Program::eventConfigCopy(Button*) {
 		cfg.name = name;
 		ph->confs.push_back(cfg);
 		ph->curConf = ph->confs.size() - 1;
+		Com::saveConfs(ph->confs, Com::defaultConfigFile);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
@@ -108,6 +110,7 @@ void Program::eventConfigNew(Button*) {
 	if (std::find_if(ph->confs.begin(), ph->confs.end(), [name](const Com::Config& it) -> bool { return it.name == name; }) == ph->confs.end()) {
 		ph->confs.emplace_back(name);
 		ph->curConf = ph->confs.size() - 1;
+		Com::saveConfs(ph->confs, Com::defaultConfigFile);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
@@ -118,6 +121,7 @@ void Program::eventUpdateSurvivalSL(Button* but) {
 	uint8 prc = uint8(static_cast<Slider*>(but)->getVal());
 	ph->confs[ph->curConf].survivalPass = prc;
 	ph->inSurvivalLE->setText(toStr(prc) + '%');
+	Com::saveConfs(ph->confs, Com::defaultConfigFile);
 }
 
 void Program::eventUpdateConfig(Button*) {
@@ -170,17 +174,13 @@ void Program::updateConfigWidgets(ProgHost* ph, const Com::Config& cfg) {
 	ph->inCapturers->setText(cfg.capturersString());
 	ph->inShiftLeft->on = cfg.shiftLeft;
 	ph->inShiftNear->on = cfg.shiftNear;
+	Com::saveConfs(ph->confs, Com::defaultConfigFile);
 }
 
 void Program::eventUpdateReset(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	ph->confs[ph->curConf] = Com::Config(ph->confs[ph->curConf].name);
 	updateConfigWidgets(ph, ph->confs[ph->curConf]);
-}
-
-void Program::eventExitHost(Button*) {
-	Com::saveConfs(static_cast<ProgHost*>(state.get())->confs, Com::defaultConfigFile);
-	eventOpenMainMenu();
 }
 
 // GAME SETUP
@@ -277,8 +277,8 @@ void Program::eventMovePiece(BoardObject* obj) {
 	if (Piece* dst; pickBob(pos, dst)) {
 		Piece* src = static_cast<Piece*>(obj);
 		if (dst)
-			dst->pos = src->pos;
-		src->pos = game.gtop(pos);
+			dst->setPos(src->getPos());
+		src->setPos(game.gtop(pos));
 	}
 }
 
@@ -338,8 +338,10 @@ void Program::eventShowWaitPopup(Button*) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
-	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(Game::screenPosDown.x, Game::screenPosDown.y, game.getScreen()->pos.z)) })));
+	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYDown, game.getScreen()->getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(0.f)) })));
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
+	World::scene()->getCamera()->pmax = Camera::pmaxMatch;
+	World::scene()->getCamera()->ymax = Camera::ymaxMatch;
 }
 
 void Program::eventEndTurn(Button*) {
@@ -374,11 +376,13 @@ void Program::eventFire(BoardObject* obj) {
 
 void Program::eventExitGame(Button*) {
 	if (dynamic_cast<ProgMatch*>(state.get())) {
-		World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(Game::screenPosUp.x, Game::screenPosUp.y, game.getScreen()->pos.z)) })));
+		World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(1.f)), Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYUp, game.getScreen()->getPos().z)) })));
 		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, Camera::latSetup) })));
 		for (Piece& it : game.getPieces())
-			if (it.pos.z <= game.getScreen()->pos.z && it.pos.z >= Com::Config::boardWidth / -2.f)
-				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(it.pos.x, -2.f, it.pos.z)) })));
+			if (it.getPos().z <= game.getScreen()->getPos().z && it.getPos().z >= Com::Config::boardWidth / -2.f)
+				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(it.getPos().x, -2.f, it.getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(0.f)) })));
+		World::scene()->getCamera()->pmax = Camera::pmaxSetup;
+		World::scene()->getCamera()->ymax = Camera::ymaxSetup;
 	}
 	game.disconnect();
 	eventOpenMainMenu();
@@ -464,7 +468,7 @@ void Program::setState(ProgState* newState) {
 
 BoardObject* Program::pickBob(vec2s& pos, Piece*& pce) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
-	pos = bob ? game.ptog(bob->pos) : INT16_MIN;
+	pos = bob ? game.ptog(bob->getPos()) : INT16_MIN;
 	pce = bob ? extractPiece(bob, pos) : nullptr;
 	return bob;
 }

@@ -33,9 +33,11 @@ public:
 
 	void eventEnter();
 	virtual void eventEscape() {}
+	virtual void eventNumpress(uint8) {}
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
+	virtual void eventCameraReset();
 
 	virtual Layout* createLayout();
 	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
@@ -142,6 +144,7 @@ public:
 	virtual ~ProgSetup() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventNumpress(uint8 num) override;
 	virtual void eventWheel(int ymov) override;
 	virtual void eventDrag(uint32 mStat) override;
 	virtual void eventUndrag() override;
@@ -191,15 +194,18 @@ private:
 	Label* favorIcon;
 	Label* turnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
+	uint16 unplacedDragons;
 
 public:
 	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventWheel(int ymov) override;
+	virtual void eventCameraReset() override;
 	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
 	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
-	void deleteDragonIcon();
+	void decreaseDragonIcon();
 
 	virtual Layout* createLayout() override;
 };

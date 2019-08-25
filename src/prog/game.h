@@ -45,7 +45,8 @@ class Game {
 public:
 	FavorState favorState;	// favor state when dragging piece
 
-	static const vec2 screenPosUp, screenPosDown;
+	static constexpr float screenYUp = 0.f;
+	static constexpr float screenYDown = -4.2f;
 	static constexpr char messageTurnGo[] = "Your turn";
 	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
@@ -128,7 +129,7 @@ private:
 	void setBgrid();
 	void setMidTiles();
 	void setTiles(Tile* tiles, int16 yofs, bool inter);
-	void setPieces(Piece* pieces, float rot, OCall ucall, const Material* matl);
+	void setPieces(Piece* pieces, float rot, GCall ucall, const Material* matl);
 	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl, bool dim = false);
 	static void setPiecesInteract(Piece* pieces, uint16 num, bool on, bool dim = false);
 	void setPiecesVisible(Piece* pieces, bool on);
@@ -268,7 +269,7 @@ inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
 }
 
 inline Com::Tile Game::checkFavor() {
-	return ffpad.show ? getTile(ptog(ffpad.pos))->getType() : Com::Tile::empty;
+	return ffpad.show ? getTile(ptog(ffpad.getPos()))->getType() : Com::Tile::empty;
 }
 
 inline uset<uint16> Game::collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed) {

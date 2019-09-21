@@ -158,25 +158,18 @@ public:
 	GCall hgcall, ulcall, urcall;
 	float diffuseFactor, emissionFactor;
 
-private:
-	static const vec3 moveIconColor, fireIconColor;
-
-	enum class DragState : uint8 {
-		none,
-		move,
-		fire
-	} dragState;
+protected:
+	static const vec3 moveIconColor;
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
 	BoardObject(const vec3& pos, float rot = 0.f, float size = 1.f, GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = true, bool show = true);
 
 	virtual void draw() const override;
-	virtual void drawTop() const override;
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
-	virtual void onUndrag(uint8 mBut) override;
 
 	void setRaycast(bool on, bool dim = false);
+protected:
+	void drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
 };
 
 // piece of terrain
@@ -196,6 +189,9 @@ public:
 	DCLASS_CONSTRUCT(Tile, BoardObject)
 	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
 
+	virtual void drawTop() const override;
+	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
 
@@ -321,11 +317,17 @@ public:
 	uint16 lastFortress;	// index of last visited fortress (only relevant to throne)
 private:
 	Com::Piece type;
+	bool drawTopSelf;
+
+	static const vec3 fireIconColor, attackHorseColor;
 
 public:
 	DCLASS_CONSTRUCT(Piece, BoardObject)
 	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
 
+	virtual void drawTop() const override;
+	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
 

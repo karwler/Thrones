@@ -183,7 +183,6 @@ private:
 	Interactable* getScrollOrObject(vec2i mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
-	template <class T> static const T& findAsset(const umap<string, T>& assets, const string& name);
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 	void simulateMouseMove();
@@ -230,31 +229,25 @@ inline vec3 Scene::pickerRay(vec2i mPos) const {
 }
 
 inline const CMesh* Scene::collim(const string& name) const {
-	return &findAsset(collims, name);
+	return &collims.at(name);
 }
 
 inline const GMesh* Scene::mesh(const string& name) const {
-	return &findAsset(meshes, name);
+	return &meshes.at(name);
 }
 
 inline const Material* Scene::material(const string& name) const {
-	return &findAsset(materials, name);
+	return &materials.at(name);
 }
 
 inline const Texture* Scene::getTex(const string& name) const {
-	return &findAsset(texes, name);
+	return &texes.at(name);
 }
 
 inline GLuint Scene::texture(const string& name) const {
-	return findAsset(texes, name).getID();
+	return texes.at(name).getID();
 }
 
 inline GLuint Scene::blank() const {
 	return texes.at(string()).getID();
-}
-
-template <class T>
-const T& Scene::findAsset(const umap<string, T>& assets, const string& name) {
-	typename umap<string, T>::const_iterator it = assets.find(name);
-	return it != assets.end() ? it->second : assets.at(string());
 }

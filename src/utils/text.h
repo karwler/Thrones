@@ -97,9 +97,14 @@ constexpr char defaultWriteMode[] = "wb";
 bool hasExt(const string& path, const string& ext);
 string filename(const string& path);
 string readWordM(const char*& pos);
+int strnatcmp(const char* a, const char* b);	// natural string compare
 
 inline string readWord(const char* pos) {
 	return readWordM(pos);
+}
+
+inline bool strnatless(const string& a, const string& b) {
+	return strnatcmp(a.c_str(), b.c_str()) < 0;
 }
 
 inline int strcicmp(const string& a, const string& b) {	// case insensitive check if strings are equal
@@ -298,6 +303,10 @@ vector<string> readFileLines(const string& file);
 bool writeFile(const string& file, const string& text);
 string readIniTitle(const string& line);
 pairStr readIniLine(const string& line);
+
+inline string makeIniLine(const string& title) {
+	return '[' + title + ']' + linend;
+}
 
 inline string makeIniLine(const string& key, const string& val) {
 	return key + '=' + val + linend;

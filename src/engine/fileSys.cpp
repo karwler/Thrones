@@ -32,6 +32,14 @@ Settings::Settings() :
 	port(Com::defaultPort)
 {}
 
+// SETUP
+
+void Setup::clear() {
+	tiles.clear();
+	mids.clear();
+	pieces.clear();
+}
+
 // FILE SYS
 
 int FileSys::setWorkingDir() {
@@ -90,6 +98,39 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, toStr(sets->port));
 	return writeFile(fileSettings, text);
+}
+
+umap<string, Setup> FileSys::loadSetups() {
+	umap<string, Setup> sets;
+	umap<string, Setup>::iterator sit;
+	for (const string& line : readFileLines(fileSetups)) {
+		if (string title = readIniTitle(line); !title.empty())
+			sit = sets.emplace(std::move(title), Setup()).first;
+		else if (pairStr it = readIniLine(line); !sets.empty()) {
+			if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
+				sit->second.tiles[vec2s::get(it.first.substr(len), strtol, 0)] = strToEnum<Com::Tile>(Com::tileNames, it.second);
+			else if (len = strlen(iniKeywordMid); !strncicmp(it.first, iniKeywordMid, len))
+				sit->second.mids[uint16(sstoul(it.first.substr(len)))] = strToEnum<Com::Tile>(Com::tileNames, it.second);
+			else if (len = strlen(iniKeywordPiece); !strncicmp(it.first, iniKeywordPiece, len))
+				sit->second.pieces[vec2s::get(it.first.substr(len), strtol, 0)] = strToEnum<Com::Piece>(Com::pieceNames, it.second);
+		}
+	}
+	return sets;
+}
+
+bool FileSys::saveSetups(const umap<string, Setup>& sets) {
+	string text;
+	for (const pair<const string, Setup>& it : sets) {
+		text += makeIniLine(it.first);
+		for (const pair<const vec2s, Com::Tile>& ti : it.second.tiles)
+			text += makeIniLine(iniKeywordTile + ti.first.toString("_"), Com::tileNames[uint8(ti.second)]);
+		for (const pair<const uint16, Com::Tile>& mi : it.second.mids)
+			text += makeIniLine(iniKeywordMid + toStr(mi.first), Com::tileNames[uint8(mi.second)]);
+		for (const pair<const vec2s, Com::Piece>& pi : it.second.pieces)
+			text += makeIniLine(iniKeywordPiece + pi.first.toString("_"), Com::pieceNames[uint8(pi.second)]);
+		text += linend;
+	}
+	return writeFile(fileSetups, text);
 }
 
 umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {

@@ -30,16 +30,16 @@ static Config getConfig(const Arguments& args, uint16& port) {
 
 	cfstr = args.getOpt(argFile);
 	char* path = SDL_GetBasePath();
-	string file = cfstr ? cfstr : (path ? string(path) : string()) + defaultConfigFile;
+	string file = cfstr ? cfstr : (path ? string(path) : string()) + Config::defaultFile;
 	SDL_free(path);
 
 	Config ret;
-	vector<Config> confs = loadConfs(file);
-	if (vector<Config>::iterator cit = std::find_if(confs.begin(), confs.end(), [&name](const Config& cf) -> bool { return cf.name == name; }); cit != confs.end())
-		ret = cit->checkValues();
+	umap<string, Config> confs = Config::load(file);
+	if (umap<string, Config>::iterator cit = confs.find(name); cit != confs.end())
+		ret = cit->second.checkValues();
 	else
-		confs.push_back(ret);
-	saveConfs(confs, file);
+		confs.emplace(Config::defaultName, ret);
+	Config::save(confs, file);
 	return ret;
 }
 

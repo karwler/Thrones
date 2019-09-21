@@ -56,8 +56,10 @@ public:
 	BCall kcall, ccall;	// gets called on enter/escape press
 private:
 	Size sizeY;			// use Widget's relSize as sizeX
-	
+
+	static constexpr int margin = defaultItemSpacing;
 	static const vec4 colorDim;
+	static const vec4 colorBackground;
 
 public:
 	Popup(const cvec2<Size>& relSize = 1.f, vector<Widget*> children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);

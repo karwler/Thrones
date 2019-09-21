@@ -58,14 +58,14 @@ void Program::eventOpenHostMenu(Button*) {
 
 void Program::eventHostServer(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	Com::saveConfs(ph->confs, Com::defaultConfigFile);
-	game.conhost(ph->confs[ph->curConf]);
+	Com::Config::save(ph->confs);
+	game.conhost(ph->curConf->second);
 }
 
 void Program::eventSwitchConfig(Button* but) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->curConf = static_cast<SwitchBox*>(but)->getCurOpt();
-	ph->confs[ph->curConf].checkValues();
+	ph->curConf = ph->confs.find(static_cast<SwitchBox*>(but)->getText());
+	ph->curConf->second.checkValues();
 	World::scene()->resetLayouts();
 }
 
@@ -75,10 +75,12 @@ void Program::eventConfigDeleteInput(Button*) {
 
 void Program::eventConfigDelete(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs.erase(ph->confs.begin() + pdift(ph->curConf));
-	if (ph->curConf >= ph->confs.size())
-		ph->curConf--;
-	Com::saveConfs(ph->confs, Com::defaultConfigFile);
+	vector<string> names = sortNames(ph->confs);
+	vector<string>::iterator nit = std::find(names.begin(), names.end(), ph->curConf->first);
+
+	ph->confs.erase(ph->curConf);
+	ph->curConf = ph->confs.find(nit + 1 != names.end() ? *(nit + 1) : *(nit - 1));
+	Com::Config::save(ph->confs);
 	World::scene()->resetLayouts();
 }
 
@@ -89,12 +91,9 @@ void Program::eventConfigCopyInput(Button*) {
 void Program::eventConfigCopy(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
-	if (std::find_if(ph->confs.begin(), ph->confs.end(), [name](const Com::Config& it) -> bool { return it.name == name; }) == ph->confs.end()) {
-		Com::Config cfg = ph->confs[ph->curConf];
-		cfg.name = name;
-		ph->confs.push_back(cfg);
-		ph->curConf = ph->confs.size() - 1;
-		Com::saveConfs(ph->confs, Com::defaultConfigFile);
+	if (ph->confs.find(name) == ph->confs.end()) {
+		ph->curConf = ph->confs.emplace(name, ph->curConf->second).first;
+		Com::Config::save(ph->confs);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
@@ -107,10 +106,9 @@ void Program::eventConfigNewInput(Button*) {
 void Program::eventConfigNew(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
-	if (std::find_if(ph->confs.begin(), ph->confs.end(), [name](const Com::Config& it) -> bool { return it.name == name; }) == ph->confs.end()) {
-		ph->confs.emplace_back(name);
-		ph->curConf = ph->confs.size() - 1;
-		Com::saveConfs(ph->confs, Com::defaultConfigFile);
+	if (ph->confs.find(name) == ph->confs.end()) {
+		ph->curConf = ph->confs.emplace(name, Com::Config()).first;
+		Com::Config::save(ph->confs);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
@@ -119,68 +117,76 @@ void Program::eventConfigNew(Button*) {
 void Program::eventUpdateSurvivalSL(Button* but) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
 	uint8 prc = uint8(static_cast<Slider*>(but)->getVal());
-	ph->confs[ph->curConf].survivalPass = prc;
-	ph->inSurvivalLE->setText(toStr(prc) + '%');
-	Com::saveConfs(ph->confs, Com::defaultConfigFile);
+	ph->curConf->second.survivalPass = prc;
+	ph->wio.survivalLE->setText(toStr(prc) + '%');
+	Com::Config::save(ph->confs);
 }
 
 void Program::eventUpdateConfig(Button*) {
 	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	Com::Config& cfg = ph->confs[ph->curConf];
+	Com::Config& cfg = ph->curConf->second;
 
-	cfg.homeWidth = uint16(sstol(ph->inWidth->getText()));
-	cfg.homeHeight = uint16(sstol(ph->inHeight->getText()));
-	cfg.survivalPass = uint8(sstoul(ph->inSurvivalLE->getText()));
-	cfg.favorLimit = uint8(sstoul(ph->inFavors->getText()));
-	cfg.dragonDist = uint8(sstoul(ph->inDragonDist->getText()));
-	cfg.dragonDiag = ph->inDragonDiag->on;
-	cfg.multistage = ph->inMultistage->on;
+	cfg.homeWidth = uint16(sstol(ph->wio.width->getText()));
+	cfg.homeHeight = uint16(sstol(ph->wio.height->getText()));
+	cfg.survivalPass = uint8(sstoul(ph->wio.survivalLE->getText()));
+	cfg.favorLimit = uint8(sstoul(ph->wio.favors->getText()));
+	cfg.dragonDist = uint8(sstoul(ph->wio.dragonDist->getText()));
+	cfg.dragonDiag = ph->wio.dragonDiag->on;
+	cfg.multistage = ph->wio.multistage->on;
+	cfg.survivalKill = ph->wio.survivalKill->on;
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		cfg.tileAmounts[i] = uint16(sstoul(ph->inTiles[i]->getText()));
+		cfg.tileAmounts[i] = uint16(sstoul(ph->wio.tiles[i]->getText()));
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		cfg.middleAmounts[i] = uint16(sstoul(ph->inMiddles[i]->getText()));
+		cfg.middleAmounts[i] = uint16(sstoul(ph->wio.middles[i]->getText()));
 	for (uint8 i = 0; i < Com::pieceMax; i++)
-		cfg.pieceAmounts[i] = uint16(sstoul(ph->inPieces[i]->getText()));
-	cfg.winFortress = uint16(sstol(ph->inWinFortress->getText()));
-	cfg.winThrone = uint16(sstol(ph->inWinThrone->getText()));
-	cfg.readCapturers(ph->inCapturers->getText());
-	cfg.shiftLeft = ph->inShiftLeft->on;
-	cfg.shiftNear = ph->inShiftNear->on;
+		cfg.pieceAmounts[i] = uint16(sstoul(ph->wio.pieces[i]->getText()));
+	cfg.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
+	cfg.winThrone = uint16(sstol(ph->wio.winThrone->getText()));
+	cfg.readCapturers(ph->wio.capturers->getText());
+	cfg.shiftLeft = ph->wio.shiftLeft->on;
+	cfg.shiftNear = ph->wio.shiftNear->on;
 	
 	cfg.checkValues();
-	updateConfigWidgets(ph, cfg);
+	updateConfigWidgets();
 }
 
-void Program::updateConfigWidgets(ProgHost* ph, const Com::Config& cfg) {
-	ph->inWidth->setText(toStr(cfg.homeWidth));
-	ph->inHeight->setText(toStr(cfg.homeHeight));
-	ph->inSurvivalSL->setVal(cfg.survivalPass);
-	ph->inSurvivalLE->setText(toStr(cfg.survivalPass) + '%');
-	ph->inFavors->setText(toStr(cfg.favorLimit));
-	ph->inDragonDist->setText(toStr(cfg.dragonDist));
-	ph->inDragonDiag->on = cfg.dragonDiag;
-	ph->inMultistage->on = cfg.multistage;
+void Program::updateConfigWidgets() {
+	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	Com::Config& cfg = ph->curConf->second;
+
+	ph->wio.width->setText(toStr(cfg.homeWidth));
+	ph->wio.height->setText(toStr(cfg.homeHeight));
+	ph->wio.survivalSL->setVal(cfg.survivalPass);
+	ph->wio.survivalLE->setText(toStr(cfg.survivalPass) + '%');
+	ph->wio.favors->setText(toStr(cfg.favorLimit));
+	ph->wio.dragonDist->setText(toStr(cfg.dragonDist));
+	ph->wio.dragonDiag->on = cfg.dragonDiag;
+	ph->wio.multistage->on = cfg.multistage;
+	ph->wio.survivalKill->on = cfg.survivalKill;
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		ph->inTiles[i]->setText(toStr(cfg.tileAmounts[i]));
-	ph->outTileFortress->setText(ProgHost::tileFortressString(cfg));
+		ph->wio.tiles[i]->setText(toStr(cfg.tileAmounts[i]));
+	ph->wio.tileFortress->setText(ProgState::tileFortressString(cfg));
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		ph->inMiddles[i]->setText(toStr(cfg.middleAmounts[i]));
-	ph->outMiddleFortress->setText(ProgHost::middleFortressString(cfg));
+		ph->wio.middles[i]->setText(toStr(cfg.middleAmounts[i]));
+	ph->wio.middleFortress->setText(ProgState::middleFortressString(cfg));
 	for (uint8 i = 0; i < Com::pieceMax; i++)
-		ph->inPieces[i]->setText(toStr(cfg.pieceAmounts[i]));
-	ph->outPieceTotal->setText(ProgHost::pieceTotalString(cfg));
-	ph->inWinFortress->setText(toStr(cfg.winFortress));
-	ph->inWinThrone->setText(toStr(cfg.winThrone));
-	ph->inCapturers->setText(cfg.capturersString());
-	ph->inShiftLeft->on = cfg.shiftLeft;
-	ph->inShiftNear->on = cfg.shiftNear;
-	Com::saveConfs(ph->confs, Com::defaultConfigFile);
+		ph->wio.pieces[i]->setText(toStr(cfg.pieceAmounts[i]));
+	ph->wio.pieceTotal->setText(ProgState::pieceTotalString(cfg));
+	ph->wio.winFortress->setText(toStr(cfg.winFortress));
+	ph->wio.winThrone->setText(toStr(cfg.winThrone));
+	ph->wio.capturers->setText(cfg.capturersString());
+	ph->wio.shiftLeft->on = cfg.shiftLeft;
+	ph->wio.shiftNear->on = cfg.shiftNear;
+	Com::Config::save(ph->confs);
 }
 
 void Program::eventUpdateReset(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->confs[ph->curConf] = Com::Config(ph->confs[ph->curConf].name);
-	updateConfigWidgets(ph, ph->confs[ph->curConf]);
+	static_cast<ProgHost*>(state.get())->curConf->second = Com::Config();
+	updateConfigWidgets();
+}
+
+void Program::eventShowConfig(Button*) {
+	World::scene()->setPopup(ProgState::createPopupConfig(game.getConfig()));
 }
 
 // GAME SETUP
@@ -252,15 +258,11 @@ void Program::placePiece(vec2s pos, uint8 type, Piece* occupant) {
 
 	// find the first not placed piece of the specified type and place it if it exists
 	Piece* pieces = game.getOwnPieces(Com::Piece(type));
-	for (uint8 i = 0; i < game.getConfig().pieceAmounts[type]; i++)
-		if (!pieces[i].active()) {
-			pieces[i].enable(pos);
-			ps->incdecIcon(type, false, false);
-			break;
-		}
+	std::find_if(pieces, pieces + game.getConfig().pieceAmounts[type], [](Piece& it) -> bool { return !it.active(); })->enable(pos);
+	ps->incdecIcon(type, false, false);
 }
 
-void Program::eventMoveTile(BoardObject* obj) {
+void Program::eventMoveTile(BoardObject* obj, uint8) {
 	// switch types with destination tile
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
 		Com::Tile desType = dst->getType();
@@ -271,7 +273,7 @@ void Program::eventMoveTile(BoardObject* obj) {
 	}
 }
 
-void Program::eventMovePiece(BoardObject* obj) {
+void Program::eventMovePiece(BoardObject* obj, uint8) {
 	// get new position and set or swap positions with possibly already occupying piece
 	vec2s pos;
 	if (Piece* dst; pickBob(pos, dst)) {
@@ -333,6 +335,74 @@ void Program::eventShowWaitPopup(Button*) {
 	World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventExitGame, "Exit"));
 }
 
+void Program::eventOpenSetupSave(Button*) {
+	World::scene()->setPopup(static_cast<ProgSetup*>(state.get())->createPopupSaveLoad(true));
+}
+
+void Program::eventOpenSetupLoad(Button*) {
+	World::scene()->setPopup(static_cast<ProgSetup*>(state.get())->createPopupSaveLoad(false));
+}
+
+void Program::eventSetupNew(Button* but) {
+	const string& name = static_cast<LabelEdit*>(dynamic_cast<LabelEdit*>(but) ? but : but->getParent()->getWidget(but->getID() - 1))->getText();
+	if (umap<string, Setup>& setups = static_cast<ProgSetup*>(state.get())->setups; setups.find(name) == setups.end())
+		popuplateSetup(setups.emplace(name, Setup()).first->second);
+	else
+		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
+}
+
+void Program::eventSetupSave(Button* but) {
+	umap<string, Setup>& setups = static_cast<ProgSetup*>(state.get())->setups;
+	Setup& stp = setups.find(static_cast<Label*>(but)->getText())->second;
+	stp.clear();
+	popuplateSetup(stp);
+}
+
+void Program::popuplateSetup(Setup& setup) {
+	for (Tile* it = game.getTiles().own(); it != game.getTiles().end(); it++)
+		if (it->getType() < Com::Tile::fortress)
+			setup.tiles.emplace(game.ptog(it->getPos()), it->getType());
+	for (Tile* it = game.getTiles().mid(); it != game.getTiles().own(); it++)
+		if (it->getType() < Com::Tile::fortress)
+			setup.mids.emplace(uint16(it - game.getTiles().mid()), it->getType());
+	for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
+		if (vec2s pos = game.ptog(it->getPos()); pos.hasNot(INT16_MIN))
+			setup.pieces.emplace(pos, it->getType());
+
+	FileSys::saveSetups(static_cast<ProgSetup*>(state.get())->setups);
+	World::scene()->setPopup(nullptr);
+}
+
+void Program::eventSetupLoad(Button* but) {
+	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	Setup& stp = ps->setups.find(static_cast<Label*>(but)->getText())->second;
+	for (Tile* it = game.getTiles().mid(); it != game.getTiles().end(); it++)
+		it->setType(Com::Tile::empty);
+	for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
+		it->disable();
+
+	vector<uint16> cnt(game.getConfig().tileAmounts.begin(), game.getConfig().tileAmounts.end() - 1);
+	for (const pair<const vec2s, Com::Tile>& it : stp.tiles)
+		if (inRange(it.first, vec2s(0, 1), vec2s(game.getConfig().homeWidth - 1, game.getConfig().homeHeight)) && cnt[uint8(it.second)]) {
+			cnt[uint8(it.second)]--;
+			game.getTile(it.first)->setType(it.second);
+		}
+	cnt.assign(game.getConfig().middleAmounts.begin(), game.getConfig().middleAmounts.end());
+	for (const pair<const uint16, Com::Tile>& it : stp.mids)
+		if (it.first < game.getConfig().homeWidth && cnt[uint8(it.second)]) {
+			cnt[uint8(it.second)]--;
+			game.getTiles().mid(it.first)->setType(it.second);
+		}
+	cnt.assign(game.getConfig().pieceAmounts.begin(), game.getConfig().pieceAmounts.end());
+	for (const pair<const vec2s, Com::Piece>& it : stp.pieces)
+		if (inRange(it.first, vec2s(0, 1), vec2s(game.getConfig().homeWidth - 1, game.getConfig().homeHeight)) && cnt[uint8(it.second)]) {
+			cnt[uint8(it.second)]--;
+			Piece* pieces = game.getOwnPieces(it.second);
+			std::find_if(pieces, pieces + game.getConfig().pieceAmounts[uint8(it.second)], [](Piece& pce) -> bool { return !pce.active(); })->enable(it.first);
+		}
+	ps->setStage(ProgSetup::Stage::tiles);
+}
+
 // GAME MATCH
 
 void Program::eventOpenMatch() {
@@ -354,20 +424,20 @@ void Program::eventPlaceDragon(Button*) {
 		game.placeDragon(pos, pce);
 }
 
-void Program::eventFavorStart(BoardObject* obj) {
+void Program::eventFavorStart(BoardObject* obj, uint8 mBut) {
 	game.favorState.piece = static_cast<Piece*>(obj);
 	game.updateFavorState();
-	SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT) ? game.highlightMoveTiles(game.favorState.piece) : game.highlightFireTiles(game.favorState.piece);
+	mBut == SDL_BUTTON_LEFT || game.favorState.piece->getType() == Com::Piece::warhorse ? game.highlightMoveTiles(game.favorState.piece) : game.highlightFireTiles(game.favorState.piece);
 }
 
-void Program::eventMove(BoardObject* obj) {
+void Program::eventMove(BoardObject* obj, uint8 mBut) {
 	game.highlightMoveTiles(nullptr);
 	vec2s pos;
-	if (Piece* pce; pickBob(pos, pce))
-		game.pieceMove(static_cast<Piece*>(obj), pos, pce);
+	if (Piece *mover = static_cast<Piece*>(obj), *pce; pickBob(pos, pce))
+		game.pieceMove(mover, pos, pce, mover->getType() == Com::Piece::warhorse && mBut == SDL_BUTTON_LEFT);
 }
 
-void Program::eventFire(BoardObject* obj) {
+void Program::eventFire(BoardObject* obj, uint8) {
 	game.highlightFireTiles(nullptr);
 	vec2s pos;
 	if (Piece* pce; pickBob(pos, pce))

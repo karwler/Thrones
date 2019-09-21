@@ -25,6 +25,60 @@ string readWordM(const char*& pos) {
 	pos = end;
 	return str;
 }
+
+static int natCmpLetter(int a, int b) {
+	if (a != b) {
+		int au = toupper(a), bu = toupper(b);
+		return au != bu ? au - bu : b - a;
+	}
+	return 0;
+}
+
+static int natCmpLeft(const char* a, const char* b) {
+	for (;; a++, b++) {
+		bool nad = notDigit(*a), nbd = notDigit(*b);
+		if (nad && nbd)
+			return 0;
+		if (nad)
+			return -1;
+		if (nbd)
+			return 1;
+		if (int dif = natCmpLetter(*a, *b))
+			return dif;
+	}
+}
+
+static int natCmpRight(const char* a, const char* b) {
+	for (int bias = 0;; a++, b++) {
+		bool nad = notDigit(*a), nbd = notDigit(*b);
+		if (nad && nbd)
+			return bias;
+		if (nad)
+			return -1;
+		if (nbd)
+			return 1;
+		if (!(*a || *b))
+			return bias;
+		if (int dif = natCmpLetter(*a, *b); dif && !bias)
+			bias = dif;
+	}
+}
+
+int strnatcmp(const char* a, const char* b) {
+	for (;; a++, b++) {
+		char ca = *a, cb = *b;
+		for (; isSpace(ca); ca = *++a);
+		for (; isSpace(cb); cb = *++b);
+
+		if (isDigit(ca) && isDigit(cb))
+			if (int dif = ca == '0' || cb == '0' ? natCmpLeft(a, b) : natCmpRight(a, b))
+				return dif;
+		if (!(ca || cb))
+			return 0;
+		if (int dif = natCmpLetter(*a, *b))
+			return dif;
+	}
+}
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = Win::WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

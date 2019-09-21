@@ -106,17 +106,19 @@ vec2i Layout::listSize() const {
 // POPUP
 
 const vec4 Popup::colorDim(0.f, 0.f, 0.f, 0.5f);
+const vec4 Popup::colorBackground(0.42f, 0.05f, 0.f, 1.f);
 
 Popup::Popup(const cvec2<Size>& relSize, vector<Widget*> children, BCall kcall, BCall ccall, bool vertical, int spacing) :
-	Layout(relSize.x, std::move(children), vertical, spacing, nullptr, SIZE_MAX),
+	Layout(relSize.x, std::move(children), vertical, spacing),
 	kcall(kcall),
 	ccall(ccall),
 	sizeY(relSize.y)
 {}
 
 void Popup::draw() const {
-	drawRect(Rect(0, World::window()->getView()), colorDim, World::scene()->blank());	// dim other widgets
-	drawRect(rect(), colorNormal, World::scene()->blank());	// draw background
+	Rect rct = rect();
+	drawRect(Rect(0, World::window()->getView()), colorDim, World::scene()->blank());						// dim other widgets
+	drawRect(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->blank());	// draw background
 	Layout::draw();
 }
 

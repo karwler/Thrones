@@ -279,7 +279,7 @@ private:
 	BCall hcall;
 
 public:
-	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = colorNormal, const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = vec4(1.f), const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;

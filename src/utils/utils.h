@@ -33,7 +33,7 @@ using vec2d = cvec2<double>;
 using vec2t = cvec2<sizet>;
 
 using BCall = void (Program::*)(Button*);
-using GCall = void (Program::*)(BoardObject*);
+using GCall = void (Program::*)(BoardObject*, uint8);
 
 // general wrappers
 
@@ -50,6 +50,13 @@ inline vec2i mousePos() {
 	SDL_GetMouseState(&p.x, &p.y);
 	return p;
 }
+
+template <>
+struct std::hash<vec2s> {
+	sizet operator()(vec2s v) const {
+		return std::hash<int32>()(*reinterpret_cast<int32*>(&v));
+	}
+};
 
 // SDL_Rect wrapper
 
@@ -282,4 +289,14 @@ void clear(vector<T*>& vec) {
 	for (T* it : vec)
 		delete it;
 	vec.clear();
+}
+
+template <class T>
+vector<string> sortNames(const umap<string, T>& vmap) {
+	vector<string> names(vmap.size());
+	vector<string>::iterator nit = names.begin();
+	for (const pair<string, T>& cit : vmap)
+		*nit++ = cit.first;
+	std::sort(names.begin(), names.end(), strnatless);
+	return names;
 }

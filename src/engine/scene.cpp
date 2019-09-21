@@ -245,7 +245,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 			break;
 		case SDL_SCANCODE_LALT:
 			if (World::game()->favorState.use = true; Piece* pce = dynamic_cast<Piece*>(capture))
-				World::program()->eventFavorStart(pce);
+				World::program()->eventFavorStart(pce, pce->show ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);	// vaguely simulate what happens when holding down on a piece to refresh favor state and highlighted tiles (no need to take warhorse into account)
 			break;
 		case SDL_SCANCODE_C:
 			World::state()->eventCameraReset();
@@ -264,7 +264,7 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_LALT:
 			if (World::game()->favorState.use = false; Piece* pce = dynamic_cast<Piece*>(capture))
-				World::program()->eventFavorStart(pce);
+				World::program()->eventFavorStart(pce, pce->show ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);	// same as above (I could probably just call the piece's onHold())
 		}
 }
 
@@ -291,7 +291,7 @@ void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
 	uint8 mbi = mBut - 1;
 	select = getSelected(mPos);
 	stamps[mbi] = ClickStamp(select, getSelectedScrollArea(), mPos);
-	if (stamps[mbi].area)	// area goes first so widget can overwrite it's capture
+	if (stamps[mbi].area)	// area goes first so widget can overwrite it's capture	// TODO: might need an "if (!capture)" to prevent overlapping onHold calls in a single widget/object
 		stamps[mbi].area->onHold(mPos, mBut);
 	if (stamps[mbi].inter != stamps[mbi].area)
 		stamps[mbi].inter->onHold(mPos, mBut);

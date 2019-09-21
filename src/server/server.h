@@ -74,7 +74,6 @@ const array<string, pieceMax> pieceNames = {
 constexpr uint16 defaultPort = 39741;
 constexpr uint16 recvSize = 1380;
 constexpr uint8 maxPlayers = 2;
-constexpr char defaultConfigFile[] = "game.ini";
 
 enum class Code : uint8 {
 	none,	// denotes a state of not reading data
@@ -93,17 +92,18 @@ enum class Code : uint8 {
 class Config {
 public:
 	static constexpr char defaultName[] = "default";
+	static constexpr char defaultFile[] = "game.ini";
 	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
 
-	string name;
 	uint16 homeWidth, homeHeight;
 	uint8 survivalPass;
 	uint8 favorLimit;
 	uint8 dragonDist;
 	bool dragonDiag;
 	bool multistage;
+	bool survivalKill;
 	array<uint16, tileMax> tileAmounts;
 	array<uint16, tileMax-1> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
@@ -129,6 +129,7 @@ private:
 	static constexpr char keywordDragonDist[] = "dragon_dist";
 	static constexpr char keywordDragonDiag[] = "dragon_diag";
 	static constexpr char keywordMultistage[] = "multistage";
+	static constexpr char keywordSurvivalKill[] = "survival_kill";
 	static constexpr char keywordTile[] = "tile_";
 	static constexpr char keywordMiddle[] = "middle_";
 	static constexpr char keywordPiece[] = "piece_";
@@ -142,7 +143,7 @@ private:
 	static constexpr char keywordFar[] = "far";
 
 public:
-	Config(string name = defaultName);
+	Config();
 
 	void updateValues();
 	Config& checkValues();
@@ -154,11 +155,13 @@ public:
 	void fromIniLine(const string& line);
 	string capturersString() const;
 	void readCapturers(const string& line);
+	static umap<string, Config> load(const string& file = defaultFile);
+	static bool save(const umap<string, Config>& confs, const string& file = defaultFile);
 	template <class T, sizet S> static T calcSum(const array<T, S>& nums, sizet size = S);
 private:
 	void readSize(const string& line);
 	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, uint16 floor = 0);
-	template <sizet N, sizet S> static void readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts);
+	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
 	void readShift(const string& line);
 };
@@ -176,8 +179,8 @@ T Config::calcSum(const array<T, S>& nums, sizet size) {
 }
 
 template <sizet N, sizet S>
-void Config::readAmount(const pairStr& it, const string& word, const array<string, N>& names, array<uint16, S>& amts) {
-	if (uint8 id = strToEnum<uint8>(names, it.first.substr(word.length())); id < amts.size())
+void Config::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
+	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
 		amts[id] = uint16(sstol(it.second));
 }
 
@@ -187,8 +190,6 @@ void Config::writeAmounts(string& text, const string& word, const array<string, 
 		text += makeIniLine(word + names[i], toStr(amts[i]));
 }
 
-vector<Config> loadConfs(const string& file);
-void saveConfs(const vector<Config>& confs, const string& file);
 void sendRejection(TCPsocket server);
 std::default_random_engine createRandomEngine();
 

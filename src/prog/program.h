@@ -34,6 +34,7 @@ public:
 	void eventUpdateSurvivalSL(Button* but);
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
+	void eventShowConfig(Button* but = nullptr);
 
 	// game setup
 	void eventOpenSetup();
@@ -42,21 +43,26 @@ public:
 	void eventPlaceTileD(Button* but);
 	void eventPlacePieceH();
 	void eventPlacePieceD(Button* but);
-	void eventMoveTile(BoardObject* obj);
-	void eventMovePiece(BoardObject* obj);
+	void eventMoveTile(BoardObject* obj, uint8 mBut);
+	void eventMovePiece(BoardObject* obj, uint8 mBut);
 	void eventClearTile();
 	void eventClearPiece();
 	void eventSetupNext(Button* but = nullptr);
 	void eventSetupBack(Button* but = nullptr);
 	void eventShowWaitPopup(Button* but = nullptr);
+	void eventOpenSetupSave(Button* but = nullptr);
+	void eventOpenSetupLoad(Button* but = nullptr);
+	void eventSetupNew(Button* but);
+	void eventSetupSave(Button* but);
+	void eventSetupLoad(Button* but);
 
 	// game match
 	void eventOpenMatch();
 	void eventEndTurn(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
-	void eventFavorStart(BoardObject* obj);
-	void eventMove(BoardObject* obj);
-	void eventFire(BoardObject* obj);
+	void eventFavorStart(BoardObject* obj, uint8 mBut);
+	void eventMove(BoardObject* obj, uint8 mBut);
+	void eventFire(BoardObject* obj, uint8 mBut);
 	void eventExitGame(Button* but = nullptr);
 
 	// settings
@@ -81,9 +87,10 @@ public:
 	Game* getGame();
 
 private:
-	void updateConfigWidgets(ProgHost* ph, const Com::Config& cfg);
+	void updateConfigWidgets();
 	void placeTile(Tile* tile, uint8 type);
 	void placePiece(vec2s pos, uint8 type, Piece* occupant);
+	void popuplateSetup(Setup& setup);
 
 	void setState(ProgState* newState);
 	BoardObject* pickBob(vec2s& pos, Piece*& pce);

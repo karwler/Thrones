@@ -1,7 +1,7 @@
-﻿#pragma once
+#pragma once
 
+#include "engine/fileSys.h"
 #include "utils/layouts.h"
-#include "utils/objects.h"
 
 // for handling program state specific things that occur in all states
 class ProgState {
@@ -23,10 +23,29 @@ protected:
 
 		static int strLen(const string& str, int height = lineHeight);
 	};
-	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight);
-	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight);
-	static Texture makeTooltip(const string& text, int limit = tooltipLimit, int height = tooltipHeight);
-	static Texture makeTooltip(const vector<string>& lines, int limit = tooltipLimit, int height = tooltipHeight);
+
+	struct ConfigIO {
+		LabelEdit* width;
+		LabelEdit* height;
+		Slider* survivalSL;
+		LabelEdit* survivalLE;
+		LabelEdit* favors;
+		LabelEdit* dragonDist;
+		CheckBox* dragonDiag;
+		CheckBox* multistage;
+		CheckBox* survivalKill;
+		array<LabelEdit*, Com::tileMax> tiles;
+		array<LabelEdit*, Com::tileMax-1> middles;
+		array<LabelEdit*, Com::pieceMax> pieces;
+		LabelEdit* winFortress;
+		LabelEdit* winThrone;
+		LabelEdit* capturers;
+		CheckBox* shiftLeft;
+		CheckBox* shiftNear;
+		Label* tileFortress;
+		Label* middleFortress;
+		Label* pieceTotal;
+	};
 
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
@@ -43,18 +62,35 @@ public:
 	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
 	static Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
 	static pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal);
+	static Popup* createPopupConfig(const Com::Config& conf);
 
+	static string tileFortressString(const Com::Config& cfg);
+	static string middleFortressString(const Com::Config& cfg);
+	static string pieceTotalString(const Com::Config& cfg);
 protected:
+	static vector<Widget*> createConfigList(const Com::Config& conf, ConfigIO& wio, BCall update, BCall scUpdate);
+
 	bool tryClosePopup();
+
+	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight);
+	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight);
+	static Texture makeTooltip(const string& text, int limit = tooltipLimit, int height = tooltipHeight);
+	static Texture makeTooltip(const vector<string>& lines, int limit = tooltipLimit, int height = tooltipHeight);
+private:
+	static void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
+	static void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
 
-template<class T>
-int ProgState::findMaxLength(T pos, T end, int height) {
-	int width = 0;
-	for (; pos != end; pos++)
-		if (int len = Text::strLen(*pos, height); len > width)
-			width = len;
-	return width;
+inline string ProgState::tileFortressString(const Com::Config& cfg) {
+	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+}
+
+inline string ProgState::middleFortressString(const Com::Config& cfg) {
+	return toStr(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+}
+
+inline string ProgState::pieceTotalString(const Com::Config& cfg) {
+	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
 }
 
 class ProgMenu : public ProgState {
@@ -68,28 +104,9 @@ public:
 
 class ProgHost : public ProgState {
 public:
-	vector<Com::Config> confs;
-	sizet curConf;
-
-	LabelEdit* inWidth;
-	LabelEdit* inHeight;
-	Slider* inSurvivalSL;
-	LabelEdit* inSurvivalLE;
-	LabelEdit* inFavors;
-	LabelEdit* inDragonDist;
-	CheckBox* inDragonDiag;
-	CheckBox* inMultistage;
-	array<LabelEdit*, Com::tileMax> inTiles;
-	array<LabelEdit*, Com::tileMax-1> inMiddles;
-	array<LabelEdit*, Com::pieceMax> inPieces;
-	LabelEdit* inWinFortress;
-	LabelEdit* inWinThrone;
-	LabelEdit* inCapturers;
-	CheckBox* inShiftLeft;
-	CheckBox* inShiftNear;
-	Label* outTileFortress;
-	Label* outMiddleFortress;
-	Label* outPieceTotal;
+	umap<string, Com::Config> confs;
+	umap<string, Com::Config>::iterator curConf;
+	ConfigIO wio;
 	
 public:
 	ProgHost();
@@ -98,26 +115,16 @@ public:
 	virtual void eventEscape() override;
 
 	virtual Layout* createLayout() override;
-
-	static string tileFortressString(const Com::Config& cfg);
-	static string middleFortressString(const Com::Config& cfg);
-	static string pieceTotalString(const Com::Config& cfg);
-private:
-	static void setLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
-	static void setTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
 
-inline string ProgHost::tileFortressString(const Com::Config& cfg) {
-	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
-}
+class ProgRooms : public ProgState {
+public:
+	virtual ~ProgRooms() override = default;
 
-inline string ProgHost::middleFortressString(const Com::Config& cfg) {
-	return toStr(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
-}
+	virtual void eventEscape() override;
 
-inline string ProgHost::pieceTotalString(const Com::Config& cfg) {
-	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
-}
+	virtual Layout* createLayout() override;
+};
 
 class ProgSetup : public ProgState {
 public:
@@ -128,16 +135,17 @@ public:
 		ready
 	};
 
+	umap<string, Setup> setups;
 	vector<Com::Tile> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
 	Label* message;
 	bool enemyReady;
 private:
 	uint8 selected;
 	Stage stage;
+	uint8 lastButton;	// last button that was used on lastHold (0 for none)
+	vec2s lastHold;		// position of last object that the cursor was dragged over
 	vector<uint16> counters;
 	Layout* icons;
-	vec2s lastHold;		// position of last object that the cursor was dragged over
-	uint8 lastButton;	// last button that was used on lastHold (0 for none)
 
 public:
 	ProgSetup();
@@ -158,6 +166,8 @@ public:
 	void selectNext(bool fwd);
 
 	virtual Layout* createLayout() override;
+	Popup* createPopupSaveLoad(bool save);
+
 	void setSelected(uint8 sel);
 private:
 	static Layout* getTicons();

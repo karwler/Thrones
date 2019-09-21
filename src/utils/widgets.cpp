@@ -140,7 +140,7 @@ void CheckBox::draw() const {
 }
 
 void CheckBox::onClick(vec2i mPos, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT)
+	if ((mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) && (lcall || rcall))
 		toggle();
 	Button::onClick(mPos, mBut);
 }
@@ -174,7 +174,7 @@ void Slider::onClick(vec2i, uint8 mBut) {
 }
 
 void Slider::onHold(vec2i mPos, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT) {
+	if (mBut == SDL_BUTTON_LEFT && (lcall || rcall)) {
 		World::scene()->capture = this;
 		if (int sp = sliderPos(); outRange(mPos.x, sp, sp + barSize))	// if mouse outside of slider
 			setSlider(mPos.x - barSize / 2);
@@ -339,10 +339,12 @@ SwitchBox::SwitchBox(Size relSize, const string* opts, uint ocnt, string curOpti
 }
 
 void SwitchBox::onClick(vec2i mPos, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT)
-		shiftOption(1);
-	else if (mBut == SDL_BUTTON_RIGHT)
-		shiftOption(-1);
+	if (lcall || rcall) {
+		if (mBut == SDL_BUTTON_LEFT)
+			shiftOption(1);
+		else if (mBut == SDL_BUTTON_RIGHT)
+			shiftOption(-1);
+	}
 	Button::onClick(mPos, mBut);
 }
 
@@ -382,7 +384,7 @@ void LabelEdit::drawTop() const {
 }
 
 void LabelEdit::onClick(vec2i, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT) {
+	if (mBut == SDL_BUTTON_LEFT && (lcall || ecall)) {
 		World::scene()->capture = this;
 		SDL_StartTextInput();
 		setCPos(uint(text.length()));

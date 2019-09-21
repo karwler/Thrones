@@ -2,8 +2,7 @@
 
 #include "utils/objects.h"
 
-class Settings {
-public:
+struct Settings {
 	static constexpr char loopback[] = "127.0.0.1";
 	static constexpr float gammaMax = 2.f;
 
@@ -34,8 +33,15 @@ public:
 	string address;
 	uint16 port;
 
-public:
 	Settings();
+};
+
+struct Setup {
+	umap<vec2s, Com::Tile> tiles;
+	umap<uint16, Com::Tile> mids;
+	umap<vec2s, Com::Piece> pieces;
+
+	void clear();
 };
 
 // handles all filesystem interactions
@@ -45,6 +51,7 @@ private:
 	static constexpr char fileMaterials[] = "data/materials.dat";
 	static constexpr char fileObjects[] = "data/objects.dat";
 	static constexpr char fileSettings[] = "settings.ini";
+	static constexpr char fileSetups[] = "setup.ini";
 	static constexpr char fileShaders[] = "data/shaders.dat";
 	static constexpr char fileTextures[] = "data/textures.dat";
 
@@ -59,6 +66,9 @@ private:
 	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
+	static constexpr char iniKeywordTile[] = "tile_";
+	static constexpr char iniKeywordMid[] = "middle_";
+	static constexpr char iniKeywordPiece[] = "piece_";
 
 	static constexpr char errorAudios[] = "failed to load sounds";
 	static constexpr char errorFile[] = "failed to load ";
@@ -71,6 +81,8 @@ public:
 	static int setWorkingDir();
 	static Settings* loadSettings();
 	static bool saveSettings(const Settings* sets);
+	static umap<string, Setup> loadSetups();
+	static bool saveSetups(const umap<string, Setup>& sets);
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
 	static umap<string, GMesh> loadObjects();

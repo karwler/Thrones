@@ -127,7 +127,6 @@ void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const vec3& 
 // GAME OBJECT
 
 const vec3 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f);
-const vec3 BoardObject::fireIconColor(1.f, 0.1f, 0.1f);
 
 BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, GCall ulcall, GCall urcall, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
 	Object(pos, vec3(0.f, rot, 0.f), vec3(size, 1.f, size), mesh, matl, tex, coli, rigid, show),
@@ -135,12 +134,11 @@ BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, G
 	ulcall(ulcall),
 	urcall(urcall),
 	diffuseFactor(1.f),
-	emissionFactor(0.f),
-	dragState(DragState::none)
+	emissionFactor(0.f)
 {}
 
 void BoardObject::draw() const {
-	if (dragState != DragState::move && show) {
+	if (show) {
 		glBindVertexArray(mesh->vao);
 		updateTransform();
 		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->emission * emissionFactor, matl->shininess, matl->alpha, tex);
@@ -148,34 +146,15 @@ void BoardObject::draw() const {
 	}
 }
 
-void BoardObject::drawTop() const {
-	if (dragState != DragState::none && show) {
-		vec3 ray = World::scene()->pickerRay(mousePos());
-		const GMesh* tmesh = dragState == DragState::move ? mesh : World::scene()->mesh("plane");
-		glBindVertexArray(tmesh->vao);
+void BoardObject::drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const {
+	vec3 ray = World::scene()->pickerRay(mousePos());
+	glBindVertexArray(tmesh->vao);
 
-		mat4 model;
-		setTransform(model, World::scene()->getCamera()->getPos() + ray * (getPos().y - upperPoz * 2.f - World::scene()->getCamera()->getPos().y / ray.y), getRot(), getScl());
-		updateTransform(model, getNormat());
-		updateColor(dragState == DragState::move ? matl->diffuse * moveIconColor : fireIconColor, matl->specular, vec3(0.f), matl->shininess, 0.9f, dragState == DragState::move ? tex : World::scene()->texture("crosshair"));
-		glDrawElements(tmesh->shape, tmesh->ecnt, GMesh::elemType, nullptr);
-	}
-}
-
-void BoardObject::onHold(vec2i, uint8 mBut) {
-	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
-		dragState = mBut == SDL_BUTTON_LEFT ? DragState::move : DragState::fire;
-		World::scene()->capture = this;
-		World::prun(hgcall, this);
-	}
-}
-
-void BoardObject::onUndrag(uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
-		dragState = DragState::none;
-		World::scene()->capture = nullptr;
-		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this);
-	}
+	mat4 model;
+	setTransform(model, World::scene()->getCamera()->getPos() - ray * (World::scene()->getCamera()->getPos().y / ray.y) + vec3(0.f, ypos, 0.f), getRot(), getScl());
+	updateTransform(model, getNormat());
+	updateColor(tdiffuse, matl->specular, vec3(0.f), matl->shininess, 0.9f, ttexture);
+	glDrawElements(tmesh->shape, tmesh->ecnt, GMesh::elemType, nullptr);
 }
 
 void BoardObject::setRaycast(bool on, bool dim) {
@@ -186,10 +165,31 @@ void BoardObject::setRaycast(bool on, bool dim) {
 // TILE
 
 Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show) :
-	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, World::scene()->mesh("tile"), World::scene()->material(type != Com::Tile::empty ? Com::tileNames[uint8(type)] : string()), World::scene()->blank(), World::scene()->collim("tile"), rigid, getShow(show, type)),
-	type(type),
+	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, nullptr, nullptr, 0, World::scene()->collim("tile"), rigid, getShow(show, type)),
 	breached(false)
-{}
+{
+	setTypeSilent(type);
+}
+
+void Tile::drawTop() const {
+	drawTopMesh(0.1f, mesh, matl->diffuse, tex);
+}
+
+void Tile::onHold(vec2i, uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT && ulcall) {
+		show = false;
+		World::scene()->capture = this;
+		World::prun(hgcall, this, mBut);
+	}
+}
+
+void Tile::onUndrag(uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT) {
+		show = true;
+		World::scene()->capture = nullptr;
+		World::prun(ulcall, this, mBut);
+	}
+}
 
 void Tile::onHover() {
 	emissionFactor += emissionSelect;
@@ -205,17 +205,20 @@ void Tile::onUnhover() {
 
 void Tile::setType(Com::Tile newType) {
 	setTypeSilent(newType);
-	show = matl;
+	show = type != Com::Tile::empty;
 }
 
 void Tile::setTypeSilent(Com::Tile newType) {
 	type = newType;
-	matl = type != Com::Tile::empty ? World::scene()->material(Com::tileNames[uint8(type)]) : nullptr;
+	mesh = World::scene()->mesh(type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress");
+	matl = World::scene()->material(type != Com::Tile::fortress ? "tile" : Com::tileNames[uint8(type)]);
+	tex = World::scene()->texture(type < Com::Tile::fortress ? Com::tileNames[uint8(type)] : string());
 }
 
 void Tile::setBreached(bool yes) {
 	breached = yes;
 	diffuseFactor = breached ? 0.5f : 1.f;
+	mesh = World::scene()->mesh(type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress");
 }
 
 void Tile::setInteractivity(Interactivity lvl, bool dim) {
@@ -245,11 +248,44 @@ void TileCol::update(const Com::Config& conf) {
 
 // PIECE
 
+const vec3 Piece::fireIconColor(1.f, 0.1f, 0.1f);
+const vec3 Piece::attackHorseColor(0.9f, 0.7f, 0.7f);
+
 Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show) :
 	BoardObject(pos, rot, size, hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), World::scene()->collim("piece"), rigid, show),
 	lastFortress(INT16_MAX),
 	type(type)
 {}
+
+void Piece::drawTop() const {
+	if (drawTopSelf)
+		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f : upperPoz, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
+	else {
+		glDisable(GL_DEPTH_TEST);
+		drawTopMesh(0.1f, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
+		glEnable(GL_DEPTH_TEST);
+	}
+}
+
+void Piece::onHold(vec2i, uint8 mBut) {
+	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
+		if (drawTopSelf = mBut == SDL_BUTTON_LEFT || type == Com::Piece::warhorse)
+			show = false;
+		else
+			SDL_ShowCursor(SDL_DISABLE);
+		World::scene()->capture = this;
+		World::prun(hgcall, this, mBut);
+	}
+}
+
+void Piece::onUndrag(uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
+		show = true;
+		SDL_ShowCursor(SDL_ENABLE);
+		World::scene()->capture = nullptr;
+		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this, mBut);
+	}
+}
 
 void Piece::onHover() {
 	emissionFactor += emissionSelect;

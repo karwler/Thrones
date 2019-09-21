@@ -121,7 +121,7 @@ void Game::processCode(Com::Code code, const uint8* data) {
 		}
 		break;
 	case Com::Code::move:
-		pieces.ene(reinterpret_cast<const uint16*>(data)[0])->enable(idToPos(reinterpret_cast<const uint16*>(data)[1]));
+		pieces[reinterpret_cast<const uint16*>(data)[0]].enable(idToPos(reinterpret_cast<const uint16*>(data)[1]));
 		break;
 	case Com::Code::kill:
 		pieces[*reinterpret_cast<const uint16*>(data)].disable();
@@ -131,11 +131,11 @@ void Game::processCode(Com::Code code, const uint8* data) {
 		break;
 	case Com::Code::record: {
 		uint16 ai = *reinterpret_cast<const uint16*>(data + 1), si = *reinterpret_cast<const uint16*>(data + 3);
-		eneRec = Record(ai < config.piecesSize ? &pieces[ai] : nullptr, si < config.piecesSize ? &pieces[si] : nullptr, Record::Action(data[0]));
+		eneRec = Record(ai < config.piecesSize ? &pieces[ai] : nullptr, si < config.piecesSize ? &pieces[si] : nullptr, Action(data[0]));
 		ownRec = Record();
-		if (eneRec.action & Record::ACT_MOVE)
+		if (eneRec.action & ACT_MOVE)
 			World::play("move");
-		else if (eneRec.action & Record::ACT_FIRE)
+		else if (eneRec.action & ACT_FIRE)
 			World::play("ammo");
 		myTurn = true;
 		prepareTurn();
@@ -158,7 +158,7 @@ vector<Object*> Game::initObjects() {
 	setTiles(tiles.ene(), -int16(config.homeHeight), false);
 	setMidTiles();
 	setTiles(tiles.own(), 1, true);
-	setPieces(pieces.own(), float(M_PI), &Program::eventMovePiece, World::scene()->material("ally"));
+	setPieces(pieces.own(), PI, &Program::eventMovePiece, World::scene()->material("ally"));
 	setPieces(pieces.ene(), 0.f, nullptr, World::scene()->material("enemy"));
 
 	// collect array of references to all objects
@@ -187,7 +187,7 @@ void Game::prepareMatch() {
 		it->setRaycast(myTurn && ptog(it->getPos()).hasNot(INT16_MIN));
 		it->hgcall = &Program::eventFavorStart;
 		it->ulcall = &Program::eventMove;
-		it->urcall = it->firingDistance() ? &Program::eventFire : nullptr;
+		it->urcall = it->firingDistance() ? &Program::eventFire : &Program::eventMove;
 	}
 	for (Piece* it = pieces.ene(); it != pieces.end(); it++) {
 		it->show = ptog(it->getPos()).hasNot(INT16_MIN);
@@ -326,74 +326,85 @@ void Game::useFavor() {
 	favorTotal--;
 }
 
-void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant) {
+void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch) {
 	// check attack, favor, move and survival conditions
 	vec2s spos = ptog(piece->getPos());
-	bool attacking = occupant && !isOwnPiece(occupant);
+	Tile *stil = getTile(spos), *dtil = getTile(pos);
+	Action action = occupant ? isOwnPiece(occupant) || forceSwitch ? ACT_SWAP : ACT_ATCK : ACT_MOVE;
 	Com::Tile favored = pollFavor();
-	if (ownRec.action & Record::ACT_MOVE) {
+	if ((ownRec.action & ACT_MOVE) && piece->getType() != Com::Piece::warhorse) {
 		static_cast<ProgMatch*>(World::state())->message->setText("You've already moved");
 		return;
 	}
-	if (!checkMove(piece, spos, occupant, pos, attacking, favored))
+	if (!checkMove(piece, spos, occupant, pos, action, favored))
 		return;
-	if (!survivalCheck(piece, spos, pos, attacking, occupant && isOwnPiece(occupant), favored)) {
-		failSurvivalCheck(piece->getType() != Com::Piece::throne ? piece : nullptr);
+	if (!survivalCheck(piece, stil, dtil, action, favored)) {
+		failSurvivalCheck(piece, action);
 		return;
 	}
 
 	// handle movement
-	if (attacking) {	// kill or breach
-		if (Tile* til = getTile(pos); piece->getType() != Com::Piece::throne && til->isUnbreachedFortress())	// breach fortress
-			updateFortress(til, true);
-		else {			// execute attack
+	bool end = true;
+	switch (action) {
+	case ACT_MOVE:	// regular move
+		if (stil->isBreachedFortress())
+			updateFortress(stil, false);	// restore fortress
+		placePiece(piece, pos);
+		ownRec.update(piece, nullptr, action);
+		break;
+	case ACT_ATCK: {	// kill or breach
+		bool okFort = dtil->isUnbreachedFortress();
+		if (okFort)
+			updateFortress(dtil, true);
+		if (!okFort || piece->getType() == Com::Piece::throne) {
 			removePiece(occupant);
 			placePiece(piece, pos);
 		}
-		ownRec.update(piece, nullptr, Record::ACT_MOVE | Record::ACT_ATCK);
-	} else if (occupant) {	// switch ally
+		ownRec.update(piece, occupant, ACT_MOVE | action);
+		break; }
+	case ACT_SWAP:	// switch ally or enemy
 		placePiece(occupant, spos);
 		placePiece(piece, pos);
-		ownRec.update(piece, occupant, Record::ACT_MOVE | Record::ACT_SWAP);
-	} else {				// regular move
-		if (Tile* til = getTile(spos); til->isBreachedFortress())
-			updateFortress(til, false);	// restore fortress
-		placePiece(piece, pos);
-		ownRec.update(piece, nullptr, Record::ACT_MOVE);
+		ownRec.update(piece, occupant, ACT_MOVE | action);
+		if (piece->getType() == Com::Piece::warhorse) {
+			netcp->sendData();
+			end = false;
+		}
 	}
 	World::play("move");
-	concludeAction();
+	concludeAction(end);
 }
 
 void Game::pieceFire(Piece* killer, vec2s pos, Piece* piece) {
 	vec2s kpos = ptog(killer->getPos());
+	Tile* dtil = getTile(pos);
 	Com::Tile favored = pollFavor();
-	if (ownRec.action & Record::ACT_FIRE) {
+	if (ownRec.action & ACT_FIRE) {
 		static_cast<ProgMatch*>(World::state())->message->setText("You've already fired");
 		return;
 	}
 	if (!checkFire(killer, kpos, piece, pos))	// check rules
 		return;
-	if (!survivalCheck(killer, kpos, pos, false, false, favored)) {
-		failSurvivalCheck(nullptr);
+	if (!survivalCheck(killer, getTile(kpos), dtil, ACT_FIRE, favored)) {	// occupant must be guaranteed not to be an ally
+		failSurvivalCheck(killer, ACT_FIRE);
 		return;
 	}
 
-	if (Tile* til = getTile(pos); til->isUnbreachedFortress())	// breach fortress
-		updateFortress(til, true);
+	if (dtil->isUnbreachedFortress())	// breach fortress
+		updateFortress(dtil, true);
 	else {	// regular fire
-		if (til->isBreachedFortress())
-			updateFortress(til, false);	// restore fortress
+		if (dtil->isBreachedFortress())
+			updateFortress(dtil, false);	// restore fortress
 		removePiece(piece);
 	}
-	ownRec.update(killer, nullptr, Record::ACT_FIRE);
+	ownRec.update(killer, nullptr, ACT_FIRE);
 	World::play("ammo");
-	concludeAction();
+	concludeAction(true);
 }
 
-void Game::concludeAction() {
+void Game::concludeAction(bool end) {
 	if (!checkWin()) {
-		if (!config.multistage || !ownRec.actor->firingDistance() || (ownRec.action & (Record::ACT_MOVE | Record::ACT_FIRE)) == (Record::ACT_MOVE | Record::ACT_FIRE) || ((ownRec.action & Record::ACT_MOVE) && firstTurn))
+		if (end && (!config.multistage || !ownRec.actor->firingDistance() || (ownRec.action & (ACT_MOVE | ACT_FIRE)) == (ACT_MOVE | ACT_FIRE) || ((ownRec.action & ACT_MOVE) && firstTurn)))
 			endTurn();
 		else {
 			setOwnPiecesInteract(false, true);
@@ -404,7 +415,7 @@ void Game::concludeAction() {
 }
 
 void Game::placeDragon(vec2s pos, Piece* occupant) {
-	if (Tile* til = getTile(pos); til->getType() == Com::Tile::fortress && isHomeTile(til)) {		// tile needs to be a home fortress
+	if (Tile* til = getTile(pos); isHomeTile(til) && (til->getType() == Com::Tile::fortress || (til->getType() == Com::Tile::mountain && !occupant))) {		// tile needs to be a home fortress or unoccupied homeland mountain
 		static_cast<ProgMatch*>(World::state())->decreaseDragonIcon();
 		if (occupant)
 			removePiece(occupant);
@@ -483,12 +494,13 @@ Piece* Game::findPiece(vec2s pos) {
 	return pce != pieces.end() ? pce : nullptr;
 }
 
-bool Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor) {
+bool Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor) {
 	if (pos == dst)
 		return false;
 
 	Tile* dtil = getTile(dst);
-	if (attacking) {
+	switch (action) {
+	case ACT_ATCK:
 		if (firstTurn) {
 			static_cast<ProgMatch*>(World::state())->message->setText("Can't attack on first turn");
 			return false;
@@ -497,7 +509,8 @@ bool Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool a
 			return checkMoveDestination(pos, dst, favor, &Game::collectTilesBySingle);
 		else if (!checkAttack(piece, occupant, dtil))
 			return false;
-	} else if (occupant) {
+		break;
+	case ACT_SWAP:
 		if (piece->getType() == occupant->getType()) {
 			static_cast<ProgMatch*>(World::state())->message->setText("Can't swap with a piece of the same type");
 			return false;
@@ -513,9 +526,9 @@ bool Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool a
 	case Com::Piece::spearman:
 		return checkMoveDestination(pos, dst, favor, getTile(pos)->getType() == Com::Tile::water && dtil->getType() == Com::Tile::water ? &Game::collectTilesByType : &Game::collectTilesBySingle);
 	case Com::Piece::lancer:
-		return checkMoveDestination(pos, dst, favor, getTile(pos)->getType() == Com::Tile::plains && dtil->getType() == Com::Tile::plains && !attacking ? &Game::collectTilesByType : &Game::collectTilesBySingle);
+		return checkMoveDestination(pos, dst, favor, getTile(pos)->getType() == Com::Tile::plains && dtil->getType() == Com::Tile::plains && action != ACT_ATCK ? &Game::collectTilesByType : &Game::collectTilesBySingle);
 	case Com::Piece::dragon:
-		return !attacking ? checkMoveDestination(pos, dst, favor, &Game::collectTilesByArea, config.dragonDist, spaceAvailible, config.dragonDiag ? adjacentFull.data() : adjacentStraight.data(), uint8(config.dragonDiag ? adjacentFull.size() : adjacentStraight.size())) : checkMoveDestination(pos, dst, favor, &Game::collectTilesBySingle);
+		return action != ACT_ATCK ? checkMoveDestination(pos, dst, favor, &Game::collectTilesByArea, config.dragonDist, spaceAvailible, config.dragonDiag ? adjacentFull.data() : adjacentStraight.data(), uint8(config.dragonDiag ? adjacentFull.size() : adjacentStraight.size())) : checkMoveDestination(pos, dst, favor, &Game::collectTilesBySingle);
 	}
 	return checkMoveDestination(pos, dst, favor, &Game::collectTilesBySingle);
 }
@@ -571,14 +584,21 @@ void Game::highlightMoveTiles(Piece* pce) {
 		return;
 
 	vec2s pos = ptog(pce->getPos());
+	Com::Tile src = getTile(pos)->getType();
 	Com::Tile favor = checkFavor();
 	uset<uint16> tcol;
+
+	if (favor == Com::Tile::forest)
+		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
+			if (vec2s tp = ptog(it->getPos()); tp != pos && getTile(tp)->getType() == Com::Tile::forest)
+				tcol.insert(posToId(tp));
+
 	switch (bool fu; pce->getType()) {
 	case Com::Piece::spearman:
-		tcol = getTile(pos)->getType() == Com::Tile::water ? collectTilesByType(pos, favor, fu) : collectTilesBySingle(pos, favor, fu);
+		tcol = src == Com::Tile::water ? collectTilesByType(pos, favor, fu) : collectTilesBySingle(pos, favor, fu);
 		break;
 	case Com::Piece::lancer:
-		tcol = getTile(pos)->getType() == Com::Tile::plains ? collectTilesByType(pos, favor, fu) : collectTilesBySingle(pos, favor, fu);
+		tcol = src == Com::Tile::plains ? collectTilesByType(pos, favor, fu) : collectTilesBySingle(pos, favor, fu);
 		break;
 	case Com::Piece::dragon:
 		tcol = collectTilesByArea(pos, favor, fu, config.dragonDist, spaceAvailible, config.dragonDiag ? adjacentFull.data() : adjacentStraight.data(), uint8(config.dragonDiag ? adjacentFull.size() : adjacentStraight.size()));
@@ -600,7 +620,7 @@ bool Game::checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst) {
 		return false;
 	}
 	if (pos == dst) {
-		static_cast<ProgMatch*>(World::state())->message->setText("Suicide is not yet implemented");
+		static_cast<ProgMatch*>(World::state())->message->setText("Can't commit suicide");
 		return false;
 	}
 	if (isOwnPiece(victim)) {
@@ -614,11 +634,7 @@ bool Game::checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst) {
 			static_cast<ProgMatch*>(World::state())->message->setText("Can't fire at a " + Com::pieceNames[uint8(victim->getType())] + " in the " + Com::tileNames[uint8(dtil->getType())] + 's');
 			return false;
 		}
-		if (killer->getType() == Com::Piece::crossbowman && (dtil->getType() == Com::Tile::forest || dtil->getType() == Com::Tile::mountain)) {
-			static_cast<ProgMatch*>(World::state())->message->setText(firstUpper(Com::pieceNames[uint8(killer->getType())]) + " can't fire at " + (dtil->getType() == Com::Tile::forest ? "a ": "") + Com::tileNames[uint8(dtil->getType())] + (dtil->getType() == Com::Tile::mountain ? "s" : ""));
-			return false;
-		}
-		if (killer->getType() == Com::Piece::catapult && dtil->getType() == Com::Tile::forest) {
+		if ((killer->getType() == Com::Piece::crossbowman || killer->getType() == Com::Piece::catapult) && dtil->getType() == Com::Tile::forest) {
 			static_cast<ProgMatch*>(World::state())->message->setText(firstUpper(Com::pieceNames[uint8(killer->getType())]) + " can't fire at a " + Com::tileNames[uint8(dtil->getType())]);
 			return false;
 		}
@@ -666,31 +682,29 @@ bool Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) {
 	return true;
 }
 
-bool Game::survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking, bool switching, Com::Tile favor) {
-	Com::Tile src = getTile(spos)->getType();
-	Com::Tile dst = attacking ? getTile(dpos)->getType() : Com::Tile::empty;	// dst only relevant when attacking
-	if ((src != Com::Tile::mountain && src != Com::Tile::water && dst != Com::Tile::mountain && dst != Com::Tile::water) || piece->getType() == Com::Piece::dragon)
-		return true;
-	if ((piece->getType() == Com::Piece::ranger && src == Com::Tile::mountain && dst != Com::Tile::water) || (piece->getType() == Com::Piece::spearman && src == Com::Tile::water && dst != Com::Tile::mountain))
-		return true;
-	if ((switching && favor == Com::Tile::water) || favor == Com::Tile::mountain) {
+bool Game::survivalCheck(Piece* piece, Tile* stil, Tile* dtil, Action action, Com::Tile favor) {
+	Com::Tile src = action != ACT_FIRE ? stil->getType() : Com::Tile::empty;								// don't check src when firing (only check dst)
+	Com::Tile dst = action == ACT_SWAP || action == ACT_FIRE ? dtil->getType() : Com::Tile::empty;	// check dst when switching/firing (in addition to src when switching)
+	if (!(dtil->isUnbreachedFortress() && (action == ACT_ATCK || action == ACT_FIRE))) {	// always run survival check when attacking a fortress
+		if ((src != Com::Tile::mountain && src != Com::Tile::water && dst != Com::Tile::mountain && dst != Com::Tile::water) || piece->getType() == Com::Piece::dragon)
+			return true;
+		if ((piece->getType() == Com::Piece::ranger && src == Com::Tile::mountain && dst != Com::Tile::water) || (piece->getType() == Com::Piece::spearman && src == Com::Tile::water && dst != Com::Tile::mountain))
+			return true;
+	}
+	if (favor == Com::Tile::mountain || (action == ACT_SWAP && favor == Com::Tile::water)) {
 		useFavor();
 		return true;
 	}
 	return randDist(randGen) < config.survivalPass;
 }
 
-void Game::failSurvivalCheck(Piece* piece) {
-	if (piece) {
+void Game::failSurvivalCheck(Piece* piece, Action action) {
+	if (piece->getType() != Com::Piece::throne && (action == ACT_ATCK || config.survivalKill)) {
 		removePiece(piece);
-		if (!checkWin()) {
-			netcp->sendData();
-			static_cast<ProgMatch*>(World::state())->message->setText("Failed survival check");
-		}
-	} else {
+		netcp->sendData();
+	} else
 		endTurn();
-		static_cast<ProgMatch*>(World::state())->message->setText("Failed action");
-	}
+	static_cast<ProgMatch*>(World::state())->message->setText("Failed survival check");
 }
 
 bool Game::checkWin() {
@@ -776,7 +790,7 @@ void Game::placePiece(Piece* piece, vec2s pos) {
 		}
 	piece->enable(pos);
 	netcp->push(Com::Code::move);
-	netcp->push(vector<uint16>({ uint16(piece - pieces.own()), invertId(posToId(pos)) }));
+	netcp->push(vector<uint16>({ inversePieceId(piece), invertId(posToId(pos)) }));
 }
 
 void Game::removePiece(Piece* piece) {

@@ -18,8 +18,7 @@ Date Date::now() {
 	return Date(uint8(tim->tm_sec), uint8(tim->tm_min), uint8(tim->tm_hour), uint8(tim->tm_mday), uint8(tim->tm_mon + 1), int16(tim->tm_year + 1900), uint8(tim->tm_wday ? tim->tm_wday : 7));
 }
 
-Config::Config(string name) :
-	name(std::move(name)),
+Config::Config() :
 	homeWidth(9),
 	homeHeight(4),
 	survivalPass(randomLimit / 2),
@@ -27,6 +26,7 @@ Config::Config(string name) :
 	dragonDist(4),
 	dragonDiag(true),
 	multistage(false),
+	survivalKill(false),
 	tileAmounts({ 11, 10, 7, 7, 1 }),
 	middleAmounts({ 1, 1, 1, 1 }),
 	pieceAmounts({ 2, 2, 2, 1, 1, 2, 1, 2, 1, 1 }),
@@ -107,6 +107,7 @@ void Config::toComData(uint8* data) const {
 	*bp++ = dragonDist;
 	*bp++ = dragonDiag;
 	*bp++ = multistage;
+	*bp++ = survivalKill;
 
 	sp = std::copy(tileAmounts.begin(), tileAmounts.end(), reinterpret_cast<uint16*>(bp));
 	sp = std::copy(middleAmounts.begin(), middleAmounts.end(), sp);
@@ -131,6 +132,7 @@ void Config::fromComData(const uint8* data) {
 	dragonDist = *bp++;
 	dragonDiag = *bp++;
 	multistage = *bp++;
+	survivalKill = *bp++;
 
 	sp = reinterpret_cast<const uint16*>(bp);
 	std::copy_n(sp, tileAmounts.size(), tileAmounts.begin());
@@ -157,7 +159,7 @@ uint16 Config::dataSize(Code code) const {
 	case Code::full:
 		return sizeof(Code);
 	case Code::setup:
-		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + sizeof(uint8) * 5 + tileAmounts.size() * sizeof(tileAmounts[0]) + middleAmounts.size() * sizeof(middleAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
+		return uint16(sizeof(Code) + sizeof(bool) + sizeof(homeWidth) + sizeof(homeHeight) + sizeof(uint8) * 6 + tileAmounts.size() * sizeof(tileAmounts[0]) + middleAmounts.size() * sizeof(middleAmounts[0]) + pieceAmounts.size() * sizeof(pieceAmounts[0]) + sizeof(winFortress) + sizeof(winThrone) + capturers.size() * sizeof(capturers[0]) + sizeof(shiftLeft) + sizeof(shiftNear));
 	case Code::tiles:
 		return tileCompressionEnd();
 	case Code::pieces:
@@ -177,21 +179,20 @@ uint16 Config::dataSize(Code code) const {
 }
 
 string Config::toIniText() const {
-	string text = '[' + name + ']' + linend;
-	text += makeIniLine(keywordSize, toStr(homeWidth) + ' ' + toStr(homeHeight));
+	string text = makeIniLine(keywordSize, toStr(homeWidth) + ' ' + toStr(homeHeight));
 	text += makeIniLine(keywordSurvival, toStr(survivalPass));
 	text += makeIniLine(keywordFavors, toStr(favorLimit));
 	text += makeIniLine(keywordDragonDist, toStr(dragonDist));
 	text += makeIniLine(keywordDragonDiag, btos(dragonDiag));
 	text += makeIniLine(keywordMultistage, btos(multistage));
+	text += makeIniLine(keywordSurvivalKill, btos(survivalKill));
 	writeAmounts(text, keywordTile, tileNames, tileAmounts);
 	writeAmounts(text, keywordMiddle, tileNames, middleAmounts);
 	writeAmounts(text, keywordPiece, pieceNames, pieceAmounts);
 	text += makeIniLine(keywordWinFortress, toStr(winFortress));
 	text += makeIniLine(keywordWinThrone, toStr(winThrone));
 	text += makeIniLine(keywordCapturers, capturersString());
-	text += makeIniLine(keywordShift, string(shiftLeft ? keywordLeft : keywordRight) + ' ' + (shiftNear ? keywordNear : keywordFar));
-	return text;
+	return text + makeIniLine(keywordShift, string(shiftLeft ? keywordLeft : keywordRight) + ' ' + (shiftNear ? keywordNear : keywordFar));
 }
 
 void Config::fromIniLine(const string& line) {
@@ -207,12 +208,14 @@ void Config::fromIniLine(const string& line) {
 		dragonDiag = stob(it.second);
 	else if (!strcicmp(it.first, keywordMultistage))
 		multistage = stob(it.second);
-	else if (!strncicmp(it.first, keywordTile, strlen(keywordTile)))
-		readAmount(it, keywordTile, tileNames, tileAmounts);
-	else if (!strncicmp(it.first, keywordMiddle, strlen(keywordMiddle)))
-		readAmount(it, keywordMiddle, tileNames, middleAmounts);
-	else if (!strncicmp(it.first, keywordPiece, strlen(keywordPiece)))
-		readAmount(it, keywordPiece, pieceNames, pieceAmounts);
+	else if (!strcicmp(it.first, keywordSurvivalKill))
+		survivalKill = stob(it.second);
+	else if (sizet len = strlen(keywordTile); !strncicmp(it.first, keywordTile, len))
+		readAmount(it, len, tileNames, tileAmounts);
+	else if (len = strlen(keywordMiddle); !strncicmp(it.first, keywordMiddle, len))
+		readAmount(it, len, tileNames, middleAmounts);
+	else if (len = strlen(keywordPiece); !strncicmp(it.first, keywordPiece, len))
+		readAmount(it, len, pieceNames, pieceAmounts);
 	else if (!strcicmp(it.first, keywordWinFortress))
 		winFortress = uint16(sstol(it.second));
 	else if (!strcicmp(it.first, keywordWinThrone))
@@ -258,22 +261,23 @@ void Config::readShift(const string& line) {
 	}
 }
 
-vector<Config> Com::loadConfs(const string& file) {
-	vector<Config> confs;
+umap<string, Config> Config::load(const string& file) {
+	umap<string, Config> confs;
+	umap<string, Config>::iterator cit;
 	for (const string& line : readFileLines(file)) {
 		if (string title = readIniTitle(line); !title.empty())
-			confs.emplace_back(std::move(title));
-		else
-			confs.back().fromIniLine(line);
+			cit = confs.emplace(std::move(title), Config()).first;
+		else if (!confs.empty())
+			cit->second.fromIniLine(line);
 	}
-	return !confs.empty() ? confs : vector<Config>(1);
+	return !confs.empty() ? confs : umap<string, Config>({ pair(defaultName, Config()) });
 }
 
-void Com::saveConfs(const vector<Config>& confs, const string& file) {
+bool Config::save(const umap<string, Config>& confs, const string& file) {
 	string text;
-	for (const Config& cfg : confs)
-		text += cfg.toIniText() + linend;
-	writeFile(file, text);
+	for (const pair<const string, Config>& it : confs)
+		text += makeIniLine(it.first) + it.second.toIniText() + linend;
+	return writeFile(file, text);
 }
 
 void Com::sendRejection(TCPsocket server) {

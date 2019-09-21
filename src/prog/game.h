@@ -10,16 +10,17 @@ struct FavorState {
 	FavorState();
 };
 
+enum Action : uint8 {
+	ACT_NONE = 0,
+	ACT_MOVE = 1,
+	ACT_SWAP = 2,
+	ACT_ATCK = 4,
+	ACT_FIRE = 8
+};
+ENUM_OPERATIONS(Action, uint8)
+
 class Record {
 public:
-	enum Action : uint8 {
-		ACT_NONE = 0,
-		ACT_MOVE = 1,
-		ACT_SWAP = 2,
-		ACT_ATCK = 4,
-		ACT_FIRE = 8
-	};
-
 	Piece* actor;	// the moved piece/the killer
 	Piece* swapper;	// who swapped with acter
 	Action action;
@@ -34,7 +35,6 @@ private:
 	void updateProtectionColor(Piece* pce, bool on) const;
 	bool pieceProtected(Piece* pce) const;		// piece mustn't be nullptr
 };
-ENUM_OPERATIONS(Record::Action, uint8)
 
 inline bool Record::pieceProtected(Piece* pce) const {
 	return pce->getType() == Com::Piece::warhorse && (action & (ACT_SWAP | ACT_ATCK | ACT_FIRE));
@@ -73,14 +73,15 @@ public:
 	Game();
 	~Game();
 
+	TileCol& getTiles();
 	Tile* getTile(vec2s pos);
 	bool isHomeTile(Tile* til) const;
 	bool isEnemyTile(Tile* til) const;
 	PieceCol& getPieces();
 	Piece* getOwnPieces(Com::Piece type);
-	Piece* getEnePieces();
 	Piece* findPiece(vec2s pos);
 	bool isOwnPiece(Piece* pce) const;
+	bool isEnemyPiece(Piece* pce) const;
 	Object* getScreen();
 	const Com::Config& getConfig() const;
 	bool getMyTurn() const;
@@ -118,7 +119,7 @@ public:
 	void takeOutFortress();
 
 	void updateFavorState();
-	void pieceMove(Piece* piece, vec2s pos, Piece* occupant);
+	void pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch);
 	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
 	void placeDragon(vec2s pos, Piece* occupant);
 	void endTurn();
@@ -141,8 +142,8 @@ private:
 	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
 	void useFavor();
 
-	void concludeAction();
-	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, bool attacking, Com::Tile favor);
+	void concludeAction(bool end);
+	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor);
 	template <class F, class... A> bool checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args);
 	uset<uint16> collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed);
 	uset<uint16> collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
@@ -153,8 +154,8 @@ private:
 	bool checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
 	uset<uint16> collectTilesByDistance(vec2s pos, int16 dist);
 	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
-	bool survivalCheck(Piece* piece, vec2s spos, vec2s dpos, bool attacking, bool switching, Com::Tile favor);	// in this case "attacking" only refers to attack by movement
-	void failSurvivalCheck(Piece* piece);	// pass null for soft fail
+	bool survivalCheck(Piece* piece, Tile* stil, Tile* dtil, Action action, Com::Tile favor);
+	void failSurvivalCheck(Piece* piece, Action action);
 	bool checkWin();
 	bool checkThroneWin(Piece* thrones);
 	bool checkFortressWin();
@@ -175,6 +176,10 @@ private:
 
 inline Game::~Game() {
 	gridat.free();
+}
+
+inline TileCol& Game::getTiles() {
+	return tiles;
 }
 
 inline void Game::connect() {
@@ -205,12 +210,12 @@ inline Piece* Game::getOwnPieces(Com::Piece type) {
 	return getPieces(pieces.own(), type);
 }
 
-inline Piece* Game::getEnePieces() {
-	return pieces.ene();
-}
-
 inline bool Game::isOwnPiece(Piece* pce) const {
 	return pce < pieces.ene();
+}
+
+inline bool Game::isEnemyPiece(Piece* pce) const {
+	return pce >= pieces.ene();
 }
 
 inline Object* Game::getScreen() {

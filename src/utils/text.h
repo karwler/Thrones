@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <array>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -57,6 +56,7 @@ using pairStr = pair<string, string>;
 
 using glm::mat3;
 using glm::mat4;
+using glm::quat;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
@@ -297,6 +297,16 @@ U cycle(U pos, U siz, S mov) {
 	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
 }
 
+template <class T>
+vector<string> sortNames(const umap<string, T>& vmap) {
+	vector<string> names(vmap.size());
+	vector<string>::iterator nit = names.begin();
+	for (const pair<const string, T>& cit : vmap)
+		*nit++ = cit.first;
+	std::sort(names.begin(), names.end(), strnatless);
+	return names;
+}
+
 // files
 
 vector<string> readFileLines(const string& file);
@@ -333,51 +343,53 @@ T readFile(const string& file) {
 class Arguments {
 private:
 	vector<string> vals;
-	uset<string> flags;
-	umap<string, string> opts;
+	uset<char> flags;
+	umap<char, string> opts;
 
 public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt);
-	Arguments(int argc, wchar** argv, const uset<string>& flg, const uset<string>& opt);
+	Arguments(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt);
 #endif
-	Arguments(int argc, char** argv, const uset<string>& flg, const uset<string>& opt);
+	Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt);
 
 #ifdef _WIN32
-	void setArgs(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt);
+	void setArgs(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
 #endif
-	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<string>& flg, const uset<string>& opt);
+	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt);
 
 	const vector<string>& getVals() const;
-	bool hasFlag(const char* key) const;
-	const char* getOpt(const char* key) const;
+	bool hasFlag(char key) const;
+	const char* getOpt(char key) const;
 };
 #ifdef _WIN32
-inline Arguments::Arguments(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt) {
+inline Arguments::Arguments(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(pCmdLine, flg, opt);
 }
 
-inline Arguments::Arguments(int argc, wchar** argv, const uset<string>& flg, const uset<string>& opt) {
+inline Arguments::Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(argc - 1, argv + 1, wtos, flg, opt);
 }
 #endif
-inline Arguments::Arguments(int argc, char** argv, const uset<string>& flg, const uset<string>& opt) {
+inline Arguments::Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(argc - 1, argv + 1, stos, flg, opt);
 }
 
 template <class C, class F>
-void Arguments::setArgs(int argc, C** argv, F conv, const uset<string>& flg, const uset<string>& opt) {
+void Arguments::setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt) {
 	for (int i = 0; i < argc; i++) {
-		if (argv[i][0] == '-') {
-			if (string key = conv(argv[i] + 1); opt.count(key) && i + 1 < argc)
-				opts.emplace(key, conv(argv[++i]));
-			else if (flg.count(key))
-				flags.insert(key);
-			else
-				vals.push_back(conv(argv[i]));
+		if (char key; argv[i][0] == '-') {
+			for (int j = 1; key = char(argv[i][j]); j++) {
+				if (!argv[i][j+1] && i + 1 < argc && opt.count(key)) {
+					opts.emplace(key, conv(argv[++i]));
+					break;
+				}
+				if (flg.count(key))
+					flags.insert(key);
+			}
 		} else
-			vals.push_back(conv(argv[i]));
+			vals.push_back(conv(argv[i] + (argv[i][0] == '\\' && (argv[i][1] == '-' || argv[i][1] == '\\'))));
 	}
 	vals.shrink_to_fit();
 }
@@ -386,11 +398,11 @@ inline const vector<string>& Arguments::getVals() const {
 	return vals;
 }
 
-inline bool Arguments::hasFlag(const char* key) const {
+inline bool Arguments::hasFlag(char key) const {
 	return flags.count(key);
 }
 
-inline const char* Arguments::getOpt(const char* key) const {
-	umap<string, string>::const_iterator it = opts.find(key);
+inline const char* Arguments::getOpt(char key) const {
+	umap<char, string>::const_iterator it = opts.find(key);
 	return it != opts.end() ? it->second.c_str() : nullptr;
 }

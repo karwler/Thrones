@@ -2,53 +2,66 @@
 
 #include "server/server.h"
 
-// handles networking
-class Netcp {
-public:
-	uint16 sendSize;	// shall not exceed data size, is never actually checked though
-	uint8 sendb[Com::recvSize];
-protected:
-	Com::Code recvState;
-	uint16 recvPos;
-	uint8 recvb[Com::recvSize];
+class NetcpHost;
 
+struct NetcpException {
+	const string message;
+
+	NetcpException(string&& msg);
+};
+
+inline NetcpException::NetcpException(string&& msg) :
+	message(std::move(msg))
+{}
+
+// handles networking (for joining/hosting rooms on a remote sever)
+class Netcp {
+protected:
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
+	Buffer recvb;
+	void (*cncproc)(uint8*);
 
 public:
-	Netcp();
+	Netcp(uint8 maxSockets = 1);	// maxSockets shall only be altered by NetcpHost
 	virtual ~Netcp();
 
 	virtual void connect();
 	virtual void tick();
-	bool sendData();
+	void sendData(Buffer& sendb);
+	template <class T> void sendData(const vector<T>& vec);
+	void sendData(Com::Code code);
 
-	template <class T> void push(T val);
-	template <class T> void push(const vector<T>& vec);
+	static void cprocDiscard(uint8* data);
+	static void cprocWait(uint8* data);
+	static void cprocLobby(uint8* data);
+	static void cprocGame(uint8* data);
+	void setCncproc(void (*proc)(uint8*));
+
 protected:
-	void openSockets(const char* host, TCPsocket& sock, uint8 num);	// throws const char* error message
+	void openSockets(const char* host, TCPsocket& sock);
 	void closeSocket(TCPsocket& sock);
-	void closeSockets(TCPsocket& last);
 	void checkSocket();
 };
 
 template <class T>
-inline void Netcp::push(T val) {
-	std::copy_n(reinterpret_cast<const uint8*>(&val), sizeof(val), sendb + sendSize);
-	sendSize += sizeof(val);
+void Netcp::sendData(const vector<T>& vec) {
+	if (uint16 len = uint16(vec.size() * sizeof(T)); SDLNet_TCP_Send(socket, vec.data(), len) != len)
+		throw NetcpException(SDLNet_GetError());
 }
 
-template <class T>
-void Netcp::push(const vector<T>& vec) {
-	uint16 len = uint16(vec.size() * sizeof(T));
-	std::copy_n(reinterpret_cast<const uint8*>(vec.data()), len, sendb + sendSize);
-	sendSize += len;
+inline void Netcp::cprocDiscard(uint8* data) {
+	std::cerr << "unexprected data with code " << uint(data[0]) << std::endl;
 }
 
+inline void Netcp::setCncproc(void (*proc)(uint8*)) {
+	cncproc = proc;
+}
+
+// for running one room on self as server
 class NetcpHost : public Netcp {
 private:
 	TCPsocket server;
-	void (NetcpHost::*tickfunc)();
 
 public:
 	NetcpHost();
@@ -56,7 +69,4 @@ public:
 
 	virtual void connect() override;
 	virtual void tick() override;
-private:
-	void tickWait();
-	void tickGame();
 };

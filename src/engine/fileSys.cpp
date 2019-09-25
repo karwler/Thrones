@@ -100,6 +100,82 @@ bool FileSys::saveSettings(const Settings* sets) {
 	return writeFile(fileSettings, text);
 }
 
+umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
+	umap<string, Com::Config> confs;
+	Com::Config* cit = nullptr;
+	for (const string& line : readFileLines(file)) {
+		if (string title = readIniTitle(line); !title.empty())
+			cit = &confs.emplace(std::move(title), Com::Config()).first->second;
+		else if (cit) {
+			if (pairStr it = readIniLine(line); !strcicmp(it.first, iniKeywordBoardSize))
+				cit->homeSize = vec2u::get(it.second, strtoul, 0);
+			else if (!strcicmp(it.first, iniKeywordSurvival))
+				cit->survivalPass = uint8(sstoul(it.second));
+			else if (!strcicmp(it.first, iniKeywordFavors))
+				cit->favorLimit = uint8(sstoul(it.second));
+			else if (!strcicmp(it.first, iniKeywordDragonDist))
+				cit->dragonDist = uint8(sstoul(it.second));
+			else if (!strcicmp(it.first, iniKeywordDragonDiag))
+				cit->dragonDiag = stob(it.second);
+			else if (!strcicmp(it.first, iniKeywordMultistage))
+				cit->multistage = stob(it.second);
+			else if (!strcicmp(it.first, iniKeywordSurvivalKill))
+				cit->survivalKill = stob(it.second);
+			else if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
+				readAmount(it, len, Com::tileNames, cit->tileAmounts);
+			else if (len = strlen(iniKeywordMiddle); !strncicmp(it.first, iniKeywordMiddle, len))
+				readAmount(it, len, Com::tileNames, cit->middleAmounts);
+			else if (len = strlen(iniKeywordPiece); !strncicmp(it.first, iniKeywordPiece, len))
+				readAmount(it, len, Com::pieceNames, cit->pieceAmounts);
+			else if (!strcicmp(it.first, iniKeywordWinFortress))
+				cit->winFortress = uint16(sstol(it.second));
+			else if (!strcicmp(it.first, iniKeywordWinThrone))
+				cit->winThrone = uint16(sstol(it.second));
+			else if (!strcicmp(it.first, iniKeywordCapturers))
+				cit->readCapturers(it.second);
+			else if (!strcicmp(it.first, iniKeywordShift))
+				readShift(it.second, *cit);
+		}
+	}
+	return !confs.empty() ? confs : umap<string, Com::Config>{ pair(Com::Config::defaultName, Com::Config()) };
+}
+
+void FileSys::readShift(const string& line, Com::Config& conf) {
+	for (const char* pos = line.c_str(); *pos;) {
+		if (string word = readWordM(pos); !strcicmp(word, iniKeywordLeft))
+			conf.shiftLeft = true;
+		else if (!strcicmp(word, iniKeywordRight))
+			conf.shiftLeft = false;
+		else if (!strcicmp(word, iniKeywordNear))
+			conf.shiftNear = true;
+		else if (!strcicmp(word, iniKeywordFar))
+			conf.shiftNear = false;
+	}
+}
+
+bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* file) {
+	string text;
+	for (const pair<const string, Com::Config>& it : confs) {
+		text += makeIniLine(it.first);
+		text += makeIniLine(iniKeywordBoardSize, it.second.homeSize.toString());
+		text += makeIniLine(iniKeywordSurvival, toStr(it.second.survivalPass));
+		text += makeIniLine(iniKeywordFavors, toStr(it.second.favorLimit));
+		text += makeIniLine(iniKeywordDragonDist, toStr(it.second.dragonDist));
+		text += makeIniLine(iniKeywordDragonDiag, btos(it.second.dragonDiag));
+		text += makeIniLine(iniKeywordMultistage, btos(it.second.multistage));
+		text += makeIniLine(iniKeywordSurvivalKill, btos(it.second.survivalKill));
+		writeAmounts(text, iniKeywordTile, Com::tileNames, it.second.tileAmounts);
+		writeAmounts(text, iniKeywordMiddle, Com::tileNames, it.second.middleAmounts);
+		writeAmounts(text, iniKeywordPiece, Com::pieceNames, it.second.pieceAmounts);
+		text += makeIniLine(iniKeywordWinFortress, toStr(it.second.winFortress));
+		text += makeIniLine(iniKeywordWinThrone, toStr(it.second.winThrone));
+		text += makeIniLine(iniKeywordCapturers, it.second.capturersString());
+		text += makeIniLine(iniKeywordShift, string(it.second.shiftLeft ? iniKeywordLeft : iniKeywordRight) + ' ' + (it.second.shiftNear ? iniKeywordNear : iniKeywordFar));
+		text += linend;
+	}
+	return writeFile(file, text);
+}
+
 umap<string, Setup> FileSys::loadSetups() {
 	umap<string, Setup> sets;
 	umap<string, Setup>::iterator sit;
@@ -108,11 +184,11 @@ umap<string, Setup> FileSys::loadSetups() {
 			sit = sets.emplace(std::move(title), Setup()).first;
 		else if (pairStr it = readIniLine(line); !sets.empty()) {
 			if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
-				sit->second.tiles[vec2s::get(it.first.substr(len), strtol, 0)] = strToEnum<Com::Tile>(Com::tileNames, it.second);
-			else if (len = strlen(iniKeywordMid); !strncicmp(it.first, iniKeywordMid, len))
-				sit->second.mids[uint16(sstoul(it.first.substr(len)))] = strToEnum<Com::Tile>(Com::tileNames, it.second);
+				sit->second.tiles.emplace(vec2s::get(it.first.substr(len), strtol, 0), strToEnum<Com::Tile>(Com::tileNames, it.second));
+			else if (len = strlen(iniKeywordMiddle); !strncicmp(it.first, iniKeywordMiddle, len))
+				sit->second.mids.emplace(uint16(sstoul(it.first.substr(len))), strToEnum<Com::Tile>(Com::tileNames, it.second));
 			else if (len = strlen(iniKeywordPiece); !strncicmp(it.first, iniKeywordPiece, len))
-				sit->second.pieces[vec2s::get(it.first.substr(len), strtol, 0)] = strToEnum<Com::Piece>(Com::pieceNames, it.second);
+				sit->second.pieces.emplace(vec2s::get(it.first.substr(len), strtol, 0), strToEnum<Com::Piece>(Com::pieceNames, it.second));
 		}
 	}
 	return sets;
@@ -122,11 +198,11 @@ bool FileSys::saveSetups(const umap<string, Setup>& sets) {
 	string text;
 	for (const pair<const string, Setup>& it : sets) {
 		text += makeIniLine(it.first);
-		for (const pair<const vec2s, Com::Tile>& ti : it.second.tiles)
+		for (const pair<vec2s, Com::Tile>& ti : it.second.tiles)
 			text += makeIniLine(iniKeywordTile + ti.first.toString("_"), Com::tileNames[uint8(ti.second)]);
-		for (const pair<const uint16, Com::Tile>& mi : it.second.mids)
-			text += makeIniLine(iniKeywordMid + toStr(mi.first), Com::tileNames[uint8(mi.second)]);
-		for (const pair<const vec2s, Com::Piece>& pi : it.second.pieces)
+		for (const pair<uint16, Com::Tile>& mi : it.second.mids)
+			text += makeIniLine(iniKeywordMiddle + toStr(mi.first), Com::tileNames[uint8(mi.second)]);
+		for (const pair<vec2s, Com::Piece>& pi : it.second.pieces)
 			text += makeIniLine(iniKeywordPiece + pi.first.toString("_"), Com::pieceNames[uint8(pi.second)]);
 		text += linend;
 	}
@@ -137,6 +213,7 @@ umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
 	World::window()->writeLog("loading audio");
 	FILE* ifh = fopen(fileAudios, defaultReadMode);
 	if (!ifh) {
+		constexpr char errorAudios[] = "failed to load sounds";
 		std::cerr << errorAudios << std::endl;
 		World::window()->writeLog(errorAudios);
 		return {};
@@ -166,6 +243,7 @@ umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
 			auds.emplace(std::move(name), sound);
 		else {
 			sound.free();
+			constexpr char errorFile[] = "failed to load ";
 			std::cerr << errorFile << name << std::endl;
 			World::window()->writeLog(errorFile + name);
 		}
@@ -177,11 +255,9 @@ umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
 umap<string, Material> FileSys::loadMaterials() {
 	World::window()->writeLog("loading materials");
 	FILE* ifh = fopen(fileMaterials, defaultReadMode);
-	if (!ifh) {
-		std::cerr << errorMaterials << std::endl;
-		World::window()->writeLog(errorMaterials);
-		return { pair(string(), Material()) };
-	}
+	if (!ifh)
+		throw std::runtime_error("failed to load materials");
+
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, Material> mtls(size + 1);
@@ -203,11 +279,9 @@ umap<string, Material> FileSys::loadMaterials() {
 umap<string, GMesh> FileSys::loadObjects() {
 	World::window()->writeLog("loading objects");
 	FILE* ifh = fopen(fileObjects, defaultReadMode);
-	if (!ifh) {
-		std::cerr << errorObjects << std::endl;
-		World::window()->writeLog(errorObjects);
-		return umap<string, GMesh>({ pair(string(), GMesh()) });
-	}
+	if (!ifh)
+		throw std::runtime_error("failed to load objects");
+
 	glUseProgram(World::geom()->program);
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
@@ -237,11 +311,9 @@ umap<string, GMesh> FileSys::loadObjects() {
 umap<string, string> FileSys::loadShaders() {
 	World::window()->writeLog("loading shaders");
 	FILE* ifh = fopen(fileShaders, defaultReadMode);
-	if (!ifh) {
-		std::cerr << errorShaders << std::endl;
-		World::window()->writeLog(errorShaders);
-		return umap<string, string>({ pair(string(), string()) });
-	}
+	if (!ifh)
+		throw std::runtime_error("failed to load shaders");
+
 	uint8 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, string> shds(size);
@@ -264,11 +336,9 @@ umap<string, string> FileSys::loadShaders() {
 umap<string, Texture> FileSys::loadTextures() {
 	World::window()->writeLog("loading textures");
 	FILE* ifh = fopen(fileTextures, defaultReadMode);
-	if (!ifh) {
-		std::cerr << errorTextures << std::endl;
-		World::window()->writeLog(errorTextures);
-		return { pair(string(), Texture::loadBlank()) };
-	}
+	if (!ifh)
+		throw std::runtime_error("failed to load textures");
+
 	uint16 size;
 	fread(&size, sizeof(size), 1, ifh);
 	umap<string, Texture> texs(size + 1);

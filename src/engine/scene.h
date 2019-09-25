@@ -9,8 +9,8 @@ public:
 	static constexpr float fov = 35.f;
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
-	static constexpr float pmaxSetup = PI / 2.f - PI / 10.f, pmaxMatch = PI / 2.f - PI / 20.f;
-	static constexpr float ymaxSetup = -PI / 3.f, ymaxMatch = PI * 2.f;
+	static constexpr float pmaxSetup = -PI / 2.f + PI / 10.f, pmaxMatch = -PI / 2.f + PI / 20.f;
+	static constexpr float ymaxSetup = PI / 6.f, ymaxMatch = PI * 2.f;
 	static const vec3 posSetup, posMatch;
 	static const vec3 latSetup, latMatch;
 	static const vec3 up, center;
@@ -51,11 +51,11 @@ inline const vec3& Camera::getLat() const {
 }
 
 inline float Camera::calcPitch(const vec3& pos, float dist) {
-	return std::asin(pos.y / dist);
+	return -std::asin(pos.y / dist);
 }
 
 inline float Camera::calcYaw(const vec3& pos, float dist) {
-	return std::acos(pos.x / dist) * (pos.z >= 0.f ? -1.f : 1.f);
+	return std::acos(pos.z / dist) * (pos.x >= 0.f ? 1.f : -1.f);
 }
 
 struct Light {
@@ -72,9 +72,10 @@ struct Light {
 struct ClickStamp {
 	Interactable* inter;
 	ScrollArea* area;
-	vec2i mPos;
+	vec2i pos;
+	uint8 but;
 
-	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i mPos = 0);
+	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i pos = INT_MIN, uint8 but = 0);
 };
 
 // defines change of object properties at a time
@@ -84,14 +85,15 @@ struct Keyframe {
 		CHG_POS = 1,
 		CHG_ROT = 2,
 		CHG_SCL = 4,
-		CHG_LAT = CHG_ROT
+		CHG_LAT = CHG_SCL
 	};
 
-	vec3 pos, rot, scl;	// rot = lat if applied to camera
-	float time;			// time difference between this and previous keyframe
-	Change change;		// what members get affected
+	vec3 pos, scl;	// scl = lat if applied to camera
+	quat rot;
+	float time;		// time difference between this and previous keyframe
+	Change change;	// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const vec3& rot = vec3(), const vec3& scl = vec3());
+	Keyframe(float time, Change change, const vec3& pos = vec3(), const quat& rot = quat(), const vec3& scl = vec3());
 };
 ENUM_OPERATIONS(Keyframe::Change, uint8)
 
@@ -131,7 +133,7 @@ private:
 	vector<Object*> objects;
 	uptr<Layout> layout;
 	uptr<Popup> popup;
-	array<ClickStamp, SDL_BUTTON_X2> stamps;	// data about last mouse click (indices are mouse button numbers
+	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
 	Light light;
 	umap<string, GMesh> meshes;
@@ -173,7 +175,7 @@ public:
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(Animation&& anim);
 	vec2i getMouseMove() const;
-	bool cursorInClickRange(vec2i mPos, uint8 mBut);
+	bool cursorInClickRange(vec2i mPos) const;
 	vec3 pickerRay(vec2i mPos) const;
 
 	void updateSelect(vec2i mPos);
@@ -216,8 +218,8 @@ inline vec2i Scene::getMouseMove() const {
 	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : 0;
 }
 
-inline bool Scene::cursorInClickRange(vec2i mPos, uint8 mBut) {
-	return vec2f(mPos - stamps[mBut-1].mPos).length() <= clickThreshold;
+inline bool Scene::cursorInClickRange(vec2i mPos) const {
+	return vec2f(mPos - cstamp.pos).length() <= clickThreshold;
 }
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {

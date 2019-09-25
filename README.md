@@ -1,5 +1,7 @@
 # Thrones  
-Is a game designed to cultivate cunning and strategic maneuvering on a battlefield created by you, your opponent, and the battle between you. The struggle for supremacy will take many forms as your infantry melee, cavalry charge, and artillery fire. You may strike with your Throne’s royal guard or unleash a Dragon on any challenger to your claim. Not even fate itself is out of your influence and reach.  
+Designed by Chad Anthony.  
+
+Thrones is a game designed to cultivate cunning and strategic maneuvering on a battlefield created by you, your opponent, and the battle between you. The struggle for supremacy will take many forms as your infantry melee, cavalry charge, and artillery fire. You may strike with your Throne’s royal guard or unleash a Dragon on any challenger to your claim. Not even fate itself is out of your influence and reach.  
 Your enemies, however, are diverse, and their lands will be treacherous to a conqueror. Destruction of their armies is just one path to victory; if you succeed in claiming their Fortress as your own, a pretender’s family will surely plea for peace, which you can consider as their army disbands in defeat.  
 
 See [RULES](RULES.md) for detail on gameplay.  
@@ -14,22 +16,21 @@ Run either two instances or a second instance of the "Thrones" executable, which
 Different game configurations are stored with unique names in the "game.ini" file in the game's root directory. Tile/piece setups are stored in "setup.ini" and other client settings are stored in the "settings.ini" file in the game client's root directory.   
 
 Game client command line options:  
-- -s [address]  
-  - set server address (leave empty to reset)  
-- -p [port]  
-  - set port number (leave empty to reset)  
-- -c  
-  - connect to server immediately  
 - -d  
   - place objects beforehand (only for debug build)  
 
 Game server command line options:  
 - -p [port]  
   - port to use (default is 39741)  
-- -c [name]  
-  - game config to load (default is "default")  
-- -f [file]  
-  - game config file to load (default is "game.ini")  
+- v  
+  - write output to console  
+- l  
+  - write output to log file  
+
+Game server keys:  
+- L: list rooms  
+- P: list players  
+- Q: close program  
 
 ## Gameplay  
 The game starts with the setup, which consists of the following phases:  
@@ -44,9 +45,3 @@ After the setup the server program determines the first player, the middle row t
 You can move pieces by dragging them using the left mouse button and fire by dragging a piece using the right mouse button. Because by default the warhorse switches with any piece, drag it with the right mouse button to explicitly attack.  
 To use a move/attack/fire fate's favor, hold down the left alt key while dragging the piece.  
 The camera can be rotated by holding down the middle mouse button and reset by pressing C.  
-
-## TODO  
-- test survival checks  
-- test if throne can breach and kill in one go  
-- test warhorse swap  
-- make server rooms  

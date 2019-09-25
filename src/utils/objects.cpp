@@ -1,4 +1,5 @@
 #include "engine/world.h"
+#include <glm/gtc/matrix_inverse.hpp>
 
 // CMESH
 
@@ -90,8 +91,8 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const GMesh* m
 	show(show),
 	rigid(rigid),
 	pos(pos),
-	rot(rot),
-	scl(scl)
+	scl(scl),
+	rot(quat(rot))
 {
 	setTransform(trans, normat, pos, rot, scl);
 }
@@ -99,15 +100,14 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const GMesh* m
 void Object::draw() const {
 	if (show) {
 		glBindVertexArray(mesh->vao);
-		updateTransform();
-		updateColor();
+		updateTransform(trans, normat);
+		updateColor(matl->diffuse, matl->specular, matl->shininess, matl->alpha, tex);
 		glDrawElements(mesh->shape, mesh->ecnt, GMesh::elemType, nullptr);
 	}
 }
 
-void Object::updateColor(const vec3& diffuse, const vec3& specular, const vec3& emission, float shininess, float alpha, GLuint texture) {
+void Object::updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture) {
 	glUniform3fv(World::geom()->materialDiffuse, 1, glm::value_ptr(diffuse));
-	glUniform3fv(World::geom()->materialEmission, 1, glm::value_ptr(emission));
 	glUniform3fv(World::geom()->materialSpecular, 1, glm::value_ptr(specular));
 	glUniform1f(World::geom()->materialShininess, shininess);
 	glUniform1f(World::geom()->materialAlpha, alpha);
@@ -119,9 +119,9 @@ void Object::updateTransform(const mat4& model, const mat3& norm) {
 	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(norm));
 }
 
-void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const vec3& rot, const vec3& scl) {
+void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl) {
 	setTransform(model, pos, rot, scl);
-	norm = glm::transpose(glm::inverse(mat3(model)));
+	norm = glm::inverseTranspose(mat3(model));
 }
 
 // GAME OBJECT
@@ -134,14 +134,14 @@ BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, G
 	ulcall(ulcall),
 	urcall(urcall),
 	diffuseFactor(1.f),
-	emissionFactor(0.f)
+	emission(EMI_NONE)
 {}
 
 void BoardObject::draw() const {
 	if (show) {
 		glBindVertexArray(mesh->vao);
-		updateTransform();
-		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->emission * emissionFactor, matl->shininess, matl->alpha, tex);
+		updateTransform(getTrans(), getNormat());
+		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->shininess, matl->alpha, tex);
 		glDrawElements(mesh->shape, mesh->ecnt, GMesh::elemType, nullptr);
 	}
 }
@@ -153,19 +153,24 @@ void BoardObject::drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffu
 	mat4 model;
 	setTransform(model, World::scene()->getCamera()->getPos() - ray * (World::scene()->getCamera()->getPos().y / ray.y) + vec3(0.f, ypos, 0.f), getRot(), getScl());
 	updateTransform(model, getNormat());
-	updateColor(tdiffuse, matl->specular, vec3(0.f), matl->shininess, 0.9f, ttexture);
+	updateColor(tdiffuse, matl->specular, matl->shininess, 0.9f, ttexture);
 	glDrawElements(tmesh->shape, tmesh->ecnt, GMesh::elemType, nullptr);
 }
 
 void BoardObject::setRaycast(bool on, bool dim) {
 	rigid = on;
-	diffuseFactor = on || !dim ? 1.f : 0.6f;
+	setEmission(dim ? emission | EMI_DIM : emission & ~EMI_DIM);
+}
+
+void BoardObject::setEmission(Emission emi) {
+	emission = emi;
+	diffuseFactor = (emission & EMI_DIM ? 0.6f : 1.f) + (emission & EMI_SEL ? 0.2f : 0.f) + (emission & EMI_HIGH ? 0.2f : 0.f);
 }
 
 // TILE
 
 Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show) :
-	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, nullptr, nullptr, 0, World::scene()->collim("tile"), rigid, getShow(show, type)),
+	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, nullptr, World::scene()->material("tile"), 0, World::scene()->collim("tile"), rigid, getShow(show, type)),
 	breached(false)
 {
 	setTypeSilent(type);
@@ -192,15 +197,11 @@ void Tile::onUndrag(uint8 mBut) {
 }
 
 void Tile::onHover() {
-	emissionFactor += emissionSelect;
-	if (Piece* pce = World::game()->findPiece(World::game()->ptog(getPos())))
-		pce->emissionFactor += emissionSelect;
+	setEmission(getEmission() | EMI_SEL);
 }
 
 void Tile::onUnhover() {
-	emissionFactor -= emissionSelect;
-	if (Piece* pce = World::game()->findPiece(World::game()->ptog(getPos())))
-		pce->emissionFactor -= emissionSelect;
+	setEmission(getEmission() & ~EMI_SEL);
 }
 
 void Tile::setType(Com::Tile newType) {
@@ -211,19 +212,18 @@ void Tile::setType(Com::Tile newType) {
 void Tile::setTypeSilent(Com::Tile newType) {
 	type = newType;
 	mesh = World::scene()->mesh(type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress");
-	matl = World::scene()->material(type != Com::Tile::fortress ? "tile" : Com::tileNames[uint8(type)]);
-	tex = World::scene()->texture(type < Com::Tile::fortress ? Com::tileNames[uint8(type)] : string());
+	tex = World::scene()->texture(type < Com::Tile::empty ? Com::tileNames[uint8(type)] : string());
 }
 
 void Tile::setBreached(bool yes) {
 	breached = yes;
-	diffuseFactor = breached ? 0.5f : 1.f;
+	setEmission(breached ? getEmission() & EMI_DIM : getEmission() & ~EMI_DIM);
 	mesh = World::scene()->mesh(type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress");
 }
 
-void Tile::setInteractivity(Interactivity lvl, bool dim) {
-	setRaycast(lvl != Interactivity::ignore, dim);
-	ulcall = lvl == Interactivity::interact && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
+void Tile::setInteractivity(Interact lvl, bool dim) {
+	setRaycast(lvl != Interact::ignore, dim);
+	ulcall = lvl == Interact::interact && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
 }
 
 // TILE COL
@@ -252,14 +252,14 @@ const vec3 Piece::fireIconColor(1.f, 0.1f, 0.1f);
 const vec3 Piece::attackHorseColor(0.9f, 0.7f, 0.7f);
 
 Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show) :
-	BoardObject(pos, rot, size, hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), World::scene()->collim("piece"), rigid, show),
-	lastFortress(INT16_MAX),
+	BoardObject(pos, rot, size, hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), World::scene()->collim("tile"), rigid, show),
+	lastFortress(UINT16_MAX),
 	type(type)
 {}
 
 void Piece::drawTop() const {
 	if (drawTopSelf)
-		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f : upperPoz, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
+		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f : 0.01f, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
 		drawTopMesh(0.1f, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
@@ -288,29 +288,23 @@ void Piece::onUndrag(uint8 mBut) {
 }
 
 void Piece::onHover() {
-	emissionFactor += emissionSelect;
-	World::game()->getTile(World::game()->ptog(getPos()))->emissionFactor += emissionSelect;
+	if (setEmission(getEmission() | EMI_SEL); World::game()->pieceOnBoard(this)) {
+		Tile* til = World::game()->getTile(World::game()->ptog(getPos()));
+		til->setEmission(til->getEmission() | EMI_SEL);
+	}
 }
 
 void Piece::onUnhover() {
-	emissionFactor -= emissionSelect;
-	World::game()->getTile(World::game()->ptog(getPos()))->emissionFactor -= emissionSelect;
+	if (setEmission(getEmission() & ~EMI_SEL); World::game()->pieceOnBoard(this)) {	// in case there is no tile (especially when disabling the piece)
+		Tile* til = World::game()->getTile(World::game()->ptog(getPos()));
+		til->setEmission(til->getEmission() & ~EMI_SEL);
+	}
 }
 
-bool Piece::active() const {
-	return World::game()->ptog(getPos()).hasNot(INT16_MIN) && show && rigid;
-}
-
-void Piece::enable(vec2s bpos) {
+void Piece::updatePos(vec2s bpos, bool active) {
 	setPos(World::game()->gtop(bpos));
-	setActive(true);
+	setActive(active);
 	World::scene()->updateSelect(mousePos());
-}
-
-void Piece::disable() {
-	setActive(false);
-	World::scene()->updateSelect(mousePos());
-	setPos(World::game()->gtop(INT16_MIN));
 }
 
 // PIECE COL

@@ -2,6 +2,7 @@
 
 #include "netcp.h"
 #include "utils/objects.h"
+#include <random>
 
 struct FavorState {
 	Piece* piece;	// when dragging piece
@@ -11,11 +12,13 @@ struct FavorState {
 };
 
 enum Action : uint8 {
-	ACT_NONE = 0,
-	ACT_MOVE = 1,
-	ACT_SWAP = 2,
-	ACT_ATCK = 4,
-	ACT_FIRE = 8
+	ACT_NONE  = 0x00,
+	ACT_MOVE  = 0x01,	// regular position change
+	ACT_SWAP  = 0x02,	// actor switching with swapper
+	ACT_ATCK  = 0x04,	// movement attack
+	ACT_FIRE  = 0x08,	// firing attack
+	ACT_WIN   = 0x10,	// actor won
+	ACT_LOOSE = 0x20	// actor lost
 };
 ENUM_OPERATIONS(Action, uint8)
 
@@ -36,6 +39,14 @@ private:
 	bool pieceProtected(Piece* pce) const;		// piece mustn't be nullptr
 };
 
+inline bool Record::isProtectedMember(Piece* pce) const {
+	return (actor == pce || swapper == pce) && pieceProtected(pce);
+}
+
+inline void Record::updateProtectionColor(Piece* pce, bool on) const {
+	pce->setEmission(pieceProtected(pce) && on ? pce->getEmission() | BoardObject::EMI_DIM : pce->getEmission() & ~BoardObject::EMI_DIM);
+}
+
 inline bool Record::pieceProtected(Piece* pce) const {
 	return pce->getType() == Com::Piece::warhorse && (action & (ACT_SWAP | ACT_ATCK | ACT_FIRE));
 }
@@ -43,22 +54,19 @@ inline bool Record::pieceProtected(Piece* pce) const {
 // handles game logic
 class Game {
 public:
+	Com::Config config;
+	string configName;
 	FavorState favorState;	// favor state when dragging piece
 
 	static constexpr float screenYUp = 0.f;
 	static constexpr float screenYDown = -4.2f;
-	static constexpr char messageTurnGo[] = "Your turn";
-	static constexpr char messageTurnWait[] = "Opponent's turn";
 private:
-	static constexpr char messageWin[] = "You win";
-	static constexpr char messageLoose[] = "You lose";
 	static const array<uint16 (*)(uint16, uint16), 4> adjacentStraight;
 	static const array<uint16 (*)(uint16, uint16), 8> adjacentFull;
 
-	uptr<Netcp> netcp;	// shall never be nullptr
-	Com::Config config;
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
+	Buffer sendb;
 
 	GMesh gridat;
 	Object ground, board, bgrid, screen, ffpad;
@@ -82,31 +90,36 @@ public:
 	Piece* findPiece(vec2s pos);
 	bool isOwnPiece(Piece* pce) const;
 	bool isEnemyPiece(Piece* pce) const;
+	bool pieceOnBoard(const Piece* piece) const;
+	bool pieceOnHome(const Piece* piece) const;
 	Object* getScreen();
-	const Com::Config& getConfig() const;
 	bool getMyTurn() const;
 	uint8 getFavorCount() const;
 	uint8 getFavorTotal() const;
 	vec2s ptog(const vec3& p) const;
 	vec3 gtop(vec2s p, float z = 0.f) const;
 
-	void connect();
-	void conhost(const Com::Config& cfg);
-	void disconnect();
-	void disconnect(string&& msg);
 	void tick();
-	void processCode(Com::Code code, const uint8* data);
+	void sendStart();
+	void sendConfig(bool onJoin = false);
 	void sendSetup();
+	void recvStart(uint8* data);
+	void recvTiles(uint8* data);
+	void recvPieces(uint8* data);
+	void recvMove(uint8* data);
+	void recvKill(uint8* data);
+	void recvBreach(uint8* data);
+	void recvRecord(uint8* data);
 	vector<Object*> initObjects();
 #ifdef DEBUG
 	vector<Object*> initDummyObjects();
 #endif
 	void uninitObjects();
 	void prepareMatch();
-	void setOwnTilesInteract(Tile::Interactivity lvl, bool dim = false);
-	void setMidTilesInteract(Tile::Interactivity lvl, bool dim = false);
-	void setOwnPiecesInteract(bool on, bool dim = false);
+	void setOwnTilesInteract(Tile::Interact lvl, bool dim = false);
+	void setMidTilesInteract(Tile::Interact lvl, bool dim = false);
 	void setOwnPiecesVisible(bool on);
+	void disableOwnPiecesInteract(bool rigid, bool dim = false);
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^
 	void checkOwnPieces() const;	// ^
@@ -122,46 +135,44 @@ public:
 	void pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch);
 	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
 	void placeDragon(vec2s pos, Piece* occupant);
+	void prepareTurn();
 	void endTurn();
 
 private:
-	void connect(Netcp* net);
 	Piece* getPieces(Piece* pieces, Com::Piece type);
 	void setBgrid();
 	void setMidTiles();
 	void setTiles(Tile* tiles, int16 yofs, bool inter);
-	void setPieces(Piece* pieces, float rot, GCall ucall, const Material* matl);
-	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interactivity lvl, bool dim = false);
-	static void setPiecesInteract(Piece* pieces, uint16 num, bool on, bool dim = false);
-	void setPiecesVisible(Piece* pieces, bool on);
+	void setPieces(Piece* pieces, float rot, const Material* matl);
+	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interact lvl, bool dim = false);
+	static void setPieceInteract(Piece* piece, bool on, bool dim, GCall hgcall, GCall ulcall, GCall urcall);
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf);
-	static Com::Tile decompressTile(const uint8* src, uint16 i);
+	uint8 compressTile(uint16 e) const;
+	static Com::Tile decompressTile(uint8* src, uint16 i);
 	Com::Tile pollFavor();	// resets FF indicator
 	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
 	void useFavor();
 
 	void concludeAction(bool end);
-	bool checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor);
-	template <class F, class... A> bool checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args);
+	void checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor);
+	template <class F, class... A> void checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args);
 	uset<uint16> collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed);
 	uset<uint16> collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
 	uset<uint16> collectTilesByType(vec2s pos, Com::Tile favor, bool& favorUsed);
 	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type) const;
 	static bool spaceAvailible(uint16 pos);
 	static bool spaceAvailibleDummy(uint16 pos);
-	bool checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
+	void checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
 	uset<uint16> collectTilesByDistance(vec2s pos, int16 dist);
-	bool checkAttack(Piece* killer, Piece* victim, Tile* dtil);
+	void checkAttack(Piece* killer, Piece* victim, Tile* dtil) const;
 	bool survivalCheck(Piece* piece, Tile* stil, Tile* dtil, Action action, Com::Tile favor);
 	void failSurvivalCheck(Piece* piece, Action action);
 	bool checkWin();
 	bool checkThroneWin(Piece* thrones);
 	bool checkFortressWin();
-	bool doWin(bool win);	// always returns true
-
-	void prepareTurn();
+	void doWin(bool win);
 	void placePiece(Piece* piece, vec2s pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
@@ -172,6 +183,7 @@ private:
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
 	uint16 inversePieceId(Piece* piece) const;
+	std::default_random_engine createRandomEngine();
 };
 
 inline Game::~Game() {
@@ -182,16 +194,8 @@ inline TileCol& Game::getTiles() {
 	return tiles;
 }
 
-inline void Game::connect() {
-	connect(new Netcp);
-}
-
-inline void Game::disconnect() {
-	netcp.reset();
-}
-
 inline Tile* Game::getTile(vec2s pos) {
-	return tiles.mid(pos.y * config.homeWidth + pos.x);
+	return tiles.mid(pos.y * config.homeSize.x + pos.x);
 }
 
 inline bool Game::isHomeTile(Tile* til) const {
@@ -218,12 +222,16 @@ inline bool Game::isEnemyPiece(Piece* pce) const {
 	return pce >= pieces.ene();
 }
 
-inline Object* Game::getScreen() {
-	return &screen;
+inline bool Game::pieceOnBoard(const Piece* piece) const {
+	return inRange(ptog(piece->getPos()), vec2s(0, -int16(config.homeSize.y)), vec2s(config.homeSize.x - 1, config.homeSize.y));
 }
 
-inline const Com::Config& Game::getConfig() const {
-	return config;
+inline bool Game::pieceOnHome(const Piece* piece) const {
+	return inRange(ptog(piece->getPos()), vec2s(0, 1), vec2s(config.homeSize.x - 1, config.homeSize.y));
+}
+
+inline Object* Game::getScreen() {
+	return &screen;
 }
 
 inline bool Game::getMyTurn() const {
@@ -238,20 +246,12 @@ inline uint8 Game::getFavorTotal() const {
 	return favorTotal;
 }
 
-inline void Game::setOwnTilesInteract(Tile::Interactivity lvl, bool dim) {
+inline void Game::setOwnTilesInteract(Tile::Interact lvl, bool dim) {
 	setTilesInteract(tiles.own(), config.numTiles, lvl, dim);
 }
 
-inline void Game::setMidTilesInteract(Tile::Interactivity lvl, bool dim) {
-	setTilesInteract(tiles.mid(), config.homeWidth, lvl, dim);
-}
-
-inline void Game::setOwnPiecesInteract(bool on, bool dim) {
-	setPiecesInteract(pieces.own(), config.numPieces, on, dim);
-}
-
-inline void Game::setOwnPiecesVisible(bool on) {
-	setPiecesVisible(pieces.own(), on);
+inline void Game::setMidTilesInteract(Tile::Interact lvl, bool dim) {
+	setTilesInteract(tiles.mid(), config.homeSize.x, lvl, dim);
 }
 
 inline vector<uint16> Game::countOwnTiles() const {
@@ -259,7 +259,7 @@ inline vector<uint16> Game::countOwnTiles() const {
 }
 
 inline vector<uint16> Game::countMidTiles() const {
-	return countTiles(tiles.mid(), config.homeWidth, vector<uint16>(config.middleAmounts.begin(), config.middleAmounts.end()));
+	return countTiles(tiles.mid(), config.homeSize.x, vector<uint16>(config.middleAmounts.begin(), config.middleAmounts.end()));
 }
 
 template <class T>
@@ -269,7 +269,11 @@ void Game::setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id) 
 	id += size;
 }
 
-inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
+inline uint8 Game::compressTile(uint16 e) const {
+	return uint8(uint8(tiles.mid(e)->getType()) << (e % 2 * 4));
+}
+
+inline Com::Tile Game::decompressTile(uint8* src, uint16 i) {
 	return Com::Tile((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
@@ -285,6 +289,18 @@ inline bool Game::spaceAvailibleDummy(uint16) {
 	return true;
 }
 
+inline void Game::recvMove(uint8* data) {
+	pieces[SDLNet_Read16(data)].updatePos(idToPos(SDLNet_Read16(data + 2)), true);
+}
+
+inline void Game::recvKill(uint8* data) {
+	pieces[SDLNet_Read16(data)].updatePos(INT16_MIN, false);
+}
+
+inline void Game::recvBreach(uint8* data) {
+	tiles[SDLNet_Read16(data + 1)].setBreached(data[0]);
+}
+
 inline vec2s Game::ptog(const vec3& p) const {
 	return vec2s((p.x - config.objectSize / 2.f) / config.objectSize, p.z / config.objectSize);
 }
@@ -294,11 +310,11 @@ inline vec3 Game::gtop(vec2s p, float z) const {
 }
 
 inline uint16 Game::posToId(vec2s p) {
-	return uint16((p.y + config.homeHeight) * config.homeWidth + p.x);
+	return uint16((p.y + config.homeSize.y) * config.homeSize.x + p.x);
 }
 
 inline vec2s Game::idToPos(uint16 i) {
-	return vec2s(int16(i % config.homeWidth), int16(i / config.homeWidth) - config.homeHeight);
+	return vec2s(int16(i % config.homeSize.x), int16(i / config.homeSize.x) - config.homeSize.y);
 }
 
 inline uint16 Game::invertId(uint16 i) {

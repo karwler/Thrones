@@ -28,12 +28,11 @@ inline void Sound::free() {
 
 struct Material {
 	vec3 diffuse;
-	vec3 emission;
 	vec3 specular;
 	float shininess;
 	float alpha;
 
-	Material(const vec3& diffuse = vec3(1.f), const vec3& emission = vec3(0.f), const vec3& specular = vec3(1.f), float shininess = 32.f, float alpha = 1.f);
+	Material(const vec3& diffuse = vec3(1.f), const vec3& specular = vec3(1.f), float shininess = 32.f, float alpha = 1.f);
 };
 
 struct Vertex {

@@ -5,10 +5,7 @@
 // class that makes accessing stuff easier
 class World {
 public:
-	static constexpr char argAddress[] = "s";
-	static constexpr char argConnect[] = "c";
-	static constexpr char argPort[] = "p";
-	static constexpr char argSetup[] = "d";
+	static constexpr char argSetup = 'd';
 
 	static Arguments args;
 private:
@@ -19,8 +16,10 @@ public:
 	static AudioSys* audio();
 	static FontSet* fonts();
 	static Game* game();
+	static Netcp* netcp();
 	static Program* program();
 	static ProgState* state();
+	template <class T> static T* state();
 	static Settings* sets();
 	static Scene* scene();
 	static ShaderGeometry* geom();
@@ -51,12 +50,21 @@ inline Game* World::game() {
 	return windowSys.getProgram()->getGame();
 }
 
+inline Netcp* World::netcp() {
+	return windowSys.getProgram()->getNetcp();
+}
+
 inline Program* World::program() {
 	return windowSys.getProgram();
 }
 
 inline ProgState* World::state() {
 	return windowSys.getProgram()->getState();
+}
+
+template <class T>
+T* World::state() {
+	return static_cast<T*>(windowSys.getProgram()->getState());
 }
 
 inline Scene* World::scene() {

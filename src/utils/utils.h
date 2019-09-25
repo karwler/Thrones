@@ -51,13 +51,6 @@ inline vec2i mousePos() {
 	return p;
 }
 
-template <>
-struct std::hash<vec2s> {
-	sizet operator()(vec2s v) const {
-		return std::hash<int32>()(*reinterpret_cast<int32*>(&v));
-	}
-};
-
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
@@ -173,10 +166,10 @@ public:
 	virtual ~Interactable() = default;
 
 	virtual void drawTop() const {}
-	virtual void onClick(vec2i mPos, uint8 mBut);		// dummy function to have an out-of-line virtual function
+	virtual void onClick(vec2i mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onHold(vec2i, uint8) {}
 	virtual void onDrag(vec2i, vec2i) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
+	virtual void onUndrag(uint8) {}			// get's called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onKeypress(const SDL_Keysym&) {}
@@ -259,15 +252,6 @@ cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
 	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
 }
 
-template <class T>
-T lerp(const T& start, const T& end, float factor) {
-	return start + (end - start) * factor;
-}
-
-inline glm::quat makeQuat(const vec3& rot) {
-	return glm::quat(vec3(rot.x, 0.f, 0.f)) * glm::quat(vec3(0.f, rot.y, 0.f)) *glm::quat(vec3(0.f, 0.f, rot.z));	// for unknown reasons the glm::quat euler constructor doesn't work as expected
-}
-
 // container stuff
 
 template <class T>
@@ -289,14 +273,4 @@ void clear(vector<T*>& vec) {
 	for (T* it : vec)
 		delete it;
 	vec.clear();
-}
-
-template <class T>
-vector<string> sortNames(const umap<string, T>& vmap) {
-	vector<string> names(vmap.size());
-	vector<string>::iterator nit = names.begin();
-	for (const pair<string, T>& cit : vmap)
-		*nit++ = cit.first;
-	std::sort(names.begin(), names.end(), strnatless);
-	return names;
 }

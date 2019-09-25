@@ -50,7 +50,6 @@ protected:
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
 
-	void eventEnter();
 	virtual void eventEscape() {}
 	virtual void eventNumpress(uint8) {}
 	virtual void eventWheel(int) {}
@@ -61,37 +60,14 @@ public:
 	virtual Layout* createLayout();
 	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
 	static Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
-	static pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal);
-	static Popup* createPopupConfig(const Com::Config& conf);
+	static pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX);
 
-	static string tileFortressString(const Com::Config& cfg);
-	static string middleFortressString(const Com::Config& cfg);
-	static string pieceTotalString(const Com::Config& cfg);
 protected:
-	static vector<Widget*> createConfigList(const Com::Config& conf, ConfigIO& wio, BCall update, BCall scUpdate);
-
-	bool tryClosePopup();
-
 	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight);
 	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight);
 	static Texture makeTooltip(const string& text, int limit = tooltipLimit, int height = tooltipHeight);
 	static Texture makeTooltip(const vector<string>& lines, int limit = tooltipLimit, int height = tooltipHeight);
-private:
-	static void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
-	static void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
-
-inline string ProgState::tileFortressString(const Com::Config& cfg) {
-	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
-}
-
-inline string ProgState::middleFortressString(const Com::Config& cfg) {
-	return toStr(cfg.homeWidth - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
-}
-
-inline string ProgState::pieceTotalString(const Com::Config& cfg) {
-	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
-}
 
 class ProgMenu : public ProgState {
 public:
@@ -102,29 +78,86 @@ public:
 	virtual Layout* createLayout() override;
 };
 
-class ProgHost : public ProgState {
+class ProgLobby : public ProgState {
+private:
+	ScrollArea* rlist;
+	vector<pair<string, bool>> rooms;
+
+public:
+	ProgLobby(vector<pair<string, bool>>&& rooms);
+	virtual ~ProgLobby() override = default;
+
+	virtual void eventEscape() override;
+
+	virtual Layout* createLayout() override;
+
+	void addRoom(string&& name);
+	void delRoom(const string& name);
+	void openRoom(const string& name, bool open);
+	bool roomsMaxed() const;
+	bool roomNameOk(const string& name);
+private:
+	static Label* createRoom(string name, bool open);
+};
+
+inline ProgLobby::ProgLobby(vector<pair<string, bool>>&& rooms) :
+	rooms(rooms)
+{}
+
+inline void ProgLobby::delRoom(const string& name) {
+	rlist->deleteWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin()));
+}
+
+inline void ProgLobby::openRoom(const string& name, bool open) {
+	static_cast<Label*>(rlist->getWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin())))->color = Widget::colorNormal * (open ? 1.f : 0.5f);
+}
+
+inline bool ProgLobby::roomsMaxed() const {
+	return rooms.size() >= Com::maxRooms;
+}
+
+inline bool ProgLobby::roomNameOk(const string& name) {
+	return std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) == rooms.end();
+}
+
+class ProgRoom : public ProgState {
 public:
 	umap<string, Com::Config> confs;
-	umap<string, Com::Config>::iterator curConf;
 	ConfigIO wio;
-	
+private:
+	Label* startButton;
+
 public:
-	ProgHost();
-	virtual ~ProgHost() override = default;
+	ProgRoom();
+	virtual ~ProgRoom() override = default;
 
 	virtual void eventEscape() override;
 
 	virtual Layout* createLayout() override;
+
+	void updateStartButton();	// canStart only applies to State::host
+	void updateConfigWidgets();
+	static Popup* createPopupConfig();
+private:
+	static vector<Widget*> createConfigList(ConfigIO& wio, bool active);
+	static void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
+	static void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
+	static string tileFortressString(const Com::Config& cfg);
+	static string middleFortressString(const Com::Config& cfg);
+	static string pieceTotalString(const Com::Config& cfg);
 };
 
-class ProgRooms : public ProgState {
-public:
-	virtual ~ProgRooms() override = default;
+inline string ProgRoom::tileFortressString(const Com::Config& cfg) {
+	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+}
 
-	virtual void eventEscape() override;
+inline string ProgRoom::middleFortressString(const Com::Config& cfg) {
+	return toStr(cfg.homeSize.x - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+}
 
-	virtual Layout* createLayout() override;
-};
+inline string ProgRoom::pieceTotalString(const Com::Config& cfg) {
+	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
+}
 
 class ProgSetup : public ProgState {
 public:
@@ -172,7 +205,6 @@ public:
 private:
 	static Layout* getTicons();
 	static Layout* getPicons();
-	Layout* createSidebar(int& sideLength) const;
 	uint8 findNextSelect(bool fwd);
 	void switchIcon(uint8 type, bool on, bool isTile);
 };
@@ -267,8 +299,14 @@ private:
 	static void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
 	static void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
 	static void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	static void appendDevices(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(int), const char* (*value)(int, int), int arg);
+	static void appendAudioDevices(vector<Widget*>& lines, int width, vector<string>& titles, int iscapture);
 	static void appendDrivers(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(), const char* (*value)(int));
 	static void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
 	static void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
+
+	static string versionText(const SDL_version& ver);
 };
+
+inline string ProgInfo::versionText(const SDL_version& ver) {
+	return toStr(ver.major) + '.' + toStr(ver.minor) + '.' + toStr(ver.patch);
+}

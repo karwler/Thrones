@@ -7,11 +7,11 @@
 
 static const string mtlKeywordNewmtl = "newmtl";
 static const string objKeywordOff = "off";
-constexpr char argAudio[] = "a";
-constexpr char argMaterial[] = "m";
-constexpr char argObject[] = "o";
-constexpr char argShader[] = "s";
-constexpr char argTexture[] = "t";
+constexpr char argAudio = 'a';
+constexpr char argMaterial = 'm';
+constexpr char argObject = 'o';
+constexpr char argShader = 's';
+constexpr char argTexture = 't';
 constexpr char messageUsage[] = "usage: tobjtobob <-a|-m|-o|-s|-t> <destination file> <input files>";
 
 // OBJ FILE DATA
@@ -192,8 +192,6 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 				mtls.back().second.diffuse = stov<3>(&line[2], 1.f);
 			else if (c1 == 'S')
 				mtls.back().second.specular = stov<3>(&line[2], 1.f);
-			else if (c1 == 'E')		// isn't actually in the standard
-				mtls.back().second.emission = stov<3>(&line[2], 1.f);
 		} else if (c0 == 'N') {
 			if (toupper(line[1]) == 'S')
 				mtls.back().second.shininess = sstof(&line[2]) / 1000.f * 128.f;
@@ -271,7 +269,7 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 
 		if (vector<pair<Element, uint16>>::iterator ei = std::find_if(elems.begin(), elems.end(), [&face, v](const pair<Element, uint16>& it) -> bool { return it.first.p == face[v].p && it.first.t == face[v].t && it.first.n == face[v].n; }); ei == elems.end()) {
 			obj.elems.push_back(uint16(obj.data.size()));
-			obj.data.emplace_back(verts[face[v].p], norms[face[v].n], tuvs[face[v].t]);
+			obj.data.emplace_back(verts[face[v].p], norms[face[v].n], vec2(tuvs[face[v].t].x, 1.f - tuvs[face[v].t].y));
 			elems.emplace_back(face[v], obj.elems.back());
 		} else
 			obj.elems.push_back(ei->second);

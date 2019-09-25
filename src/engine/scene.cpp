@@ -52,9 +52,9 @@ void Camera::updateRotations(const vec3& pvec, const vec3& lvec) {
 }
 
 void Camera::rotate(vec2 dRot, float dYaw) {
-	prot = vec2(std::clamp(prot.x + dRot.x, 0.f, pmax), std::clamp(prot.y + dRot.y, -PI - ymax, ymax));
-	pos = makeQuat(vec3(0.f, prot.y, prot.x)) * vec3(pdst, 0.f, 0.f);
-	lat = glm::quat(vec3(0.f, lyaw + dYaw, 0.f)) * vec3(ldst, 0.f, 0.f);
+	prot = vec2(std::clamp(prot.x - dRot.x, pmax, 0.f), std::clamp(prot.y + dRot.y, -ymax, ymax));
+	pos = quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst);
+	lat = quat(vec3(0.f, lyaw + dYaw, 0.f)) * vec3(0.f, 0.f, ldst);
 	updateRotations(pos, lat);
 	lat += center;
 	pos += lat;
@@ -63,7 +63,7 @@ void Camera::rotate(vec2 dRot, float dYaw) {
 
 void Camera::zoom(int mov) {
 	pdst = std::clamp(pdst + float(mov) / 2.f, defaultPdst - 8.f, defaultPdst + 20.f);
-	pos = makeQuat(vec3(0.f, prot.y, prot.x)) * vec3(pdst, 0.f, 0.f) + lat;
+	pos = glm::quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst) + lat;
 	updateView();
 }
 
@@ -100,18 +100,19 @@ Light::Light(const vec3& position, const vec3& color, float ambiFac, float range
 
 // CLICK STAMP
 
-ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, vec2i mPos) :
+ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, vec2i pos, uint8 but) :
 	inter(inter),
 	area(area),
-	mPos(mPos)
+	pos(pos),
+	but(but)
 {}
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Change change, const vec3& pos, const vec3& rot, const vec3& scl) :
+Keyframe::Keyframe(float time, Change change, const vec3& pos, const quat& rot, const vec3& scl) :
 	pos(pos),
-	rot(rot),
 	scl(scl),
+	rot(rot),
 	time(time),
 	change(change)
 {}
@@ -139,13 +140,13 @@ bool Animation::tick(float dSec) {
 
 	if (float td = keyframes.front().time > 0.f ? clampHigh(begin.time / keyframes.front().time, 1.f) : 1.f; useObject) {
 		if (keyframes.front().change & Keyframe::CHG_POS)
-			object->setPos(lerp(begin.pos, keyframes.front().pos, td));
+			object->setPos(glm::mix(begin.pos, keyframes.front().pos, td));
 		if (keyframes.front().change & Keyframe::CHG_ROT)
-			object->setRot(lerp(begin.rot, keyframes.front().rot, td));
+			object->setRot(glm::mix(begin.rot, keyframes.front().rot, td));
 		if (keyframes.front().change & Keyframe::CHG_SCL)
-			object->setScl(lerp(begin.scl, keyframes.front().scl, td));
+			object->setScl(glm::mix(begin.scl, keyframes.front().scl, td));
 	} else
-		camera->setPos(keyframes.front().change & Keyframe::CHG_POS ? lerp(begin.pos, keyframes.front().pos, td) : camera->getPos(), keyframes.front().change & Keyframe::CHG_ROT ? lerp(begin.rot, keyframes.front().rot, td) : camera->getLat());
+		camera->setPos(keyframes.front().change & Keyframe::CHG_POS ? glm::mix(begin.pos, keyframes.front().pos, td) : camera->getPos(), keyframes.front().change & Keyframe::CHG_LAT ? glm::mix(begin.scl, keyframes.front().scl, td) : camera->getLat());
 
 	if (begin.time >= keyframes.front().time) {
 		float ovhead = begin.time - keyframes.front().time;
@@ -181,8 +182,7 @@ Scene::Scene() :
 	texes(FileSys::loadTextures()),
 	collims({
 		pair(string(), CMesh()),
-		pair("tile", CMesh::makeDefault()),
-		pair("piece", CMesh::makeDefault(vec3(0.f, BoardObject::upperPoz, 0.f)))
+		pair("tile", CMesh::makeDefault())
 	})
 {}
 
@@ -255,7 +255,10 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 				World::prun(popup->kcall, nullptr);
 			break;
 		case SDL_SCANCODE_ESCAPE:
-			World::state()->eventEscape();
+			if (popup)
+				World::prun(popup->ccall, nullptr);
+			else
+				World::state()->eventEscape();
 		}
 }
 
@@ -285,33 +288,37 @@ void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time) {
 }
 
 void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
+	if (cstamp.but)
+		return;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	uint8 mbi = mBut - 1;
 	select = getSelected(mPos);
-	stamps[mbi] = ClickStamp(select, getSelectedScrollArea(), mPos);
-	if (stamps[mbi].area)	// area goes first so widget can overwrite it's capture	// TODO: might need an "if (!capture)" to prevent overlapping onHold calls in a single widget/object
-		stamps[mbi].area->onHold(mPos, mBut);
-	if (stamps[mbi].inter != stamps[mbi].area)
-		stamps[mbi].inter->onHold(mPos, mBut);
-	if (!capture)	// can be set by previous onHold calls
+	cstamp = ClickStamp(select, getSelectedScrollArea(), mPos, mBut);
+	if (cstamp.area)	// area goes first so widget can overwrite it's capture
+		cstamp.area->onHold(mPos, mBut);
+	if (cstamp.inter != cstamp.area)
+		cstamp.inter->onHold(mPos, mBut);
+	if (!capture)		// can be set by previous onHold calls
 		World::state()->eventDrag(SDL_BUTTON(mBut));
 	if (mBut == SDL_BUTTON_MIDDLE)
 		SDL_SetRelativeMouseMode(SDL_TRUE);
 }
 
 void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
+	if (mBut != cstamp.but)
+		return;
 	if (mBut == SDL_BUTTON_MIDDLE) {	// in case camera was being moved
 		SDL_SetRelativeMouseMode(SDL_FALSE);
 		simulateMouseMove();
 	}
 	if (capture)
 		capture->onUndrag(mBut);
-	if (uint8 mbi = mBut - 1; select && stamps[mbi].inter == select && cursorInClickRange(mPos, mBut))
-		stamps[mbi].inter->onClick(mPos, mBut);
+	if (select && cstamp.inter == select && cursorInClickRange(mPos))
+		cstamp.inter->onClick(mPos, mBut);
 	if (!capture)
 		World::state()->eventUndrag();
+	cstamp = ClickStamp();
 }
 
 void Scene::onMouseWheel(vec2i wMov) {
@@ -322,9 +329,8 @@ void Scene::onMouseWheel(vec2i wMov) {
 }
 
 void Scene::onMouseLeave() {
-	for (ClickStamp& it : stamps)
-		it.inter = it.area = nullptr;
-	unselect();
+	if (unselect(); cstamp.but)		// get rid of select first to prevent click event
+		onMouseUp(mousePos(), cstamp.but);
 }
 
 void Scene::resetLayouts() {

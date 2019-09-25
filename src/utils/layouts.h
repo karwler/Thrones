@@ -10,11 +10,11 @@ public:
 protected:
 	vector<Widget*> widgets;
 	vector<vec2i> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
-	int spacing;				// space between widgets
-	bool vertical;				// how to arrange widgets
+	const int spacing;				// space between widgets
+	const bool vertical;				// how to arrange widgets
 
 public:
-	Layout(Size relSize = 1.f, vector<Widget*> children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Layout() override;
 
 	virtual void draw() const override;
@@ -25,16 +25,15 @@ public:
 	Widget* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
 	void setWidgets(vector<Widget*>&& wgts);
+	void insertWidget(sizet id, Widget* wgt);
 	void deleteWidget(sizet id);
 	bool getVertical() const;
-	virtual vec2i position() const override;
-	virtual vec2i size() const override;
-	virtual Rect frame() const override;
 	virtual vec2i wgtPosition(sizet id) const;
 	virtual vec2i wgtSize(sizet id) const;
 
 protected:
 	void initWidgets(vector<Widget*>&& wgts);
+	void reinitWidgets(sizet id);
 	virtual vec2i listSize() const;
 };
 
@@ -50,26 +49,41 @@ inline bool Layout::getVertical() const {
 	return vertical;
 }
 
+// top level layout
+class RootLayout : public Layout {
+public:
+	static const vec4 defaultBgColor, uniformBgColor;
+
+protected:
+	const vec4 bgColor;
+
+public:
+	RootLayout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = defaultBgColor);
+	virtual ~RootLayout() override = default;
+
+	virtual void draw() const override;
+	virtual vec2i position() const override;
+	virtual vec2i size() const override;
+	virtual Rect frame() const override;
+};
+
 // layout with background with free position/size (shouldn't have a parent)
-class Popup : public Layout {
+class Popup : public RootLayout {
 public:
 	BCall kcall, ccall;	// gets called on enter/escape press
 private:
 	Size sizeY;			// use Widget's relSize as sizeX
 
 	static constexpr int margin = defaultItemSpacing;
-	static const vec4 colorDim;
 	static const vec4 colorBackground;
 
 public:
-	Popup(const cvec2<Size>& relSize = 1.f, vector<Widget*> children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing);
+	Popup(const cvec2<Size>& relSize = 1.f, vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = uniformBgColor);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
-
 	virtual vec2i position() const override;
 	virtual vec2i size() const override;
-	virtual Rect frame() const override;
 };
 
 // places widgets vertically through which the user can scroll (DON"T PUT SCROLL AREAS INTO OTHER SCROLL AREAS)
@@ -85,7 +99,7 @@ private:
 	static constexpr float scrollThrottle = 10.f;
 
 public:
-	ScrollArea(Size relSize = 1.f, vector<Widget*> children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	ScrollArea(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~ScrollArea() override = default;
 
 	virtual void draw() const override;
@@ -95,8 +109,8 @@ public:
 	virtual void onDrag(vec2i mPos, vec2i mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onScroll(vec2i wMov) override;
-
 	virtual Rect frame() const override;
+
 	virtual vec2i wgtPosition(sizet id) const override;
 	virtual vec2i wgtSize(sizet id) const override;
 	Rect barRect() const;

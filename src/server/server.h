@@ -1,12 +1,11 @@
 #pragma once
 
-#include "utils/text.h"
+#include "utils/cvec2.h"
 #ifdef __APPLE__
 #include <SDL2_net/SDL_net.h>
 #else
 #include <SDL2/SDL_net.h>
 #endif
-#include <random>
 
 struct Date {
 	uint8 sec, min, hour;
@@ -25,6 +24,13 @@ inline string Date::toString(char ts, char sep, char ds) const {
 }
 
 namespace Com {
+
+constexpr uint16 defaultPort = 39741;
+constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
+constexpr uint16 dataMaxSize = 2048;
+constexpr uint8 roomNameLimit = 32;
+constexpr uint8 maxRooms = (dataMaxSize - dataHeadSize - sizeof(uint8)) / (sizeof(uint8) * 2 + roomNameLimit);
+constexpr uint8 maxPlayers = maxRooms * 2;
 
 enum class Tile : uint8 {
 	plains,
@@ -71,33 +77,31 @@ const array<string, pieceMax> pieceNames = {
 	"throne"
 };
 
-constexpr uint16 defaultPort = 39741;
-constexpr uint16 recvSize = 1380;
-constexpr uint8 maxPlayers = 2;
-
 enum class Code : uint8 {
-	none,	// denotes a state of not reading data
 	full,	// server full
-	setup,	// start setup phase (has first turn info)
+	rlist,	// list all rooms (amount + flags + names)
+	rnew,	// create new room (room name)
+	cnrnew,	// confirm new room (yes/no)
+	rerase,	// delete a room (name info)
+	ropen,	// info whether a room can be accessed (not full + name)
+	join,	// player joins room (room name)
+	leave,	// player leaves room
+	hello,	// player has joined
+	cnjoin,	// confirm join	(yes/no + config)
+	config,	// player sending game config
+	start,	// start setup phase (has first turn info)
 	tiles,	// player ready to start match (tile info)
 	pieces,	// arrives after ^ and is the last ready signal (piece info)
 	move,	// piece move (piece + position info)
 	kill,	// piece die (piece info)
 	breach,	// fortress state change (breached or not info)
-	record,	// turn record data (piece + has attacked or switched info)
-	win		// player win (if it's the sender who won info)
+	record	// turn record data (piece + has attacked or switched info)
 };
 
 // variable game properties (shall never be changed after loading)
 class Config {
 public:
-	static constexpr char defaultName[] = "default";
-	static constexpr char defaultFile[] = "game.ini";
-	static constexpr uint16 maxNumPieces = (recvSize - sizeof(Code)) / 2;
-	static constexpr float boardWidth = 10.f;
-	static constexpr uint8 randomLimit = 100;
-
-	uint16 homeWidth, homeHeight;
+	vec2u homeSize;
 	uint8 survivalPass;
 	uint8 favorLimit;
 	uint8 dragonDist;
@@ -118,29 +122,14 @@ public:
 	uint16 piecesSize;	// total number of pieces
 	float objectSize;	// width and height of a tile/piece
 	
+	static constexpr char defaultName[] = "default";
+	static constexpr uint16 maxNumPieces = (dataMaxSize - dataHeadSize) / 2;
+	static constexpr uint16 dataSize = sizeof(homeSize) + sizeof(survivalPass) + sizeof(favorLimit) + sizeof(dragonDist) + sizeof(uint8) + sizeof(uint8) + sizeof(uint8) + tileMax * sizeof(uint16) + (tileMax - 1) * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8) + sizeof(uint8) + sizeof(uint8);
+	static constexpr float boardWidth = 10.f;
+	static constexpr uint8 randomLimit = 100;
 private:
-	static constexpr uint16 minWidth = 4;
-	static constexpr uint16 maxWidth = 71;
-	static constexpr uint16 minHeight = 2;
-	static constexpr uint16 maxHeight = 35;
-	static constexpr char keywordSize[] = "size";
-	static constexpr char keywordSurvival[] = "survival";
-	static constexpr char keywordFavors[] = "favors";
-	static constexpr char keywordDragonDist[] = "dragon_dist";
-	static constexpr char keywordDragonDiag[] = "dragon_diag";
-	static constexpr char keywordMultistage[] = "multistage";
-	static constexpr char keywordSurvivalKill[] = "survival_kill";
-	static constexpr char keywordTile[] = "tile_";
-	static constexpr char keywordMiddle[] = "middle_";
-	static constexpr char keywordPiece[] = "piece_";
-	static constexpr char keywordWinFortress[] = "win_fortresses";
-	static constexpr char keywordWinThrone[] = "win_thrones";
-	static constexpr char keywordCapturers[] = "capturers";
-	static constexpr char keywordShift[] = "middle_shift";
-	static constexpr char keywordLeft[] = "left";
-	static constexpr char keywordRight[] = "right";
-	static constexpr char keywordNear[] = "near";
-	static constexpr char keywordFar[] = "far";
+	static constexpr vec2u minHomeSize = { 4, 2 };
+	static constexpr vec2u maxHomeSize = { 89, 44 };
 
 public:
 	Config();
@@ -148,26 +137,23 @@ public:
 	void updateValues();
 	Config& checkValues();
 	void toComData(uint8* data) const;
-	void fromComData(const uint8* data);
-	uint16 dataSize(Code code) const;
-	uint16 tileCompressionEnd() const;
-	string toIniText() const;
-	void fromIniLine(const string& line);
+	void fromComData(uint8* data);
+	uint16 tileCompressionSize() const;
+	uint16 pieceDataSize() const;
 	string capturersString() const;
 	void readCapturers(const string& line);
-	static umap<string, Config> load(const string& file = defaultFile);
-	static bool save(const umap<string, Config>& confs, const string& file = defaultFile);
+
 	template <class T, sizet S> static T calcSum(const array<T, S>& nums, sizet size = S);
 private:
-	void readSize(const string& line);
 	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, uint16 floor = 0);
-	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
-	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
-	void readShift(const string& line);
 };
 
-inline uint16 Config::tileCompressionEnd() const {
-	return 1 + extraSize / 2 + extraSize % 2;
+inline uint16 Config::tileCompressionSize() const {
+	return dataHeadSize + extraSize / 2 + extraSize % 2;
+}
+
+inline uint16 Config::pieceDataSize() const {
+	return dataHeadSize + numPieces * sizeof(uint16);
 }
 
 template <class T, sizet S>
@@ -178,19 +164,93 @@ T Config::calcSum(const array<T, S>& nums, sizet size) {
 	return res;
 }
 
-template <sizet N, sizet S>
-void Config::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
-	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
-		amts[id] = uint16(sstol(it.second));
+int sendRejection(TCPsocket server);
+string readName(const uint8* data);
+
+constexpr array<uint16, uint8(Code::record)+1> codeSizes = {	// 0 means variable length
+	dataHeadSize,					// full
+	0,								// room list (room count * (name.len + name))
+	0,								// room create (name.len + name)
+	dataHeadSize + sizeof(uint8),	// confirm room create
+	0,								// room delete (name.len + name)
+	0,								// room is open (state + name.len + name)
+	0,								// join room (name.len + name)
+	dataHeadSize,					// leave room
+	dataHeadSize,					// player in room
+	dataHeadSize + Config::dataSize,					// confirm join room
+	dataHeadSize + Config::dataSize,					// game config
+	dataHeadSize + sizeof(uint8) + Config::dataSize,	// game start
+	0,													// tile setup (tiles.num / 2)
+	0,													// piece setup (pieces.num * 2)
+	dataHeadSize + sizeof(uint16) * 2,					// piece move
+	dataHeadSize + sizeof(uint16),						// piece kill
+	dataHeadSize + sizeof(uint8) + sizeof(uint16),		// fortress breach
+	dataHeadSize + sizeof(uint8) + sizeof(uint16) * 2	// turn record
+};
+
 }
 
-template <sizet N, sizet S>
-void Config::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
-	for (sizet i = 0; i < amts.size(); i++)
-		text += makeIniLine(word + names[i], toStr(amts[i]));
+// for making sending stuff easier
+struct Buffer {
+	uint16 size;	// shall not exceed bufSize, is never actually checked though
+	uint8 data[Com::dataMaxSize];
+
+	Buffer();
+
+	void push(const vector<uint8>& vec);
+	void push(const vector<uint16>& vec);
+	void push(const string& str);
+	void push(const uint8* vec, uint16 len);
+	void push(uint8 val);
+	void push(uint16 val);
+	void pushHead(Com::Code code);			// shouldn't be used for codes with variable length
+	uint16 writeHead(Com::Code code, uint16 clen, uint16 pos = 0);	// returns new pos
+	const char* send(TCPsocket socket);		// returns error code or nullptr on success
+	int recv(TCPsocket socket);
+	template <class F, class... A> void processRecv(int len, F finish, A... args);
+};
+
+inline Buffer::Buffer() :
+	size(0)
+{}
+
+inline void Buffer::push(const vector<uint8>& vec) {
+	push(vec.data(), uint16(vec.size()));
 }
 
-void sendRejection(TCPsocket server);
-std::default_random_engine createRandomEngine();
+inline void Buffer::push(const string& str) {
+	push(reinterpret_cast<const uint8*>(str.c_str()), uint16(str.length()));
+}
 
+inline void Buffer::push(uint8 val) {
+	data[size++] = val;
+}
+
+inline void Buffer::pushHead(Com::Code code) {
+	size = writeHead(code, Com::codeSizes[uint8(code)], size);
+}
+
+inline const char* Buffer::send(TCPsocket socket) {
+	return SDLNet_TCP_Send(socket, data, size) == size ? reinterpret_cast<const char*>(size = 0) : SDLNet_GetError();
+}
+
+inline int Buffer::recv(TCPsocket socket) {
+	return SDLNet_TCP_Recv(socket, data + size, Com::dataMaxSize - size);
+}
+
+template <class F, class... A>
+void Buffer::processRecv(int len, F finish, A... args) {
+	uint8* dtp = data;
+	do {
+		if (int await = SDLNet_Read16(dtp + 1), left = await - size; size + len >= Com::dataHeadSize && len >= left) {
+			finish(dtp, args...);
+			len -= left;
+			dtp += left;
+			size = 0;
+		} else {
+			if (size += len; dtp != data)
+				std::copy_n(dtp, size, data);
+			len = 0;
+		}
+	} while (len);
 }

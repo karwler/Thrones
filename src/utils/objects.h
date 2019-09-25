@@ -2,6 +2,8 @@
 
 #include "oven/oven.h"
 #include "utils.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 // vertex data for raycast detection
 class CMesh {
@@ -77,7 +79,8 @@ public:
 	bool show;		// if drawn
 	bool rigid;		// if affected by raycast
 private:
-	vec3 pos, rot, scl;
+	vec3 pos, scl;
+	quat rot;
 	mat4 trans;
 	mat3 normat;
 
@@ -89,20 +92,18 @@ public:
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
-	const vec3& getRot() const;
-	void setRot(const vec3& vec);
+	const quat& getRot() const;
+	void setRot(const quat& qut);
 	const vec3& getScl() const;
 	void setScl(const vec3& vec);
 	const mat4& getTrans() const;
 protected:
 	const mat3& getNormat() const;
 
-	void updateColor() const;
-	static void updateColor(const vec3& diffuse, const vec3& specular, const vec3& emission, float shininess, float alpha, GLuint texture);
-	void updateTransform() const;
+	static void updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture);
 	static void updateTransform(const mat4& model, const mat3& norm);
-	static void setTransform(mat4& model, const vec3& pos, const vec3& rot, const vec3& scl);
-	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const vec3& rot, const vec3& scl);
+	static void setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl);
+	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl);
 };
 
 inline const vec3& Object::getPos() const {
@@ -113,12 +114,12 @@ inline void Object::setPos(const vec3& vec) {
 	setTransform(trans, pos = vec, rot, scl);
 }
 
-inline const vec3& Object::getRot() const {
+inline const quat& Object::getRot() const {
 	return rot;
 }
 
-inline void Object::setRot(const vec3& vec) {
-	setTransform(trans, normat, pos, rot = vec, scl);
+inline void Object::setRot(const quat& qut) {
+	setTransform(trans, normat, pos, rot = qut, scl);
 }
 
 inline const vec3& Object::getScl() const {
@@ -137,29 +138,28 @@ inline const mat3& Object::getNormat() const {
 	return normat;
 }
 
-inline void Object::updateColor() const {
-	updateColor(matl->diffuse, matl->specular, matl->emission, matl->shininess, matl->alpha, tex);
-}
-
-inline void Object::updateTransform() const {
-	updateTransform(trans, normat);
-}
-
-inline void Object::setTransform(mat4& model, const vec3& pos, const vec3& rot, const vec3& scl) {
-	model = glm::translate(mat4(1.f), pos) * glm::scale(glm::mat4_cast(makeQuat(rot)), scl);
+inline void Object::setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl) {
+	model = glm::scale(glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot), scl);
 }
 
 // square object on a single plane
 class BoardObject : public Object {
 public:
-	static constexpr float upperPoz = 0.001f;
-	static constexpr float emissionSelect = 0.1f;
+	enum Emission : uint8 {
+		EMI_NONE = 0,
+		EMI_DIM  = 1,
+		EMI_SEL  = 2,
+		EMI_HIGH = 4
+	};
 
 	GCall hgcall, ulcall, urcall;
-	float diffuseFactor, emissionFactor;
 
 protected:
 	static const vec3 moveIconColor;
+
+private:
+	float diffuseFactor;
+	Emission emission;
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
@@ -167,15 +167,22 @@ public:
 
 	virtual void draw() const override;
 
+	Emission getEmission() const;
+	void setEmission(Emission emi);
 	void setRaycast(bool on, bool dim = false);
 protected:
 	void drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
 };
+ENUM_OPERATIONS(BoardObject::Emission, uint8)
+
+inline BoardObject::Emission BoardObject::getEmission() const {
+	return emission;
+}
 
 // piece of terrain
 class Tile : public BoardObject {
 public:
-	enum class Interactivity : uint8 {
+	enum class Interact : uint8 {
 		ignore,
 		recognize,
 		interact
@@ -200,10 +207,9 @@ public:
 	void setTypeSilent(Com::Tile newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
-	bool isPenetrable() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
-	void setInteractivity(Interactivity lvl, bool dim = false);
+	void setInteractivity(Interact lvl, bool dim = false);
 private:
 	static bool getShow(bool show, Com::Tile type);
 };
@@ -218,10 +224,6 @@ inline bool Tile::isBreachedFortress() const {
 
 inline bool Tile::isUnbreachedFortress() const {
 	return type == Com::Tile::fortress && !breached;
-}
-
-inline bool Tile::isPenetrable() const {
-	return type != Com::Tile::fortress || breached;
 }
 
 inline bool Tile::getBreached() const {
@@ -333,10 +335,9 @@ public:
 
 	Com::Piece getType() const;
 	uint8 firingDistance() const;	// 0 if non-firing piece
-	bool active() const;
 	void setActive(bool on);
-	void enable(vec2s bpos);
-	void disable();
+	void updatePos(vec2s bpos, bool active);
+	bool getDrawTopSelf() const;
 };
 
 inline Com::Piece Piece::getType() const {
@@ -349,6 +350,10 @@ inline uint8 Piece::firingDistance() const {
 
 inline void Piece::setActive(bool on) {
 	show = rigid = on;
+}
+
+inline bool Piece::getDrawTopSelf() const {
+	return drawTopSelf;
 }
 
 // pieces on a board

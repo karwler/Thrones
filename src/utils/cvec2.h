@@ -1,8 +1,6 @@
 #pragma once
 
 #include "text.h"
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <cmath>
 
 template <class T>
@@ -18,16 +16,16 @@ struct cvec2 {
 	template <class I> T& operator[](I i);
 	template <class I> constexpr const T& operator[](I i) const;
 
-	cvec2& operator+=(const cvec2& v);
-	cvec2& operator-=(const cvec2& v);
-	cvec2& operator*=(const cvec2& v);
-	cvec2& operator/=(const cvec2& v);
-	cvec2& operator%=(const cvec2& v);
-	cvec2& operator&=(const cvec2& v);
-	cvec2& operator|=(const cvec2& v);
-	cvec2& operator^=(const cvec2& v);
-	cvec2& operator<<=(const cvec2& v);
-	cvec2& operator>>=(const cvec2& v);
+	template <class A> cvec2& operator+=(const cvec2<A>& v);
+	template <class A> cvec2& operator-=(const cvec2<A>& v);
+	template <class A> cvec2& operator*=(const cvec2<A>& v);
+	template <class A> cvec2& operator/=(const cvec2<A>& v);
+	template <class A> cvec2& operator%=(const cvec2<A>& v);
+	template <class A> cvec2& operator&=(const cvec2<A>& v);
+	template <class A> cvec2& operator|=(const cvec2<A>& v);
+	template <class A> cvec2& operator^=(const cvec2<A>& v);
+	template <class A> cvec2& operator<<=(const cvec2<A>& v);
+	template <class A> cvec2& operator>>=(const cvec2<A>& v);
 	cvec2& operator++();
 	cvec2 operator++(int);
 	cvec2& operator--();
@@ -44,7 +42,7 @@ struct cvec2 {
 	constexpr cvec2 swap() const;
 	cvec2 swap(bool yes) const;
 	static cvec2 swap(const T& x, const T& y, bool swap);
-	cvec2 clamp(const cvec2& min, const cvec2& max) const;
+	cvec2 clamp(const cvec2<T>& min, const cvec2<T>& max) const;
 };
 
 template <class T> template <class A>
@@ -75,71 +73,71 @@ constexpr const T& cvec2<T>::operator[](I i) const {
 	return (&x)[i];
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator+=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator+=(const cvec2<A>& v) {
 	x += v.x;
 	y += v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator-=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator-=(const cvec2<A>& v) {
 	x -= v.x;
 	y -= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator*=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator*=(const cvec2<A>& v) {
 	x *= v.x;
 	y *= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator/=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator/=(const cvec2<A>& v) {
 	x /= v.x;
 	y /= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator%=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator%=(const cvec2<A>& v) {
 	x %= v.x;
 	y %= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator&=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator&=(const cvec2<A>& v) {
 	x &= v.x;
 	y &= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator|=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator|=(const cvec2<A>& v) {
 	x |= v.x;
 	y |= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator^=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator^=(const cvec2<A>& v) {
 	x ^= v.x;
 	y ^= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator<<=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator<<=(const cvec2<A>& v) {
 	x <<= v.x;
 	y <<= v.y;
 	return *this;
 }
 
-template <class T>
-cvec2<T>& cvec2<T>::operator>>=(const cvec2& v) {
+template <class T> template <class A>
+cvec2<T>& cvec2<T>::operator>>=(const cvec2<A>& v) {
 	x >>= v.x;
 	y >>= v.y;
 	return *this;
@@ -184,12 +182,12 @@ cvec2<T> cvec2<T>::get(const string& str, F strtox, A... args) {
 	return vec;
 }
 
-template<class T>
+template <class T>
 inline string cvec2<T>::toString(const char* sep) const {
 	return toStr(x) + sep + toStr(y);
 }
 
-template<class T>
+template <class T>
 constexpr vec2 cvec2<T>::glm() const {
 	return vec2(float(x), float(y));
 }
@@ -209,12 +207,12 @@ constexpr T cvec2<T>::length() const {
 	return std::sqrt(x*x + y*y);
 }
 
-template<class T>
+template <class T>
 constexpr T cvec2<T>::area() const {
 	return x * y;
 }
 
-template<class T>
+template <class T>
 constexpr T cvec2<T>::ratio() const {
 	return x / y;
 }
@@ -234,23 +232,23 @@ cvec2<T> cvec2<T>::swap(const T& x, const T& y, bool swap) {
 	return swap ? cvec2<T>(y, x) : cvec2<T>(x, y);
 }
 
-template<class T>
+template <class T>
 cvec2<T> cvec2<T>::clamp(const cvec2<T>& min, const cvec2<T>& max) const {
 	return cvec2<T>(std::clamp(x, min.x, max.x), std::clamp(y, min.y, max.y));
 }
 
-template <class T>
-constexpr cvec2<T> operator+(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator+(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x + b.x, a.y + b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator+(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator+(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x + b, a.y + b);
 }
 
-template <class T>
-constexpr cvec2<T> operator+(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator+(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a + b.x, a + b.y);
 }
 
@@ -259,63 +257,63 @@ constexpr cvec2<T> operator-(const cvec2<T>& a) {
 	return cvec2<T>(-a.x, -a.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator-(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator-(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x - b.x, a.y - b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator-(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator-(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x - b, a.y - b);
 }
 
-template <class T>
-constexpr cvec2<T> operator-(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator-(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a - b.x, a - b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator*(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator*(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x * b.x, a.y * b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator*(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator*(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x * b, a.y * b);
 }
 
-template <class T>
-constexpr cvec2<T> operator*(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator*(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a * b.x, a * b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator/(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator/(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x / b.x, a.y / b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator/(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator/(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x / b, a.y / b);
 }
 
-template <class T>
-constexpr cvec2<T> operator/(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator/(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a / b.x, a / b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator%(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator%(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x % b.x, a.y % b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator%(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator%(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x % b, a.y % b);
 }
 
-template <class T>
-constexpr cvec2<T> operator%(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator%(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a % b.x, a % b.y);
 }
 
@@ -324,84 +322,89 @@ constexpr cvec2<T> operator~(const cvec2<T>& a) {
 	return cvec2<T>(~a.x, ~a.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator&(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator&(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x & b.x, a.y & b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator&(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator&(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x & b, a.y & b);
 }
 
-template <class T>
-constexpr cvec2<T> operator&(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator&(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a & b.x, a & b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator|(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator|(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x | b.x, a.y | b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator|(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator|(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x | b, a.y | b);
 }
 
-template <class T>
-constexpr cvec2<T> operator|(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator|(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a | b.x, a | b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator^(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator^(const cvec2<T>& a, const cvec2<A>& b) {
 	return cvec2<T>(a.x ^ b.x, a.y ^ b.y);
 }
 
-template <class T>
-constexpr cvec2<T> operator^(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr cvec2<T> operator^(const cvec2<T>& a, const A& b) {
 	return cvec2<T>(a.x ^ b, a.y ^ b);
 }
 
-template <class T>
-constexpr cvec2<T> operator^(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr cvec2<T> operator^(const T& a, const cvec2<A>& b) {
 	return cvec2<T>(a ^ b.x, a ^ b.y);
 }
 
-template <class T>
-constexpr bool operator==(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr bool operator==(const cvec2<T>& a, const cvec2<A>& b) {
 	return a.x == b.x && a.y == b.y;
 }
 
-template <class T>
-constexpr bool operator==(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr bool operator==(const cvec2<T>& a, const A& b) {
 	return a.x == b && a.y == b;
 }
 
-template <class T>
-constexpr bool operator==(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr bool operator==(const T& a, const cvec2<A>& b) {
 	return a == b.x && a == b.y;
 }
 
-template <class T>
-constexpr bool operator!=(const cvec2<T>& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr bool operator!=(const cvec2<T>& a, const cvec2<A>& b) {
 	return a.x != b.x || a.y != b.y;
 }
 
-template <class T>
-constexpr bool operator!=(const cvec2<T>& a, const T& b) {
+template <class T, class A>
+constexpr bool operator!=(const cvec2<T>& a, const A& b) {
 	return a.x != b || a.y != b;
 }
 
-template <class T>
-constexpr bool operator!=(const T& a, const cvec2<T>& b) {
+template <class T, class A>
+constexpr bool operator!=(const T& a, const cvec2<A>& b) {
 	return a != b.x || a != b.y;
 }
 
-template <class T>
-bool operator<(const cvec2<T>& a, const cvec2<T>& b) {
-	if (a.y < b.y)
-		return true;
-	return a.y == b.y ? a.x < b.x : false;
+template <class T, class A>
+bool operator<(const cvec2<T>& a, const cvec2<A>& b) {
+	return a.y < b.y ? true : a.y == b.y ? a.x < b.x : false;
 }
+
+using vec2s = cvec2<int16>;
+using vec2u = cvec2<uint16>;
+using vec2i = cvec2<int>;
+using vec2f = cvec2<float>;
+using vec2d = cvec2<double>;
+using vec2t = cvec2<sizet>;

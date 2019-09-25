@@ -95,7 +95,7 @@ endif()
 # set main target
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-add_dependencies(${PROJECT_NAME} ${DATA_NAME})
+add_dependencies(${PROJECT_NAME} ${DATA_NAME} ${SERVER_NAME})
 
 # include directories and link libraries
 include_directories("${CMAKE_SOURCE_DIR}/src")

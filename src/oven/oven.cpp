@@ -33,9 +33,8 @@ bool Sound::convert(const SDL_AudioSpec& dsts) {
 
 // MATERIAL
 
-Material::Material(const vec3& diffuse, const vec3& emission, const vec3& specular, float shininess, float alpha) :
+Material::Material(const vec3& diffuse, const vec3& specular, float shininess, float alpha) :
 	diffuse(diffuse),
-	emission(emission),
 	specular(specular),
 	shininess(shininess),
 	alpha(alpha)

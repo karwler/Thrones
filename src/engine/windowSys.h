@@ -77,7 +77,7 @@ inline Shader::~Shader() {
 class ShaderGeometry : public Shader {
 public:
 	GLint pview, model, normat, vertex, uvloc, normal, texsamp, viewPos;
-	GLint materialDiffuse, materialEmission, materialSpecular, materialShininess, materialAlpha;
+	GLint materialDiffuse, materialSpecular, materialShininess, materialAlpha;
 	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
 public:
@@ -116,7 +116,6 @@ private:
 
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
-	static constexpr float resolutionRatioLimit = 1.5f;
 	static constexpr uint8 fallbackCursorSize = 18;
 	
 	uptr<AudioSys> audio;

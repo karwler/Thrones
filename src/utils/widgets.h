@@ -59,12 +59,13 @@ public:
 
 // can be used as spacer
 class Widget : public Interactable {
-protected:
+public:
 	static const vec4 colorNormal;
 	static const vec4 colorDark;
 	static const vec4 colorLight;
 	static const vec4 colorTooltip;
 
+protected:
 	Layout* parent;	// every widget that isn't a Layout should have a parent
 	sizet pcID;		// this widget's id in parent's widget list
 	Size relSize;	// size relative to parent's parameters
@@ -78,17 +79,16 @@ public:
 	virtual void onResize() {}
 	virtual void postInit() {}		// gets called after parent is set and all set up
 	virtual void onScroll(vec2i) {}
+	virtual vec2i position() const;
+	virtual vec2i size() const;
+	virtual Rect frame() const;	// the rectangle to restrain a widget's visibility (in Widget it returns the parent's frame and if in Layout, it returns a frame for it's children)
+	virtual bool selectable() const;
 
 	sizet getID() const;
 	Layout* getParent() const;
 	void setParent(Layout* pnt, sizet id);
-
 	const Size& getRelSize() const;
-	virtual vec2i position() const;
-	virtual vec2i size() const;
 	Rect rect() const;			// the rectangle that is the widget
-	virtual Rect frame() const;	// the rectangle to restrain a widget's visibility (in Widget it returns the parent's frame and if in Layout, it returns a frame for it's children)
-	virtual bool selectable() const;
 
 protected:
 	static void drawRect(const Rect& rect, const vec4& color, GLuint tex, float z = 0.f);
@@ -194,11 +194,11 @@ private:
 	int diffSliderMouse;
 
 public:
-	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall finishCall = nullptr, BCall updateCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Slider() override = default;
 
 	virtual void draw() const override;
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(vec2i, uint8) override {}
 	virtual void onHold(vec2i mPos, uint8 mBut) override;
 	virtual void onDrag(vec2i mPos, vec2i mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
@@ -301,7 +301,7 @@ private:
 	uint curOpt;
 
 public:
-	SwitchBox(Size relSize = 1.f, const string* opts = nullptr, uint ocnt = 0, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(Size relSize = 1.f, vector<string> opts = {}, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(vec2i mPos, uint8 mBut) override;
@@ -326,11 +326,12 @@ public:
 private:
 	string oldText;
 	BCall ecall;
+	uint limit;
 	uint cpos;		// caret position
 	int textOfs;	// text's horizontal offset
 
 public:
-	LabelEdit(Size relSize = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(Size relSize = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), uint limit = UINT_MAX, Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void drawTop() const override;

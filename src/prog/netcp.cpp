@@ -3,31 +3,34 @@ using namespace Com;
 
 // GUEST
 
-Netcp::Netcp() :
-	sendSize(0),
-	recvState(Code::none),
-	recvPos(0),
-	socks(nullptr),
-	socket(nullptr)
-{}
+Netcp::Netcp(uint8 maxSockets) :
+	socket(nullptr),
+	cncproc(nullptr)
+{
+	if (!(socks = SDLNet_AllocSocketSet(maxSockets)))
+		throw SDLNet_GetError();
+}
 
 Netcp::~Netcp() {
-	closeSockets(socket);
+	closeSocket(socket);
+	SDLNet_FreeSocketSet(socks);
 }
 
 void Netcp::connect() {
-	openSockets(World::sets()->address.c_str(), socket, 1);
+	openSockets(World::sets()->address.c_str(), socket);
+	cncproc = &Netcp::cprocWait;
 }
 
-void Netcp::openSockets(const char* host, TCPsocket& sock, uint8 num) {
+void Netcp::openSockets(const char* host, TCPsocket& sock) {
 	IPaddress address;
 	if (SDLNet_ResolveHost(&address, host, World::sets()->port))
 		throw SDLNet_GetError();
 	if (!(sock = SDLNet_TCP_Open(&address)))
 		throw SDLNet_GetError();
-
-	socks = SDLNet_AllocSocketSet(num);
-	SDLNet_TCP_AddSocket(socks, sock);
+	if (SDLNet_TCP_AddSocket(socks, sock) < 0) {
+		closeSocket(sock);
+		throw SDLNet_GetError();
+	}
 }
 
 void Netcp::closeSocket(TCPsocket& sock) {
@@ -36,94 +39,158 @@ void Netcp::closeSocket(TCPsocket& sock) {
 	sock = nullptr;
 }
 
-void Netcp::closeSockets(TCPsocket& last) {
-	if (last) {
-		closeSocket(last);
-		SDLNet_FreeSocketSet(socks);
-		socks = nullptr;
-	}
-}
-
 void Netcp::tick() {
 	if (SDLNet_CheckSockets(socks, 0) > 0)
 		checkSocket();
 }
 
-void Netcp::checkSocket() {
-	if (SDLNet_SocketReady(socket)) {
-		if (int len = SDLNet_TCP_Recv(socket, recvb + recvPos, Com::recvSize - recvPos); len <= 0)
-			World::game()->disconnect("Connection lost");
-		else do {
-			if (recvState == Code::none) {
-				recvState = Code(*recvb);
-				len--;
-				recvPos++;
-			}
-			if (uint16 await = World::game()->getConfig().dataSize(recvState), left = await - recvPos; len >= left) {
-				World::game()->processCode(recvState, recvb + 1);
-				len -= left;
-				std::copy_n(recvb + await, len, recvb);
-				recvState = Code::none;
-				recvPos = 0;
-			} else {
-				recvPos += len;
-				len = 0;
-			}
-		} while (len);
+void Netcp::cprocWait(uint8* data) {
+	switch (Code(data[0])) {
+	case Code::full:
+		throw NetcpException("Server full");
+	case Code::rlist:
+		World::program()->info &= ~Program::INF_UNIQ;
+		World::program()->eventOpenLobby(data + dataHeadSize);
+		break;
+	case Code::start:
+		World::program()->info |= Program::INF_UNIQ;
+		World::game()->recvStart(data + dataHeadSize);
+		break;
+	default:
+		throw NetcpException("Invalid response: " + toStr(*data));
 	}
 }
 
-bool Netcp::sendData() {
-	if (SDLNet_TCP_Send(socket, sendb, sendSize) == sendSize) {
-		sendSize = 0;
-		return true;
+void Netcp::cprocLobby(uint8* data) {
+	switch (Code(data[0])) {
+	case Code::rlist:
+		World::program()->eventOpenLobby(data + dataHeadSize);
+		break;
+	case Code::rnew:
+		World::state<ProgLobby>()->addRoom(readName(data + dataHeadSize));
+		break;
+	case Code::cnrnew:
+		World::program()->eventHostRoomReceive(data + dataHeadSize);
+		break;
+	case Code::rerase:
+		World::state<ProgLobby>()->delRoom(readName(data + dataHeadSize));
+		break;
+	case Code::ropen:
+		World::state<ProgLobby>()->openRoom(readName(data + dataHeadSize + 1), data[dataHeadSize]);
+		break;
+	case Code::leave:
+		World::program()->info &= ~Program::INF_GUEST_WAITING;
+		World::state<ProgRoom>()->updateStartButton();
+		break;
+	case Code::hello:
+		World::program()->info |= Program::INF_GUEST_WAITING;
+		World::program()->eventPlayerHello(true);
+		break;
+	case Code::cnjoin:
+		World::program()->eventJoinRoomReceive(data + dataHeadSize);
+		break;
+	case Code::config:
+		World::game()->config.fromComData(data + dataHeadSize);
+		World::state<ProgRoom>()->updateConfigWidgets();
+		break;
+	case Code::start:
+		World::game()->recvStart(data + dataHeadSize);
+		break;
+	default:
+		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in lobby" << std::endl;
 	}
-	World::game()->disconnect(SDLNet_GetError());
-	return false;
+}
+
+void Netcp::cprocGame(uint8* data) {
+	switch (Code(data[0])) {
+	case Code::rlist:
+		World::program()->uninitGame();
+		World::program()->eventOpenLobby(data + dataHeadSize);
+		break;
+	case Code::leave:
+		World::program()->eventPlayerLeft();
+		break;
+	case Code::hello:
+		World::program()->info |= Program::INF_GUEST_WAITING;
+		break;
+	case Code::tiles:
+		World::game()->recvTiles(data + dataHeadSize);
+		break;
+	case Code::pieces:
+		World::game()->recvPieces(data + dataHeadSize);
+		break;
+	case Code::move:
+		World::game()->recvMove(data + dataHeadSize);
+		break;
+	case Code::kill:
+		World::game()->recvKill(data + dataHeadSize);
+		break;
+	case Code::breach:
+		World::game()->recvBreach(data + dataHeadSize);
+		break;
+	case Code::record:
+		World::game()->recvRecord(data + dataHeadSize);
+		break;
+	default:
+		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in game" << std::endl;
+	}
+}
+
+void Netcp::checkSocket() {
+	if (SDLNet_SocketReady(socket)) {
+		int len = recvb.recv(socket);
+		if (len <= 0)
+			throw NetcpException("Connection lost");
+		recvb.processRecv(len, cncproc);
+	}
+}
+
+void Netcp::sendData(Buffer& sendb) {
+	if (const char* err = sendb.send(socket))
+		throw NetcpException(err);
+	sendb.size = 0;
+}
+
+void Netcp::sendData(Com::Code code) {
+	uint8 data[Com::dataHeadSize] = { uint8(code) };
+	SDLNet_Write16(Com::dataHeadSize, data + 1);
+	if (SDLNet_TCP_Send(socket, data, Com::dataHeadSize) != Com::dataHeadSize)
+		throw NetcpException(SDLNet_GetError());
 }
 
 // HOST
 
 NetcpHost::NetcpHost() :
-	Netcp(),
-	server(nullptr),
-	tickfunc(&NetcpHost::tickWait)
+	Netcp(2),
+	server(nullptr)
 {}
 
 NetcpHost::~NetcpHost() {
-	if (socket)
-		closeSocket(socket);
-	closeSockets(server);
+	closeSocket(server);
 }
 
 void NetcpHost::connect() {
-	openSockets(nullptr, server, maxPlayers);
+	openSockets(nullptr, server);
+	cncproc = &Netcp::cprocDiscard;
 }
 
 void NetcpHost::tick() {
-	if (SDLNet_CheckSockets(socks, 0) > 0)
-		(this->*tickfunc)();
-}
+	if (SDLNet_CheckSockets(socks, 0) <= 0)
+		return;
 
-void NetcpHost::tickWait() {
 	if (SDLNet_SocketReady(server)) {
-		socket = SDLNet_TCP_Accept(server);
-		SDLNet_TCP_AddSocket(socks, socket);
-		tickfunc = &NetcpHost::tickGame;
-
-		std::default_random_engine randGen = createRandomEngine();
-		sendSize = World::game()->getConfig().dataSize(Code::setup);
-		World::game()->getConfig().toComData(sendb);
-		if (sendb[1] = uint8(std::uniform_int_distribution<uint>(0, 1)(randGen)); sendData()) {
-			sendb[1] = !sendb[1];
-			World::game()->processCode(Code::setup, sendb + 1);
-			tickfunc = &NetcpHost::tickGame;
+		if (socket)
+			sendRejection(server);
+		else try {
+			if (!(socket = SDLNet_TCP_Accept(server)))
+				throw NetcpException(SDLNet_GetError());
+			if (SDLNet_TCP_AddSocket(socks, socket) < 0)
+				throw NetcpException(SDLNet_GetError());
+			World::game()->sendStart();
+		} catch (const NetcpException& err) {
+			closeSocket(socket);
+			std::cerr << "failed to connect guest: " << err.message << std::endl;
 		}
 	}
-}
-
-void NetcpHost::tickGame() {
-	if (SDLNet_SocketReady(server))
-		sendRejection(server);
 	checkSocket();
 }

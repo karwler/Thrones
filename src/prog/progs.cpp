@@ -55,19 +55,6 @@ Texture ProgState::makeTooltip(const vector<string>& lines, int limit, int heigh
 
 // PROGRAM STATE
 
-void ProgState::eventEnter() {
-	if (World::scene()->getPopup())
-		World::scene()->setPopup(nullptr);
-}
-
-bool ProgState::tryClosePopup() {
-	if (World::scene()->getPopup()) {
-		World::prun(World::scene()->getPopup()->ccall, nullptr);
-		return true;
-	}
-	return false;
-}
-
 void ProgState::eventCameraReset() {
 	World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
 }
@@ -104,8 +91,8 @@ Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
 	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), std::move(con), kcal, ccal);
 }
 
-pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal) {
-	LabelEdit* ledit = new LabelEdit(1.f, string(), kcal, &Program::eventClosePopup, kcal);
+pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal, uint limit) {
+	LabelEdit* ledit = new LabelEdit(1.f, string(), kcal, &Program::eventClosePopup, nullptr, Texture(), limit);
 	vector<Widget*> bot = {
 		new Label(1.f, "Ok", kcal, nullptr, Texture(), Label::Alignment::center),
 		new Label(1.f, "Cancel", &Program::eventClosePopup, nullptr, Texture(), Label::Alignment::center)
@@ -118,21 +105,188 @@ pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal) {
 	return pair(new Popup(cvec2<Size>(500, superHeight * 3 + Layout::defaultItemSpacing * 2), std::move(con), kcal, &Program::eventClosePopup), ledit);
 }
 
-Popup* ProgState::createPopupConfig(const Com::Config& conf) {
-	ConfigIO wio;
-	vector<Widget*> bot = {
-		new Widget(),
-		new Label(1.f, "Close", &Program::eventClosePopup, nullptr, Texture(), Label::Alignment::center),
-		new Widget()
-	};
-	vector<Widget*> con = {
-		new ScrollArea(1.f, createConfigList(conf, wio, nullptr, nullptr)),
-		new Layout(lineHeight, std::move(bot), false, 0)
-	};
-	return new Popup(cvec2<Size>(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup);
+// PROG MENU
+
+void ProgMenu::eventEscape() {
+	World::window()->close();
 }
 
-vector<Widget*> ProgState::createConfigList(const Com::Config& conf, ConfigIO& wio, BCall update, BCall scUpdate) {
+Layout* ProgMenu::createLayout() {
+	// server input
+	Text srvt("Server:", superHeight);
+	vector<Widget*> srv = {
+		new Label(srvt.length, srvt.text),
+		new LabelEdit(1.f, World::sets()->address, &Program::eventUpdateAddress, &Program::eventResetAddress, &Program::eventConnectServer)
+	};
+
+	// port input and connect button
+	vector<Widget*> prt = {
+		new Label(srvt.length, "Port:"),
+		new LabelEdit(1.f, toStr(World::sets()->port), &Program::eventUpdatePort, &Program::eventResetPort, &Program::eventConnectServer, Texture())
+	};
+
+	// net buttons
+	vector<Widget*> con = {
+		new Label(srvt.length, "Host", &Program::eventOpenHostMenu, nullptr, Texture(), Label::Alignment::center),
+		new Label(1.f, "Connect", &Program::eventConnectServer, nullptr, Texture(), Label::Alignment::center)
+	};
+
+	// title
+	int width = World::fonts()->length(srvt.text + "000.000.000.000", superHeight) + Layout::defaultItemSpacing + Label::textMargin * 4;
+	const Texture* title = World::scene()->getTex("title");
+	vector<Widget*> tit = {
+		new Widget(),
+		new Button(title->getRes().y * width / title->getRes().x, nullptr, nullptr, Texture(), title->getID(), vec4(1.f))
+	};
+
+	// middle buttons
+	vector<Widget*> buts = {
+		new Layout(1.f, std::move(tit), true, superSpacing),
+		new Widget(0),
+		new Layout(superHeight, std::move(srv), false),
+		new Layout(superHeight, std::move(prt), false),
+		new Layout(superHeight, std::move(con), false),
+		new Widget(0),
+		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, Texture(), Label::Alignment::center),
+		new Label(superHeight, "Exit", &Program::eventExit, nullptr, Texture(), Label::Alignment::center),
+		new Widget(0.9f)
+	};
+
+	// root layout
+	vector<Widget*> cont = {
+		new Widget(),
+		new Layout(width, std::move(buts), true, superSpacing),
+		new Widget()
+	};
+	return new RootLayout(1.f, std::move(cont), false, 0);
+}
+
+// PROG LOBBY
+
+void ProgLobby::eventEscape() {
+	World::program()->eventExitLobby();
+}
+
+Layout* ProgLobby::createLayout() {
+	// side bar
+	vector<string> sidt = {
+		"Host",
+		"Back"
+	};
+	int sideLength = findMaxLength(sidt.begin(), sidt.end());
+	vector<Widget*> lft = {
+		new Label(lineHeight, popBack(sidt), &Program::eventExitLobby),
+		new Label(lineHeight, popBack(sidt), &Program::eventHostRoomInput)
+	};
+
+	// room list
+	vector<Widget*> lns(rooms.size());
+	for (sizet i = 0; i < rooms.size(); i++)
+		lns[i] = createRoom(rooms[i].first, rooms[i].second);
+
+	// root layout
+	vector<Widget*> cont = {
+		new Layout(sideLength, std::move(lft)),
+		rlist = new ScrollArea(1.f, std::move(lns))
+	};
+	return new RootLayout(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
+}
+
+Label* ProgLobby::createRoom(string name, bool open) {
+	return new Label(lineHeight, std::move(name), &Program::eventJoinRoomRequest, nullptr, Texture(), Label::Alignment::left, true, 0, Widget::colorNormal * (open ? 1.f : 0.5f));
+}
+
+void ProgLobby::addRoom(string&& name) {
+	vector<pair<string, bool>>::iterator it = std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return strnatless(rm.first, name); });
+	rlist->insertWidget(sizet(it - rooms.begin()), createRoom(name, true));
+	rooms.insert(it, pair(std::move(name), true));
+}
+
+// PROG ROOM
+
+ProgRoom::ProgRoom() {
+	if (World::program()->info & Program::INF_HOST) {
+		confs = FileSys::loadConfigs();
+		umap<string, Com::Config>::iterator it = confs.find(Com::Config::defaultName);
+		World::game()->configName = it != confs.end() ? it->first : sortNames(confs).front();
+		World::game()->config = confs[World::game()->configName].checkValues();
+	}
+}
+
+void ProgRoom::eventEscape() {
+	World::program()->info & Program::INF_UNIQ ? World::program()->eventOpenMainMenu() : World::program()->eventExitRoom();
+}
+
+Layout* ProgRoom::createLayout() {
+	Text back("Back");
+	vector<Widget*> top0 = {
+		new Label(back.length, back.text, World::program()->info & Program::INF_UNIQ ? &Program::eventOpenMainMenu : &Program::eventExitRoom),
+		startButton = new Label(1.f, string(), nullptr, nullptr, Texture(), Label::Alignment::center)
+	};
+	if (World::program()->info & Program::INF_UNIQ) {
+		Text setup("Setup");
+		Text port("Port:");
+		top0.insert(top0.begin() + 1, new Label(setup.length, std::move(setup.text), &Program::eventOpenSetup));
+		top0.insert(top0.end(), {
+			new Label(port.length, std::move(port.text)),
+			new LabelEdit(Text::strLen("00000") + LabelEdit::caretWidth, toStr(World::sets()->port), &Program::eventUpdatePort)
+		});
+	}
+
+	vector<Widget*> topb = { new Layout(lineHeight, std::move(top0), false) };
+	vector<Widget*> menu = createConfigList(wio, World::program()->info & Program::INF_HOST);
+	if (World::program()->info & Program::INF_HOST) {
+		Text cfgt("Configuration: ");
+		Text aleft(arrowLeft);
+		Text aright(arrowRight);
+		Text copy("Copy");
+		Text newc("New");
+		vector<Widget*> top1 = {
+			new Label(cfgt.length, cfgt.text),
+			new Label(aleft.length, aleft.text, &Program::eventSBPrev),
+			new SwitchBox(1.f, sortNames(confs), World::game()->configName, &Program::eventSwitchConfig, Texture(), Label::Alignment::center),
+			new Label(aright.length, aright.text, &Program::eventSBNext),
+			new Label(copy.length, copy.text, &Program::eventConfigCopyInput),
+			new Label(newc.length, newc.text, &Program::eventConfigNewInput)
+		};
+		if (confs.size() > 1) {
+			Text dele("Del");
+			top1.insert(top1.begin() + 4, new Label(dele.length, dele.text, &Program::eventConfigDelete));
+		}
+		topb.push_back(new Layout(lineHeight, std::move(top1), false));
+
+		Text reset("Reset");
+		vector<Widget*> lineR = {
+			new Label(reset.length, reset.text, &Program::eventUpdateReset, nullptr, makeTooltip("Reset current config")),
+			new Widget()
+		};
+		menu.push_back(new Layout(lineHeight, std::move(lineR), false));
+	}
+
+	int topHeight = lineHeight * int(topb.size()) + Layout::defaultItemSpacing * int(topb.size() - 1);
+	vector<Widget*> cont = {
+		new Layout(topHeight, std::move(topb)),
+		new ScrollArea(1.f, std::move(menu))
+	};
+	RootLayout* root = new RootLayout(1.f, std::move(cont), true, superSpacing, RootLayout::uniformBgColor);
+	updateStartButton();
+	return root;
+}
+
+void ProgRoom::updateStartButton() {
+	if (World::program()->info & Program::INF_UNIQ) {
+		startButton->setText("Open");
+		startButton->setLcall(&Program::eventHostServer);
+	} else if (World::program()->info & Program::INF_HOST) {
+		startButton->setText(World::program()->info & Program::INF_GUEST_WAITING ? "Start" : "Waiting for player...");
+		startButton->setLcall(World::program()->info & Program::INF_GUEST_WAITING ? &Program::eventStartGame : nullptr);
+	} else {
+		startButton->setText("Waiting for start...");
+	}
+}
+
+vector<Widget*> ProgRoom::createConfigList(ConfigIO& wio, bool active) {
+	BCall update = active ? &Program::eventUpdateConfig : nullptr;
 	vector<string> txs = {
 		"Board width",
 		"Homeland height",
@@ -169,83 +323,83 @@ vector<Widget*> ProgState::createConfigList(const Com::Config& conf, ConfigIO& w
 
 	vector<vector<Widget*>> lines0 = { {
 		new Label(descLength, popBack(txs)),
-		wio.width = new LabelEdit(1.f, toStr(conf.homeWidth), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.width = new LabelEdit(1.f, toStr(World::game()->config.homeSize.x), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.height = new LabelEdit(1.f, toStr(conf.homeHeight), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.height = new LabelEdit(1.f, toStr(World::game()->config.homeSize.y), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.survivalLE = new LabelEdit(update ? Size(Text::strLen("100%") + LabelEdit::caretWidth) : Size(1.f), toStr(conf.survivalPass) + '%', update, nullptr, update, makeTooltip(scTip))
+		wio.survivalLE = new LabelEdit(update ? Size(Text::strLen("100%") + LabelEdit::caretWidth) : Size(1.f), toStr(World::game()->config.survivalPass) + '%', update, nullptr, nullptr, makeTooltip(scTip))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.favors = new LabelEdit(1.f, toStr(conf.favorLimit), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.favors = new LabelEdit(1.f, toStr(World::game()->config.favorLimit), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.dragonDist = new LabelEdit(1.f, toStr(conf.dragonDist), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.dragonDist = new LabelEdit(1.f, toStr(World::game()->config.dragonDist), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.dragonDiag = new CheckBox(lineHeight, conf.dragonDiag, update, update, makeTooltip(popBack(tips)))
+		wio.dragonDiag = new CheckBox(lineHeight, World::game()->config.dragonDiag, update, update, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.multistage = new CheckBox(lineHeight, conf.multistage, update, update, makeTooltip(popBack(tips)))
+		wio.multistage = new CheckBox(lineHeight, World::game()->config.multistage, update, update, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.survivalKill = new CheckBox(lineHeight, conf.survivalKill, update, update, makeTooltip(popBack(tips)))
+		wio.survivalKill = new CheckBox(lineHeight, World::game()->config.survivalKill, update, update, makeTooltip(popBack(tips)))
 	} };
-	if (scUpdate)
-		lines0[2].insert(lines0[2].begin() + 1, wio.survivalSL = new Slider(1.f, conf.survivalPass, 0, 100, scUpdate, nullptr, makeTooltip(scTip)));
+	if (active)
+		lines0[2].insert(lines0[2].begin() + 1, wio.survivalSL = new Slider(1.f, World::game()->config.survivalPass, 0, 100, update, &Program::eventPrcSliderUpdate, makeTooltip(scTip)));
 
 	vector<vector<Widget*>> lines1(Com::tileMax);
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines1[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
-			wio.tiles[i] = new LabelEdit(1.f, toStr(conf.tileAmounts[i]), update, nullptr, update, makeTooltip("Number of " + Com::tileNames[i] + " tiles per homeland"))
+			wio.tiles[i] = new LabelEdit(1.f, toStr(World::game()->config.tileAmounts[i]), update, nullptr, nullptr, makeTooltip("Number of " + Com::tileNames[i] + " tiles per homeland"))
 		};
 	lines1.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
-		wio.tileFortress = new Label(1.f, tileFortressString(conf), nullptr, nullptr, makeTooltip({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles per homeland", "(calculated automatically to fill remaining free tiles)" }))
+		wio.tileFortress = new Label(1.f, tileFortressString(World::game()->config), nullptr, nullptr, makeTooltip({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles per homeland", "(calculated automatically to fill remaining free tiles)" }))
 	};
 
 	vector<vector<Widget*>> lines2(Com::tileMax);
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines2[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
-			wio.middles[i] = new LabelEdit(1.f, toStr(conf.middleAmounts[i]), update, nullptr, update, makeTooltip("Number of " + Com::tileNames[i] + " tiles in middle row per player"))
+			wio.middles[i] = new LabelEdit(1.f, toStr(World::game()->config.middleAmounts[i]), update, nullptr, nullptr, makeTooltip("Number of " + Com::tileNames[i] + " tiles in middle row per player"))
 	};
 	lines2.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
-		wio.middleFortress = new Label(1.f, middleFortressString(conf), nullptr, nullptr, makeTooltip({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles in middle row", "(calculated automatically to fill remaining free tiles)" }))
+		wio.middleFortress = new Label(1.f, middleFortressString(World::game()->config), nullptr, nullptr, makeTooltip({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles in middle row", "(calculated automatically to fill remaining free tiles)" }))
 	};
 
 	vector<vector<Widget*>> lines3(Com::pieceMax + 1);
 	for (uint8 i = 0; i < Com::pieceMax; i++)
 		lines3[i] = {
 			new Label(descLength, firstUpper(Com::pieceNames[i])),
-			wio.pieces[i] = new LabelEdit(1.f, toStr(conf.pieceAmounts[i]), update, nullptr, update, makeTooltip("Number of " + Com::pieceNames[i] + " pieces per player"))
+			wio.pieces[i] = new LabelEdit(1.f, toStr(World::game()->config.pieceAmounts[i]), update, nullptr, nullptr, makeTooltip("Number of " + Com::pieceNames[i] + " pieces per player"))
 		};
 	lines3.back() = {
 		new Label(descLength, "Total"),
-		wio.pieceTotal = new Label(1.f, pieceTotalString(conf), nullptr, nullptr, makeTooltip("Total amount of pieces out of the maximum possible number of pieces per player"))
+		wio.pieceTotal = new Label(1.f, pieceTotalString(World::game()->config), nullptr, nullptr, makeTooltip("Total amount of pieces out of the maximum possible number of pieces per player"))
 	};
 
 	vector<vector<Widget*>> lines4 = { {
 		new Label(descLength, popBack(txs)),
-		wio.winFortress = new LabelEdit(1.f, toStr(conf.winFortress), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.winFortress = new LabelEdit(1.f, toStr(World::game()->config.winFortress), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.winThrone = new LabelEdit(1.f, toStr(conf.winThrone), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.winThrone = new LabelEdit(1.f, toStr(World::game()->config.winThrone), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.capturers = new LabelEdit(1.f, conf.capturersString(), update, nullptr, update, makeTooltip(popBack(tips)))
+		wio.capturers = new LabelEdit(1.f, World::game()->config.capturersString(), update, nullptr, nullptr, makeTooltip(popBack(tips)))
 	} };
 
 	vector<vector<Widget*>> lines5 = { {
 		new Label(descLength, popBack(txs)),
-		wio.shiftLeft = new CheckBox(lineHeight, conf.shiftLeft, update, update, makeTooltip(popBack(tips))),
+		wio.shiftLeft = new CheckBox(lineHeight, World::game()->config.shiftLeft, update, update, makeTooltip(popBack(tips))),
 		new Widget()
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.shiftNear = new CheckBox(lineHeight, conf.shiftNear, update, update, makeTooltip(popBack(tips))),
+		wio.shiftNear = new CheckBox(lineHeight, World::game()->config.shiftNear, update, update, makeTooltip(popBack(tips))),
 		new Widget()
 	} };
 
@@ -265,12 +419,12 @@ vector<Widget*> ProgState::createConfigList(const Com::Config& conf, ConfigIO& w
 	return menu;
 }
 
-void ProgState::setConfigLines(vector<Widget*>& menu, vector<vector<Widget*>>& lines, sizet& id) {
+void ProgRoom::setConfigLines(vector<Widget*>& menu, vector<vector<Widget*>>& lines, sizet& id) {
 	for (vector<Widget*>& it : lines)
 		menu[id++] = new Layout(lineHeight, std::move(it), false);
 }
 
-void ProgState::setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) {
+void ProgRoom::setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) {
 	int tlen = Text::strLen(title);
 	vector<Widget*> line = {
 		new Label(tlen, std::move(title)),
@@ -279,153 +433,45 @@ void ProgState::setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id)
 	menu[id++] = new Layout(lineHeight, std::move(line), false);
 }
 
-// PROG MENU
-
-void ProgMenu::eventEscape() {
-	if (!tryClosePopup())
-		World::window()->close();
+void ProgRoom::updateConfigWidgets() {
+	wio.width->setText(toStr(World::game()->config.homeSize.x));
+	wio.height->setText(toStr(World::game()->config.homeSize.y));
+	if (World::program()->info & Program::INF_HOST)
+		wio.survivalSL->setVal(World::game()->config.survivalPass);
+	wio.survivalLE->setText(toStr(World::game()->config.survivalPass) + '%');
+	wio.favors->setText(toStr(World::game()->config.favorLimit));
+	wio.dragonDist->setText(toStr(World::game()->config.dragonDist));
+	wio.dragonDiag->on = World::game()->config.dragonDiag;
+	wio.multistage->on = World::game()->config.multistage;
+	wio.survivalKill->on = World::game()->config.survivalKill;
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		wio.tiles[i]->setText(toStr(World::game()->config.tileAmounts[i]));
+	wio.tileFortress->setText(tileFortressString(World::game()->config));
+	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		wio.middles[i]->setText(toStr(World::game()->config.middleAmounts[i]));
+	wio.middleFortress->setText(middleFortressString(World::game()->config));
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		wio.pieces[i]->setText(toStr(World::game()->config.pieceAmounts[i]));
+	wio.pieceTotal->setText(pieceTotalString(World::game()->config));
+	wio.winFortress->setText(toStr(World::game()->config.winFortress));
+	wio.winThrone->setText(toStr(World::game()->config.winThrone));
+	wio.capturers->setText(World::game()->config.capturersString());
+	wio.shiftLeft->on = World::game()->config.shiftLeft;
+	wio.shiftNear->on = World::game()->config.shiftNear;
 }
 
-Layout* ProgMenu::createLayout() {
-	// server input
-	Text srvt("Server:", superHeight);
-	vector<Widget*> srv = {
-		new Label(srvt.length, srvt.text),
-		new LabelEdit(1.f, World::sets()->address, &Program::eventUpdateAddress, nullptr, &Program::eventConnectServer)
+Popup* ProgRoom::createPopupConfig() {
+	ConfigIO wio;
+	vector<Widget*> bot = {
+		new Widget(),
+		new Label(1.f, "Close", &Program::eventClosePopup, nullptr, Texture(), Label::Alignment::center),
+		new Widget()
 	};
-
-	// port input and connect button
-	vector<Widget*> prt = {
-		new Label(srvt.length, "Port:"),
-		new LabelEdit(1.f, toStr(World::sets()->port), &Program::eventUpdatePort, nullptr, &Program::eventConnectServer, Texture())
-	};
-
-	// net buttons
 	vector<Widget*> con = {
-		new Label(srvt.length, "Host", &Program::eventOpenHostMenu, nullptr, Texture(), Label::Alignment::center),
-		new Label(1.f, "Connect", &Program::eventConnectServer, nullptr, Texture(), Label::Alignment::center)
+		new ScrollArea(1.f, createConfigList(wio, false)),
+		new Layout(lineHeight, std::move(bot), false, 0)
 	};
-
-	// title
-	int width = World::fonts()->length(srvt.text + "000.000.000.000", superHeight) + Layout::defaultItemSpacing + Label::textMargin * 4;
-	const Texture* title = World::scene()->getTex("title");
-	vector<Widget*> tit = {
-		new Widget(),
-		new Button(title->getRes().y * width / title->getRes().x, nullptr, nullptr, Texture(), title->getID(), vec4(1.f))
-	};
-
-	// middle buttons
-	vector<Widget*> buts = {
-		new Layout(1.f, std::move(tit), true, superSpacing),
-		new Widget(0),
-		new Layout(superHeight, std::move(srv), false),
-		new Layout(superHeight, std::move(prt), false),
-		new Layout(superHeight, std::move(con), false),
-		new Widget(0),
-		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, Texture(), Label::Alignment::center),
-		new Label(superHeight, "Exit", &Program::eventExit, nullptr, Texture(), Label::Alignment::center),
-		new Widget(0.9f)
-	};
-
-	// root layout
-	vector<Widget*> cont = {
-		new Widget(),
-		new Layout(width, std::move(buts), true, superSpacing),
-		new Widget()
-	};
-	return new Layout(1.f, cont, false, 0);
-}
-
-// PROG HOST
-
-ProgHost::ProgHost() :
-	confs(Com::Config::load())
-{
-	if (curConf = confs.find(Com::Config::defaultName); curConf == confs.end())
-		curConf = confs.find(sortNames(confs).front());
-	curConf->second.checkValues();
-}
-
-void ProgHost::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventOpenMainMenu();
-}
-
-Layout* ProgHost::createLayout() {
-	vector<string> cfgNames = sortNames(confs);
-	Text back("Back");
-	Text port("Port:");
-	vector<Widget*> top0 = {
-		new Label(back.length, back.text, &Program::eventOpenMainMenu),
-		new Label(1.f, "Open", &Program::eventHostServer, nullptr, Texture(), Label::Alignment::center),
-		new Label(port.length, port.text),
-		new LabelEdit(Text::strLen("00000") + LabelEdit::caretWidth, toStr(World::sets()->port), &Program::eventUpdatePort)
-	};
-	Text cfgt("Configuration: ");
-	Text aleft(arrowLeft);
-	Text aright(arrowRight);
-	Text copy("Copy");
-	Text newc("New");
-	vector<Widget*> top1 = {
-		new Label(cfgt.length, cfgt.text),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev),
-		new SwitchBox(1.f, cfgNames.data(), uint(cfgNames.size()), curConf->first, &Program::eventSwitchConfig, Texture(), Label::Alignment::center),
-		new Label(aright.length, aright.text, &Program::eventSBNext),
-		new Label(copy.length, copy.text, &Program::eventConfigCopyInput),
-		new Label(newc.length, newc.text, &Program::eventConfigNewInput)
-	};
-	if (confs.size() > 1) {
-		Text dele("Del");
-		top1.insert(top1.begin() + 4, new Label(dele.length, dele.text, &Program::eventConfigDeleteInput));
-	}
-
-	Text reset("Reset");
-	vector<Widget*> lineR = {
-		new Label(reset.length, reset.text, &Program::eventUpdateReset, nullptr, makeTooltip("Reset current config")),
-		new Widget()
-	};
-	vector<Widget*> menu = createConfigList(curConf->second, wio, &Program::eventUpdateConfig, &Program::eventUpdateSurvivalSL);
-	menu.push_back(new Layout(lineHeight, std::move(lineR), false));
-
-	vector<Widget*> topb = {
-		new Layout(lineHeight, std::move(top0), false),
-		new Layout(lineHeight, std::move(top1), false)
-	};
-	vector<Widget*> cont = {
-		new Layout(lineHeight * 2 + Layout::defaultItemSpacing, std::move(topb)),
-		new ScrollArea(1.f, std::move(menu))
-	};
-	return new Layout(1.f, std::move(cont), true, superSpacing);
-}
-
-// PROG ROOMS
-
-void ProgRooms::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventOpenMainMenu();
-}
-
-Layout* ProgRooms::createLayout() {
-	// side bar
-	vector<string> sidt = {
-		"Host",
-		"Back"
-	};
-	int sideLength = findMaxLength(sidt.begin(), sidt.end());
-	vector<Widget*> lft = {
-		new Label(lineHeight, popBack(sidt), &Program::eventOpenMainMenu),
-		new Label(lineHeight, popBack(sidt), nullptr)
-	};
-
-	// room list
-	vector<Widget*> lns;	// TODO: populate
-
-	// root layout
-	vector<Widget*> cont = {
-		new Layout(sideLength, std::move(lft)),
-		new ScrollArea(1.f, std::move(lns))
-	};
-	return new Layout(1.f, cont, false, superSpacing);
+	return new Popup(cvec2<Size>(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup);
 }
 
 // PROG SETUP
@@ -438,8 +484,7 @@ ProgSetup::ProgSetup() :
 {}
 
 void ProgSetup::eventEscape() {
-	if (!tryClosePopup())
-		stage > Stage::tiles && stage < Stage::ready ? World::program()->eventSetupBack() : World::scene()->setPopup(createPopupChoice("Exit game?", &Program::eventExitGame, &Program::eventClosePopup));
+	stage > Stage::tiles ? World::program()->eventSetupBack() : World::program()->eventAbortGame();
 }
 
 void ProgSetup::eventNumpress(uint8 num) {
@@ -472,27 +517,28 @@ void ProgSetup::eventUndrag() {
 bool ProgSetup::setStage(ProgSetup::Stage stg) {
 	switch (stage = stg) {
 	case Stage::tiles:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::interact);
-		World::game()->setMidTilesInteract(Tile::Interactivity::ignore, true);
+		World::game()->setOwnTilesInteract(Tile::Interact::interact);
+		World::game()->setMidTilesInteract(Tile::Interact::ignore, true);
 		World::game()->setOwnPiecesVisible(false);
 		counters = World::game()->countOwnTiles();
 		break;
 	case Stage::middles:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::ignore, true);
-		World::game()->setMidTilesInteract(Tile::Interactivity::interact);
+		World::game()->fillInFortress();
+		World::game()->setOwnTilesInteract(Tile::Interact::ignore, true);
+		World::game()->setMidTilesInteract(Tile::Interact::interact);
 		World::game()->setOwnPiecesVisible(false);
 		counters = World::game()->countMidTiles();
 		break;
 	case Stage::pieces:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::recognize);
-		World::game()->setMidTilesInteract(Tile::Interactivity::ignore, true);
+		World::game()->setOwnTilesInteract(Tile::Interact::recognize);
+		World::game()->setMidTilesInteract(Tile::Interact::ignore, true);
 		World::game()->setOwnPiecesVisible(true);
 		counters = World::game()->countOwnPieces();
 		break;
 	case Stage::ready:
-		World::game()->setOwnTilesInteract(Tile::Interactivity::ignore);
-		World::game()->setMidTilesInteract(Tile::Interactivity::ignore);
-		World::game()->setOwnPiecesInteract(false);
+		World::game()->setOwnTilesInteract(Tile::Interact::ignore);
+		World::game()->setMidTilesInteract(Tile::Interact::ignore);
+		World::game()->disableOwnPiecesInteract(false);
 		counters.clear();
 		return true;
 	}
@@ -523,6 +569,31 @@ uint8 ProgSetup::findNextSelect(bool fwd) {
 }
 
 Layout* ProgSetup::createLayout() {
+	// sidebar
+	vector<string> sidt = {
+		"Save",
+		"Load",
+		"Config",
+		"Exit",
+	};
+	if (World::netcp() || stage < Stage::pieces)
+		sidt.emplace_back("Next");
+	if (stage > Stage::tiles)
+		sidt.emplace_back("Back");
+	std::reverse(sidt.begin(), sidt.end());
+	int sideLength = findMaxLength(sidt.begin(), sidt.end());
+
+	vector<Widget*> wgts = {
+		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupSave),
+		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupLoad),
+		new Label(lineHeight, popBack(sidt), &Program::eventShowConfig),
+		new Label(lineHeight, popBack(sidt), &Program::eventAbortGame)
+	};
+	if (World::netcp() || stage < Stage::pieces)
+		wgts.insert(wgts.end() - 1, new Label(lineHeight, popBack(sidt), &Program::eventSetupNext));
+	if (stage > Stage::tiles)
+		wgts.insert(wgts.end() - 1, new Label(lineHeight, popBack(sidt), &Program::eventSetupBack));
+
 	// center piece
 	vector<Widget*> midl = {
 		new Widget(1.f),
@@ -532,14 +603,12 @@ Layout* ProgSetup::createLayout() {
 	};
 
 	// root layout
-	int sideLength;
-	Layout* side = createSidebar(sideLength);
 	vector<Widget*> cont = {
-		side,
+		new Layout(sideLength, std::move(wgts)),
 		new Layout(1.f, std::move(midl), true, 0),
 		new Widget(sideLength)
 	};
-	return new Layout(1.f, std::move(cont), false, 0);
+	return new RootLayout(1.f, std::move(cont), false, 0);
 }
 
 Layout* ProgSetup::getTicons() {
@@ -558,31 +627,6 @@ Layout* ProgSetup::getPicons() {
 		pbot[1+i] = new Draglet(iconSize, &Program::eventPlacePieceD, &Program::eventIconSelect, nullptr, World::scene()->texture(Com::pieceNames[i]));
 	pbot.back() = new Widget();
 	return new Layout(iconSize, std::move(pbot), false);
-}
-
-Layout* ProgSetup::createSidebar(int& sideLength) const {
-	vector<string> sidt = {
-		"Save",
-		"Load",
-		"Config",
-		"Next",
-		"Exit",
-	};
-	if (stage > Stage::tiles)
-		sidt.push_back("Back");
-	std::reverse(sidt.begin(), sidt.end());
-	sideLength = findMaxLength(sidt.begin(), sidt.end());
-
-	vector<Widget*> wgts = {
-		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupSave),
-		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupLoad),
-		new Label(lineHeight, popBack(sidt), &Program::eventShowConfig),
-		new Label(lineHeight, popBack(sidt), &Program::eventSetupNext),
-		new Label(lineHeight, popBack(sidt), &Program::eventExitGame)
-	};
-	if (stage > Stage::tiles)
-		wgts.insert(wgts.end() - 1, new Label(lineHeight, popBack(sidt), &Program::eventSetupBack));
-	return new Layout(sideLength, std::move(wgts));
 }
 
 void ProgSetup::incdecIcon(uint8 type, bool inc, bool isTile) {
@@ -628,8 +672,7 @@ Popup* ProgSetup::createPopupSaveLoad(bool save) {
 // PROG MATCH
 
 void ProgMatch::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventExitGame();
+	World::program()->eventAbortGame();
 }
 
 void ProgMatch::eventWheel(int ymov) {
@@ -675,19 +718,18 @@ Layout* ProgMatch::createLayout() {
 	// sidebar
 	int sideLength = Text::strLen("FF: 00/00");
 	vector<Widget*> left = {
-		new Label(lineHeight, "Exit", &Program::eventExitGame),
+		new Label(lineHeight, "Exit", &Program::eventAbortGame),
 		new Label(lineHeight, "Config", &Program::eventShowConfig)
 	};
-	if (World::game()->getConfig().pieceAmounts[uint8(Com::Piece::throne)])
+	if (World::game()->config.pieceAmounts[uint8(Com::Piece::throne)])
 		left.push_back(favorIcon = new Label(lineHeight, "FF: 0/0"));	// text is updated after the icon has a parent
 	else
 		favorIcon = nullptr;
 	left.push_back(turnIcon = new Label(lineHeight, "End turn"));
-	updateTurnIcon(World::game()->getMyTurn());
 	
 	unplacedDragons = 0;
 	for (Piece* pce = World::game()->getOwnPieces(Com::Piece::dragon); pce->getType() == Com::Piece::dragon; pce++)
-		if (World::game()->ptog(pce->getPos()).has(INT16_MIN))
+		if (!World::game()->pieceOnBoard(pce))
 			unplacedDragons++;
 	if (unplacedDragons) {
 		left.push_back(dragonIcon = new Layout(iconSize, { new Draglet(iconSize, nullptr, nullptr, nullptr, World::scene()->texture(Com::pieceNames[uint8(Com::Piece::dragon)]), vec4(1.f)) }, false, 0));
@@ -702,18 +744,19 @@ Layout* ProgMatch::createLayout() {
 	};
 	vector<Widget*> cont = {
 		new Layout(1.f, std::move(midl), false, 0),
-		message = new Label(superHeight, World::game()->getMyTurn() ? Game::messageTurnGo : Game::messageTurnWait, nullptr, nullptr, Texture(), Label::Alignment::center, false),
+		message = new Label(superHeight, string(), nullptr, nullptr, Texture(), Label::Alignment::center, false),
 		new Widget(Layout::defaultItemSpacing * 2)
 	};
+	RootLayout* root = new RootLayout(1.f, std::move(cont), true, 0);
+	updateTurnIcon(World::game()->getMyTurn());
 	updateFavorIcon(World::game()->getMyTurn(), World::game()->getFavorCount(), World::game()->getFavorTotal());
-	return new Layout(1.f, std::move(cont), true, 0);
+	return root;
 }
 
 // PROG SETTINGS
 
 void ProgSettings::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventOpenMainMenu();
+	World::program()->eventOpenMainMenu();
 }
 
 Layout* ProgSettings::createLayout() {
@@ -737,11 +780,9 @@ Layout* ProgSettings::createLayout() {
 	pixelformats.clear();
 	for (const SDL_DisplayMode& it : modes)
 		pixelformats.emplace(pixelformatName(it.format), it.format);
-
 	vector<string> winsiz(sizes.size()), dmodes(modes.size());
 	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), [](vec2i size) -> string { return size.toString(rv2iSeparator); });
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
-	vector<string> samples = { "0", "1", "2", "4" };
 
 	// setting buttons, labels and action fields for labels
 	Text aleft(arrowLeft);
@@ -776,44 +817,44 @@ Layout* ProgSettings::createLayout() {
 
 	vector<Widget*> lx[] = { {
 		new Label(descLength, popBack(txs)),
-		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
+		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventDummy, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		screen = new SwitchBox(1.f, Settings::screenNames.data(), uint(Settings::screenNames.size()), Settings::screenNames[uint8(World::sets()->screen)], nullptr, makeTooltip(tips.back())),
+		screen = new SwitchBox(1.f, vector<string>(Settings::screenNames.begin(), Settings::screenNames.end()), Settings::screenNames[uint8(World::sets()->screen)], &Program::eventDummy, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		winSize = new SwitchBox(1.f, winsiz.data(), uint(winsiz.size()), World::sets()->size.toString(rv2iSeparator), nullptr, makeTooltip(tips.back())),
+		winSize = new SwitchBox(1.f, std::move(winsiz), World::sets()->size.toString(rv2iSeparator), &Program::eventDummy, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		dspMode = new SwitchBox(1.f, dmodes.data(), uint(dmodes.size()), dispToFstr(World::sets()->mode), nullptr, makeTooltip(tips.back())),
+		dspMode = new SwitchBox(1.f, std::move(dmodes), dispToFstr(World::sets()->mode), &Program::eventDummy, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(vsyncTip)),
-		new SwitchBox(1.f, Settings::vsyncNames.data(), uint(Settings::vsyncNames.size()), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync, makeTooltip(vsyncTip)),
+		new SwitchBox(1.f, vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync, makeTooltip(vsyncTip)),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(vsyncTip))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		new SwitchBox(1.f, samples.data(), uint(samples.size()), toStr(World::sets()->msamples), &Program::eventSetSamples, makeTooltip(tips.back())),
+		new SwitchBox(1.f, { "0", "1", "2", "4" }, toStr(World::sets()->msamples), &Program::eventSetSamples, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), &Program::eventSetGammaSL, nullptr, makeTooltip(tips.back())),
+		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), nullptr, &Program::eventSetGammaSL, makeTooltip(tips.back())),
 		new LabelEdit(slleLength, toStr(World::sets()->gamma), &Program::eventSetGammaLE, nullptr, nullptr, makeTooltip(popBack(tips)))
-	}, World::audio() ? vector<Widget*>({
+	}, World::audio() ? vector<Widget*>{
 		new Label(descLength, popBack(txs)),
-		new Slider(1.f, World::sets()->avolume, 0, SDL_MIX_MAXVOLUME, &Program::eventSetVolumeSL, nullptr, makeTooltip(tips.back())),
+		new Slider(1.f, World::sets()->avolume, 0, SDL_MIX_MAXVOLUME, nullptr, &Program::eventSetVolumeSL, makeTooltip(tips.back())),
 		new LabelEdit(slleLength, toStr(World::sets()->avolume), &Program::eventSetVolumeLE, nullptr, nullptr, makeTooltip(popBack(tips)))
-	}) : vector<Widget*>({
+	} : vector<Widget*>{
 		new Label(descLength, popBack(txs)),
 		new Label(1.f, "missing audio device")
-	}), };
+	}, };
 	vector<Widget*> lns(lnc + 2);
 	for (sizet i = 0; i < lnc; i++)
 		lns[i] = new Layout(lineHeight, std::move(lx[i]), false);
@@ -825,7 +866,7 @@ Layout* ProgSettings::createLayout() {
 		new Layout(optLength, std::move(lft)),
 		new ScrollArea(1.f, std::move(lns))
 	};
-	return new Layout(1.f, cont, false, superSpacing);
+	return new RootLayout(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
 }
 
 SDL_DisplayMode ProgSettings::currentMode() const {
@@ -847,8 +888,7 @@ const array<string, ProgInfo::powerNames.size()> ProgInfo::powerNames = {
 };
 
 void ProgInfo::eventEscape() {
-	if (!tryClosePopup())
-		World::program()->eventOpenSettings();
+	World::program()->eventOpenSettings();
 }
 
 Layout* ProgInfo::createLayout() {
@@ -883,7 +923,9 @@ Layout* ProgInfo::createLayout() {
 	vector<string> args = {
 		"Platform",			// program
 		"Path",
-		"SDL Version",
+		"SDL",
+		"SDL_net",
+		"SDL_ttf",
 		"Logical cores",	// CPU
 		"L1 line size",
 		"Features",
@@ -909,8 +951,8 @@ Layout* ProgInfo::createLayout() {
 		"Index",
 		"Name",
 		"Flags",
-		"Max tex size",
-		"Tex formats"
+		"Max texture size",
+		"Texture formats"
 	};
 	int argWidth = findMaxLength({ &args, &dispArgs, &rendArgs });
 
@@ -922,8 +964,8 @@ Layout* ProgInfo::createLayout() {
 	appendCurrent(lines, argWidth, args, titles, SDL_GetCurrentVideoDriver);
 	appendCurrentDisplay(lines, argWidth, dispArgs, titles);
 	appendPower(lines, argWidth, args, titles);
-	appendDevices(lines, argWidth, titles, SDL_GetNumAudioDevices, SDL_GetAudioDeviceName, SDL_FALSE);
-	appendDevices(lines, argWidth, titles, SDL_GetNumAudioDevices, SDL_GetAudioDeviceName, SDL_TRUE);
+	appendAudioDevices(lines, argWidth, titles, SDL_FALSE);
+	appendAudioDevices(lines, argWidth, titles, SDL_TRUE);
 	appendDrivers(lines, argWidth, titles, SDL_GetNumAudioDrivers, SDL_GetAudioDriver);
 	appendDrivers(lines, argWidth, titles, SDL_GetNumVideoDrivers, SDL_GetVideoDriver);
 	appendDisplays(lines, argWidth, findMaxLength(dispArgs.begin(), dispArgs.end()), dispArgs, titles);
@@ -934,7 +976,7 @@ Layout* ProgInfo::createLayout() {
 		new Layout(optLength, std::move(lft), true),
 		new ScrollArea(1.f, std::move(lines))
 	};
-	return new Layout(1.f, cont, false, superSpacing);
+	return new RootLayout(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
 }
 
 void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
@@ -942,20 +984,26 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 		new Label(superHeight, popBack(titles)),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, SDL_GetPlatform()) }, false)
 	});
-
 	if (char* basePath = SDL_GetBasePath()) {
 		lines.push_back(new Layout(lineHeight, { new Label(width, std::move(args.back())), new Label(1.f, basePath) }, false));
 		SDL_free(basePath);
 	}
 	args.pop_back();
 
-	SDL_version ver;
-	SDL_GetVersion(&ver);
-	Text vernum(toStr(ver.major) + '.' + toStr(ver.minor) + '.' + toStr(ver.patch));
-	Text revnum(toStr(SDL_GetRevisionNumber()));
-
+	SDL_version bver, ncver, tcver;
+	SDL_GetVersion(&bver);
+	Text slv = versionText(bver);
+	Text slr(toStr(SDL_GetRevisionNumber()));
+	SDL_VERSION(&bver)
+	Text scv = versionText(bver);
+	const SDL_version* nlver = SDLNet_Linked_Version();
+	SDL_NET_VERSION(&ncver)
+	const SDL_version* tlver = TTF_Linked_Version();
+	SDL_TTF_VERSION(&tcver)
 	lines.insert(lines.end(), {
-		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(vernum.length, std::move(vernum.text)), new Label(revnum.length, std::move(revnum.text)), new Label(1.f, SDL_GetRevision()) }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(slv.length, std::move(slv.text)), new Label(slr.length, std::move(slr.text)), new Label(1.f, SDL_GetRevision()), new Label(scv.length, std::move(scv.text)) }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, versionText(*nlver)), new Label(1.f, versionText(ncver)) }, false),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, versionText(*tlver)), new Label(1.f, versionText(tcver)) }, false),
 		new Widget(lineHeight)
 	});
 }
@@ -1055,10 +1103,10 @@ void ProgInfo::appendPower(vector<Widget*>& lines, int width, vector<string>& ar
 	});
 }
 
-void ProgInfo::appendDevices(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(int), const char* (*value)(int, int), int arg) {
+void ProgInfo::appendAudioDevices(vector<Widget*>& lines, int width, vector<string>& titles, int iscapture) {
 	lines.push_back(new Label(superHeight, popBack(titles)));
-	for (int i = 0; i < limit(arg); i++)
-		if (const char* name = value(i, arg))
+	for (int i = 0; i < SDL_GetNumAudioDevices(iscapture); i++)
+		if (const char* name = SDL_GetAudioDeviceName(i, iscapture))
 			lines.push_back(new Layout(lineHeight, { new Label(width, toStr(i)), new Label(1.f, name) }, false));
 	lines.push_back(new Widget(lineHeight));
 }

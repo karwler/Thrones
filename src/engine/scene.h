@@ -72,9 +72,10 @@ struct Light {
 struct ClickStamp {
 	Interactable* inter;
 	ScrollArea* area;
-	vec2i mPos;
+	vec2i pos;
+	uint8 but;
 
-	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i mPos = 0);
+	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i pos = INT_MIN, uint8 but = 0);
 };
 
 // defines change of object properties at a time
@@ -131,7 +132,7 @@ private:
 	vector<Object*> objects;
 	uptr<Layout> layout;
 	uptr<Popup> popup;
-	array<ClickStamp, SDL_BUTTON_X2> stamps;	// data about last mouse click (indices are mouse button numbers
+	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
 	Light light;
 	umap<string, GMesh> meshes;
@@ -173,7 +174,7 @@ public:
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(Animation&& anim);
 	vec2i getMouseMove() const;
-	bool cursorInClickRange(vec2i mPos, uint8 mBut);
+	bool cursorInClickRange(vec2i mPos) const;
 	vec3 pickerRay(vec2i mPos) const;
 
 	void updateSelect(vec2i mPos);
@@ -216,8 +217,8 @@ inline vec2i Scene::getMouseMove() const {
 	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : 0;
 }
 
-inline bool Scene::cursorInClickRange(vec2i mPos, uint8 mBut) {
-	return vec2f(mPos - stamps[mBut-1].mPos).length() <= clickThreshold;
+inline bool Scene::cursorInClickRange(vec2i mPos) const {
+	return vec2f(mPos - cstamp.pos).length() <= clickThreshold;
 }
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {

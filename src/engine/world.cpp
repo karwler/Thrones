@@ -7,15 +7,10 @@ WindowSys World::windowSys;
 
 #ifdef _WIN32
 inline void World::setArgs(Win::PWSTR pCmdLine) {
+	args.setArgs(pCmdLine, { argSetup }, {});
 #else
 inline void World::setArgs(int argc, char** argv) {
-#endif
-	uset<string> flags = { argAddress, argConnect, argPort, argSetup };
-	uset<string> opts = { argAddress, argPort };
-#ifdef _WIN32
-	args.setArgs(pCmdLine, flags, opts);
-#else
-	args.setArgs(argc, argv, stos, flags, opts);
+	args.setArgs(argc, argv, stos, { argSetup }, {});
 #endif
 }
 #ifdef _WIN32

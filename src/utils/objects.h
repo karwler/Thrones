@@ -98,7 +98,7 @@ protected:
 	const mat3& getNormat() const;
 
 	void updateColor() const;
-	static void updateColor(const vec3& diffuse, const vec3& specular, const vec3& emission, float shininess, float alpha, GLuint texture);
+	static void updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture);
 	void updateTransform() const;
 	static void updateTransform(const mat4& model, const mat3& norm);
 	static void setTransform(mat4& model, const vec3& pos, const vec3& rot, const vec3& scl);
@@ -138,7 +138,7 @@ inline const mat3& Object::getNormat() const {
 }
 
 inline void Object::updateColor() const {
-	updateColor(matl->diffuse, matl->specular, matl->emission, matl->shininess, matl->alpha, tex);
+	updateColor(matl->diffuse, matl->specular, matl->shininess, matl->alpha, tex);
 }
 
 inline void Object::updateTransform() const {
@@ -152,14 +152,21 @@ inline void Object::setTransform(mat4& model, const vec3& pos, const vec3& rot, 
 // square object on a single plane
 class BoardObject : public Object {
 public:
-	static constexpr float upperPoz = 0.001f;
-	static constexpr float emissionSelect = 0.1f;
+	enum Emission : uint8 {
+		EMI_NONE = 0,
+		EMI_DIM  = 1,
+		EMI_SEL  = 2,
+		EMI_HIGH = 4
+	};
 
 	GCall hgcall, ulcall, urcall;
-	float diffuseFactor, emissionFactor;
 
 protected:
 	static const vec3 moveIconColor;
+
+private:
+	float diffuseFactor;
+	Emission emission;
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
@@ -167,15 +174,22 @@ public:
 
 	virtual void draw() const override;
 
+	Emission getEmission() const;
+	void setEmission(Emission emi);
 	void setRaycast(bool on, bool dim = false);
 protected:
 	void drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
 };
+ENUM_OPERATIONS(BoardObject::Emission, uint8)
+
+inline BoardObject::Emission BoardObject::getEmission() const {
+	return emission;
+}
 
 // piece of terrain
 class Tile : public BoardObject {
 public:
-	enum class Interactivity : uint8 {
+	enum class Interact : uint8 {
 		ignore,
 		recognize,
 		interact
@@ -200,10 +214,9 @@ public:
 	void setTypeSilent(Com::Tile newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
-	bool isPenetrable() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
-	void setInteractivity(Interactivity lvl, bool dim = false);
+	void setInteractivity(Interact lvl, bool dim = false);
 private:
 	static bool getShow(bool show, Com::Tile type);
 };
@@ -218,10 +231,6 @@ inline bool Tile::isBreachedFortress() const {
 
 inline bool Tile::isUnbreachedFortress() const {
 	return type == Com::Tile::fortress && !breached;
-}
-
-inline bool Tile::isPenetrable() const {
-	return type != Com::Tile::fortress || breached;
 }
 
 inline bool Tile::getBreached() const {
@@ -333,10 +342,9 @@ public:
 
 	Com::Piece getType() const;
 	uint8 firingDistance() const;	// 0 if non-firing piece
-	bool active() const;
 	void setActive(bool on);
-	void enable(vec2s bpos);
-	void disable();
+	void updatePos(vec2s bpos, bool active);
+	bool getDrawTopSelf() const;
 };
 
 inline Com::Piece Piece::getType() const {
@@ -349,6 +357,10 @@ inline uint8 Piece::firingDistance() const {
 
 inline void Piece::setActive(bool on) {
 	show = rigid = on;
+}
+
+inline bool Piece::getDrawTopSelf() const {
+	return drawTopSelf;
 }
 
 // pieces on a board

@@ -26,7 +26,7 @@ string readWordM(const char*& pos) {
 	return str;
 }
 
-static int natCmpLetter(int a, int b) {
+static inline int natCmpLetter(int a, int b) {
 	if (a != b) {
 		int au = toupper(a), bu = toupper(b);
 		return au != bu ? au - bu : b - a;
@@ -34,7 +34,7 @@ static int natCmpLetter(int a, int b) {
 	return 0;
 }
 
-static int natCmpLeft(const char* a, const char* b) {
+static inline int natCmpLeft(const char* a, const char* b) {
 	for (;; a++, b++) {
 		bool nad = notDigit(*a), nbd = notDigit(*b);
 		if (nad && nbd)
@@ -48,7 +48,7 @@ static int natCmpLeft(const char* a, const char* b) {
 	}
 }
 
-static int natCmpRight(const char* a, const char* b) {
+static inline int natCmpRight(const char* a, const char* b) {
 	for (int bias = 0;; a++, b++) {
 		bool nad = notDigit(*a), nbd = notDigit(*b);
 		if (nad && nbd)
@@ -144,7 +144,7 @@ pairStr readIniLine(const string& line) {
 	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
 }
 #ifdef _WIN32
-void Arguments::setArgs(Win::PWSTR pCmdLine, const uset<string>& flg, const uset<string>& opt) {
+void Arguments::setArgs(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	if (int argc; Win::LPWSTR* argv = Win::CommandLineToArgvW(pCmdLine, &argc)) {
 		setArgs(argc, argv, wtos, flg, opt);
 		Win::LocalFree(argv);

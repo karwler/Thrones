@@ -4,41 +4,29 @@
 // PROGRAM
 
 Program::Program() :
+	info(INF_NONE),
 	state(new ProgState)	// necessary as a placeholder to prevent nullptr exceptions
 {
 	World::window()->writeLog("starting");
 }
 
 void Program::start() {
-	if (const char* addr = World::args.getOpt(World::argAddress); addr && *addr)
-		World::sets()->address = addr;
-	else if (World::args.hasFlag(World::argAddress))
-		World::sets()->address = Settings::loopback;
-
-	if (const char* port = World::args.getOpt(World::argPort); port && *port)
-		World::sets()->port = uint16(sstoul(port));
-	else if (World::args.hasFlag(World::argPort))
-		World::sets()->port = Com::defaultPort;
-
 	World::scene()->setObjects(game.initObjects());	// doesn't need to be here but I like having the game board in the background
 	eventOpenMainMenu();
-	if (World::args.hasFlag(World::argConnect))
-		eventConnectServer(nullptr);
 }
 
 // MAIN MENU
 
 void Program::eventOpenMainMenu(Button*) {
-	game.uninitObjects();	// either do this or reset objects
 	setState(new ProgMenu);
 }
 
 void Program::eventConnectServer(Button*) {
-	game.connect();
+	connect(new Netcp, "Connecting...");
 }
 
 void Program::eventConnectCancel(Button*) {
-	game.disconnect();
+	disconnect();
 	World::scene()->setPopup(nullptr);
 }
 
@@ -46,41 +34,129 @@ void Program::eventUpdateAddress(Button* but) {
 	World::sets()->address = static_cast<LabelEdit*>(but)->getText();
 }
 
-void Program::eventUpdatePort(Button* but) {
-	World::sets()->port = uint16(sstoul(static_cast<LabelEdit*>(but)->getText()));
+void Program::eventResetAddress(Button* but) {
+	World::sets()->address = Settings::loopback;
+	static_cast<LabelEdit*>(but)->setText(World::sets()->address);
 }
 
-// HOST MENU
+void Program::eventUpdatePort(Button* but) {
+	World::sets()->port = uint16(sstoul(static_cast<LabelEdit*>(but)->getText()));
+	static_cast<LabelEdit*>(but)->setText(toStr(World::sets()->port));
+}
+
+void Program::eventResetPort(Button* but) {
+	World::sets()->port = Com::defaultPort;
+	static_cast<LabelEdit*>(but)->setText(toStr(World::sets()->port));
+}
+
+// LOBBY MENU
+
+void Program::eventOpenLobby(uint8* data) {
+	vector<pair<string, bool>> rooms(*data++);
+	for (pair<string, bool>& it : rooms) {
+		it.second = *data++;
+		it.first = Com::readName(data);
+		data += it.first.length() + 1;
+	}
+	netcp->setCncproc(&Netcp::cprocLobby);
+	setState(new ProgLobby(std::move(rooms)));
+}
+
+void Program::eventHostRoomInput(Button*) {
+	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventHostRoomRequest, Com::roomNameLimit));
+}
+
+void Program::eventHostRoomRequest(Button*) {
+	try {
+		ProgLobby* pl = static_cast<ProgLobby*>(state.get());
+		if (pl->roomsMaxed())
+			throw "Server full";
+		const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
+		if (!pl->roomNameOk(name))
+			throw "Name taken";
+		netcp->sendData(writeRoomName(Com::Code::rnew, name));
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to create room: ") + err.message, &Program::eventClosePopup));
+	} catch (const char* err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+	}
+}
+
+void Program::eventHostRoomReceive(uint8* data) {
+	if (*data) {
+		info = (info | INF_HOST) & ~INF_GUEST_WAITING;
+		eventOpenRoom();
+	} else
+		World::scene()->setPopup(ProgState::createPopupMessage("Failed to host room", &Program::eventClosePopup));
+}
+
+void Program::eventJoinRoomRequest(Button* but) {
+	try {
+		netcp->sendData(writeRoomName(Com::Code::join, static_cast<Label*>(but)->getText()));
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to join room: ") + err.message, &Program::eventClosePopup));
+	}
+}
+
+void Program::eventJoinRoomReceive(uint8* data) {
+	game.config.fromComData(data);
+	info &= ~INF_HOST;
+	eventOpenRoom();
+}
+
+vector<uint8> Program::writeRoomName(Com::Code code, const string& name) {
+	vector<uint8> data(Com::dataHeadSize + 1 + name.length());
+	data[0] = uint8(code);
+	SDLNet_Write16(uint16(data.size()), data.data() + 1);
+	data[3] = uint8(name.length());
+	std::copy(name.begin(), name.end(), data.data() + 4);
+	return data;
+}
+
+void Program::eventStartGame(Button*) {
+	try {
+		game.sendStart();
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to start game: ") + err.message, &Program::eventClosePopup));
+	}
+}
+
+void Program::eventExitLobby(Button*) {
+	disconnect();
+	eventOpenMainMenu();
+}
+
+// ROOM MENU
+
+void Program::eventOpenRoom(Button*) {
+	netcp->setCncproc(&Netcp::cprocLobby);
+	setState(new ProgRoom);
+}
 
 void Program::eventOpenHostMenu(Button*) {
-	setState(new ProgHost);
+	info |= INF_HOST | INF_UNIQ;
+	setState(new ProgRoom);
 }
 
 void Program::eventHostServer(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	Com::Config::save(ph->confs);
-	game.conhost(ph->curConf->second);
+	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	pr->confs[game.configName] = game.config;
+	FileSys::saveConfigs(pr->confs);
+	connect(new NetcpHost, "Waiting for player...");
 }
 
 void Program::eventSwitchConfig(Button* but) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	ph->curConf = ph->confs.find(static_cast<SwitchBox*>(but)->getText());
-	ph->curConf->second.checkValues();
+	setSaveConfig(static_cast<SwitchBox*>(but)->getText(), false);
 	World::scene()->resetLayouts();
 }
 
-void Program::eventConfigDeleteInput(Button*) {
-	World::scene()->setPopup(ProgState::createPopupChoice("Are you sure?", &Program::eventConfigDelete, &Program::eventClosePopup));
-}
-
 void Program::eventConfigDelete(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
+	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
 	vector<string> names = sortNames(ph->confs);
-	vector<string>::iterator nit = std::find(names.begin(), names.end(), ph->curConf->first);
+	vector<string>::iterator nit = std::find(names.begin(), names.end(), game.configName);
 
-	ph->confs.erase(ph->curConf);
-	ph->curConf = ph->confs.find(nit + 1 != names.end() ? *(nit + 1) : *(nit - 1));
-	Com::Config::save(ph->confs);
+	ph->confs.erase(game.configName);
+	setSaveConfig(ph->confs.find(nit + 1 != names.end() ? *(nit + 1) : *(nit - 1))->first);
 	World::scene()->resetLayouts();
 }
 
@@ -89,11 +165,9 @@ void Program::eventConfigCopyInput(Button*) {
 }
 
 void Program::eventConfigCopy(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
-	if (ph->confs.find(name) == ph->confs.end()) {
-		ph->curConf = ph->confs.emplace(name, ph->curConf->second).first;
-		Com::Config::save(ph->confs);
+	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+	if (const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText(); ph->confs.find(name) == ph->confs.end()) {
+		setSaveConfig(ph->confs.emplace(name, game.config).first->first);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
@@ -104,89 +178,86 @@ void Program::eventConfigNewInput(Button*) {
 }
 
 void Program::eventConfigNew(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText();
-	if (ph->confs.find(name) == ph->confs.end()) {
-		ph->curConf = ph->confs.emplace(name, Com::Config()).first;
-		Com::Config::save(ph->confs);
+	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+	if (const string& name = static_cast<LabelEdit*>(World::scene()->getPopup()->getWidget(1))->getText(); ph->confs.find(name) == ph->confs.end()) {
+		setSaveConfig(ph->confs.emplace(name, Com::Config()).first->first);
 		World::scene()->resetLayouts();
 	} else
 		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
-void Program::eventUpdateSurvivalSL(Button* but) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	uint8 prc = uint8(static_cast<Slider*>(but)->getVal());
-	ph->curConf->second.survivalPass = prc;
-	ph->wio.survivalLE->setText(toStr(prc) + '%');
-	Com::Config::save(ph->confs);
-}
-
 void Program::eventUpdateConfig(Button*) {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	Com::Config& cfg = ph->curConf->second;
-
-	cfg.homeWidth = uint16(sstol(ph->wio.width->getText()));
-	cfg.homeHeight = uint16(sstol(ph->wio.height->getText()));
-	cfg.survivalPass = uint8(sstoul(ph->wio.survivalLE->getText()));
-	cfg.favorLimit = uint8(sstoul(ph->wio.favors->getText()));
-	cfg.dragonDist = uint8(sstoul(ph->wio.dragonDist->getText()));
-	cfg.dragonDiag = ph->wio.dragonDiag->on;
-	cfg.multistage = ph->wio.multistage->on;
-	cfg.survivalKill = ph->wio.survivalKill->on;
+	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+	game.config.homeSize.x = uint16(sstol(ph->wio.width->getText()));
+	game.config.homeSize.y = uint16(sstol(ph->wio.height->getText()));
+	game.config.survivalPass = uint8(sstoul(ph->wio.survivalLE->getText()));
+	game.config.favorLimit = uint8(sstoul(ph->wio.favors->getText()));
+	game.config.dragonDist = uint8(sstoul(ph->wio.dragonDist->getText()));
+	game.config.dragonDiag = ph->wio.dragonDiag->on;
+	game.config.multistage = ph->wio.multistage->on;
+	game.config.survivalKill = ph->wio.survivalKill->on;
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		cfg.tileAmounts[i] = uint16(sstoul(ph->wio.tiles[i]->getText()));
+		game.config.tileAmounts[i] = uint16(sstoul(ph->wio.tiles[i]->getText()));
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		cfg.middleAmounts[i] = uint16(sstoul(ph->wio.middles[i]->getText()));
+		game.config.middleAmounts[i] = uint16(sstoul(ph->wio.middles[i]->getText()));
 	for (uint8 i = 0; i < Com::pieceMax; i++)
-		cfg.pieceAmounts[i] = uint16(sstoul(ph->wio.pieces[i]->getText()));
-	cfg.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
-	cfg.winThrone = uint16(sstol(ph->wio.winThrone->getText()));
-	cfg.readCapturers(ph->wio.capturers->getText());
-	cfg.shiftLeft = ph->wio.shiftLeft->on;
-	cfg.shiftNear = ph->wio.shiftNear->on;
-	
-	cfg.checkValues();
-	updateConfigWidgets();
-}
+		game.config.pieceAmounts[i] = uint16(sstoul(ph->wio.pieces[i]->getText()));
+	game.config.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
+	game.config.winThrone = uint16(sstol(ph->wio.winThrone->getText()));
+	game.config.readCapturers(ph->wio.capturers->getText());
+	game.config.shiftLeft = ph->wio.shiftLeft->on;
+	game.config.shiftNear = ph->wio.shiftNear->on;
 
-void Program::updateConfigWidgets() {
-	ProgHost* ph = static_cast<ProgHost*>(state.get());
-	Com::Config& cfg = ph->curConf->second;
-
-	ph->wio.width->setText(toStr(cfg.homeWidth));
-	ph->wio.height->setText(toStr(cfg.homeHeight));
-	ph->wio.survivalSL->setVal(cfg.survivalPass);
-	ph->wio.survivalLE->setText(toStr(cfg.survivalPass) + '%');
-	ph->wio.favors->setText(toStr(cfg.favorLimit));
-	ph->wio.dragonDist->setText(toStr(cfg.dragonDist));
-	ph->wio.dragonDiag->on = cfg.dragonDiag;
-	ph->wio.multistage->on = cfg.multistage;
-	ph->wio.survivalKill->on = cfg.survivalKill;
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		ph->wio.tiles[i]->setText(toStr(cfg.tileAmounts[i]));
-	ph->wio.tileFortress->setText(ProgState::tileFortressString(cfg));
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
-		ph->wio.middles[i]->setText(toStr(cfg.middleAmounts[i]));
-	ph->wio.middleFortress->setText(ProgState::middleFortressString(cfg));
-	for (uint8 i = 0; i < Com::pieceMax; i++)
-		ph->wio.pieces[i]->setText(toStr(cfg.pieceAmounts[i]));
-	ph->wio.pieceTotal->setText(ProgState::pieceTotalString(cfg));
-	ph->wio.winFortress->setText(toStr(cfg.winFortress));
-	ph->wio.winThrone->setText(toStr(cfg.winThrone));
-	ph->wio.capturers->setText(cfg.capturersString());
-	ph->wio.shiftLeft->on = cfg.shiftLeft;
-	ph->wio.shiftNear->on = cfg.shiftNear;
-	Com::Config::save(ph->confs);
+	game.config.checkValues();
+	ph->updateConfigWidgets();
+	postConfigUpdate();
 }
 
 void Program::eventUpdateReset(Button*) {
-	static_cast<ProgHost*>(state.get())->curConf->second = Com::Config();
-	updateConfigWidgets();
+	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	game.config = Com::Config();
+	pr->updateConfigWidgets();
+	postConfigUpdate();
 }
 
-void Program::eventShowConfig(Button*) {
-	World::scene()->setPopup(ProgState::createPopupConfig(game.getConfig()));
+void Program::postConfigUpdate() {
+	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	try {
+		if ((info & (INF_UNIQ | INF_GUEST_WAITING)) == INF_GUEST_WAITING)	// only send if is host on remote server with guest
+			game.sendConfig();
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to send config data: ") + err.message, &Program::eventClosePopup));
+	}
+	pr->confs[game.configName] = game.config;
+	FileSys::saveConfigs(pr->confs);
+}
+
+void Program::setSaveConfig(const string& name, bool save) {
+	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	game.configName = name;
+	game.config = pr->confs[name];
+	game.config.checkValues();
+	pr->confs[name] = game.config;
+	if (save)
+		FileSys::saveConfigs(pr->confs);
+}
+
+void Program::eventPrcSliderUpdate(Button* but) {
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(static_cast<Slider*>(but)->getVal()) + '%');
+}
+
+void Program::eventPlayerHello(bool onJoin) {
+	World::state<ProgRoom>()->updateStartButton();
+	World::game()->sendConfig(onJoin);
+}
+
+void Program::eventExitRoom(Button*) {
+	try {
+		World::netcp()->sendData(Com::Code::leave);
+	} catch (const NetcpException& err) {
+		disconnect();
+		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventOpenMainMenu));
+	}
 }
 
 // GAME SETUP
@@ -197,11 +268,19 @@ void Program::eventOpenSetup() {
 #else
 	World::scene()->setObjects(World::args.hasFlag(World::argSetup) ? game.initDummyObjects() : game.initObjects());
 #endif
+	netcp->setCncproc(&Netcp::cprocGame);
+	info &= ~INF_GUEST_WAITING;
 	setState(new ProgSetup);
 
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	ps->setStage(ProgSetup::Stage::tiles);
-	ps->rcvMidBuffer.resize(game.getConfig().homeWidth);
+	ps->rcvMidBuffer.resize(game.config.homeSize.x);
+}
+
+void Program::eventOpenSetup(Button*) {
+	World::scene()->setObjects(game.initObjects());
+	setState(new ProgSetup);
+	static_cast<ProgSetup*>(state.get())->setStage(ProgSetup::Stage::tiles);
 }
 
 void Program::eventIconSelect(Button* but) {
@@ -229,7 +308,7 @@ void Program::placeTile(Tile* tile, uint8 type) {
 
 	// place the tile
 	tile->setType(Com::Tile(type));
-	tile->setInteractivity(Tile::Interactivity::interact);
+	tile->setInteractivity(Tile::Interact::interact);
 	ps->incdecIcon(type, false, true);
 }
 
@@ -252,13 +331,13 @@ void Program::placePiece(vec2s pos, uint8 type, Piece* occupant) {
 	// remove any piece that may be occupying that tile already
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	if (occupant) {
-		occupant->disable();
+		occupant->updatePos(INT16_MIN, false);
 		ps->incdecIcon(uint8(occupant->getType()), true, false);
 	}
 
 	// find the first not placed piece of the specified type and place it if it exists
 	Piece* pieces = game.getOwnPieces(Com::Piece(type));
-	std::find_if(pieces, pieces + game.getConfig().pieceAmounts[type], [](Piece& it) -> bool { return !it.active(); })->enable(pos);
+	std::find_if(pieces, pieces + game.config.pieceAmounts[type], [](Piece& it) -> bool { return !it.show; })->updatePos(pos, true);
 	ps->incdecIcon(type, false, false);
 }
 
@@ -267,9 +346,9 @@ void Program::eventMoveTile(BoardObject* obj, uint8) {
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
 		Com::Tile desType = dst->getType();
 		dst->setType(src->getType());
-		dst->setInteractivity(Tile::Interactivity::interact);
+		dst->setInteractivity(Tile::Interact::interact);
 		src->setType(desType);
-		src->setInteractivity(Tile::Interactivity::interact);
+		src->setInteractivity(Tile::Interact::interact);
 	}
 }
 
@@ -281,6 +360,7 @@ void Program::eventMovePiece(BoardObject* obj, uint8) {
 		if (dst)
 			dst->setPos(src->getPos());
 		src->setPos(game.gtop(pos));
+		World::scene()->updateSelect(mousePos());
 	}
 }
 
@@ -288,7 +368,7 @@ void Program::eventClearTile() {
 	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select); til && til->getType() != Com::Tile::empty) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
 		til->setType(Com::Tile::empty);
-		til->setInteractivity(Tile::Interactivity::interact);
+		til->setInteractivity(Tile::Interact::interact);
 	}
 }
 
@@ -297,30 +377,32 @@ void Program::eventClearPiece() {
 	Piece* pce;
 	if (pickBob(pos, pce); pce) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
-		pce->disable();
+		pce->updatePos(INT16_MIN, false);
 	}
 }
 
 void Program::eventSetupNext(Button*) {
 	try {
 		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-		switch (ps->getStage()) {
-		case ProgSetup::Stage::tiles:
-			game.checkOwnTiles();
-			game.fillInFortress();
-			break;
-		case ProgSetup::Stage::middles:
-			game.checkMidTiles();
-			break;
-		case ProgSetup::Stage::pieces:
-			game.checkOwnPieces();
-		}
+		if (netcp)		// only run checks in an actual game
+			switch (ps->getStage()) {
+			case ProgSetup::Stage::tiles:
+				game.checkOwnTiles();
+				break;
+			case ProgSetup::Stage::middles:
+				game.checkMidTiles();
+				break;
+			case ProgSetup::Stage::pieces:
+				game.checkOwnPieces();
+			}
 		if (ps->setStage(ProgSetup::Stage(uint8(ps->getStage()) + 1))) {
 			game.sendSetup();
 			ps->enemyReady ? eventOpenMatch() : eventShowWaitPopup();
 		}
 	} catch (const string& err) {
 		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to send setup: ") + err.message, &Program::eventAbortGame));
 	}
 }
 
@@ -332,7 +414,7 @@ void Program::eventSetupBack(Button*) {
 }
 
 void Program::eventShowWaitPopup(Button*) {
-	World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventExitGame, "Exit"));
+	World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventAbortGame, "Exit"));
 }
 
 void Program::eventOpenSetupSave(Button*) {
@@ -366,8 +448,8 @@ void Program::popuplateSetup(Setup& setup) {
 		if (it->getType() < Com::Tile::fortress)
 			setup.mids.emplace(uint16(it - game.getTiles().mid()), it->getType());
 	for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
-		if (vec2s pos = game.ptog(it->getPos()); pos.hasNot(INT16_MIN))
-			setup.pieces.emplace(pos, it->getType());
+		if (game.pieceOnBoard(it))
+			setup.pieces.emplace(game.ptog(it->getPos()), it->getType());
 
 	FileSys::saveSetups(static_cast<ProgSetup*>(state.get())->setups);
 	World::scene()->setPopup(nullptr);
@@ -376,31 +458,45 @@ void Program::popuplateSetup(Setup& setup) {
 void Program::eventSetupLoad(Button* but) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	Setup& stp = ps->setups.find(static_cast<Label*>(but)->getText())->second;
-	for (Tile* it = game.getTiles().mid(); it != game.getTiles().end(); it++)
-		it->setType(Com::Tile::empty);
-	for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
-		it->disable();
+	if (!stp.tiles.empty()) {
+		for (Tile* it = game.getTiles().own(); it != game.getTiles().end(); it++)
+			it->setType(Com::Tile::empty);
 
-	vector<uint16> cnt(game.getConfig().tileAmounts.begin(), game.getConfig().tileAmounts.end() - 1);
-	for (const pair<const vec2s, Com::Tile>& it : stp.tiles)
-		if (inRange(it.first, vec2s(0, 1), vec2s(game.getConfig().homeWidth - 1, game.getConfig().homeHeight)) && cnt[uint8(it.second)]) {
-			cnt[uint8(it.second)]--;
-			game.getTile(it.first)->setType(it.second);
-		}
-	cnt.assign(game.getConfig().middleAmounts.begin(), game.getConfig().middleAmounts.end());
-	for (const pair<const uint16, Com::Tile>& it : stp.mids)
-		if (it.first < game.getConfig().homeWidth && cnt[uint8(it.second)]) {
-			cnt[uint8(it.second)]--;
-			game.getTiles().mid(it.first)->setType(it.second);
-		}
-	cnt.assign(game.getConfig().pieceAmounts.begin(), game.getConfig().pieceAmounts.end());
-	for (const pair<const vec2s, Com::Piece>& it : stp.pieces)
-		if (inRange(it.first, vec2s(0, 1), vec2s(game.getConfig().homeWidth - 1, game.getConfig().homeHeight)) && cnt[uint8(it.second)]) {
-			cnt[uint8(it.second)]--;
-			Piece* pieces = game.getOwnPieces(it.second);
-			std::find_if(pieces, pieces + game.getConfig().pieceAmounts[uint8(it.second)], [](Piece& pce) -> bool { return !pce.active(); })->enable(it.first);
-		}
+		vector<uint16> cnt(game.config.tileAmounts.begin(), game.config.tileAmounts.end() - 1);
+		for (const pair<vec2s, Com::Tile>& it : stp.tiles)
+			if (inRange(it.first, vec2s(0, 1), vec2s(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
+				cnt[uint8(it.second)]--;
+				game.getTile(it.first)->setType(it.second);
+			}
+	}
+	if (!stp.mids.empty()) {
+		for (Tile* it = game.getTiles().mid(); it != game.getTiles().own(); it++)
+			it->setType(Com::Tile::empty);
+
+		vector<uint16> cnt(game.config.middleAmounts.begin(), game.config.middleAmounts.end());
+		for (const pair<uint16, Com::Tile>& it : stp.mids)
+			if (it.first < game.config.homeSize.x && cnt[uint8(it.second)]) {
+				cnt[uint8(it.second)]--;
+				game.getTiles().mid(it.first)->setType(it.second);
+			}
+	}
+	if (!stp.pieces.empty()) {
+		for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
+			it->updatePos(INT16_MIN, false);
+
+		vector<uint16> cnt(game.config.pieceAmounts.begin(), game.config.pieceAmounts.end());
+		for (const pair<vec2s, Com::Piece>& it : stp.pieces)
+			if (inRange(it.first, vec2s(0, 1), vec2s(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
+				cnt[uint8(it.second)]--;
+				Piece* pieces = game.getOwnPieces(it.second);
+				std::find_if(pieces, pieces + game.config.pieceAmounts[uint8(it.second)], [](Piece& pce) -> bool { return !pce.show; })->updatePos(it.first, true);
+			}
+	}
 	ps->setStage(ProgSetup::Stage::tiles);
+}
+
+void Program::eventShowConfig(Button*) {
+	World::scene()->setPopup(ProgRoom::createPopupConfig());
 }
 
 // GAME MATCH
@@ -408,6 +504,7 @@ void Program::eventSetupLoad(Button* but) {
 void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
+	game.prepareTurn();
 	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYDown, game.getScreen()->getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(0.f)) })));
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
 	World::scene()->getCamera()->pmax = Camera::pmaxMatch;
@@ -424,28 +521,54 @@ void Program::eventPlaceDragon(Button*) {
 		game.placeDragon(pos, pce);
 }
 
-void Program::eventFavorStart(BoardObject* obj, uint8 mBut) {
+void Program::eventFavorStart(BoardObject* obj, uint8) {
 	game.favorState.piece = static_cast<Piece*>(obj);
 	game.updateFavorState();
-	mBut == SDL_BUTTON_LEFT || game.favorState.piece->getType() == Com::Piece::warhorse ? game.highlightMoveTiles(game.favorState.piece) : game.highlightFireTiles(game.favorState.piece);
+	game.favorState.piece->getDrawTopSelf() ? game.highlightMoveTiles(game.favorState.piece) : game.highlightFireTiles(game.favorState.piece);
 }
 
 void Program::eventMove(BoardObject* obj, uint8 mBut) {
-	game.highlightMoveTiles(nullptr);
-	vec2s pos;
-	if (Piece *mover = static_cast<Piece*>(obj), *pce; pickBob(pos, pce))
-		game.pieceMove(mover, pos, pce, mover->getType() == Com::Piece::warhorse && mBut == SDL_BUTTON_LEFT);
+	try {
+		game.highlightMoveTiles(nullptr);
+		vec2s pos;
+		if (Piece* mover = static_cast<Piece*>(obj), *pce; pickBob(pos, pce))
+			game.pieceMove(mover, pos, pce, mover->getType() == Com::Piece::warhorse && mBut == SDL_BUTTON_LEFT);
+	} catch (const string& err) {
+		if (!err.empty())
+			static_cast<ProgMatch*>(state.get())->message->setText(err);
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+	}
 }
 
 void Program::eventFire(BoardObject* obj, uint8) {
-	game.highlightFireTiles(nullptr);
-	vec2s pos;
-	if (Piece* pce; pickBob(pos, pce))
-		game.pieceFire(static_cast<Piece*>(obj), pos, pce);
+	try {
+		game.highlightFireTiles(nullptr);
+		vec2s pos;
+		if (Piece* pce; pickBob(pos, pce))
+			game.pieceFire(static_cast<Piece*>(obj), pos, pce);
+	} catch (const string& err) {
+		if (!err.empty())
+			static_cast<ProgMatch*>(state.get())->message->setText(err);
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+	}
 }
 
-void Program::eventExitGame(Button*) {
-	if (dynamic_cast<ProgMatch*>(state.get())) {
+void Program::eventAbortGame(Button*) {
+	if (uninitGame(); info & INF_UNIQ) {
+		disconnect();
+		info & INF_HOST ? eventOpenHostMenu() : eventOpenMainMenu();
+	} else try {
+		netcp->sendData(Com::Code::leave);
+	} catch (const NetcpException& err) {
+		disconnect();
+		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventOpenMainMenu));
+	}
+}
+
+void Program::uninitGame() {
+	if (game.uninitObjects(); dynamic_cast<ProgMatch*>(state.get())) {
 		World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(1.f)), Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYUp, game.getScreen()->getPos().z)) })));
 		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, Camera::latSetup) })));
 		for (Piece& it : game.getPieces())
@@ -454,8 +577,39 @@ void Program::eventExitGame(Button*) {
 		World::scene()->getCamera()->pmax = Camera::pmaxSetup;
 		World::scene()->getCamera()->ymax = Camera::ymaxSetup;
 	}
-	game.disconnect();
-	eventOpenMainMenu();
+}
+
+void Program::finishMatch(bool win) {
+	if (info & INF_UNIQ)
+		disconnect();
+	World::scene()->setPopup(ProgState::createPopupMessage(win ? "You win" : "You lose", &Program::eventPostFinishMatch));
+}
+
+void Program::eventPostFinishMatch(Button*) {
+	if (uninitGame(); info & INF_UNIQ)
+		info & INF_HOST ? eventOpenHostMenu() : eventOpenMainMenu();
+	else try {
+		if (!(info & INF_HOST))
+			netcp->sendData(Com::Code::hello);
+		if (eventOpenRoom(); info & INF_GUEST_WAITING)
+			eventPlayerHello(false);
+	} catch (const NetcpException& err) {
+		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+	}
+}
+
+void Program::eventPostDisconnectGame(Button*) {
+	uninitGame();
+	(info & (INF_HOST | INF_UNIQ)) == (INF_HOST | INF_UNIQ) ? eventOpenHostMenu() : eventOpenMainMenu();
+}
+
+void Program::eventPlayerLeft() {
+	if (uninitGame(); info & INF_HOST) {
+		info &= ~INF_GUEST_WAITING;
+		eventOpenRoom();
+		World::scene()->setPopup(ProgState::createPopupMessage("Player left", &Program::eventClosePopup));
+	} else
+		World::scene()->setPopup(ProgState::createPopupMessage("Host left", &Program::eventClosePopup));
 }
 
 // SETTINGS
@@ -531,6 +685,17 @@ void Program::eventSBPrev(Button* but) {
 	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() + 1))->onClick(0, SDL_BUTTON_RIGHT);
 }
 
+void Program::connect(Netcp* net, const char* msg) {
+	try {
+		netcp.reset(net);
+		netcp->connect();
+		World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventConnectCancel, "Cancel"));
+	} catch (const char* err) {
+		disconnect();
+		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+	}
+}
+
 void Program::setState(ProgState* newState) {
 	state.reset(newState);
 	World::scene()->resetLayouts();
@@ -539,6 +704,6 @@ void Program::setState(ProgState* newState) {
 BoardObject* Program::pickBob(vec2s& pos, Piece*& pce) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
 	pos = bob ? game.ptog(bob->getPos()) : INT16_MIN;
-	pce = bob ? extractPiece(bob, pos) : nullptr;
+	pce = dynamic_cast<Piece*>(bob);
 	return bob;
 }

@@ -129,7 +129,6 @@ ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag) :
 	uvloc = glGetAttribLocation(program, "uvloc");
 	normal = glGetAttribLocation(program, "normal");
 	materialDiffuse = glGetUniformLocation(program, "material.diffuse");
-	materialEmission = glGetUniformLocation(program, "material.emission");
 	materialSpecular = glGetUniformLocation(program, "material.specular");
 	materialShininess = glGetUniformLocation(program, "material.shininess");
 	materialAlpha = glGetUniformLocation(program, "material.alpha");
@@ -230,7 +229,13 @@ void WindowSys::exec() {
 		SDL_GL_SwapWindow(window);
 
 		scene->tick(dSec);
-		program->getGame()->tick();
+		try {
+			if (program->getNetcp())
+				program->getNetcp()->tick();
+		} catch (const NetcpException& err) {
+			program->disconnect();
+			scene->setPopup(ProgState::createPopupMessage(err.message, &Program::eventPostDisconnectGame));
+		}
 
 		uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
 		for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
@@ -485,7 +490,7 @@ bool WindowSys::checkCurDisplay() {
 vector<vec2i> WindowSys::displaySizes() const {
 	vector<vec2i> sizes;
 	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode) && float(mode.w) / float(mode.h) >= resolutionRatioLimit)
+		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
 			sizes.emplace_back(mode.w, mode.h);
 	return uniqueSort(sizes);
 }

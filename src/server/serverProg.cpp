@@ -1,5 +1,6 @@
 #include "server.h"
 #include <csignal>
+#include <fstream>
 #ifdef _WIN32
 #include <conio.h>
 #else
@@ -8,153 +9,280 @@
 #endif
 using namespace Com;
 
-enum class WaitResult : uint8 {
-	ready,
-	retry,
-	exit
+struct Player {
+	enum class State : uint8 {
+		lobby,
+		host,
+		guest
+	};
+	static const array<string, uint8(State::guest)+1> stateNames;
+
+	TCPsocket sock;
+	Buffer recvb;
+	string room;
+	uint8 partner;
+	State state;
+
+	Player(TCPsocket socket);
 };
 
+const array<string, Player::stateNames.size()> Player::stateNames = {
+	"lobby",
+	"host",
+	"guest"
+};
+
+Player::Player(TCPsocket socket) :
+	sock(socket),
+	partner(UINT8_MAX),
+	state(State::lobby)
+{}
+
 constexpr uint32 checkTimeout = 500;
-constexpr char argConfig[] = "c";
-constexpr char argFile[] = "f";
-constexpr char argPort[] = "p";
+constexpr char argPort = 'p';
+constexpr char argLog = 'l';
+constexpr char argVerbose = 'v';
 
 static bool running = true;
+static Buffer sendb;
+static vector<Player> players;
+static umap<string, bool> rooms;	// name, isFull
+static bool verbose;
+static std::ofstream oflog;
 
-static Config getConfig(const Arguments& args, uint16& port) {
-	const char* cfstr = args.getOpt(argPort);
-	port = cfstr ? uint16(sstoul(cfstr)) : defaultPort;
-	
-	cfstr = args.getOpt(argConfig);
-	string name = cfstr ? cfstr : Config::defaultName;
-
-	cfstr = args.getOpt(argFile);
-	char* path = SDL_GetBasePath();
-	string file = cfstr ? cfstr : (path ? string(path) : string()) + Config::defaultFile;
-	SDL_free(path);
-
-	Config ret;
-	umap<string, Config> confs = Config::load(file);
-	if (umap<string, Config>::iterator cit = confs.find(name); cit != confs.end())
-		ret = cit->second.checkValues();
-	else
-		confs.emplace(Config::defaultName, ret);
-	Config::save(confs, file);
-	return ret;
+static void print(std::ostream& vofs, const string& msg) {
+	if (verbose)
+		vofs << msg << std::endl;
+	if (oflog)
+		oflog << msg << std::endl;
 }
 
-static int connectionFail(const char* msg, int ret = -1) {
-	std::cerr << msg << linend << SDLNet_GetError() << std::endl;
-	SDLNet_Quit();
-	SDL_Quit();
-	return ret;
+static string addressToStr(const IPaddress* addr) {
+	string str;
+	for (uint8 i = 0; i < 4; i++)
+		str += toStr((addr->host >> (i * 8)) & 0xFF) + '.';
+	str.back() = ':';
+	return str + toStr(addr->port);
 }
 
-static bool quitting() {
-#ifdef _WIN32
-	char cv = _kbhit() ? char(_getch()) : '\0';
-#else
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(0, &fds);
-	timeval tv = { 0, 0 };
-	char cv = select(1, &fds, nullptr, nullptr, &tv) ? char(getchar()) : '\0';
-#endif
-	return cv == 'q' || cv == 'Q';
-}
-
-static void disconnectSocket(SDLNet_SocketSet sockets, TCPsocket& client) {
-	if (client) {
-		SDLNet_TCP_DelSocket(sockets, client);
-		SDLNet_TCP_Close(client);
-		client = nullptr;
+static const char* sendRoomList(TCPsocket socket) {
+	sendb.pushHead(Code::rlist);
+	sendb.push(uint8(rooms.size()));
+	for (const pair<const string, bool>& it : rooms) {
+		sendb.push(vector<uint8>{ uint8(it.second), uint8(it.first.length()) });
+		sendb.push(it.first);
 	}
+	SDLNet_Write16(sendb.size, sendb.data + 1);
+	return sendb.send(socket);
 }
 
-static void disconnectPlayers(SDLNet_SocketSet sockets, TCPsocket* players) {
-	std::cout << "disconnecting" << linend << std::endl;
-	for (uint8 i = 0; i < maxPlayers; i++)
-		disconnectSocket(sockets, players[i]);
+static void sendRoomData(Code code, const string& name, const vector<uint8>& extra = {}) {
+	sendb.pushHead(code);
+	sendb.push(extra);
+	sendb.push(uint8(name.length()));
+	sendb.push(name);
+	SDLNet_Write16(sendb.size, sendb.data + 1);
+	for (uint8 i = 0; i < players.size(); i++)
+		if (players[i].state == Player::State::lobby)
+			if (SDLNet_TCP_Send(players[i].sock, sendb.data, sendb.size) != sendb.size)
+				print(std::cerr, "failed to send room data '" + toStr(uint8(code)) + "' of '" + name + "' to player '" + toStr(i) + "': " + SDLNet_GetError());
+	sendb.size = 0;
 }
 
-static void addPlayer(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server, uint8& pc) {
-	if (uint8 i = uint8(std::find(players, players + maxPlayers, nullptr) - players); i < maxPlayers) {
-		players[i] = SDLNet_TCP_Accept(server);
-		SDLNet_TCP_AddSocket(sockets, players[i]);
-		std::cout << "player " << uint(++pc) << " connected" << std::endl;
-	} else
-		sendRejection(server);
+static void createRoom(uint8* data, uint8 pid) {
+	bool ok;
+	if (string room = readName(data); ok = !rooms.count(room)) {
+		players[pid].room = std::move(room);
+		players[pid].state = Player::State::host;
+		rooms.emplace(players[pid].room, true);
+		sendRoomData(Code::rnew, players[pid].room);
+	}
+	sendb.pushHead(Code::cnrnew);
+	sendb.push(uint8(ok));
+	if (const char* err = sendb.send(players[pid].sock))
+		print(std::cerr, "failed to send host " + string(ok ? "accept" : "rejection") + " to player '" + toStr(pid) + "': " + err);
 }
 
-static void checkWaitingPlayer(SDLNet_SocketSet sockets, TCPsocket* players, uint8 i, uint8& pc) {
-	if (!SDLNet_SocketReady(players[i]))
+static void joinRoom(uint8* data, uint8 pid) {
+	if (string name = readName(data); rooms[name])
+		players[pid].room = std::move(name);
+	else {
+		sendb.pushHead(Code::cnjoin);
+		sendb.push(uint8(false));
+		if (const char* err = sendb.send(players[pid].sock))
+			print(std::cerr, "failed to send join rejection to player '" + toStr(pid) + "': " + err);
 		return;
-
-	if (uint8 rbuf; SDLNet_TCP_Recv(players[i], &rbuf, sizeof(rbuf)) <= 0) {
-		disconnectSocket(sockets, players[i]);
-		std::cout << "player " << uint(pc--) << " disconnected" << std::endl;
-	} else
-		std::cerr << "invalid data from player " << uint(i + 1) << std::endl;
-}
-
-static WaitResult waitForPlayers(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server, const Config& conf) {
-	std::cout << "waiting for players" << std::endl;
-	for (uint8 pc = 0; pc < maxPlayers;) {
-		if (!running || quitting())
-			return WaitResult::exit;
-		if (SDLNet_CheckSockets(sockets, checkTimeout) <= 0)
-			continue;
-
-		if (SDLNet_SocketReady(server))
-			addPlayer(sockets, players, server, pc);
-		for (uint8 i = 0; i < maxPlayers; i++)
-			checkWaitingPlayer(sockets, players, i, pc);
 	}
-
-	// decide which player goes first and send game config information
-	std::default_random_engine ranGen = createRandomEngine();
-	uint8 first = uint8(std::uniform_int_distribution<uint>(0, 1)(ranGen));
-	vector<uint8> sendb(conf.dataSize(Code::setup));
-	conf.toComData(sendb.data());
-	for (uint8 i = 0; i < maxPlayers; i++) {
-		sendb[1] = i == first;
-		if (SDLNet_TCP_Send(players[i], sendb.data(), int(sendb.size())) != int(sendb.size())) {
-			std::cerr << SDLNet_GetError() << std::endl;
-			return WaitResult::retry;
+	for (uint8 i = 0; i < players.size(); i++)
+		if (i != pid && players[i].room == players[pid].room) {
+			players[pid].partner = i;
+			players[i].partner = pid;
+			break;
 		}
-	}
-	std::cout << "all players ready" << std::endl;
-	return WaitResult::ready;
+	players[pid].state = Player::State::guest;
+	sendRoomData(Code::ropen, players[pid].room, { false });
+
+	sendb.pushHead(Code::hello);
+	if (uint8 ptc = players[pid].partner; const char* err = sendb.send(players[ptc].sock))
+		print(std::cerr, "failed to send join request from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
 }
 
-static bool checkPlayer(TCPsocket* players, uint8 i, uint8* ntbuf) {
-	if (!SDLNet_SocketReady(players[i]))
-		return true;
-
-	int len = SDLNet_TCP_Recv(players[i], ntbuf, recvSize);
-	if (len <= 0) {
-		std::cout << "player " << uint(i + 1) << " disconnected" << std::endl;
-		return false;
+static void leaveRoom(uint8 pid, bool sendList = true) {
+	uint8 ptc = players[pid].partner;
+	if (players[pid].state == Player::State::guest) {
+		if (sendb.pushHead(Code::leave); const char* err = sendb.send(players[ptc].sock))
+			print(std::cerr, "failed to send leave info from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
+		sendRoomData(Code::ropen, players[pid].room, { true });
+	} else {		// must be host
+		rooms.erase(players[pid].room);
+		if (ptc < players.size()) {
+			if (players[ptc].state = Player::State::lobby; const char* err = sendRoomList(players[ptc].sock))
+				print(std::cerr, "failed to send room list to player '" + toStr(ptc) + "': " + err);
+			if (sendb.pushHead(Code::leave); const char* err = sendb.send(players[ptc].sock))
+				print(std::cerr, "failed to send leave info from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
+		}
+		sendRoomData(Code::rerase, players[pid].room);
 	}
-	if (SDLNet_TCP_Send(players[(i + 1) % maxPlayers], ntbuf, len) != len) {	// forward data to other player
-		std::cerr << SDLNet_GetError() << std::endl;
+
+	if (players[pid].state = Player::State::lobby; ptc < players.size())
+		players[pid].partner = players[ptc].partner = UINT8_MAX;
+	if (const char* err; sendList && (err = sendRoomList(players[pid].sock)))
+		print(std::cerr, "failed to send room list to player '" + toStr(pid) + "': " + err);
+}
+
+static void connectPlayer(SDLNet_SocketSet sockets, TCPsocket server) {
+	if (players.size() >= maxPlayers) {
+		sendRejection(server);
+		print(std::cout, "rejected incoming connection");
+		return;
+	}
+
+	TCPsocket psock;
+	try {
+		if (!(psock = SDLNet_TCP_Accept(server)))
+			throw SDLNet_GetError();
+		if (SDLNet_TCP_AddSocket(sockets, psock) < 0)
+			throw SDLNet_GetError();
+		if (const char* err = sendRoomList(psock))
+			throw err;
+		players.emplace_back(psock);
+		print(std::cout, "player '" + toStr(players.size() - 1) + "' connected");
+	} catch (const char* err) {
+		SDLNet_TCP_DelSocket(sockets, psock);
+		SDLNet_TCP_Close(psock);
+		print(std::cerr, "failed to connect player: " + string(err));
+	}
+}
+
+static void disconnectPlayer(SDLNet_SocketSet sockets, uint8 pid) {
+	if (players[pid].state != Player::State::lobby)
+		leaveRoom(pid, false);
+	SDLNet_TCP_DelSocket(sockets, players[pid].sock);
+	SDLNet_TCP_Close(players[pid].sock);
+
+	for (Player& it : players)
+		if (it.state != Player::State::lobby && it.partner > pid)
+			it.partner--;
+	players.erase(players.begin() + pid);
+	print(std::cout, "player '" + toStr(pid) + "' disconnected");
+}
+
+static bool checkPlayer(uint8 pid) {
+	if (!SDLNet_SocketReady(players[pid].sock))
+		return true;
+	int len = players[pid].recvb.recv(players[pid].sock);
+	if (len <= 0)
 		return false;
+
+	players[pid].recvb.processRecv(len, [pid](uint8* data) {
+		switch (Code(data[0])) {
+		case Code::rnew:
+			createRoom(data + dataHeadSize, pid);
+			break;
+		case Code::join:
+			joinRoom(data + dataHeadSize, pid);
+			break;
+		case Code::leave:
+			leaveRoom(pid);
+			break;
+		default:
+			if (Code(data[0]) >= Code::hello)
+				sendb.push(data, SDLNet_Read16(data + 1));
+			else
+				print(std::cerr, "invalid net code from player " + toStr(pid));
+		}
+	});
+	if (sendb.size) {
+		if (uint8 ptc = players[pid].partner; ptc >= players.size()) {
+			sendb.size = 0;
+			print(std::cerr, "data with code '" + toStr(sendb.data[0]) + "' of size '" + toStr(sendb.size) + "' to invalid partner '" + toStr(ptc) + "' of player '" + toStr(pid) + "'");
+		} else if (const char* err = sendb.send(players[ptc].sock)) {
+			sendb.size = 0;
+			print(std::cerr, "failed to send data with codde '" + toStr(sendb.data[0]) + "' of size '" + toStr(sendb.size) + "' from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
+		}
 	}
 	return true;
 }
 
-static WaitResult runGame(SDLNet_SocketSet sockets, TCPsocket* players, TCPsocket server) {
-	for (uint8 ntbuf[recvSize]; running && !quitting();) {
-		if (SDLNet_CheckSockets(sockets, checkTimeout) <= 0)
-			continue;
+template <sizet S>
+void printTable(vector<array<string, S>>& table, const char* title, array<string, S>&& header) {
+	array<uint, S> lens;
+	std::fill(lens.begin(), lens.end(), 0);
+	table[0] = std::move(header);
+	for (const array<string, S>& it : table)
+		for (sizet i = 0; i < S; i++)
+			if (it[i].length() > lens[i])
+				lens[i] = uint(it[i].length());
 
-		if (SDLNet_SocketReady(server))
-			sendRejection(server);
-		for (uint8 i = 0; i < maxPlayers; i++)
-			if (!checkPlayer(players, i, ntbuf))
-				return WaitResult::retry;
+	std::cout << title << linend;
+	for (const array<string, S>& it : table) {
+		for (sizet i = 0; i < S; i++)
+			std::cout << it[i] << string(lens[i] - it[i].length() + 2, ' ');
+		std::cout << linend;
 	}
-	return WaitResult::exit;
+	std::cout << std::endl;
+}
+
+static void checkInput() {
+#ifdef _WIN32
+	if (!_kbhit())
+		return;
+	int ch = toupper(_getch());
+#else
+	fd_set fds;
+	FD_ZERO(&fds);
+	FD_SET(0, &fds);
+	if (timeval tv = { 0, 0 }; !select(1, &fds, nullptr, nullptr, &tv))
+		return;
+	int ch = toupper(getchar());
+#endif
+	switch (ch) {
+	case 'L': {
+		vector<string> names = sortNames(rooms);
+		vector<array<string, 2>> table(names.size() + 1);
+		for (sizet i = 0; i < names.size(); i++) {
+			table[i+1][1] = btos(rooms[names[i]]);
+			table[i+1][0] = std::move(names[i]);
+		}
+		printTable(table, "Rooms:", { "NAME", "OPEN" });
+		break; }
+	case 'P': {
+		vector<array<string, 6>> table(players.size() + 1);
+		for (sizet i = 0; i < players.size(); i++) {
+			table[i+1] = { toStr(i), addressToStr(SDLNet_TCP_GetPeerAddress(players[i].sock)), toStr(players[i].recvb.size), Player::stateNames[uint8(players[i].state)], "", "" };
+			if (players[i].state != Player::State::lobby)
+				table[i+1][4] = players[i].room;
+			if (players[i].partner < players.size())
+				table[i+1][5] = toStr(players[i].partner);
+		}
+		printTable(table, "Players:", { "ID", "ADDRESS", "RSIZE", "STATE", "ROOM", "PARTNER" });
+		break; }
+	case 'Q':
+		running = false;
+		break;
+	default:
+		std::cerr << "unknown input: '" << char(ch) << "' (" << ch << ')' << std::endl;
+	}
 }
 
 static void eventExit(int) {
@@ -169,45 +297,62 @@ int main(int argc, char** argv) {
 	tcflag_t oldLflag = termst.c_lflag;
 	termst.c_lflag &= ~uint(ICANON | ECHO);
 	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
+
+	signal(SIGQUIT, eventExit);
 #endif
-	uint16 port;
-	Config conf = getConfig(Arguments(argc, argv, {}, { argConfig, argFile, argPort }), port);
-
-	// init server
-	if (SDL_Init(0)) {
-		std::cerr << "failed to initialize SDL:" << linend << SDL_GetError() << std::endl;
-		return -1;
-	}
-	if (SDLNet_Init()) {
-		std::cerr << "failed to initialize networking:" << linend << SDLNet_GetError() << std::endl;
-		SDL_Quit();
-		return -1;
-	}
-	std::cout << "using port " << port << std::endl;
-	
-	IPaddress address;
-	if (SDLNet_ResolveHost(&address, nullptr, port))
-		return connectionFail("failed to resolve host:");
-	TCPsocket server = SDLNet_TCP_Open(&address);
-	if (!server)
-		return connectionFail("failed to resolve host:");
-
-	TCPsocket players[maxPlayers] = { nullptr, nullptr };
-	SDLNet_SocketSet sockets = SDLNet_AllocSocketSet(maxPlayers + 1);
-	SDLNet_TCP_AddSocket(sockets, server);
-	std::cout << "press 'q' to exit" << linend << std::endl;
-
 	signal(SIGINT, eventExit);
 	signal(SIGABRT, eventExit);
 	signal(SIGTERM, eventExit);
-#ifndef _WIN32
-	signal(SIGQUIT, eventExit);
-#endif
-	// run game server
-	for (WaitResult cont = WaitResult::retry; cont != WaitResult::exit;) {
-		if (cont = waitForPlayers(sockets, players, server, conf); cont == WaitResult::ready)
-			cont = runGame(sockets, players, server);
-		disconnectPlayers(sockets, players);
+
+	TCPsocket server = nullptr;
+	SDLNet_SocketSet sockets = nullptr;
+	try {
+		Arguments args(argc, argv, { argLog, argVerbose }, { argPort });
+		const char* cfstr = args.getOpt(argPort);
+		uint16 port = cfstr ? uint16(sstoul(cfstr)) : defaultPort;
+		verbose = args.hasFlag(argVerbose);
+		if (args.hasFlag(argLog))
+			oflog.open("server_log_" + Date::now().toString('-', '_', '-') + ".txt");
+
+		if (SDL_Init(0))
+			throw SDL_GetError();
+		if (SDLNet_Init())
+			throw SDLNet_GetError();
+		print(std::cout, "using port " + toStr(port));
+
+		IPaddress address;
+		if (SDLNet_ResolveHost(&address, nullptr, port))
+			throw SDLNet_GetError();
+		if (!(sockets = SDLNet_AllocSocketSet(maxPlayers + 1)))
+			throw SDLNet_GetError();
+		if (!(server = SDLNet_TCP_Open(&address)))
+			throw SDLNet_GetError();
+		if (SDLNet_TCP_AddSocket(sockets, server) < 0)
+			throw SDLNet_GetError();
+	} catch (const char* err) {
+		print(std::cerr, err);
+		SDLNet_TCP_Close(server);
+		SDLNet_FreeSocketSet(sockets);
+		SDLNet_Quit();
+		SDL_Quit();
+		return -1;
+	}
+
+	while (running) {
+		if (SDLNet_CheckSockets(sockets, checkTimeout) > 0) {
+			if (SDLNet_SocketReady(server))
+				connectPlayer(sockets, server);
+			for (uint8 i = 0; i < players.size(); i++) {
+				try {
+					if (!checkPlayer(i))
+						disconnectPlayer(sockets, i--);
+				} catch (const char* err) {
+					print(std::cerr, "player '" + toStr(i) + "' error: " + err);
+					disconnectPlayer(sockets, i--);
+				}
+			}
+		}
+		checkInput();
 	}
 	SDLNet_TCP_DelSocket(sockets, server);
 	SDLNet_TCP_Close(server);

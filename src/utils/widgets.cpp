@@ -40,11 +40,6 @@ Widget::Widget(Size relSize, Layout* parent, sizet id) :
 	relSize(relSize)
 {}
 
-void Widget::setParent(Layout* pnt, sizet id) {
-	parent = pnt;
-	pcID = id;
-}
-
 vec2i Widget::position() const {
 	return parent->wgtPosition(pcID);
 }
@@ -59,6 +54,11 @@ Rect Widget::frame() const {
 
 bool Widget::selectable() const {
 	return false;
+}
+
+void Widget::setParent(Layout* pnt, sizet id) {
+	parent = pnt;
+	pcID = id;
 }
 
 void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
@@ -153,8 +153,8 @@ Rect CheckBox::boxRect() const {
 
 // SLIDER
 
-Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall leftCall, BCall rightCall, const Texture& tooltip, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, tooltip, bgTex, color, parent, id),
+Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall finishCall, BCall updateCall, const Texture& tooltip, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Button(relSize, finishCall, updateCall, tooltip, bgTex, color, parent, id),
 	val(value),
 	vmin(minimum),
 	vmax(maximum),
@@ -166,11 +166,6 @@ void Slider::draw() const {
 	drawRect(rect(), frm, color * dimFactor, bgTex);					// draw background
 	drawRect(barRect(), frm, colorDark, World::scene()->blank());		// draw bar
 	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// draw slider
-}
-
-void Slider::onClick(vec2i, uint8 mBut) {
-	if (mBut == SDL_BUTTON_RIGHT)
-		World::prun(rcall, this);
 }
 
 void Slider::onHold(vec2i mPos, uint8 mBut) {
@@ -187,13 +182,15 @@ void Slider::onDrag(vec2i mPos, vec2i) {
 }
 
 void Slider::onUndrag(uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT)	// if dragging slider stop dragging slider
+	if (mBut == SDL_BUTTON_LEFT) {	// if dragging slider stop dragging slider
 		World::scene()->capture = nullptr;
+		World::prun(lcall, this);
+	}
 }
 
 void Slider::setSlider(int xpos) {
-	setVal((xpos - position().x - size().y/4) * vmax / sliderLim());
-	World::prun(lcall, this);
+	setVal(vmin + int(std::round(float((xpos - position().x - size().y/4) * vmax) / float(sliderLim()))));
+	World::prun(rcall, this);
 }
 
 Rect Slider::barRect() const {
@@ -329,9 +326,9 @@ void Draglet::onUndrag(uint8 mBut) {
 
 // SWITCH BOX
 
-SwitchBox::SwitchBox(Size relSize, const string* opts, uint ocnt, string curOption, BCall call, const Texture& tooltip, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+SwitchBox::SwitchBox(Size relSize, vector<string> opts, string curOption, BCall call, const Texture& tooltip, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
 	Label(relSize, std::move(curOption), call, call, tooltip, alignment, showBG, bgTex, color, parent, id),
-	options(opts, opts + ocnt),
+	options(std::move(opts)),
 	curOpt(uint(std::find(options.begin(), options.end(), text) - options.begin()))
 {
 	if (curOpt >= options.size())
@@ -370,10 +367,11 @@ void SwitchBox::shiftOption(int mov) {
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, const Texture& tooltip, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, const Texture& tooltip, uint limit, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
 	Label(relSize, std::move(line), leftCall, rightCall, tooltip, alignment, showBG, bgTex, color, parent, id),
 	oldText(text),
 	ecall(retCall),
+	limit(limit),
 	cpos(0),
 	textOfs(0)
 {}
@@ -475,21 +473,26 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 }
 
 void LabelEdit::onText(const char* str) {
-	sizet olen = text.length();
-	text.insert(cpos, str);
+	sizet slen = strlen(str);
+	if (sizet availible = limit - text.length(); slen > availible)
+		slen = availible;
+	text.insert(cpos, str, slen);
 	updateTextTex();
-	setCPos(cpos + (uint(text.length() - olen)));
+	setCPos(cpos + uint(slen));
 }
 
 void LabelEdit::setText(string&& str) {
 	oldText = std::move(text);
+	if (str.length() > limit)
+		str.erase(limit);
 	text = std::move(str);
 	onTextReset();
 }
 
 void LabelEdit::setText(const string& str) {
 	oldText = std::move(text);
-	text = str;
+	if (text = str; text.length() > limit)
+		text.erase(limit);
 	onTextReset();
 }
 

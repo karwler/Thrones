@@ -37,9 +37,9 @@ struct Settings {
 };
 
 struct Setup {
-	umap<vec2s, Com::Tile> tiles;
-	umap<uint16, Com::Tile> mids;
-	umap<vec2s, Com::Piece> pieces;
+	sset<pair<vec2s, Com::Tile>> tiles;
+	sset<pair<uint16, Com::Tile>> mids;
+	sset<pair<vec2s, Com::Piece>> pieces;
 
 	void clear();
 };
@@ -50,8 +50,9 @@ private:
 	static constexpr char fileAudios[] = "data/audio.dat";
 	static constexpr char fileMaterials[] = "data/materials.dat";
 	static constexpr char fileObjects[] = "data/objects.dat";
-	static constexpr char fileSettings[] = "settings.ini";
-	static constexpr char fileSetups[] = "setup.ini";
+	static constexpr char fileConfigs[] = "data/game.ini";
+	static constexpr char fileSettings[] = "data/settings.ini";
+	static constexpr char fileSetups[] = "data/setup.ini";
 	static constexpr char fileShaders[] = "data/shaders.dat";
 	static constexpr char fileTextures[] = "data/textures.dat";
 
@@ -66,21 +67,32 @@ private:
 	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
-	static constexpr char iniKeywordTile[] = "tile_";
-	static constexpr char iniKeywordMid[] = "middle_";
-	static constexpr char iniKeywordPiece[] = "piece_";
 
-	static constexpr char errorAudios[] = "failed to load sounds";
-	static constexpr char errorFile[] = "failed to load ";
-	static constexpr char errorMaterials[] = "failed to load materials";
-	static constexpr char errorObjects[] = "failed to load objects";
-	static constexpr char errorShaders[] = "failed to load shaders";
-	static constexpr char errorTextures[] = "failed to load textures";
+	static constexpr char iniKeywordBoardSize[] = "size";
+	static constexpr char iniKeywordSurvival[] = "survival";
+	static constexpr char iniKeywordFavors[] = "favors";
+	static constexpr char iniKeywordDragonDist[] = "dragon_dist";
+	static constexpr char iniKeywordDragonDiag[] = "dragon_diag";
+	static constexpr char iniKeywordMultistage[] = "multistage";
+	static constexpr char iniKeywordSurvivalKill[] = "survival_kill";
+	static constexpr char iniKeywordTile[] = "tile_";
+	static constexpr char iniKeywordMiddle[] = "middle_";
+	static constexpr char iniKeywordPiece[] = "piece_";
+	static constexpr char iniKeywordWinFortress[] = "win_fortresses";
+	static constexpr char iniKeywordWinThrone[] = "win_thrones";
+	static constexpr char iniKeywordCapturers[] = "capturers";
+	static constexpr char iniKeywordShift[] = "middle_shift";
+	static constexpr char iniKeywordLeft[] = "left";
+	static constexpr char iniKeywordRight[] = "right";
+	static constexpr char iniKeywordNear[] = "near";
+	static constexpr char iniKeywordFar[] = "far";
 
 public:
 	static int setWorkingDir();
 	static Settings* loadSettings();
 	static bool saveSettings(const Settings* sets);
+	static umap<string, Com::Config> loadConfigs(const char* file = fileConfigs);
+	static bool saveConfigs(const umap<string, Com::Config>& confs, const char* file = fileConfigs);
 	static umap<string, Setup> loadSetups();
 	static bool saveSetups(const umap<string, Setup>& sets);
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
@@ -88,4 +100,21 @@ public:
 	static umap<string, GMesh> loadObjects();
 	static umap<string, string> loadShaders();
 	static umap<string, Texture> loadTextures();
+
+private:
+	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
+	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
+	static void readShift(const string& line, Com::Config& conf);
 };
+
+template <sizet N, sizet S>
+void FileSys::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
+	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
+		amts[id] = uint16(sstol(it.second));
+}
+
+template <sizet N, sizet S>
+void FileSys::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
+	for (sizet i = 0; i < amts.size(); i++)
+		text += makeIniLine(word + names[i], toStr(amts[i]));
+}

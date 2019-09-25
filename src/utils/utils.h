@@ -51,13 +51,6 @@ inline vec2i mousePos() {
 	return p;
 }
 
-template <>
-struct std::hash<vec2s> {
-	sizet operator()(vec2s v) const {
-		return std::hash<int32>()(*reinterpret_cast<int32*>(&v));
-	}
-};
-
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
@@ -173,10 +166,10 @@ public:
 	virtual ~Interactable() = default;
 
 	virtual void drawTop() const {}
-	virtual void onClick(vec2i mPos, uint8 mBut);		// dummy function to have an out-of-line virtual function
+	virtual void onClick(vec2i mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onHold(vec2i, uint8) {}
 	virtual void onDrag(vec2i, vec2i) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
+	virtual void onUndrag(uint8) {}			// get's called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onKeypress(const SDL_Keysym&) {}
@@ -289,14 +282,4 @@ void clear(vector<T*>& vec) {
 	for (T* it : vec)
 		delete it;
 	vec.clear();
-}
-
-template <class T>
-vector<string> sortNames(const umap<string, T>& vmap) {
-	vector<string> names(vmap.size());
-	vector<string>::iterator nit = names.begin();
-	for (const pair<string, T>& cit : vmap)
-		*nit++ = cit.first;
-	std::sort(names.begin(), names.end(), strnatless);
-	return names;
 }

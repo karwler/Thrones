@@ -42,7 +42,7 @@ Material::Material(const vec3& diffuse, const vec3& specular, float shininess, f
 
 // VERTEX
 
-Vertex::Vertex(const vec3& pos, const vec3& nrm, vec2 tuv) :
+Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
 	pos(pos),
 	nrm(nrm),
 	tuv(tuv)

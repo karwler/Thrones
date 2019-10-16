@@ -82,12 +82,12 @@ public:
 	~Game();
 
 	TileCol& getTiles();
-	Tile* getTile(vec2s pos);
+	Tile* getTile(svec2 pos);
 	bool isHomeTile(Tile* til) const;
 	bool isEnemyTile(Tile* til) const;
 	PieceCol& getPieces();
 	Piece* getOwnPieces(Com::Piece type);
-	Piece* findPiece(vec2s pos);
+	Piece* findPiece(svec2 pos);
 	bool isOwnPiece(Piece* pce) const;
 	bool isEnemyPiece(Piece* pce) const;
 	bool pieceOnBoard(const Piece* piece) const;
@@ -96,8 +96,8 @@ public:
 	bool getMyTurn() const;
 	uint8 getFavorCount() const;
 	uint8 getFavorTotal() const;
-	vec2s ptog(const vec3& p) const;
-	vec3 gtop(vec2s p, float z = 0.f) const;
+	svec2 ptog(const vec3& p) const;
+	vec3 gtop(svec2 p, float z = 0.f) const;
 
 	void tick();
 	void sendStart();
@@ -132,9 +132,9 @@ public:
 	void takeOutFortress();
 
 	void updateFavorState();
-	void pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch);
-	void pieceFire(Piece* killer, vec2s pos, Piece* piece);
-	void placeDragon(vec2s pos, Piece* occupant);
+	void pieceMove(Piece* piece, svec2 pos, Piece* occupant, bool forceSwitch);
+	void pieceFire(Piece* killer, svec2 pos, Piece* piece);
+	void placeDragon(svec2 pos, Piece* occupant);
 	void prepareTurn();
 	void endTurn();
 
@@ -156,16 +156,16 @@ private:
 	void useFavor();
 
 	void concludeAction(bool end);
-	void checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor);
-	template <class F, class... A> void checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args);
-	uset<uint16> collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed);
-	uset<uint16> collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
-	uset<uint16> collectTilesByType(vec2s pos, Com::Tile favor, bool& favorUsed);
+	void checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action action, Com::Tile favor);
+	template <class F, class... A> void checkMoveDestination(svec2 pos, svec2 dst, Com::Tile favor, F check, A... args);
+	uset<uint16> collectTilesBySingle(svec2 pos, Com::Tile favor, bool& favorUsed);
+	uset<uint16> collectTilesByArea(svec2 pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
+	uset<uint16> collectTilesByType(svec2 pos, Com::Tile favor, bool& favorUsed);
 	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type) const;
 	static bool spaceAvailible(uint16 pos);
 	static bool spaceAvailibleDummy(uint16 pos);
-	void checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst);
-	uset<uint16> collectTilesByDistance(vec2s pos, int16 dist);
+	void checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst);
+	uset<uint16> collectTilesByDistance(svec2 pos, int16 dist);
 	void checkAttack(Piece* killer, Piece* victim, Tile* dtil) const;
 	bool survivalCheck(Piece* piece, Tile* stil, Tile* dtil, Action action, Com::Tile favor);
 	void failSurvivalCheck(Piece* piece, Action action);
@@ -173,12 +173,12 @@ private:
 	bool checkThroneWin(Piece* thrones);
 	bool checkFortressWin();
 	void doWin(bool win);
-	void placePiece(Piece* piece, vec2s pos);	// set the position and check if a favor has been gained
+	void placePiece(Piece* piece, svec2 pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
 
-	uint16 posToId(vec2s p);
-	vec2s idToPos(uint16 i);
+	uint16 posToId(svec2 p);
+	svec2 idToPos(uint16 i);
 	uint16 invertId(uint16 i);
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
@@ -194,7 +194,7 @@ inline TileCol& Game::getTiles() {
 	return tiles;
 }
 
-inline Tile* Game::getTile(vec2s pos) {
+inline Tile* Game::getTile(svec2 pos) {
 	return tiles.mid(pos.y * config.homeSize.x + pos.x);
 }
 
@@ -223,11 +223,11 @@ inline bool Game::isEnemyPiece(Piece* pce) const {
 }
 
 inline bool Game::pieceOnBoard(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), vec2s(0, -int16(config.homeSize.y)), vec2s(config.homeSize.x - 1, config.homeSize.y));
+	return inRange(ptog(piece->getPos()), svec2(0, -int16(config.homeSize.y)), svec2(config.homeSize.x - 1, config.homeSize.y));
 }
 
 inline bool Game::pieceOnHome(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), vec2s(0, 1), vec2s(config.homeSize.x - 1, config.homeSize.y));
+	return inRange(ptog(piece->getPos()), svec2(0, 1), svec2(config.homeSize.x - 1, config.homeSize.y));
 }
 
 inline Object* Game::getScreen() {
@@ -281,7 +281,7 @@ inline Com::Tile Game::checkFavor() {
 	return ffpad.show ? getTile(ptog(ffpad.getPos()))->getType() : Com::Tile::empty;
 }
 
-inline uset<uint16> Game::collectTilesBySingle(vec2s pos, Com::Tile favor, bool& favorUsed) {
+inline uset<uint16> Game::collectTilesBySingle(svec2 pos, Com::Tile favor, bool& favorUsed) {
 	return collectTilesByArea(pos, favor, favorUsed, 1, spaceAvailibleDummy, adjacentFull.data(), uint8(adjacentFull.size()));
 }
 
@@ -294,27 +294,27 @@ inline void Game::recvMove(uint8* data) {
 }
 
 inline void Game::recvKill(uint8* data) {
-	pieces[SDLNet_Read16(data)].updatePos(INT16_MIN, false);
+	pieces[SDLNet_Read16(data)].updatePos();
 }
 
 inline void Game::recvBreach(uint8* data) {
 	tiles[SDLNet_Read16(data + 1)].setBreached(data[0]);
 }
 
-inline vec2s Game::ptog(const vec3& p) const {
-	return vec2s((p.x - config.objectSize / 2.f) / config.objectSize, p.z / config.objectSize);
+inline svec2 Game::ptog(const vec3& p) const {
+	return svec2((p.x - config.objectSize / 2.f) / config.objectSize, p.z / config.objectSize);
 }
 
-inline vec3 Game::gtop(vec2s p, float z) const {
+inline vec3 Game::gtop(svec2 p, float z) const {
 	return vec3(p.x * config.objectSize + config.objectSize / 2.f, z, p.y * config.objectSize);
 }
 
-inline uint16 Game::posToId(vec2s p) {
+inline uint16 Game::posToId(svec2 p) {
 	return uint16((p.y + config.homeSize.y) * config.homeSize.x + p.x);
 }
 
-inline vec2s Game::idToPos(uint16 i) {
-	return vec2s(int16(i % config.homeSize.x), int16(i / config.homeSize.x) - config.homeSize.y);
+inline svec2 Game::idToPos(uint16 i) {
+	return svec2(int16(i % config.homeSize.x), int16(i / config.homeSize.x) - config.homeSize.y);
 }
 
 inline uint16 Game::invertId(uint16 i) {

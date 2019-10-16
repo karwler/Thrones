@@ -38,7 +38,7 @@ inline void Size::set(float percent) {
 }
 
 // vertex data for widgets
-class Rectangle {
+class Shape {
 public:
 	GLuint vao;
 
@@ -78,9 +78,9 @@ public:
 	virtual void tick(float) {}
 	virtual void onResize() {}
 	virtual void postInit() {}		// gets called after parent is set and all set up
-	virtual void onScroll(vec2i) {}
-	virtual vec2i position() const;
-	virtual vec2i size() const;
+	virtual void onScroll(const ivec2&) {}
+	virtual ivec2 position() const;
+	virtual ivec2 size() const;
 	virtual Rect frame() const;	// the rectangle to restrain a widget's visibility (in Widget it returns the parent's frame and if in Layout, it returns a frame for it's children)
 	virtual bool selectable() const;
 
@@ -134,7 +134,7 @@ protected:
 
 private:
 	static constexpr float selectFactor = 1.2f;
-	static constexpr vec2i tooltipMargin = { 4, 1 };
+	static constexpr ivec2 tooltipMargin = { 4, 1 };
 	static constexpr int cursorMargin = 2;
 
 public:
@@ -142,7 +142,7 @@ public:
 	virtual ~Button() override;
 
 	virtual void draw() const override;
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
 
@@ -170,7 +170,7 @@ public:
 	virtual ~CheckBox() override = default;
 
 	virtual void draw() const override;
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 
 	Rect boxRect() const;
 	const vec4& boxColor() const;
@@ -198,9 +198,9 @@ public:
 	virtual ~Slider() override = default;
 
 	virtual void draw() const override;
-	virtual void onClick(vec2i, uint8) override {}
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
-	virtual void onDrag(vec2i mPos, vec2i mMov) override;
+	virtual void onClick(const ivec2&, uint8) override {}
+	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
+	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
 
 	int getVal() const;
@@ -256,8 +256,8 @@ public:
 	virtual void setText(const string& str);
 	Rect textRect() const;
 protected:
-	static vec2i textPos(const Texture& text, Alignment alignment, vec2i pos, vec2i siz, int margin);
-	virtual vec2i textPos() const;
+	static ivec2 textPos(const Texture& text, Alignment alignment, ivec2 pos, ivec2 siz, int margin);
+	virtual ivec2 textPos() const;
 	void updateTextTex();
 };
 
@@ -283,8 +283,8 @@ public:
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
+	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 
 	void setSelected(bool on);
@@ -304,7 +304,7 @@ public:
 	SwitchBox(Size relSize = 1.f, vector<string> opts = {}, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 
 	virtual bool selectable() const override;
 	virtual void setText(const string& str) override;
@@ -335,7 +335,7 @@ public:
 	virtual ~LabelEdit() override = default;
 
 	virtual void drawTop() const override;
-	virtual void onClick(vec2i mPos, uint8 mBut) override;
+	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onKeypress(const SDL_Keysym& key) override;
 	virtual void onText(const char* str) override;
 
@@ -348,7 +348,7 @@ public:
 	void cancel();
 
 protected:
-	virtual vec2i textPos() const override;
+	virtual ivec2 textPos() const override;
 private:
 	void onTextReset();
 	int caretPos() const;	// caret's relative x position

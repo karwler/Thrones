@@ -1,19 +1,11 @@
 #include "text.h"
 
-bool hasExt(const string& path, const string& ext) {
-	if (ext.empty())
-		return true;
-
-	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
-	return it != path.rend() && *it == '.' ? !strcicmp(string(it.base(), path.end()), ext) : false;
-}
-
 string filename(const string& path) {
 	if (path[0] == '\0' || (isDsep(path[0]) && path[1] == '\0'))
 		return string();
 
 	string::const_iterator end = isDsep(path.back()) ? path.end() - 1 : path.end();
-	return string(std::find_if(std::make_reverse_iterator(end), path.rend(), isDsep).base(), end);
+	return string(std::find_if(string::const_reverse_iterator(end), path.rend(), isDsep).base(), end);
 }
 
 string readWordM(const char*& pos) {
@@ -79,30 +71,32 @@ int strnatcmp(const char* a, const char* b) {
 			return dif;
 	}
 }
+
 #ifdef _WIN32
 string wtos(const wchar* src) {
-	int len = Win::WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
+	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
 	if (len <= 1)
 		return string();
 	len--;
 	
 	string dst;
 	dst.resize(len);
-	Win::WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
+	WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
 	return dst;
 }
 
 wstring stow(const string& src) {
-	int len = Win::MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0);
+	int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0);
 	if (len <= 0)
 		return wstring();
 
 	wstring dst;
 	dst.resize(len);
-	Win::MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
+	MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
 	return dst;
 }
 #endif
+
 SDL_DisplayMode strToDisp(const string& str) {
 	const char* pos = str.c_str();
 	int w = readNumber<int>(pos, strtoul, 0);
@@ -143,11 +137,12 @@ pairStr readIniLine(const string& line) {
 	sizet id = line.find_first_of('=');
 	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
 }
+
 #ifdef _WIN32
-void Arguments::setArgs(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
-	if (int argc; Win::LPWSTR* argv = Win::CommandLineToArgvW(pCmdLine, &argc)) {
+void Arguments::setArgs(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
+	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
 		setArgs(argc, argv, wtos, flg, opt);
-		Win::LocalFree(argv);
+		LocalFree(argv);
 	}
 }
 #endif

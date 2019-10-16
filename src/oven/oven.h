@@ -1,6 +1,14 @@
 #pragma once
 
 #include "utils/text.h"
+#ifdef __APPLE
+#include <OpenGL/gl.h>
+#else
+#ifdef _WIN32
+#define GLEW_STATIC
+#endif
+#include <GL/glew.h>
+#endif
 
 constexpr uint audioHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 3 + sizeof(uint8);
 constexpr uint objectHeaderSize = sizeof(uint8) + sizeof(uint16) * 2;
@@ -41,5 +49,5 @@ struct Vertex {
 	vec2 tuv;
 
 	Vertex() = default;
-	Vertex(const vec3& pos, const vec3& nrm, vec2 tuv);
+	Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv);
 };

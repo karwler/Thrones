@@ -26,8 +26,8 @@ void Camera::updateView() const {
 }
 
 void Camera::updateProjection() {
-	vec2i res = World::window()->getView();
-	proj = glm::perspective(glm::radians(fov), vec2f(res).ratio(), znear, zfar);
+	ivec2 res = World::window()->getView();
+	proj = glm::perspective(glm::radians(fov), float(res.x) / float(res.y), znear, zfar);
 
 	vec2 hsiz(float(res.x / 2), float(res.y / 2));
 	glUseProgram(World::gui()->program);
@@ -51,7 +51,7 @@ void Camera::updateRotations(const vec3& pvec, const vec3& lvec) {
 	lyaw = calcYaw(lvec, ldst);
 }
 
-void Camera::rotate(vec2 dRot, float dYaw) {
+void Camera::rotate(const vec2& dRot, float dYaw) {
 	prot = vec2(std::clamp(prot.x - dRot.x, pmax, 0.f), std::clamp(prot.y + dRot.y, -ymax, ymax));
 	pos = quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst);
 	lat = quat(vec3(0.f, lyaw + dYaw, 0.f)) * vec3(0.f, 0.f, ldst);
@@ -62,13 +62,13 @@ void Camera::rotate(vec2 dRot, float dYaw) {
 }
 
 void Camera::zoom(int mov) {
-	pdst = std::clamp(pdst + float(mov) / 2.f, defaultPdst - 8.f, defaultPdst + 20.f);
+	pdst = std::clamp(pdst - float(mov) / 2.f, defaultPdst - 8.f, defaultPdst + 20.f);
 	pos = glm::quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst) + lat;
 	updateView();
 }
 
-vec3 Camera::direction(vec2i mPos) const {
-	vec2 res = World::window()->getView().glm();
+vec3 Camera::direction(const ivec2& mPos) const {
+	vec2 res = World::window()->getView();
 	vec3 dir = glm::normalize(lat - pos);
 
 	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
@@ -100,7 +100,7 @@ Light::Light(const vec3& position, const vec3& color, float ambiFac, float range
 
 // CLICK STAMP
 
-ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, vec2i pos, uint8 but) :
+ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const ivec2& pos, uint8 but) :
 	inter(inter),
 	area(area),
 	pos(pos),
@@ -128,7 +128,7 @@ Animation::Animation(Object* object, std::queue<Keyframe>&& keyframes) :
 
 Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
 	keyframes(std::move(keyframes)),
-	begin(0.f, Keyframe::CHG_NONE, camera->getPos(), camera->getLat()),
+	begin(0.f, Keyframe::CHG_NONE, camera->getPos(), quat(), camera->getLat()),
 	camera(camera),
 	useObject(false)
 {
@@ -138,7 +138,7 @@ Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
 bool Animation::tick(float dSec) {
 	begin.time += dSec;
 
-	if (float td = keyframes.front().time > 0.f ? clampHigh(begin.time / keyframes.front().time, 1.f) : 1.f; useObject) {
+	if (float td = keyframes.front().time > 0.f ? std::clamp(begin.time / keyframes.front().time, 0.f, 1.f) : 1.f; useObject) {
 		if (keyframes.front().change & Keyframe::CHG_POS)
 			object->setPos(glm::mix(begin.pos, keyframes.front().pos, td));
 		if (keyframes.front().change & Keyframe::CHG_ROT)
@@ -151,7 +151,7 @@ bool Animation::tick(float dSec) {
 	if (begin.time >= keyframes.front().time) {
 		float ovhead = begin.time - keyframes.front().time;
 		if (keyframes.pop(); !keyframes.empty()) {
-			begin = Keyframe(0.f, Keyframe::CHG_NONE, useObject ? object->getPos() : camera->getPos(), useObject ? object->getRot() : camera->getLat(), useObject ? object->getScl() : vec3());
+			begin = Keyframe(0.f, Keyframe::CHG_NONE, useObject ? object->getPos() : camera->getPos(), useObject ? object->getRot() : quat(), useObject ? object->getScl() : camera->getLat());
 			return tick(ovhead);
 		}
 		if (!useObject)
@@ -271,66 +271,73 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 		}
 }
 
-void Scene::onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time) {
-	if ((mStat & SDL_BUTTON_MMASK) && !camera.moving) {
-		vec2 rot(glm::radians(float(mMov.y) / 2.f), glm::radians(float(-mMov.x) / 2.f));
+void Scene::onMouseMove(const SDL_MouseMotionEvent& mot) {
+	if ((mot.state & SDL_BUTTON_MMASK) && !camera.moving) {
+		vec2 rot(glm::radians(float(mot.yrel) / 2.f), glm::radians(float(-mot.xrel) / 2.f));
 		camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 		return;
 	}
-	mouseMove = mMov;
-	moveTime = time;
+	mouseMove = ivec2(mot.xrel, mot.yrel);
+	moveTime = mot.timestamp;
 
-	updateSelect(mPos);
+	updateSelect(ivec2(mot.x, mot.y));
 	if (capture)
-		capture->onDrag(mPos, mMov);
-	else if (mStat)
-		World::state()->eventDrag(mStat);
+		capture->onDrag(ivec2(mot.x, mot.y), mouseMove);
+	else if (mot.state)
+		World::state()->eventDrag(mot.state);
 }
 
-void Scene::onMouseDown(vec2i mPos, uint8 mBut) {
+void Scene::onMouseDown(const SDL_MouseButtonEvent& but) {
 	if (cstamp.but)
 		return;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	select = getSelected(mPos);
-	cstamp = ClickStamp(select, getSelectedScrollArea(), mPos, mBut);
+	select = getSelected(ivec2(but.x, but.y));
+	cstamp = ClickStamp(select, getSelectedScrollArea(), ivec2(but.x, but.y), but.button);
 	if (cstamp.area)	// area goes first so widget can overwrite it's capture
-		cstamp.area->onHold(mPos, mBut);
+		cstamp.area->onHold(ivec2(but.x, but.y), but.button);
 	if (cstamp.inter != cstamp.area)
-		cstamp.inter->onHold(mPos, mBut);
+		cstamp.inter->onHold(ivec2(but.x, but.y), but.button);
 	if (!capture)		// can be set by previous onHold calls
-		World::state()->eventDrag(SDL_BUTTON(mBut));
-	if (mBut == SDL_BUTTON_MIDDLE)
+		World::state()->eventDrag(SDL_BUTTON(but.button));
+	if (but.button == SDL_BUTTON_MIDDLE)
 		SDL_SetRelativeMouseMode(SDL_TRUE);
 }
 
-void Scene::onMouseUp(vec2i mPos, uint8 mBut) {
-	if (mBut != cstamp.but)
+void Scene::onMouseUp(const SDL_MouseButtonEvent& but) {
+	if (but.button != cstamp.but)
 		return;
-	if (mBut == SDL_BUTTON_MIDDLE) {	// in case camera was being moved
+	if (but.button == SDL_BUTTON_MIDDLE) {	// in case camera was being moved
 		SDL_SetRelativeMouseMode(SDL_FALSE);
 		simulateMouseMove();
 	}
 	if (capture)
-		capture->onUndrag(mBut);
-	if (select && cstamp.inter == select && cursorInClickRange(mPos))
-		cstamp.inter->onClick(mPos, mBut);
+		capture->onUndrag(but.button);
+	if (select && cstamp.inter == select && cursorInClickRange(ivec2(but.x, but.y)))
+		cstamp.inter->onClick(ivec2(but.x, but.y), but.button);
 	if (!capture)
 		World::state()->eventUndrag();
 	cstamp = ClickStamp();
 }
 
-void Scene::onMouseWheel(vec2i wMov) {
+void Scene::onMouseWheel(const SDL_MouseWheelEvent& whe) {
 	if (ScrollArea* box = getSelectedScrollArea())
-		box->onScroll(wMov * scrollFactorWheel);
-	else if (wMov.y)
-		World::state()->eventWheel(wMov.y);
+		box->onScroll(ivec2(whe.x, whe.y) * scrollFactorWheel);
+	else if (whe.y)
+		World::state()->eventWheel(whe.y);
 }
 
 void Scene::onMouseLeave() {
-	if (unselect(); cstamp.but)		// get rid of select first to prevent click event
-		onMouseUp(mousePos(), cstamp.but);
+	if (unselect(); cstamp.but) {		// get rid of select first to prevent click event
+		ivec2 mPos = mousePos();
+		onMouseUp({ SDL_MOUSEBUTTONUP, SDL_GetTicks(), World::window()->windowID(), 0, cstamp.but, SDL_RELEASED, 1, 0, mPos.x, mPos.y });
+	}
+}
+
+void Scene::onText(const char* str) {
+	if (capture)
+		capture->onText(str);
 }
 
 void Scene::resetLayouts() {
@@ -372,7 +379,7 @@ void Scene::unselect() {
 	}
 }
 
-void Scene::updateSelect(vec2i mPos) {
+void Scene::updateSelect(const ivec2& mPos) {
 	if (Interactable* cur = getSelected(mPos); cur != select) {
 		if (select)
 			select->onUnhover();
@@ -381,7 +388,7 @@ void Scene::updateSelect(vec2i mPos) {
 	}
 }
 
-Interactable* Scene::getSelected(vec2i mPos) {
+Interactable* Scene::getSelected(const ivec2& mPos) {
 	for (Layout* box = !popup ? layout.get() : popup.get();;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
@@ -394,7 +401,7 @@ Interactable* Scene::getSelected(vec2i mPos) {
 	}
 }
 
-Interactable* Scene::getScrollOrObject(vec2i mPos, Widget* wgt) const {
+Interactable* Scene::getScrollOrObject(const ivec2& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
 	return !popup ? static_cast<Interactable*>(rayCast(pickerRay(mPos))) : static_cast<Interactable*>(popup.get());
@@ -437,7 +444,7 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 
 	float f = 1.f / a;
 	vec3 s = ori - v0;
-	float u = f * (glm::dot(s, h));
+	float u = f * glm::dot(s, h);
 	if (u < 0.f || u > 1.f)
 		return false;
 
@@ -451,7 +458,7 @@ bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& 
 }
 
 void Scene::simulateMouseMove() {
-	vec2i pos;
+	ivec2 pos;
 	uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
-	onMouseMove(pos, 0, state, SDL_GetTicks());
+	onMouseMove({ SDL_MOUSEMOTION, SDL_GetTicks(), World::window()->windowID(), 0, state, pos.x, pos.y, 0, 0 });
 }

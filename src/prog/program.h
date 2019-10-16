@@ -122,12 +122,12 @@ private:
 	void postConfigUpdate();
 	void setSaveConfig(const string& name, bool save = true);
 	void placeTile(Tile* tile, uint8 type);
-	void placePiece(vec2s pos, uint8 type, Piece* occupant);
+	void placePiece(svec2 pos, uint8 type, Piece* occupant);
 	void popuplateSetup(Setup& setup);
 
 	void connect(Netcp* net, const char* msg);
 	void setState(ProgState* newState);
-	BoardObject* pickBob(vec2s& pos, Piece*& pce);
+	BoardObject* pickBob(svec2& pos, Piece*& pce);
 };
 ENUM_OPERATIONS(Program::Info, uint8)
 

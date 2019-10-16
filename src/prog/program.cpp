@@ -313,7 +313,7 @@ void Program::placeTile(Tile* tile, uint8 type) {
 }
 
 void Program::eventPlacePieceH() {
-	vec2s pos;
+	svec2 pos;
 	if (Piece* pce; pickBob(pos, pce)) {
 		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 		if (uint8 tid = ps->getSelected(); ps->getCount(tid))
@@ -322,16 +322,16 @@ void Program::eventPlacePieceH() {
 }
 
 void Program::eventPlacePieceD(Button* but) {
-	vec2s pos;
+	svec2 pos;
 	if (Piece* pce; pickBob(pos, pce))
 		placePiece(pos, uint8(but->getID() - 1), pce);
 }
 
-void Program::placePiece(vec2s pos, uint8 type, Piece* occupant) {
+void Program::placePiece(svec2 pos, uint8 type, Piece* occupant) {
 	// remove any piece that may be occupying that tile already
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	if (occupant) {
-		occupant->updatePos(INT16_MIN, false);
+		occupant->updatePos();
 		ps->incdecIcon(uint8(occupant->getType()), true, false);
 	}
 
@@ -354,7 +354,7 @@ void Program::eventMoveTile(BoardObject* obj, uint8) {
 
 void Program::eventMovePiece(BoardObject* obj, uint8) {
 	// get new position and set or swap positions with possibly already occupying piece
-	vec2s pos;
+	svec2 pos;
 	if (Piece* dst; pickBob(pos, dst)) {
 		Piece* src = static_cast<Piece*>(obj);
 		if (dst)
@@ -373,11 +373,11 @@ void Program::eventClearTile() {
 }
 
 void Program::eventClearPiece() {
-	vec2s pos;
+	svec2 pos;
 	Piece* pce;
 	if (pickBob(pos, pce); pce) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true, false);
-		pce->updatePos(INT16_MIN, false);
+		pce->updatePos();
 	}
 }
 
@@ -463,8 +463,8 @@ void Program::eventSetupLoad(Button* but) {
 			it->setType(Com::Tile::empty);
 
 		vector<uint16> cnt(game.config.tileAmounts.begin(), game.config.tileAmounts.end() - 1);
-		for (const pair<vec2s, Com::Tile>& it : stp.tiles)
-			if (inRange(it.first, vec2s(0, 1), vec2s(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
+		for (const pair<svec2, Com::Tile>& it : stp.tiles)
+			if (inRange(it.first, svec2(0, 1), svec2(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
 				cnt[uint8(it.second)]--;
 				game.getTile(it.first)->setType(it.second);
 			}
@@ -482,11 +482,11 @@ void Program::eventSetupLoad(Button* but) {
 	}
 	if (!stp.pieces.empty()) {
 		for (Piece* it = game.getPieces().own(); it != game.getPieces().ene(); it++)
-			it->updatePos(INT16_MIN, false);
+			it->updatePos();
 
 		vector<uint16> cnt(game.config.pieceAmounts.begin(), game.config.pieceAmounts.end());
-		for (const pair<vec2s, Com::Piece>& it : stp.pieces)
-			if (inRange(it.first, vec2s(0, 1), vec2s(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
+		for (const pair<svec2, Com::Piece>& it : stp.pieces)
+			if (inRange(it.first, svec2(0, 1), svec2(game.config.homeSize.x - 1, game.config.homeSize.y)) && cnt[uint8(it.second)]) {
 				cnt[uint8(it.second)]--;
 				Piece* pieces = game.getOwnPieces(it.second);
 				std::find_if(pieces, pieces + game.config.pieceAmounts[uint8(it.second)], [](Piece& pce) -> bool { return !pce.show; })->updatePos(it.first, true);
@@ -505,8 +505,8 @@ void Program::eventOpenMatch() {
 	game.prepareMatch();
 	setState(new ProgMatch);
 	game.prepareTurn();
-	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYDown, game.getScreen()->getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(0.f)) })));
-	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, Camera::latMatch) })));
+	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYDown, game.getScreen()->getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), quat(), vec3(0.f)) })));
+	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, quat(), Camera::latMatch) })));
 	World::scene()->getCamera()->pmax = Camera::pmaxMatch;
 	World::scene()->getCamera()->ymax = Camera::ymaxMatch;
 }
@@ -516,7 +516,7 @@ void Program::eventEndTurn(Button*) {
 }
 
 void Program::eventPlaceDragon(Button*) {
-	vec2s pos;
+	svec2 pos;
 	if (Piece* pce; pickBob(pos, pce))
 		game.placeDragon(pos, pce);
 }
@@ -530,7 +530,7 @@ void Program::eventFavorStart(BoardObject* obj, uint8) {
 void Program::eventMove(BoardObject* obj, uint8 mBut) {
 	try {
 		game.highlightMoveTiles(nullptr);
-		vec2s pos;
+		svec2 pos;
 		if (Piece* mover = static_cast<Piece*>(obj), *pce; pickBob(pos, pce))
 			game.pieceMove(mover, pos, pce, mover->getType() == Com::Piece::warhorse && mBut == SDL_BUTTON_LEFT);
 	} catch (const string& err) {
@@ -544,7 +544,7 @@ void Program::eventMove(BoardObject* obj, uint8 mBut) {
 void Program::eventFire(BoardObject* obj, uint8) {
 	try {
 		game.highlightFireTiles(nullptr);
-		vec2s pos;
+		svec2 pos;
 		if (Piece* pce; pickBob(pos, pce))
 			game.pieceFire(static_cast<Piece*>(obj), pos, pce);
 	} catch (const string& err) {
@@ -569,11 +569,11 @@ void Program::eventAbortGame(Button*) {
 
 void Program::uninitGame() {
 	if (game.uninitObjects(); dynamic_cast<ProgMatch*>(state.get())) {
-		World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(1.f)), Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYUp, game.getScreen()->getPos().z)) })));
-		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, Camera::latSetup) })));
+		World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.f, Keyframe::CHG_SCL, vec3(), quat(), vec3(1.f)), Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYUp, game.getScreen()->getPos().z)) })));
+		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posSetup, quat(), Camera::latSetup) })));
 		for (Piece& it : game.getPieces())
 			if (it.getPos().z <= game.getScreen()->getPos().z && it.getPos().z >= Com::Config::boardWidth / -2.f)
-				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(it.getPos().x, -2.f, it.getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), vec3(), vec3(0.f)) })));
+				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(it.getPos().x, -2.f, it.getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), quat(), vec3(0.f)) })));
 		World::scene()->getCamera()->pmax = Camera::pmaxSetup;
 		World::scene()->getCamera()->ymax = Camera::ymaxSetup;
 	}
@@ -620,10 +620,10 @@ void Program::eventOpenSettings(Button*) {
 
 void Program::eventApplySettings(Button*) {
 	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
-	World::window()->setScreen(uint8(sstoul(ps->display->getText())), Settings::Screen(ps->screen->getCurOpt()), vec2i::get(ps->winSize->getText(), strtoul, 0), ps->currentMode());
+	World::window()->setScreen(uint8(sstoul(ps->display->getText())), Settings::Screen(ps->screen->getCurOpt()), stoiv<ivec2>(ps->winSize->getText().c_str(), strtoul), ps->currentMode());
 	ps->display->setText(toStr(World::sets()->display));
 	ps->screen->setCurOpt(uint8(World::sets()->screen));
-	ps->winSize->setText(World::sets()->size.toString(ProgSettings::rv2iSeparator));
+	ps->winSize->setText(toStr(World::sets()->size, ProgSettings::rv2iSeparator));
 	ps->dspMode->setText(ProgSettings::dispToFstr(World::sets()->mode));
 }
 
@@ -654,7 +654,7 @@ void Program::eventSetVolumeSL(Button* but) {
 
 void Program::eventSetVolumeLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	World::sets()->avolume = clampHigh(uint8(sstoul(le->getText())), uint8(SDL_MIX_MAXVOLUME));
+	World::sets()->avolume = std::clamp(uint8(sstoul(le->getText())), uint8(0), uint8(SDL_MIX_MAXVOLUME));
 	le->setText(toStr(World::sets()->avolume));
 	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(World::sets()->avolume);
 }
@@ -678,11 +678,11 @@ void Program::eventExit(Button*) {
 }
 
 void Program::eventSBNext(Button* but) {
-	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() - 1))->onClick(0, SDL_BUTTON_LEFT);
+	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() - 1))->onClick(ivec2(0), SDL_BUTTON_LEFT);
 }
 
 void Program::eventSBPrev(Button* but) {
-	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() + 1))->onClick(0, SDL_BUTTON_RIGHT);
+	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() + 1))->onClick(ivec2(0), SDL_BUTTON_RIGHT);
 }
 
 void Program::connect(Netcp* net, const char* msg) {
@@ -701,9 +701,9 @@ void Program::setState(ProgState* newState) {
 	World::scene()->resetLayouts();
 }
 
-BoardObject* Program::pickBob(vec2s& pos, Piece*& pce) {
+BoardObject* Program::pickBob(svec2& pos, Piece*& pce) {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
-	pos = bob ? game.ptog(bob->getPos()) : INT16_MIN;
+	pos = bob ? game.ptog(bob->getPos()) : svec2(INT16_MIN);
 	pce = dynamic_cast<Piece*>(bob);
 	return bob;
 }

@@ -26,10 +26,10 @@ public:
 	static ShaderGUI* gui();
 
 #ifdef _WIN32
-	static void setArgs(Win::PWSTR pCmdLine);
-#else
-	static void setArgs(int argc, char** argv);
+	static void setArgs(PWSTR pCmdLine);
 #endif
+	static void setArgs(int argc, char** argv);
+
 	template <class F, class... A> static void prun(F func, A... args);
 	static void play(const string& name);
 };
@@ -81,6 +81,14 @@ inline ShaderGeometry* World::geom() {
 
 inline ShaderGUI* World::gui() {
 	return windowSys.getGUI();
+}
+#ifdef _WIN32
+inline void World::setArgs(PWSTR pCmdLine) {
+	args.setArgs(pCmdLine, { argSetup }, {});
+}
+#endif
+inline void World::setArgs(int argc, char** argv) {
+	args.setArgs(argc, argv, stos, { argSetup }, {});
 }
 
 template <class F, class... A>

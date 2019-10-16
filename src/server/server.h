@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/cvec2.h"
+#include "utils/text.h"
 #ifdef __APPLE__
 #include <SDL2_net/SDL_net.h>
 #else
@@ -101,7 +101,7 @@ enum class Code : uint8 {
 // variable game properties (shall never be changed after loading)
 class Config {
 public:
-	vec2u homeSize;
+	nvec2 homeSize;
 	uint8 survivalPass;
 	uint8 favorLimit;
 	uint8 dragonDist;
@@ -128,8 +128,8 @@ public:
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
 private:
-	static constexpr vec2u minHomeSize = { 4, 2 };
-	static constexpr vec2u maxHomeSize = { 89, 44 };
+	static constexpr nvec2 minHomeSize = { 4, 2 };
+	static constexpr nvec2 maxHomeSize = { 89, 44 };
 
 public:
 	Config();

@@ -61,11 +61,11 @@ Settings* FileSys::loadSettings() {
 		if (pairStr il = readIniLine(line); il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
 		else if (il.first == iniKeywordDisplay)
-			sets->display = clampHigh(uint8(sstoul(il.second)), uint8(SDL_GetNumVideoDisplays()));
+			sets->display = std::clamp(uint8(sstoul(il.second)), uint8(0), uint8(SDL_GetNumVideoDisplays()));
 		else if (il.first == iniKeywordScreen)
 			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
 		else if (il.first == iniKeywordSize)
-			sets->size = vec2i::get(il.second, strtoul, 0);
+			sets->size = stoiv<ivec2>(il.second.c_str(), strtoul);
 		else if (il.first == iniKeywordMode)
 			sets->mode = strToDisp(il.second);
 		else if (il.first == iniKeywordVsync)
@@ -75,7 +75,7 @@ Settings* FileSys::loadSettings() {
 		else if (il.first == iniKeywordGamma)
 			sets->gamma = std::clamp(sstof(il.second), 0.f, Settings::gammaMax);
 		else if (il.first == iniKeywordAVolume)
-			sets->avolume = clampHigh(uint8(sstoul(il.second)), uint8(SDL_MIX_MAXVOLUME));
+			sets->avolume = std::clamp(uint8(sstoul(il.second)), uint8(0), uint8(SDL_MIX_MAXVOLUME));
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -89,7 +89,7 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
 	text += makeIniLine(iniKeywordDisplay, toStr(sets->display));
 	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
-	text += makeIniLine(iniKeywordSize, sets->size.toString());
+	text += makeIniLine(iniKeywordSize, toStr(sets->size));
 	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
 	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
 	text += makeIniLine(iniKeywordMsamples, toStr(sets->msamples));
@@ -108,7 +108,7 @@ umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
 			cit = &confs.emplace(std::move(title), Com::Config()).first->second;
 		else if (cit) {
 			if (pairStr it = readIniLine(line); !strcicmp(it.first, iniKeywordBoardSize))
-				cit->homeSize = vec2u::get(it.second, strtoul, 0);
+				cit->homeSize = stoiv<nvec2>(it.second.c_str(), strtoul);
 			else if (!strcicmp(it.first, iniKeywordSurvival))
 				cit->survivalPass = uint8(sstoul(it.second));
 			else if (!strcicmp(it.first, iniKeywordFavors))
@@ -157,7 +157,7 @@ bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* fi
 	string text;
 	for (const pair<const string, Com::Config>& it : confs) {
 		text += makeIniLine(it.first);
-		text += makeIniLine(iniKeywordBoardSize, it.second.homeSize.toString());
+		text += makeIniLine(iniKeywordBoardSize, toStr(it.second.homeSize));
 		text += makeIniLine(iniKeywordSurvival, toStr(it.second.survivalPass));
 		text += makeIniLine(iniKeywordFavors, toStr(it.second.favorLimit));
 		text += makeIniLine(iniKeywordDragonDist, toStr(it.second.dragonDist));
@@ -184,11 +184,11 @@ umap<string, Setup> FileSys::loadSetups() {
 			sit = sets.emplace(std::move(title), Setup()).first;
 		else if (pairStr it = readIniLine(line); !sets.empty()) {
 			if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
-				sit->second.tiles.emplace(vec2s::get(it.first.substr(len), strtol, 0), strToEnum<Com::Tile>(Com::tileNames, it.second));
+				sit->second.tiles.emplace(stoiv<svec2>(it.first.c_str() + len, strtol), strToEnum<Com::Tile>(Com::tileNames, it.second));
 			else if (len = strlen(iniKeywordMiddle); !strncicmp(it.first, iniKeywordMiddle, len))
 				sit->second.mids.emplace(uint16(sstoul(it.first.substr(len))), strToEnum<Com::Tile>(Com::tileNames, it.second));
 			else if (len = strlen(iniKeywordPiece); !strncicmp(it.first, iniKeywordPiece, len))
-				sit->second.pieces.emplace(vec2s::get(it.first.substr(len), strtol, 0), strToEnum<Com::Piece>(Com::pieceNames, it.second));
+				sit->second.pieces.emplace(stoiv<svec2>(it.first.c_str() + len, strtol), strToEnum<Com::Piece>(Com::pieceNames, it.second));
 		}
 	}
 	return sets;
@@ -198,12 +198,12 @@ bool FileSys::saveSetups(const umap<string, Setup>& sets) {
 	string text;
 	for (const pair<const string, Setup>& it : sets) {
 		text += makeIniLine(it.first);
-		for (const pair<vec2s, Com::Tile>& ti : it.second.tiles)
-			text += makeIniLine(iniKeywordTile + ti.first.toString("_"), Com::tileNames[uint8(ti.second)]);
+		for (const pair<svec2, Com::Tile>& ti : it.second.tiles)
+			text += makeIniLine(iniKeywordTile + toStr(ti.first, "_"), Com::tileNames[uint8(ti.second)]);
 		for (const pair<uint16, Com::Tile>& mi : it.second.mids)
 			text += makeIniLine(iniKeywordMiddle + toStr(mi.first), Com::tileNames[uint8(mi.second)]);
-		for (const pair<vec2s, Com::Piece>& pi : it.second.pieces)
-			text += makeIniLine(iniKeywordPiece + pi.first.toString("_"), Com::pieceNames[uint8(pi.second)]);
+		for (const pair<svec2, Com::Piece>& pi : it.second.pieces)
+			text += makeIniLine(iniKeywordPiece + toStr(pi.first, "_"), Com::pieceNames[uint8(pi.second)]);
 		text += linend;
 	}
 	return writeFile(fileSetups, text);
@@ -351,7 +351,7 @@ umap<string, Texture> FileSys::loadTextures() {
 	for (uint16 i = 0; i < size; i++) {
 		fread(ibuf, sizeof(*ibuf), textureHeaderSize, ifh);
 		name.resize(ibuf[0]);
-		vec2i res(sp[0], sp[1]);
+		ivec2 res(sp[0], sp[1]);
 		pixels.resize(uint(int(sp[2]) * res.y));
 
 		fread(name.data(), sizeof(*name.data()), name.length(), ifh);

@@ -26,7 +26,7 @@ void Layout::tick(float dSec) {
 
 void Layout::onResize() {
 	// get amount of space for widgets with prc and get sum of widget's prc
-	vec2i wsiz = size();
+	ivec2 wsiz = size();
 	float space = float(wsiz[vertical] - int(widgets.size()-1) * spacing);
 	float total = 0;
 	for (Widget* it : widgets) {
@@ -37,12 +37,12 @@ void Layout::onResize() {
 	}
 
 	// calculate positions for each widget and set last poss element to end position of the last widget
-	vec2i pos = 0;
+	ivec2 pos(0);
 	for (sizet i = 0; i < widgets.size(); i++) {
 		positions[i] = pos;
 		pos[vertical] += (widgets[i]->getRelSize().usePix ? widgets[i]->getRelSize().pix : int(widgets[i]->getRelSize().prc * space / total)) + spacing;
 	}
-	positions.back() = vec2i::swap(wsiz[!vertical], pos[vertical], !vertical);
+	positions.back() = swap(wsiz[!vertical], pos[vertical], !vertical);
 
 	// do the same for children
 	for (Widget* it : widgets)
@@ -87,15 +87,15 @@ void Layout::reinitWidgets(sizet id) {
 	postInit();
 }
 
-vec2i Layout::wgtPosition(sizet id) const {
+ivec2 Layout::wgtPosition(sizet id) const {
 	return position() + positions[id];
 }
 
-vec2i Layout::wgtSize(sizet id) const {
-	return vec2i::swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - spacing, !vertical);
+ivec2 Layout::wgtSize(sizet id) const {
+	return swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - spacing, !vertical);
 }
 
-vec2i Layout::listSize() const {
+ivec2 Layout::listSize() const {
 	return positions.back() - spacing;
 }
 
@@ -110,47 +110,47 @@ RootLayout::RootLayout(Size relSize, vector<Widget*>&& children, bool vertical, 
 {}
 
 void RootLayout::draw() const {
-	drawRect(Rect(0, World::window()->getView()), bgColor, World::scene()->blank());	// dim other widgets
+	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());	// dim other widgets
 	Layout::draw();
 }
 
-vec2i RootLayout::position() const {
-	return 0;
+ivec2 RootLayout::position() const {
+	return ivec2(0);
 }
 
-vec2i RootLayout::size() const {
+ivec2 RootLayout::size() const {
 	return World::window()->getView();
 }
 
 Rect RootLayout::frame() const {
-	return Rect(0, World::window()->getView());
+	return Rect(ivec2(0), World::window()->getView());
 }
 
 // POPUP
 
 const vec4 Popup::colorBackground(0.42f, 0.05f, 0.f, 1.f);
 
-Popup::Popup(const cvec2<Size>& relSize, vector<Widget*>&& children, BCall kcall, BCall ccall, bool vertical, int spacing, const vec4& bgColor) :
-	RootLayout(relSize.x, std::move(children), vertical, spacing, bgColor),
+Popup::Popup(const pair<Size, Size>& relSize, vector<Widget*>&& children, BCall kcall, BCall ccall, bool vertical, int spacing, const vec4& bgColor) :
+	RootLayout(relSize.first, std::move(children), vertical, spacing, bgColor),
 	kcall(kcall),
 	ccall(ccall),
-	sizeY(relSize.y)
+	sizeY(relSize.second)
 {}
 
 void Popup::draw() const {
 	Rect rct = rect();
-	drawRect(Rect(0, World::window()->getView()), bgColor, World::scene()->blank());						// dim other widgets
+	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());						// dim other widgets
 	drawRect(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->blank());	// draw background
 	Layout::draw();
 }
 
-vec2i Popup::position() const {
+ivec2 Popup::position() const {
 	return (World::window()->getView() - size()) / 2;
 }
 
-vec2i Popup::size() const {
-	vec2f res = World::window()->getView();
-	return vec2i(relSize.usePix ? relSize.pix : relSize.prc * res.x, sizeY.usePix ? sizeY.pix : sizeY.prc * res.y);
+ivec2 Popup::size() const {
+	vec2 res = World::window()->getView();
+	return ivec2(relSize.usePix ? relSize.pix : relSize.prc * res.x, sizeY.usePix ? sizeY.pix : sizeY.prc * res.y);
 }
 
 // SCROLL AREA
@@ -164,8 +164,8 @@ ScrollArea::ScrollArea(Size relSize, vector<Widget*>&& children, bool vertical, 
 {}
 
 void ScrollArea::draw() const {
-	vec2t vis = visibleWidgets();	// get index interval of items on screen and draw children
-	for (sizet i = vis.b; i < vis.t; i++)
+	mvec2 vis = visibleWidgets();	// get index interval of items on screen and draw children
+	for (sizet i = vis.x; i < vis.y; i++)
 		widgets[i]->draw();
 
 	Rect frm = frame();
@@ -175,7 +175,7 @@ void ScrollArea::draw() const {
 
 void ScrollArea::tick(float dSec) {
 	Layout::tick(dSec);
-	if (motion != 0.f) {
+	if (motion != vec2(0.f)) {
 		moveListPos(motion);
 		throttleMotion(motion.x, dSec);
 		throttleMotion(motion.y, dSec);
@@ -184,11 +184,11 @@ void ScrollArea::tick(float dSec) {
 
 void ScrollArea::postInit() {
 	Layout::postInit();
-	listPos = 0;
+	listPos = ivec2(0);
 }
 
-void ScrollArea::onHold(vec2i mPos, uint8 mBut) {
-	motion = 0.f;	// get rid of scroll motion
+void ScrollArea::onHold(const ivec2& mPos, uint8 mBut) {
+	motion = vec2(0.f);	// get rid of scroll motion
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
 		World::scene()->capture = this;
 		if ((draggingSlider = barRect().contain(mPos))) {
@@ -199,39 +199,39 @@ void ScrollArea::onHold(vec2i mPos, uint8 mBut) {
 	}
 }
 
-void ScrollArea::onDrag(vec2i mPos, vec2i mMov) {
+void ScrollArea::onDrag(const ivec2& mPos, const ivec2& mMov) {
 	if (draggingSlider)
 		setSlider(mPos.y - diffSliderMouse);
 	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)
 		moveListPos(-mMov);
 	else
-		moveListPos(mMov * vec2i::swap(0, -1, !vertical));
+		moveListPos(mMov * swap(0, -1, !vertical));
 }
 
 void ScrollArea::onUndrag(uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
-			motion = World::scene()->getMouseMove() * vec2i::swap(0, -1, !vertical);
+			motion = World::scene()->getMouseMove() * swap(0, -1, !vertical);
 		draggingSlider = false;
 		World::scene()->capture = nullptr;
 	}
 }
 
-void ScrollArea::onScroll(vec2i wMov) {
-	moveListPos(wMov.swap(!vertical));
-	motion = 0.f;
+void ScrollArea::onScroll(const ivec2& wMov) {
+	moveListPos(swap(wMov.x, -wMov.y, !vertical));
+	motion = vec2(0.f);
 }
 
 Rect ScrollArea::frame() const {
 	return rect().intersect(parent->frame());
 }
 
-vec2i ScrollArea::wgtPosition(sizet id) const {
+ivec2 ScrollArea::wgtPosition(sizet id) const {
 	return Layout::wgtPosition(id) - listPos;
 }
 
-vec2i ScrollArea::wgtSize(sizet id) const {
-	return Layout::wgtSize(id) - vec2i::swap(barSize(), 0, !vertical);
+ivec2 ScrollArea::wgtSize(sizet id) const {
+	return Layout::wgtSize(id) - swap(barSize(), 0, !vertical);
 }
 
 void ScrollArea::setSlider(int spos) {
@@ -239,9 +239,9 @@ void ScrollArea::setSlider(int spos) {
 	listPos[vertical] = std::clamp((spos - position()[vertical]) * lim / sliderLim(), 0, lim);
 }
 
-vec2i ScrollArea::listLim() const {
-	vec2i wsiz = size(), lsiz = listSize();
-	return vec2i(wsiz.x < lsiz.x ? lsiz.x - wsiz.x : 0, wsiz.y < lsiz.y ? lsiz.y - wsiz.y : 0);
+ivec2 ScrollArea::listLim() const {
+	ivec2 wsiz = size(), lsiz = listSize();
+	return ivec2(wsiz.x < lsiz.x ? lsiz.x - wsiz.x : 0, wsiz.y < lsiz.y ? lsiz.y - wsiz.y : 0);
 }
 
 int ScrollArea::sliderSize() const {
@@ -259,8 +259,8 @@ void ScrollArea::throttleMotion(float& mov, float dSec) {
 
 Rect ScrollArea::barRect() const {
 	int bs = barSize();
-	vec2i pos = position();
-	vec2i siz = size();
+	ivec2 pos = position();
+	ivec2 siz = size();
 	return vertical ? Rect(pos.x + siz.x - bs, pos.y, bs, siz.y) : Rect(pos.x, pos.y + siz.y - bs, siz.x, bs);
 }
 
@@ -269,18 +269,18 @@ Rect ScrollArea::sliderRect() const {
 	return vertical ? Rect(position().x + size().x - bs, sliderPos(), bs, sliderSize()) : Rect(sliderPos(), position().y + size().y - bs, sliderSize(), bs);
 }
 
-vec2t ScrollArea::visibleWidgets() const {
-	vec2t ival = 0;
+mvec2 ScrollArea::visibleWidgets() const {
+	mvec2 ival(0);
 	if (widgets.empty())	// nothing to draw
 		return ival;
 
-	for (; ival.b < widgets.size() && wgtREnd(ival.b) < listPos[vertical]; ival.b++);
-	ival.t = ival.b + 1;	// last is one greater than the actual last index
-	for (int end = listPos[vertical] + size()[vertical]; ival.t < widgets.size() && wgtRPos(ival.t) <= end; ival.t++);
+	for (; ival.x < widgets.size() && wgtREnd(ival.x) < listPos[vertical]; ival.x++);
+	ival.y = ival.x + 1;	// last is one greater than the actual last index
+	for (int end = listPos[vertical] + size()[vertical]; ival.y < widgets.size() && wgtRPos(ival.y) <= end; ival.y++);
 	return ival;
 }
 
-void ScrollArea::moveListPos(vec2i mov) {
-	listPos = vec2i(listPos + mov).clamp(0, listLim());
+void ScrollArea::moveListPos(const ivec2& mov) {
+	listPos = glm::clamp(ivec2(listPos + mov), ivec2(0), listLim());
 	World::scene()->updateSelect(mousePos());
 }

@@ -56,7 +56,7 @@ Game::Game() :
 	board(vec3(Com::Config::boardWidth / 2.f, 0.f, 0.f), vec3(0.f), vec3(1.f), World::scene()->mesh("table"), World::scene()->material("board"), World::scene()->texture("rock")),
 	bgrid(vec3(0.f), vec3(0.f), vec3(1.f), &gridat, World::scene()->material("grid"), World::scene()->blank()),
 	screen(vec3(Com::Config::boardWidth / 2.f, screenYUp, 0.f), vec3(0.f), vec3(1.f), World::scene()->mesh("screen"), World::scene()->material("screen"), World::scene()->texture("wall")),
-	ffpad(gtop(INT16_MIN, 0.001f), vec3(0.f), vec3(config.objectSize, 1.f, config.objectSize), World::scene()->mesh("outline"), World::scene()->material("grid"), World::scene()->blank(), nullptr, false, false),	// show indicates if favor is being used and pos informs tile type
+	ffpad(gtop(svec2(INT16_MIN), 0.001f), vec3(0.f), vec3(config.objectSize, 1.f, config.objectSize), World::scene()->mesh("outline"), World::scene()->material("grid"), World::scene()->blank(), nullptr, false, false),	// show indicates if favor is being used and pos informs tile type
 	tiles(config),
 	pieces(config)
 {}
@@ -102,7 +102,7 @@ void Game::prepareMatch() {
 	favorCount = 0;
 	favorTotal = config.favorLimit;
 	for (Piece* throne = getOwnPieces(Com::Piece::throne); throne != pieces.ene() && favorCount < favorTotal; throne++)
-		if (vec2s pos = ptog(throne->getPos()); getTile(pos)->getType() == Com::Tile::fortress) {
+		if (svec2 pos = ptog(throne->getPos()); getTile(pos)->getType() == Com::Tile::fortress) {
 			throne->lastFortress = posToId(pos);
 			favorCount++;
 		}
@@ -147,8 +147,8 @@ void Game::checkOwnTiles() const {
 		for (int16 x = 0; x < config.homeSize.x; x++) {
 			if (Com::Tile type = tiles.mid(y * config.homeSize.x + x)->getType(); type < Com::Tile::fortress)
 				cnt[uint8(type)]++;
-			else if (vec2s pos(x, y); outRange(pos, vec2s(1), vec2s(config.homeSize.x - 2, config.homeSize.y - 1)))
-				throw firstUpper(Com::tileNames[uint8(Com::Tile::fortress)]) + " at " + pos.toString("|") + " not allowed";
+			else if (svec2 pos(x, y); outRange(pos, svec2(1), svec2(config.homeSize.x - 2, config.homeSize.y - 1)))
+				throw firstUpper(Com::tileNames[uint8(Com::Tile::fortress)]) + " at " + toStr(pos, "|") + " not allowed";
 			else
 				empties++;
 		}
@@ -229,9 +229,9 @@ void Game::useFavor() {
 	favorTotal--;
 }
 
-void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch) {
+void Game::pieceMove(Piece* piece, svec2 pos, Piece* occupant, bool forceSwitch) {
 	// check attack, favor, move and survival conditions
-	vec2s spos = ptog(piece->getPos());
+	svec2 spos = ptog(piece->getPos());
 	Tile *stil = getTile(spos), *dtil = getTile(pos);
 	Action action = occupant ? isOwnPiece(occupant) || forceSwitch ? ACT_SWAP : ACT_ATCK : ACT_MOVE;
 	Com::Tile favored = pollFavor();
@@ -270,8 +270,8 @@ void Game::pieceMove(Piece* piece, vec2s pos, Piece* occupant, bool forceSwitch)
 	concludeAction(end);
 }
 
-void Game::pieceFire(Piece* killer, vec2s pos, Piece* piece) {
-	vec2s kpos = ptog(killer->getPos());
+void Game::pieceFire(Piece* killer, svec2 pos, Piece* piece) {
+	svec2 kpos = ptog(killer->getPos());
 	Tile* dtil = getTile(pos);
 	Com::Tile favored = pollFavor();
 	if (checkFire(killer, kpos, piece, pos); !survivalCheck(killer, getTile(kpos), dtil, ACT_FIRE, favored)) {	// occupant must be guaranteed not to be an ally
@@ -304,7 +304,7 @@ void Game::concludeAction(bool end) {
 	}
 }
 
-void Game::placeDragon(vec2s pos, Piece* occupant) {
+void Game::placeDragon(svec2 pos, Piece* occupant) {
 	if (Tile* til = getTile(pos); isHomeTile(til) && (til->getType() == Com::Tile::fortress || (til->getType() == Com::Tile::mountain && !occupant))) {		// tile needs to be a home fortress or unoccupied homeland mountain
 		World::state<ProgMatch>()->decreaseDragonIcon();
 		if (occupant)
@@ -329,10 +329,10 @@ void Game::setBgrid() {
 	uint16 i = 0;
 	for (int16 x = 0; x <= config.homeSize.x; x++)
 		for (int16 y = -int16(config.homeSize.y); y <= config.homeSize.y + 1; y += boardHeight)
-			verts[i++] = Vertex(gtop(vec2s(x, y), -0.018f) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f)), Camera::up, vec2(0.f));
+			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f)), Camera::up, vec2(0.f));
 	for (int16 y = -int16(config.homeSize.y); y <= config.homeSize.y + 1; y++)
 		for (int16 x = 0; x <= config.homeSize.x; x += config.homeSize.x)
-			verts[i++] = Vertex(gtop(vec2s(x, y), -0.018f) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f)), Camera::up, vec2(0.f));
+			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(config.objectSize / 2.f), 0.f, -(config.objectSize / 2.f)), Camera::up, vec2(0.f));
 	gridat = GMesh(verts, elems, GL_LINES);
 }
 
@@ -340,17 +340,17 @@ void Game::setTiles(Tile* tiles, int16 yofs, bool inter) {
 	sizet id = 0;
 	for (int16 y = yofs, yend = config.homeSize.y + yofs; y < yend; y++)
 		for (int16 x = 0; x < config.homeSize.x; x++)
-			tiles[id++] = Tile(gtop(vec2s(x, y)), config.objectSize, Com::Tile::empty, nullptr, nullptr, nullptr, inter, inter);
+			tiles[id++] = Tile(gtop(svec2(x, y)), config.objectSize, Com::Tile::empty, nullptr, nullptr, nullptr, inter, inter);
 }
 
 void Game::setMidTiles() {
 	for (int8 i = 0; i < config.homeSize.x; i++)
-		*tiles.mid(i) = Tile(gtop(vec2s(i, 0)), config.objectSize, Com::Tile::empty, nullptr, &Program::eventMoveTile, nullptr, false, false);
+		*tiles.mid(i) = Tile(gtop(svec2(i, 0)), config.objectSize, Com::Tile::empty, nullptr, &Program::eventMoveTile, nullptr, false, false);
 }
 
 void Game::setPieces(Piece* pieces, float rot, const Material* matl) {
 	for (uint16 i = 0, t = 0, c = 0; i < config.numPieces; i++) {
-		pieces[i] = Piece(gtop(INT16_MIN), rot, config.objectSize, Com::Piece(t), nullptr, nullptr, nullptr, matl, false, false);
+		pieces[i] = Piece(gtop(svec2(INT16_MIN)), rot, config.objectSize, Com::Piece(t), nullptr, nullptr, nullptr, matl, false, false);
 		if (++c >= config.pieceAmounts[t]) {
 			c = 0;
 			t++;
@@ -387,12 +387,12 @@ Piece* Game::getPieces(Piece* pieces, Com::Piece type) {
 	return pieces;
 }
 
-Piece* Game::findPiece(vec2s pos) {
+Piece* Game::findPiece(svec2 pos) {
 	Piece* pce = std::find_if(pieces.begin(), pieces.end(), [this, pos](const Piece& it) -> bool { return ptog(it.getPos()) == pos; });
 	return pce != pieces.end() ? pce : nullptr;
 }
 
-void Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action action, Com::Tile favor) {
+void Game::checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action action, Com::Tile favor) {
 	if ((ownRec.action & ACT_MOVE) && piece->getType() != Com::Piece::warhorse)
 		throw string("You've already moved");
 	if (pos == dst)
@@ -435,7 +435,7 @@ void Game::checkMove(Piece* piece, vec2s pos, Piece* occupant, vec2s dst, Action
 }
 
 template <class F, class... A>
-void Game::checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, A... args) {
+void Game::checkMoveDestination(svec2 pos, svec2 dst, Com::Tile favor, F check, A... args) {
 	bool favorUsed = false;
 	if (!(this->*check)(pos, favor, favorUsed, args...).count(posToId(dst)))
 		throw string("Can't move there");
@@ -443,7 +443,7 @@ void Game::checkMoveDestination(vec2s pos, vec2s dst, Com::Tile favor, F check, 
 		useFavor();
 }
 
-uset<uint16> Game::collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize) {
+uset<uint16> Game::collectTilesByArea(svec2 pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize) {
 	if (favorUsed = favor == Com::Tile::plains)
 		dlim++;
 
@@ -455,7 +455,7 @@ uset<uint16> Game::collectTilesByArea(vec2s pos, Com::Tile favor, bool& favorUse
 	return tcol;
 }
 
-uset<uint16> Game::collectTilesByType(vec2s pos, Com::Tile favor, bool& favorUsed) {
+uset<uint16> Game::collectTilesByType(svec2 pos, Com::Tile favor, bool& favorUsed) {
 	uset<uint16> tcol;
 	collectAdjacentTilesByType(tcol, posToId(pos), getTile(pos)->getType());
 	uset<uint16> sing = collectTilesBySingle(pos, favor, favorUsed);
@@ -481,13 +481,13 @@ void Game::highlightMoveTiles(Piece* pce) {
 	if (!pce)
 		return;
 
-	vec2s pos = ptog(pce->getPos());
+	svec2 pos = ptog(pce->getPos());
 	Com::Tile src = getTile(pos)->getType();
 	Com::Tile favor = checkFavor();
 	uset<uint16> tcol;
 	if (favor == Com::Tile::forest)
 		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
-			if (vec2s tp = ptog(it->getPos()); tp != pos && getTile(tp)->getType() == Com::Tile::forest)
+			if (svec2 tp = ptog(it->getPos()); tp != pos && getTile(tp)->getType() == Com::Tile::forest)
 				tcol.insert(posToId(tp));
 
 	switch (bool fu; pce->getType()) {
@@ -507,7 +507,7 @@ void Game::highlightMoveTiles(Piece* pce) {
 		tiles[id].setEmission(tiles[id].getEmission() | BoardObject::EMI_HIGH);
 }
 
-void Game::checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst) {
+void Game::checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst) {
 	if (ownRec.action & ACT_FIRE)
 		throw string("You've already fired");
 	if (firstTurn)
@@ -529,10 +529,10 @@ void Game::checkFire(Piece* killer, vec2s pos, Piece* victim, vec2s dst) {
 		throw firstUpper(Com::pieceNames[uint8(killer->getType())]) + " can only fire at a distance of " + toStr(dist);
 }
 
-uset<uint16> Game::collectTilesByDistance(vec2s pos, int16 dist) {
+uset<uint16> Game::collectTilesByDistance(svec2 pos, int16 dist) {
 	uset<uint16> tcol;
-	for (vec2s it : { pos - dist, pos - vec2s(0, dist), pos + vec2s(dist, -dist), pos - vec2s(dist, 0), pos + vec2s(dist, 0), pos + vec2s(-dist, dist), pos + vec2s(0, dist), pos + dist })
-		if (inRange(it, vec2s(0, -int16(config.homeSize.y)), vec2s(config.homeSize.x - 1, config.homeSize.y)))
+	for (svec2 it : { pos - dist, pos - svec2(0, dist), pos + svec2(dist, -dist), pos - svec2(dist, 0), pos + svec2(dist, 0), pos + svec2(-dist, dist), pos + svec2(0, dist), pos + dist })
+		if (inRange(it, svec2(0, -int16(config.homeSize.y)), svec2(config.homeSize.x - 1, config.homeSize.y)))
 			tcol.insert(posToId(it));
 	return tcol;
 }
@@ -710,7 +710,7 @@ void Game::recvTiles(uint8* data) {
 void Game::recvPieces(uint8* data) {
 	for (uint16 i = 0; i < config.numPieces; i++) {
 		uint16 id = SDLNet_Read16(data + i * sizeof(uint16));
-		pieces.ene(i)->setPos(gtop(id < config.numTiles ? idToPos(id) : vec2s(INT16_MIN)));
+		pieces.ene(i)->setPos(gtop(id < config.numTiles ? idToPos(id) : svec2(INT16_MIN)));
 	}
 
 	if (ProgSetup* ps = World::state<ProgSetup>(); ps->getStage() == ProgSetup::Stage::ready)
@@ -721,7 +721,7 @@ void Game::recvPieces(uint8* data) {
 	}
 }
 
-void Game::placePiece(Piece* piece, vec2s pos) {
+void Game::placePiece(Piece* piece, svec2 pos) {
 	if (piece->getType() == Com::Piece::throne && getTile(pos)->getType() == Com::Tile::fortress && favorCount < favorTotal)
 		if (uint16 fid = posToId(pos); piece->lastFortress != fid) {
 			piece->lastFortress = fid;
@@ -733,7 +733,7 @@ void Game::placePiece(Piece* piece, vec2s pos) {
 }
 
 void Game::removePiece(Piece* piece) {
-	piece->updatePos(INT16_MIN, false);
+	piece->updatePos();
 	sendb.pushHead(Com::Code::kill);
 	sendb.push(inversePieceId(piece));
 }
@@ -763,7 +763,7 @@ vector<Object*> Game::initDummyObjects() {
 	vector<uint16> amts(config.tileAmounts.begin(), config.tileAmounts.end());
 	for (int16 x = 0; x < config.homeSize.x; x++)
 		for (int16 y = 0; y < config.homeSize.y; y++) {
-			if (outRange(vec2s(x, y), vec2s(1, 0), vec2s(config.homeSize - 2)) || !amts[uint8(Com::Tile::fortress)]) {
+			if (outRange(svec2(x, y), svec2(1, 0), svec2(config.homeSize.x - 2, config.homeSize.y - 2)) || !amts[uint8(Com::Tile::fortress)]) {
 				for (; !amts[t]; t++);
 				tiles.own(y * config.homeSize.x + x)->setType(Com::Tile(t));
 				amts[t]--;
@@ -782,7 +782,7 @@ vector<Object*> Game::initDummyObjects() {
 	}
 
 	for (uint16 i = 0; i < config.numPieces; i++)
-		pieces.own(i)->setPos(gtop(vec2s(i % config.homeSize.x, 1 + i / config.homeSize.x)));
+		pieces.own(i)->setPos(gtop(svec2(i % config.homeSize.x, 1 + i / config.homeSize.x)));
 	return objs;
 }
 #endif

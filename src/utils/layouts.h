@@ -9,7 +9,7 @@ public:
 
 protected:
 	vector<Widget*> widgets;
-	vector<vec2i> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
+	vector<ivec2> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
 	const int spacing;				// space between widgets
 	const bool vertical;				// how to arrange widgets
 
@@ -28,13 +28,13 @@ public:
 	void insertWidget(sizet id, Widget* wgt);
 	void deleteWidget(sizet id);
 	bool getVertical() const;
-	virtual vec2i wgtPosition(sizet id) const;
-	virtual vec2i wgtSize(sizet id) const;
+	virtual ivec2 wgtPosition(sizet id) const;
+	virtual ivec2 wgtSize(sizet id) const;
 
 protected:
 	void initWidgets(vector<Widget*>&& wgts);
 	void reinitWidgets(sizet id);
-	virtual vec2i listSize() const;
+	virtual ivec2 listSize() const;
 };
 
 inline Widget* Layout::getWidget(sizet id) const {
@@ -62,8 +62,8 @@ public:
 	virtual ~RootLayout() override = default;
 
 	virtual void draw() const override;
-	virtual vec2i position() const override;
-	virtual vec2i size() const override;
+	virtual ivec2 position() const override;
+	virtual ivec2 size() const override;
 	virtual Rect frame() const override;
 };
 
@@ -78,21 +78,21 @@ private:
 	static const vec4 colorBackground;
 
 public:
-	Popup(const cvec2<Size>& relSize = 1.f, vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = uniformBgColor);
+	Popup(const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = uniformBgColor);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
-	virtual vec2i position() const override;
-	virtual vec2i size() const override;
+	virtual ivec2 position() const override;
+	virtual ivec2 size() const override;
 };
 
 // places widgets vertically through which the user can scroll (DON"T PUT SCROLL AREAS INTO OTHER SCROLL AREAS)
 class ScrollArea : public Layout {
 protected:
 	bool draggingSlider;
-	vec2i listPos;
+	ivec2 listPos;
 private:
-	vec2f motion;			// how much the list scrolls over time
+	vec2 motion;			// how much the list scrolls over time
 	int diffSliderMouse;	// space between slider and mouse position
 
 	static constexpr int barWidth = 10;
@@ -105,21 +105,21 @@ public:
 	virtual void draw() const override;
 	virtual void tick(float dSec) override;
 	virtual void postInit() override;
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
-	virtual void onDrag(vec2i mPos, vec2i mMov) override;
+	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
+	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
-	virtual void onScroll(vec2i wMov) override;
+	virtual void onScroll(const ivec2& wMov) override;
 	virtual Rect frame() const override;
 
-	virtual vec2i wgtPosition(sizet id) const override;
-	virtual vec2i wgtSize(sizet id) const override;
+	virtual ivec2 wgtPosition(sizet id) const override;
+	virtual ivec2 wgtSize(sizet id) const override;
 	Rect barRect() const;
 	Rect sliderRect() const;
-	vec2t visibleWidgets() const;
-	void moveListPos(vec2i mov);
+	mvec2 visibleWidgets() const;
+	void moveListPos(const ivec2& mov);
 
 protected:
-	virtual vec2i listLim() const;	// max list position
+	virtual ivec2 listLim() const;	// max list position
 	int wgtRPos(sizet id) const;
 	int wgtREnd(sizet id) const;
 

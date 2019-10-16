@@ -176,7 +176,7 @@ private:
 	uint8 selected;
 	Stage stage;
 	uint8 lastButton;	// last button that was used on lastHold (0 for none)
-	vec2s lastHold;		// position of last object that the cursor was dragged over
+	svec2 lastHold;		// position of last object that the cursor was dragged over
 	vector<uint16> counters;
 	Layout* icons;
 
@@ -260,7 +260,6 @@ public:
 	SwitchBox* dspMode;
 
 	static constexpr float gammaStepFactor = 10.f;
-	static constexpr float brightStepFactor = 10.f;
 	static constexpr char rv2iSeparator[] = " x ";
 private:
 	umap<string, uint32> pixelformats;

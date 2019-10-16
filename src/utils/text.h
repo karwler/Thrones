@@ -1,12 +1,14 @@
 #pragma once
 
+#if !defined(_DEBUG) && !defined(NDEBUG)
+#define NDEBUG
+#endif
 #ifdef DEBUG
 #define MALLOC_CHECK_ 2
 #endif
+#define SDL_MAIN_HANDLED
+
 #include <SDL2/SDL.h>
-#ifdef main
-#undef main
-#endif
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <array>
@@ -16,9 +18,7 @@
 #include <unordered_set>
 #include <vector>
 #ifdef _WIN32
-namespace Win {
 #include <windows.h>	// needs to be here to prevent conflicts with SDL_net
-}
 #else
 #include <strings.h>
 #endif
@@ -60,6 +60,10 @@ using glm::quat;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
+using glm::ivec2;
+using svec2 = glm::vec<2, int16, glm::defaultp>;
+using nvec2 = glm::vec<2, uint16, glm::defaultp>;
+using mvec2 = glm::vec<2, sizet, glm::defaultp>;
 
 #ifdef _WIN32
 constexpr char linend[] = "\r\n";
@@ -94,7 +98,6 @@ constexpr char defaultWriteMode[] = "wb";
 		return a = EType(IType(a) ^ IType(b)); \
 	}
 
-bool hasExt(const string& path, const string& ext);
 string filename(const string& path);
 string readWordM(const char*& pos);
 int strnatcmp(const char* a, const char* b);	// natural string compare
@@ -107,20 +110,28 @@ inline bool strnatless(const string& a, const string& b) {
 	return strnatcmp(a.c_str(), b.c_str()) < 0;
 }
 
-inline int strcicmp(const string& a, const string& b) {	// case insensitive check if strings are equal
+inline int strcicmp(const char* a, const char* b) {	// case insensitive check if strings are equal
 #ifdef _WIN32
-	return _stricmp(a.c_str(), b.c_str());
+	return _stricmp(a, b);
 #else
-	return strcasecmp(a.c_str(), b.c_str());
+	return strcasecmp(a, b);
 #endif
 }
 
-inline int strncicmp(const string& a, const string& b, sizet n) {	// case insensitive check if strings are equal
+inline int strcicmp(const string& a, const char* b) {
+	return strcicmp(a.c_str(), b);
+}
+
+inline int strncicmp(const char* a, const char* b, sizet n) {	// case insensitive check if strings are equal
 #ifdef _WIN32
-	return _strnicmp(a.c_str(), b.c_str(), n);
+	return _strnicmp(a, b, n);
 #else
-	return strncasecmp(a.c_str(), b.c_str(), n);
+	return strncasecmp(a, b, n);
 #endif
+}
+
+inline int strncicmp(const string& a, const char* b, sizet n) {
+	return strncicmp(a.c_str(), b, n);
 }
 
 inline bool isDsep(char c) {
@@ -154,7 +165,7 @@ inline string firstUpper(string str) {
 
 inline string trim(const string& str) {
 	string::const_iterator pos = std::find_if(str.begin(), str.end(), notSpace);
-	return string(pos, std::find_if(str.rbegin(), std::make_reverse_iterator(pos), notSpace).base());
+	return string(pos, std::find_if(str.rbegin(), string::const_reverse_iterator(pos), notSpace).base());
 }
 
 inline string delExt(const string& path) {
@@ -198,7 +209,7 @@ inline string dispToStr(const SDL_DisplayMode& mode) {
 }
 
 inline bool stob(const string& str) {
-	return str == "true" || str == "yes" || str == "1";
+	return !strncicmp(str, "true", 4) || !strncicmp(str, "yes", 3) || !strncicmp(str, "on", 2) || (str[0] >= '1' && str[0] <= '9');
 }
 
 inline string btos(bool b) {
@@ -207,7 +218,7 @@ inline string btos(bool b) {
 
 template <class T, sizet N>
 T strToEnum(const array<string, N>& names, const string& str) {
-	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str); }) - names.begin());
+	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str.c_str()); }) - names.begin());
 }
 
 inline long sstol(const char* str, int base = 0) {
@@ -274,15 +285,30 @@ T readNumber(const char*& pos, F strtox, A... args) {
 	return num;
 }
 
-template <glm::length_t L>
-glm::vec<L, float, glm::highp> stov(const char* str, float fill = 0.f) {
-	glm::length_t i = 0;
-	glm::vec<L, float, glm::highp> gvn;
-	while (*str && i < L)
-		gvn[i++] = readNumber<float>(str, strtof);
-	while (i < L)
-		gvn[i++] = fill;
-	return gvn;
+template <class T, class F, class... A>
+T stoxv(const char* str, F strtox, typename T::value_type fill, A... args) {
+	T vec(fill);
+	for (glm::length_t i = 0; *str && i < vec.length();)
+		vec[i++] = readNumber<typename T::value_type>(str, strtox, args...);
+	return vec;
+}
+
+template <class T, class F = float (*)(const char*, char**)>
+T stofv(const char* str, F strtox = strtof, typename T::value_type fill = typename T::value_type(0)) {
+	return stoxv<T>(str, strtox, fill);
+}
+
+template <class T, class F>
+T stoiv(const char* str, F strtox, typename T::value_type fill = typename T::value_type(0), int base = 0) {
+	return stoxv<T>(str, strtox, fill, base);
+}
+
+template <glm::length_t L, class T, glm::qualifier Q>
+string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
+	string str;
+	for (glm::length_t i = 0; i < L - 1; i++)
+		str += toStr(v[i]) + sep;
+	return str + toStr(v[L-1]);
 }
 
 template <class T>
@@ -349,13 +375,13 @@ private:
 public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	Arguments(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
 	Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt);
 #endif
 	Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt);
 
 #ifdef _WIN32
-	void setArgs(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	void setArgs(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
 #endif
 	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt);
 
@@ -363,8 +389,9 @@ public:
 	bool hasFlag(char key) const;
 	const char* getOpt(char key) const;
 };
+
 #ifdef _WIN32
-inline Arguments::Arguments(Win::PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
+inline Arguments::Arguments(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(pCmdLine, flg, opt);
 }
 

@@ -39,7 +39,7 @@ int FontSet::length(const string& text, int height) {
 	return len;
 }
 
-void FontSet::writeLog(string&& text, vec2i res) {
+void FontSet::writeLog(string&& text, const ivec2& res) {
 	logLines.push_back(std::move(text));
 	if (uint maxl = uint(res.y / int(float(logSize) / heightScale)); logLines.size() > maxl)
 		logLines.erase(logLines.begin(), logLines.begin() + pdift(logLines.size() - maxl));
@@ -200,7 +200,22 @@ void WindowSys::init() {
 	if (SDLNet_Init())
 		throw std::runtime_error(string("failed to initialize networking:") + linend + SDLNet_GetError());
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-	SDL_StopTextInput();	// for some reason TextInput is on
+	SDL_StopTextInput();
+	SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERUP, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERMOTION, SDL_DISABLE);
+	SDL_EventState(SDL_DOLLARGESTURE, SDL_DISABLE);
+	SDL_EventState(SDL_DOLLARRECORD, SDL_DISABLE);
+	SDL_EventState(SDL_MULTIGESTURE, SDL_DISABLE);
+	SDL_EventState(SDL_CLIPBOARDUPDATE, SDL_DISABLE);
+	SDL_EventState(SDL_DROPFILE, SDL_DISABLE);
+	SDL_EventState(SDL_DROPBEGIN, SDL_DISABLE);
+	SDL_EventState(SDL_DROPCOMPLETE, SDL_DISABLE);
+	SDL_EventState(SDL_AUDIODEVICEADDED, SDL_DISABLE);
+	SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
+	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
+	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
 
 	sets.reset(FileSys::loadSettings());
 	fonts.reset(new FontSet);
@@ -352,16 +367,16 @@ void WindowSys::destroyWindow() {
 void WindowSys::handleEvent(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_MOUSEMOTION:
-		scene->onMouseMove(vec2i(event.motion.x, event.motion.y), vec2i(event.motion.xrel, event.motion.yrel), event.motion.state, event.motion.timestamp);
+		scene->onMouseMove(event.motion);
 		break;
 	case SDL_MOUSEBUTTONDOWN:
-		scene->onMouseDown(vec2i(event.button.x, event.button.y), event.button.button);
+		scene->onMouseDown(event.button);
 		break;
 	case SDL_MOUSEBUTTONUP:
-		scene->onMouseUp(vec2i(event.button.x, event.button.y), event.button.button);
+		scene->onMouseUp(event.button);
 		break;
 	case SDL_MOUSEWHEEL:
-		scene->onMouseWheel(vec2i(event.wheel.x, -event.wheel.y));
+		scene->onMouseWheel(event.wheel);
 		break;
 	case SDL_KEYDOWN:
 		scene->onKeyDown(event.key);
@@ -371,6 +386,10 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		break;
 	case SDL_TEXTINPUT:
 		scene->onText(event.text.text);
+		break;
+	case SDL_DROPTEXT:
+		scene->onText(event.drop.file);
+		SDL_free(event.drop.file);
 		break;
 	case SDL_WINDOWEVENT:
 		eventWindow(event.window);
@@ -382,7 +401,6 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 
 void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	switch (winEvent.event) {
-	case SDL_WINDOWEVENT_RESIZED:
 	case SDL_WINDOWEVENT_SIZE_CHANGED:
 		updateViewport();
 		scene->onResize();
@@ -391,14 +409,8 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 		scene->onMouseLeave();
 		break;
 	case SDL_WINDOWEVENT_MOVED:	// doesn't work on windows for some reason
-		if (checkCurDisplay() && sets->screen <= Settings::Screen::borderless && !checkResolution(sets->size, displaySizes())) {
+		if (checkCurDisplay() && sets->screen <= Settings::Screen::borderless && !checkResolution(sets->size, displaySizes()))
 			SDL_SetWindowSize(window, sets->size.x, sets->size.y);
-			updateViewport();
-			scene->onResize();
-		}
-		break;
-	case SDL_WINDOWEVENT_CLOSE:
-		close();
 	}
 }
 
@@ -437,8 +449,8 @@ bool WindowSys::trySetSwapInterval() {
 	return true;
 }
 
-void WindowSys::setScreen(uint8 display, Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode) {
-	sets->display = clampHigh(display, uint8(SDL_GetNumVideoDisplays()));
+void WindowSys::setScreen(uint8 display, Settings::Screen screen, const ivec2& size, const SDL_DisplayMode& mode) {
+	sets->display = std::clamp(display, uint8(0), uint8(SDL_GetNumVideoDisplays()));
 	sets->screen = screen;
 	sets->size = size;
 	checkResolution(sets->size, displaySizes());
@@ -465,6 +477,11 @@ void WindowSys::setWindowMode() {
 	updateViewport();
 }
 
+void WindowSys::updateViewport() {
+	SDL_GL_GetDrawableSize(window, &curView.x, &curView.y);
+	glViewport(0, 0, curView.x, curView.y);
+}
+
 void WindowSys::setGamma(float gamma) {
 	sets->gamma = std::clamp(gamma, 0.f, Settings::gammaMax);
 	SDL_SetWindowBrightness(window, sets->gamma);
@@ -487,11 +504,16 @@ bool WindowSys::checkCurDisplay() {
 	return false;
 }
 
-vector<vec2i> WindowSys::displaySizes() const {
-	vector<vec2i> sizes;
-	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); im++)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
-			sizes.emplace_back(mode.w, mode.h);
+vector<ivec2> WindowSys::displaySizes() const {
+	SDL_Rect max;
+	if (SDL_GetDisplayBounds(sets->display, &max))
+		max.w = max.h = INT_MAX;
+
+	vector<ivec2> sizes;
+	for (int i = 0; i < SDL_GetNumVideoDisplays(); i++)
+		for (int im = 0; im < SDL_GetNumDisplayModes(i); im++)
+			if (SDL_DisplayMode mode; !SDL_GetDisplayMode(i, im, &mode) && mode.w <= max.w && mode.h <= max.h)
+				sizes.emplace_back(mode.w, mode.h);
 	return uniqueSort(sizes);
 }
 

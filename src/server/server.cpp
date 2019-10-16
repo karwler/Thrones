@@ -53,10 +53,10 @@ void Config::updateValues() {
 }
 
 Config& Config::checkValues() {
-	homeSize = homeSize.clamp(minHomeSize, maxHomeSize);
+	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
 	survivalPass = std::clamp(survivalPass, uint8(0), randomLimit);
 
-	uint16 hsize = homeSize.area();
+	uint16 hsize = homeSize.x * homeSize.y;
 	for (uint8 i = 0; i < tileAmounts.size() - 2; i++)
 		if (tileAmounts[i] && tileAmounts[i] < homeSize.y)
 			tileAmounts[i] = homeSize.y;

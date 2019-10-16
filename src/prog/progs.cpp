@@ -75,7 +75,7 @@ Popup* ProgState::createPopupMessage(string msg, BCall ccal, string ctxt) {
 		new Label(1.f, ms.text, nullptr, nullptr, Texture(), Label::Alignment::center),
 		new Layout(1.f, std::move(bot), false, 0)
 	};
-	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), std::move(con), ccal, ccal);
+	return new Popup(pair(ms.length, superHeight * 2 + Layout::defaultItemSpacing), std::move(con), ccal, ccal);
 }
 
 Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
@@ -88,7 +88,7 @@ Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
 		new Label(1.f, ms.text, nullptr, nullptr, Texture(), Label::Alignment::center),
 		new Layout(1.f, std::move(bot), false, 0)
 	};
-	return new Popup(cvec2<Size>(ms.length, superHeight * 2 + Layout::defaultItemSpacing), std::move(con), kcal, ccal);
+	return new Popup(pair(ms.length, superHeight * 2 + Layout::defaultItemSpacing), std::move(con), kcal, ccal);
 }
 
 pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal, uint limit) {
@@ -102,7 +102,7 @@ pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal, uint l
 		ledit,
 		new Layout(1.f, std::move(bot), false, 0)
 	};
-	return pair(new Popup(cvec2<Size>(500, superHeight * 3 + Layout::defaultItemSpacing * 2), std::move(con), kcal, &Program::eventClosePopup), ledit);
+	return pair(new Popup(pair(500, superHeight * 3 + Layout::defaultItemSpacing * 2), std::move(con), kcal, &Program::eventClosePopup), ledit);
 }
 
 // PROG MENU
@@ -471,7 +471,7 @@ Popup* ProgRoom::createPopupConfig() {
 		new ScrollArea(1.f, createConfigList(wio, false)),
 		new Layout(lineHeight, std::move(bot), false, 0)
 	};
-	return new Popup(cvec2<Size>(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup);
+	return new Popup(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup);
 }
 
 // PROG SETUP
@@ -493,13 +493,13 @@ void ProgSetup::eventNumpress(uint8 num) {
 }
 
 void ProgSetup::eventWheel(int ymov) {
-	setSelected(cycle(selected, uint8(counters.size()), int8(-ymov)));
+	setSelected(cycle(selected, uint8(counters.size()), int8(ymov)));
 }
 
 void ProgSetup::eventDrag(uint32 mStat) {
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
 	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->select);
-	vec2s curHold = bo ? World::game()->ptog(bo->getPos()) : INT16_MIN;
+	svec2 curHold = bo ? World::game()->ptog(bo->getPos()) : svec2(INT16_MIN);
 	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
 			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTileH() : World::program()->eventClearTile();
@@ -511,7 +511,7 @@ void ProgSetup::eventDrag(uint32 mStat) {
 }
 
 void ProgSetup::eventUndrag() {
-	lastHold = INT16_MIN;
+	lastHold = svec2(INT16_MIN);
 }
 
 bool ProgSetup::setStage(ProgSetup::Stage stg) {
@@ -666,7 +666,7 @@ Popup* ProgSetup::createPopupSaveLoad(bool save) {
 		new Layout(lineHeight, std::move(top), false),
 		new ScrollArea(1.f, std::move(saves))
 	};
-	return new Popup(cvec2<Size>(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup, true, superSpacing);
+	return new Popup(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup, true, superSpacing);
 }
 
 // PROG MATCH
@@ -775,13 +775,13 @@ Layout* ProgSettings::createLayout() {
 	};
 
 	// resolution list
-	vector<vec2i> sizes = World::window()->displaySizes();
+	vector<ivec2> sizes = World::window()->displaySizes();
 	vector<SDL_DisplayMode> modes = World::window()->displayModes();
 	pixelformats.clear();
 	for (const SDL_DisplayMode& it : modes)
 		pixelformats.emplace(pixelformatName(it.format), it.format);
 	vector<string> winsiz(sizes.size()), dmodes(modes.size());
-	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), [](vec2i size) -> string { return size.toString(rv2iSeparator); });
+	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), [](ivec2 size) -> string { return toStr(size, rv2iSeparator); });
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
 
 	// setting buttons, labels and action fields for labels
@@ -806,7 +806,7 @@ Layout* ProgSettings::createLayout() {
 		"Anti-Aliasing multisamples (requires restart)",
 		"Brightness",
 		"Audio volume",
-		"Applies \"Display\", \"Screen\", \"Size\" and \"Mode\""
+		"Apply \"Display\", \"Screen\", \"Size\" and \"Mode\""
 	};
 	vector<string> vsyncTip = { "Immediate: off", "Synchronized: on", "Adaptive: on and smooth (works on fewer computers)" };
 	std::reverse(txs.begin(), txs.end());
@@ -826,7 +826,7 @@ Layout* ProgSettings::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		winSize = new SwitchBox(1.f, std::move(winsiz), World::sets()->size.toString(rv2iSeparator), &Program::eventDummy, makeTooltip(tips.back())),
+		winSize = new SwitchBox(1.f, std::move(winsiz), toStr(World::sets()->size, rv2iSeparator), &Program::eventDummy, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),

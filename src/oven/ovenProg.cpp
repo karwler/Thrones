@@ -1,12 +1,6 @@
 #include "oven.h"
-#ifdef __APPLE
-#include <OpenGL/gl.h>
-#else
-#include <GL/glew.h>
-#endif
 
-static const string mtlKeywordNewmtl = "newmtl";
-static const string objKeywordOff = "off";
+constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
 constexpr char argMaterial = 'm';
 constexpr char argObject = 'o';
@@ -182,16 +176,16 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 	mtls.emplace_back();
 
 	for (const string& line : lines) {
-		if (!strncicmp(line, mtlKeywordNewmtl, mtlKeywordNewmtl.length())) {
-			if (pair<string, Material> next(trim(line.substr(mtlKeywordNewmtl.length())), Material()); mtls.back().first.empty())
+		if (sizet len = strlen(mtlKeywordNewmtl); !strncicmp(line, mtlKeywordNewmtl, len)) {
+			if (pair<string, Material> next(trim(line.substr(len)), Material()); mtls.back().first.empty())
 				mtls.back() = std::move(next);
 			else
 				mtls.push_back(std::move(next));
 		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
 			if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
-				mtls.back().second.diffuse = stov<3>(&line[2], 1.f);
+				mtls.back().second.diffuse = stofv<vec3>(&line[2], strtof, 1.f);
 			else if (c1 == 'S')
-				mtls.back().second.specular = stov<3>(&line[2], 1.f);
+				mtls.back().second.specular = stofv<vec3>(&line[2], strtof, 1.f);
 		} else if (c0 == 'N') {
 			if (toupper(line[1]) == 'S')
 				mtls.back().second.shininess = sstof(&line[2]) / 1000.f * 128.f;
@@ -291,11 +285,11 @@ static void loadObj(const char* file, vector<Blueprint>& bprs) {
 	for (const string& line : lines) {
 		if (char c0 = char(toupper(line[0])); c0 == 'V') {
 			if (char c1 = char(toupper(line[1])); c1 == 'T')
-				tuvs.push_back(stov<2>(&line[2]));
+				tuvs.push_back(stofv<vec2>(&line[2]));
 			else if (c1 == 'N')
-				norms.push_back(stov<3>(&line[2]));
+				norms.push_back(stofv<vec3>(&line[2]));
 			else
-				verts.push_back(stov<3>(&line[1]));
+				verts.push_back(stofv<vec3>(&line[1]));
 		} else if (c0 == 'F')
 			readFace(&line[1], verts, tuvs, norms, elems, bprs.back());
 		else if (c0 == 'O') {

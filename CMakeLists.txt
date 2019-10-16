@@ -38,7 +38,6 @@ set(SRC_FILES
 	"src/prog/progs.h"
 	"src/server/server.cpp"
 	"src/server/server.h"
-	"src/utils/cvec2.h"
 	"src/utils/layouts.cpp"
 	"src/utils/layouts.h"
 	"src/utils/objects.cpp"

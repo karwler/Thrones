@@ -3,7 +3,6 @@
 #include "audioSys.h"
 #include "scene.h"
 #include "prog/program.h"
-#include "utils/layouts.h"
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
@@ -38,7 +37,7 @@ public:
 	Texture render(const string& text, int height);
 	Texture render(const string& text, int height, uint length);
 
-	void writeLog(string&& text, vec2i res);
+	void writeLog(string&& text, const ivec2& res);
 	void closeLog();	// doesn't get called in destructor
 
 private:
@@ -89,7 +88,7 @@ public:
 	GLint pview, rect, uvrc, zloc, vertex, uvloc;
 	GLint color, texsamp;
 private:
-	Rectangle wrect;
+	Shape wrect;
 
 public:
 	ShaderGUI(const string& srcVert, const string& srcFrag);
@@ -127,7 +126,7 @@ private:
 	uptr<ShaderGeometry> geom;
 	uptr<ShaderGUI> gui;
 	uptr<FontSet> fonts;
-	vec2i curView;
+	ivec2 curView;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 	SDL_Cursor* cursor;
@@ -140,13 +139,14 @@ public:
 	void close();
 
 	float getDSec() const;
-	vec2i getView() const;
+	ivec2 getView() const;
 	uint8 getCursorHeight() const;
-	vector<vec2i> displaySizes() const;
+	vector<ivec2> displaySizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
+	uint32 windowID() const;
 	void writeLog(string&& text);
-	void setScreen(uint8 display, Settings::Screen screen, vec2i size, const SDL_DisplayMode& mode);
+	void setScreen(uint8 display, Settings::Screen screen, const ivec2& size, const SDL_DisplayMode& mode);
 	void setVsync(Settings::VSync vsync);
 	void setGamma(float gamma);
 	void resetSettings();
@@ -185,7 +185,7 @@ inline float WindowSys::getDSec() const {
 	return dSec;
 }
 
-inline vec2i WindowSys::getView() const {
+inline ivec2 WindowSys::getView() const {
 	return curView;
 }
 
@@ -221,13 +221,12 @@ inline ShaderGUI* WindowSys::getGUI() {
 	return gui.get();
 }
 
-inline void WindowSys::updateViewport() {
-	SDL_GL_GetDrawableSize(window, &curView.x, &curView.y);
-	glViewport(0, 0, curView.x, curView.y);
-}
-
 inline int WindowSys::displayID() const {
 	return SDL_GetWindowDisplayIndex(window);
+}
+
+inline uint32 WindowSys::windowID() const {
+	return SDL_GetWindowID(window);
 }
 
 template <class T>

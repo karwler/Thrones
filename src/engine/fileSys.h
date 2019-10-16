@@ -28,7 +28,7 @@ struct Settings {
 	VSync vsync;
 	uint8 msamples;
 	float gamma;
-	vec2i size;
+	ivec2 size;
 	SDL_DisplayMode mode;
 	string address;
 	uint16 port;
@@ -37,9 +37,9 @@ struct Settings {
 };
 
 struct Setup {
-	sset<pair<vec2s, Com::Tile>> tiles;
+	sset<pair<svec2, Com::Tile>> tiles;
 	sset<pair<uint16, Com::Tile>> mids;
-	sset<pair<vec2s, Com::Piece>> pieces;
+	sset<pair<svec2, Com::Piece>> pieces;
 
 	void clear();
 };

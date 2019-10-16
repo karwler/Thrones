@@ -197,7 +197,7 @@ public:
 	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
 
 	virtual void drawTop() const override;
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
@@ -328,7 +328,7 @@ public:
 	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
 
 	virtual void drawTop() const override;
-	virtual void onHold(vec2i mPos, uint8 mBut) override;
+	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
@@ -336,7 +336,7 @@ public:
 	Com::Piece getType() const;
 	uint8 firingDistance() const;	// 0 if non-firing piece
 	void setActive(bool on);
-	void updatePos(vec2s bpos, bool active);
+	void updatePos(svec2 bpos = svec2(INT16_MIN), bool active = false);
 	bool getDrawTopSelf() const;
 };
 

@@ -33,9 +33,9 @@ public:
 	const vec3& getPos() const;
 	const vec3& getLat() const;
 	void setPos(const vec3& newPos, const vec3& newLat);
-	void rotate(vec2 dRot, float dYaw);
+	void rotate(const vec2& dRot, float dYaw);
 	void zoom(int mov);
-	vec3 direction(vec2i mPos) const;
+	vec3 direction(const ivec2& mPos) const;
 private:
 	void updateRotations(const vec3& pvec, const vec3& lvec);
 	static float calcPitch(const vec3& pos, float dist);
@@ -72,10 +72,10 @@ struct Light {
 struct ClickStamp {
 	Interactable* inter;
 	ScrollArea* area;
-	vec2i pos;
+	ivec2 pos;
 	uint8 but;
 
-	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, vec2i pos = INT_MIN, uint8 but = 0);
+	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, const ivec2& pos = ivec2(INT_MIN), uint8 but = 0);
 };
 
 // defines change of object properties at a time
@@ -127,7 +127,7 @@ public:
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
-	vec2i mouseMove;	// last recorded cursor position difference
+	ivec2 mouseMove;	// last recorded cursor position difference
 	uint32 moveTime;	// timestamp of last recorded mouseMove
 	Camera camera;
 	vector<Object*> objects;
@@ -153,12 +153,12 @@ public:
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onKeyUp(const SDL_KeyboardEvent& key);
-	void onMouseMove(vec2i mPos, vec2i mMov, uint32 mStat, uint32 time);
-	void onMouseDown(vec2i mPos, uint8 mBut);
-	void onMouseUp(vec2i mPos, uint8 mBut);
-	void onMouseWheel(vec2i wMov);
+	void onMouseMove(const SDL_MouseMotionEvent& mot);
+	void onMouseDown(const SDL_MouseButtonEvent& but);
+	void onMouseUp(const SDL_MouseButtonEvent& but);
+	void onMouseWheel(const SDL_MouseWheelEvent& whe);
 	void onMouseLeave();
-	void onText(const char* str);	// text input should only run if line edit is being captured, therefore a cast check isn't necessary
+	void onText(const char* str);
 
 	const CMesh* collim(const string& name) const;
 	const GMesh* mesh(const string& name) const;
@@ -174,25 +174,21 @@ public:
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(Animation&& anim);
-	vec2i getMouseMove() const;
-	bool cursorInClickRange(vec2i mPos) const;
-	vec3 pickerRay(vec2i mPos) const;
+	ivec2 getMouseMove() const;
+	bool cursorInClickRange(const ivec2& mPos) const;
+	vec3 pickerRay(const ivec2& mPos) const;
 
-	void updateSelect(vec2i mPos);
+	void updateSelect(const ivec2& mPos);
 private:
 	void unselect();
-	Interactable* getSelected(vec2i mPos);
-	Interactable* getScrollOrObject(vec2i mPos, Widget* wgt) const;
+	Interactable* getSelected(const ivec2& mPos);
+	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	Object* rayCast(const vec3& ray) const;
 	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
 	void simulateMouseMove();
 };
-
-inline void Scene::onText(const char* str) {
-	capture->onText(str);
-}
 
 inline Camera* Scene::getCamera() {
 	return &camera;
@@ -214,19 +210,19 @@ inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
 	setPopup(popcap.first, popcap.second);
 }
 
-inline vec2i Scene::getMouseMove() const {
-	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : 0;
+inline ivec2 Scene::getMouseMove() const {
+	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : ivec2(0);
 }
 
-inline bool Scene::cursorInClickRange(vec2i mPos) const {
-	return vec2f(mPos - cstamp.pos).length() <= clickThreshold;
+inline bool Scene::cursorInClickRange(const ivec2& mPos) const {
+	return glm::length(vec2(mPos - cstamp.pos)) <= clickThreshold;
 }
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {
 	return dynamic_cast<Widget*>(select) ? findFirstScrollArea(static_cast<Widget*>(select)) : nullptr;
 }
 
-inline vec3 Scene::pickerRay(vec2i mPos) const {
+inline vec3 Scene::pickerRay(const ivec2& mPos) const {
 	return camera.direction(mPos) * Camera::zfar;
 }
 

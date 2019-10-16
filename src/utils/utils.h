@@ -1,16 +1,8 @@
 #pragma once
 
 // stuff that's used pretty much everywhere
-#include "cvec2.h"
+#include "oven/oven.h"
 #include "server/server.h"
-#ifdef __APPLE
-#include <OpenGL/gl.h>
-#else
-#ifdef _WIN32
-#define GLEW_STATIC
-#endif
-#include <GL/glew.h>
-#endif
 #include <memory>
 #include <queue>
 #include <set>
@@ -26,12 +18,6 @@ class ShaderGUI;
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using sset = std::set<T...>;
 
-using vec2s = cvec2<int16>;
-using vec2i = cvec2<int>;
-using vec2f = cvec2<float>;
-using vec2d = cvec2<double>;
-using vec2t = cvec2<sizet>;
-
 using BCall = void (Program::*)(Button*);
 using GCall = void (Program::*)(BoardObject*, uint8);
 
@@ -45,8 +31,15 @@ inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format == b.format && a.w == b.w && a.h == b.h && a.refresh_rate == b.refresh_rate;
 }
 
-inline vec2i mousePos() {
-	vec2i p;
+namespace glm {
+template <class T, qualifier Q>
+bool operator<(const vec<2, T, Q>& a, const vec<2, T, Q>& b) {
+	return a.y < b.y || (a.y == b.y && a.x < b.x);
+}
+}
+
+inline ivec2 mousePos() {
+	ivec2 p;
 	SDL_GetMouseState(&p.x, &p.y);
 	return p;
 }
@@ -57,15 +50,15 @@ struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
 	constexpr Rect(int x, int y, int w, int h);
-	constexpr Rect(vec2i pos, vec2i size);
+	constexpr Rect(const ivec2& pos, const ivec2& size);
 
-	vec2i& pos();
-	constexpr vec2i pos() const;
-	vec2i& size();
-	constexpr vec2i size() const;
-	constexpr vec2i end() const;
+	ivec2& pos();
+	ivec2 pos() const;
+	ivec2& size();
+	ivec2 size() const;
+	ivec2 end() const;
 
-	bool contain(vec2i point) const;
+	bool contain(const ivec2& point) const;
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
@@ -77,31 +70,31 @@ inline constexpr Rect::Rect(int x, int y, int w, int h) :
 	SDL_Rect({ x, y, w, h })
 {}
 
-inline constexpr Rect::Rect(vec2i pos, vec2i size) :
-	SDL_Rect({ pos.x, pos.y, size.w, size.h })
+inline constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
+	SDL_Rect({ pos.x, pos.y, size.x, size.y })
 {}
 
-inline vec2i& Rect::pos() {
-	return *reinterpret_cast<vec2i*>(this);
+inline ivec2& Rect::pos() {
+	return *reinterpret_cast<ivec2*>(this);
 }
 
-inline constexpr vec2i Rect::pos() const {
-	return vec2i(x, y);
+inline ivec2 Rect::pos() const {
+	return ivec2(x, y);
 }
 
-inline vec2i& Rect::size() {
-	return reinterpret_cast<vec2i*>(this)[1];
+inline ivec2& Rect::size() {
+	return reinterpret_cast<ivec2*>(this)[1];
 }
 
-inline constexpr vec2i Rect::size() const {
-	return vec2i(w, h);
+inline ivec2 Rect::size() const {
+	return ivec2(w, h);
 }
 
-inline constexpr vec2i Rect::end() const {
+inline ivec2 Rect::end() const {
 	return pos() + size();
 }
 
-inline bool Rect::contain(vec2i point) const {
+inline bool Rect::contain(const ivec2& point) const {
 	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
 
@@ -115,25 +108,25 @@ inline Rect Rect::intersect(const Rect& rect) const {
 class Texture {
 private:
 	GLuint id;
-	vec2i res;
+	ivec2 res;
 
 public:
-	Texture(GLuint id = 0, vec2i res = 0);
+	Texture(GLuint id = 0, const ivec2& res = ivec2(0));
 	Texture(SDL_Surface* img);											// for text
-	Texture(vec2i size, GLint iform, GLenum pform, const uint8* pix);	// for image
+	Texture(ivec2 size, GLint iform, GLenum pform, const uint8* pix);	// for image
 
 	void close();
 	void free();
 	GLuint getID() const;
-	vec2i getRes() const;
+	ivec2 getRes() const;
 	bool valid() const;
 
 	static Texture loadBlank(const vec3& color = vec3(1.f));
 private:
-	static GLuint loadGL(vec2i size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter);
+	static GLuint loadGL(const ivec2& size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter);
 };
 
-inline Texture::Texture(GLuint id, vec2i res) :
+inline Texture::Texture(GLuint id, const ivec2& res) :
 	id(id),
 	res(res)
 {}
@@ -146,16 +139,16 @@ inline GLuint Texture::getID() const {
 	return id;
 }
 
-inline vec2i Texture::getRes() const {
+inline ivec2 Texture::getRes() const {
 	return res;
 }
 
 inline bool Texture::valid() const {
-	return res.hasNot(0);
+	return res.x != 0 && res.y != 0;
 }
 
 inline Texture Texture::loadBlank(const vec3& color) {
-	return Texture(loadGL(1, GL_RGB8, GL_BGR, GL_FLOAT, &color, GL_CLAMP_TO_EDGE, GL_NEAREST), 1);
+	return Texture(loadGL(ivec2(1), GL_RGB8, GL_BGR, GL_FLOAT, &color, GL_CLAMP_TO_EDGE, GL_NEAREST), ivec2(1));
 }
 
 // for Object and Widget
@@ -166,10 +159,10 @@ public:
 	virtual ~Interactable() = default;
 
 	virtual void drawTop() const {}
-	virtual void onClick(vec2i mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
-	virtual void onHold(vec2i, uint8) {}
-	virtual void onDrag(vec2i, vec2i) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}			// get's called on mouse button up if instance is Scene's capture
+	virtual void onClick(const ivec2& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
+	virtual void onHold(const ivec2&, uint8) {}
+	virtual void onDrag(const ivec2&, const ivec2&) {}		// mouse move while left button down
+	virtual void onUndrag(uint8) {}							// get's called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onKeypress(const SDL_Keysym&) {}
@@ -217,39 +210,24 @@ bool inRange(const T& val, const T& min, const T& max) {
 	return val >= min && val <= max;
 }
 
+template <class T, glm::qualifier Q>
+bool inRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& max) {
+	return inRange(val.x, min.x, max.x) && inRange(val.y, min.y, max.y);
+}
+
 template <class T>
 bool outRange(const T& val, const T& min, const T& max) {
 	return val < min || val > max;
 }
 
-template <class T>
-bool inRange(const cvec2<T>& val, const cvec2<T>& min, const cvec2<T>& max) {
-	return inRange(val.x, min.x, max.x) && inRange(val.y, min.y, max.y);
-}
-
-template <class T>
-bool outRange(const cvec2<T>& val, const cvec2<T>& min, const cvec2<T>& max) {
+template <class T, glm::qualifier Q>
+bool outRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& max) {
 	return outRange(val.x, min.x, max.x) || outRange(val.y, min.y, max.y);
 }
 
-template <class T>
-const T& clampLow(const T& val, const T& min) {
-	return (val >= min) ? val : min;
-}
-
-template <class T>
-cvec2<T> clampLow(const cvec2<T>& val, const cvec2<T>& min) {
-	return cvec2<T>(clampLow(val.x, min.x), clampLow(val.y, min.y));
-}
-
-template <class T>
-const T& clampHigh(const T& val, const T& max) {
-	return (val <= max) ? val : max;
-}
-
-template <class T>
-cvec2<T> clampHigh(const cvec2<T>& val, const cvec2<T>& max) {
-	return cvec2<T>(clampHigh(val.x, max.x), clampHigh(val.y, max.y));
+template <class T, glm::qualifier Q = glm::defaultp>
+glm::vec<2, T, Q> swap(const T& x, const T& y, bool swap) {
+	return swap ? glm::vec<2, T, Q>(y, x) : glm::vec<2, T, Q>(x, y);
 }
 
 // container stuff

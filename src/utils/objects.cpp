@@ -180,7 +180,7 @@ void Tile::drawTop() const {
 	drawTopMesh(0.1f, mesh, matl->diffuse, tex);
 }
 
-void Tile::onHold(vec2i, uint8 mBut) {
+void Tile::onHold(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && ulcall) {
 		show = false;
 		World::scene()->capture = this;
@@ -267,7 +267,7 @@ void Piece::drawTop() const {
 	}
 }
 
-void Piece::onHold(vec2i, uint8 mBut) {
+void Piece::onHold(const ivec2&, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
 		if (drawTopSelf = mBut == SDL_BUTTON_LEFT || type == Com::Piece::warhorse)
 			show = false;
@@ -301,7 +301,7 @@ void Piece::onUnhover() {
 	}
 }
 
-void Piece::updatePos(vec2s bpos, bool active) {
+void Piece::updatePos(svec2 bpos, bool active) {
 	setPos(World::game()->gtop(bpos));
 	setActive(active);
 	World::scene()->updateSelect(mousePos());

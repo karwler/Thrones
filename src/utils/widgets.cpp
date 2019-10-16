@@ -2,7 +2,7 @@
 
 // RECTANGLE
 
-void Rectangle::init(ShaderGUI* gui) {
+void Shape::init(ShaderGUI* gui) {
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
@@ -20,7 +20,7 @@ void Rectangle::init(ShaderGUI* gui) {
 	glDeleteBuffers(1, &vbo);
 }
 
-void Rectangle::free(ShaderGUI* gui) {
+void Shape::free(ShaderGUI* gui) {
 	glBindVertexArray(vao);
 	glDisableVertexAttribArray(gui->vertex);
 	glDisableVertexAttribArray(gui->uvloc);
@@ -40,11 +40,11 @@ Widget::Widget(Size relSize, Layout* parent, sizet id) :
 	relSize(relSize)
 {}
 
-vec2i Widget::position() const {
+ivec2 Widget::position() const {
 	return parent->wgtPosition(pcID);
 }
 
-vec2i Widget::size() const {
+ivec2 Widget::size() const {
 	return parent->wgtSize(pcID);
 }
 
@@ -68,7 +68,7 @@ void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, G
 	glUniform1f(World::gui()->zloc, z);
 	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_QUADS, 0, Rectangle::corners);
+	glDrawArrays(GL_QUADS, 0, Shape::corners);
 }
 
 // BUTTON
@@ -91,7 +91,7 @@ void Button::draw() const {
 	drawRect(rect(), frame(), color * dimFactor, bgTex);
 }
 
-void Button::onClick(vec2i, uint8 mBut) {
+void Button::onClick(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
 		World::prun(lcall, this);
 	else if (mBut == SDL_BUTTON_RIGHT)
@@ -115,8 +115,8 @@ void Button::drawTooltip() const {
 		return;
 
 	int ofs = World::window()->getCursorHeight() + cursorMargin;
-	vec2i pos = mousePos() + vec2i(0, ofs);
-	vec2i siz = tipTex.getRes() + tooltipMargin * 2;
+	ivec2 pos = mousePos() + ivec2(0, ofs);
+	ivec2 siz = tipTex.getRes() + tooltipMargin * 2;
 	if (pos.x + siz.x > World::window()->getView().x)
 		pos.x = World::window()->getView().x - siz.x;
 	if (pos.y + siz.y > World::window()->getView().y)
@@ -139,14 +139,14 @@ void CheckBox::draw() const {
 	drawRect(boxRect(), frm, boxColor() * dimFactor, World::scene()->blank());	// draw checkbox
 }
 
-void CheckBox::onClick(vec2i mPos, uint8 mBut) {
+void CheckBox::onClick(const ivec2& mPos, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) && (lcall || rcall))
 		toggle();
 	Button::onClick(mPos, mBut);
 }
 
 Rect CheckBox::boxRect() const {
-	vec2i siz = size();
+	ivec2 siz = size();
 	int margin = (siz.x > siz.y ? siz.y : siz.x) / 4;
 	return Rect(position() + margin, siz - margin * 2);
 }
@@ -168,7 +168,7 @@ void Slider::draw() const {
 	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// draw slider
 }
 
-void Slider::onHold(vec2i mPos, uint8 mBut) {
+void Slider::onHold(const ivec2& mPos, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || rcall)) {
 		World::scene()->capture = this;
 		if (int sp = sliderPos(); outRange(mPos.x, sp, sp + barSize))	// if mouse outside of slider
@@ -177,7 +177,7 @@ void Slider::onHold(vec2i mPos, uint8 mBut) {
 	}
 }
 
-void Slider::onDrag(vec2i mPos, vec2i) {
+void Slider::onDrag(const ivec2& mPos, const ivec2&) {
 	setSlider(mPos.x - diffSliderMouse);
 }
 
@@ -194,18 +194,18 @@ void Slider::setSlider(int xpos) {
 }
 
 Rect Slider::barRect() const {
-	vec2i siz = size();
+	ivec2 siz = size();
 	int height = siz.y / 2;
-	return Rect(position() + siz.y / 4, vec2i(siz.x - height, height));
+	return Rect(position() + siz.y / 4, ivec2(siz.x - height, height));
 }
 
 Rect Slider::sliderRect() const {
-	vec2i pos = position(), siz = size();
+	ivec2 pos = position(), siz = size();
 	return Rect(sliderPos(), pos.y, barSize, siz.y);
 }
 
 int Slider::sliderLim() const {
-	vec2i siz = size();
+	ivec2 siz = size();
 	return siz.x - siz.y/2 - barSize;
 }
 
@@ -249,19 +249,19 @@ void Label::setText(const string& str) {
 	updateTextTex();
 }
 
-vec2i Label::textPos(const Texture& text, Label::Alignment alignment, vec2i pos, vec2i siz, int margin) {
+ivec2 Label::textPos(const Texture& text, Label::Alignment alignment, ivec2 pos, ivec2 siz, int margin) {
 	switch (alignment) {
 	case Alignment::left:
-		return vec2i(pos.x + margin, pos.y);
+		return ivec2(pos.x + margin, pos.y);
 	case Alignment::center: {
-		return vec2i(pos.x + (siz.x - text.getRes().x) / 2, pos.y); }
+		return ivec2(pos.x + (siz.x - text.getRes().x) / 2, pos.y); }
 	case Alignment::right:
-		return vec2i(pos.x + siz.x - text.getRes().x - margin, pos.y);
+		return ivec2(pos.x + siz.x - text.getRes().x - margin, pos.y);
 	}
-	return 0;
+	return ivec2(0);
 }
 
-vec2i Label::textPos() const {
+ivec2 Label::textPos() const {
 	return textPos(textTex, align, position(), size(), textMargin);
 }
 
@@ -289,26 +289,26 @@ void Draglet::draw() const {
 
 	if (selected) {
 		Rect rbg = rect();
-		drawRect(Rect(rbg.pos(), vec2i(rbg.w, olSize)), colorLight, World::scene()->blank(), -1.f);
+		drawRect(Rect(rbg.pos(), ivec2(rbg.w, olSize)), colorLight, World::scene()->blank(), -1.f);
 		drawRect(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), colorLight, World::scene()->blank(), -1.f);
 		drawRect(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), colorLight, World::scene()->blank(), -1.f);
 		drawRect(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), colorLight, World::scene()->blank(), -1.f);
 	}
 	if (dragging) {
-		vec2i siz = size() / 2;
-		vec2i pos = mousePos() - siz / 2;
+		ivec2 siz = size() / 2;
+		ivec2 pos = mousePos() - siz / 2;
 		drawRect(Rect(pos, siz), bclr, bgTex, -1.f);
 		if (textTex.valid())
 			drawRect(Rect(textPos(textTex, align, pos, siz, textMargin / 2), textTex.getRes() / 2), tclr, textTex.getID(), -1.f);
 	}
 }
 
-void Draglet::onClick(vec2i, uint8 mBut) {
+void Draglet::onClick(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_RIGHT)
 		World::prun(rcall, this);
 }
 
-void Draglet::onHold(vec2i, uint8 mBut) {
+void Draglet::onHold(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && lcall) {
 		dragging = true;
 		World::scene()->capture = this;
@@ -335,7 +335,7 @@ SwitchBox::SwitchBox(Size relSize, vector<string> opts, string curOption, BCall 
 		curOpt = 0;
 }
 
-void SwitchBox::onClick(vec2i mPos, uint8 mBut) {
+void SwitchBox::onClick(const ivec2& mPos, uint8 mBut) {
 	if (lcall || rcall) {
 		if (mBut == SDL_BUTTON_LEFT)
 			shiftOption(1);
@@ -356,7 +356,7 @@ void SwitchBox::setText(const string& str) {
 }
 
 void SwitchBox::setCurOpt(uint id) {
-	curOpt = clampHigh(id, uint(options.size() - 1));
+	curOpt = std::clamp(id, 0u, uint(options.size() - 1));
 	Label::setText(options[curOpt]);
 }
 
@@ -377,11 +377,11 @@ LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall,
 {}
 
 void LabelEdit::drawTop() const {
-	vec2i ps = position();
+	ivec2 ps = position();
 	drawRect(Rect(caretPos() + ps.x + textMargin, ps.y, caretWidth, size().y), frame(), colorLight, World::scene()->blank(), -1.f);
 }
 
-void LabelEdit::onClick(vec2i, uint8 mBut) {
+void LabelEdit::onClick(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || ecall)) {
 		World::scene()->capture = this;
 		SDL_StartTextInput();
@@ -510,8 +510,8 @@ void LabelEdit::setCPos(uint cp) {
 		textOfs -= ce - sx;
 }
 
-vec2i LabelEdit::textPos() const {
-	return Label::textPos() + vec2i(textOfs, 0);
+ivec2 LabelEdit::textPos() const {
+	return Label::textPos() + ivec2(textOfs, 0);
 }
 
 int LabelEdit::caretPos() const {

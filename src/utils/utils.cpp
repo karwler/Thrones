@@ -22,13 +22,13 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 
 Texture::Texture(SDL_Surface* img) {
 	if (img) {
-		id = loadGL(res = vec2i(img->w, img->h), GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
+		id = loadGL(res = ivec2(img->w, img->h), GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
 		SDL_FreeSurface(img);
 	} else
 		*this = Texture();
 }
 
-Texture::Texture(vec2i size, GLint iform, GLenum pform, const uint8* pix) :
+Texture::Texture(ivec2 size, GLint iform, GLenum pform, const uint8* pix) :
 	id(loadGL(size, iform, pform, GL_UNSIGNED_BYTE, pix, GL_REPEAT, GL_LINEAR)),
 	res(size)
 {
@@ -42,7 +42,7 @@ void Texture::close() {
 	}
 }
 
-GLuint Texture::loadGL(vec2i size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter) {
+GLuint Texture::loadGL(const ivec2& size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter) {
 	GLuint id;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
@@ -57,7 +57,7 @@ GLuint Texture::loadGL(vec2i size, GLint iformat, GLenum pformat, GLenum type, c
 
 // INTERACTABLE
 
-void Interactable::onClick(vec2i, uint8) {}
+void Interactable::onClick(const ivec2&, uint8) {}
 
 // DIJKSTRA
 

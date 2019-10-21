@@ -40,22 +40,27 @@ inline void Size::set(float percent) {
 // vertex data for widgets
 class Shape {
 public:
-	GLuint vao;
-
 	static constexpr uint corners = 4;
 private:
 	static constexpr uint stride = 2;
 	static constexpr float vertices[corners * stride] = {
 		0.f, 0.f,
 		1.f, 0.f,
-		1.f, 1.f,
 		0.f, 1.f,
+		1.f, 1.f
 	};
+
+	GLuint vao, vbo;
 
 public:
 	void init(ShaderGUI* gui);
 	void free(ShaderGUI* gui);
+	GLuint getVao() const;
 };
+
+inline GLuint Shape::getVao() const {
+	return vao;
+}
 
 // can be used as spacer
 class Widget : public Interactable {
@@ -271,28 +276,26 @@ inline Rect Label::textRect() const {
 
 // a weird thing for game related icons
 class Draglet : public Label {
+public:
+	bool selected;
+
 private:
 	static constexpr int olSize = 3;
 
-	bool dragging;
-	bool selected;
+	bool showTop, showingTop;
 	BCall hcall;
 
 public:
-	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = vec4(1.f), const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = vec4(1.f), const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showTop = true, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;
+	virtual void drawTop() const override;
 	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
+	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
-
-	void setSelected(bool on);
 };
-
-inline void Draglet::setSelected(bool on) {
-	selected = on;
-}
 
 // for switching between multiple options (kinda like a dropdown menu except I was too lazy to make an actual one)
 class SwitchBox : public Label {

@@ -120,9 +120,9 @@ vector<string> readFileLines(const string& file) {
 }
 
 bool writeFile(const string& file, const string& text) {
-	if (FILE* ofh = fopen(file.c_str(), defaultWriteMode)) {
-		fwrite(text.c_str(), sizeof(*text.c_str()), text.length(), ofh);
-		return !fclose(ofh);
+	if (SDL_RWops* ofh = SDL_RWFromFile(file.c_str(), defaultWriteMode)) {
+		SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
+		return !SDL_RWclose(ofh);
 	}
 	return false;
 }

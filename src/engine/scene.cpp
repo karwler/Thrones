@@ -63,7 +63,7 @@ void Camera::rotate(const vec2& dRot, float dYaw) {
 
 void Camera::zoom(int mov) {
 	pdst = std::clamp(pdst - float(mov) / 2.f, defaultPdst - 8.f, defaultPdst + 20.f);
-	pos = glm::quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst) + lat;
+	pos = quat(vec3(prot, 0.f)) * vec3(0.f, 0.f, pdst) + lat;
 	updateView();
 }
 
@@ -174,8 +174,9 @@ Scene::Scene() :
 	select(nullptr),
 	capture(nullptr),
 	mouseMove(0),
+	moveTime(0),
 	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
-	layout(new Layout),	// dummy layout in case a function gets called preemptively
+	layout(new RootLayout),	// dummy layout in case a function gets called preemptively
 	light(vec3(Com::Config::boardWidth / 2.f, 4.f, 0.f), vec3(1.f, 0.98f, 0.92f), 0.8f, 140.f),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
@@ -204,14 +205,16 @@ void Scene::draw() {
 		capture->drawTop();
 
 	glUseProgram(World::gui()->program);
-	World::gui()->bindRect();
+	glBindVertexArray(World::gui()->wrect.getVao());
 	layout->draw();
 	if (popup)
 		popup->draw();
 	if (dynamic_cast<Widget*>(capture))
 		capture->drawTop();
-	if (Button* but = dynamic_cast<Button*>(select))
+#ifndef __ANDROID__
+	if (Button* but = dynamic_cast<Button*>(select); but)
 		but->drawTooltip();
+#endif
 }
 
 void Scene::tick(float dSec) {
@@ -228,10 +231,10 @@ void Scene::tick(float dSec) {
 }
 
 void Scene::onResize() {
+	World::state()->eventResize();
 	camera.updateProjection();
 	camera.updateView();
-	layout->onResize();
-	if (popup)
+	if (layout->onResize(); popup)
 		popup->onResize();
 }
 
@@ -244,8 +247,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 			World::state()->eventNumpress(uint8(key.keysym.scancode - SDL_SCANCODE_1));
 			break;
 		case SDL_SCANCODE_LALT:
-			if (World::game()->favorState.use = true; Piece* pce = dynamic_cast<Piece*>(capture))
-				World::program()->eventFavorStart(pce, pce->show ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);	// vaguely simulate what happens when holding down on a piece to refresh favor state and highlighted tiles (no need to take warhorse into account)
+			World::state()->eventFavorize(true);
 			break;
 		case SDL_SCANCODE_C:
 			World::state()->eventCameraReset();
@@ -254,7 +256,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
 				World::prun(popup->kcall, nullptr);
 			break;
-		case SDL_SCANCODE_ESCAPE:
+		case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
 			if (popup)
 				World::prun(popup->ccall, nullptr);
 			else
@@ -266,8 +268,7 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 	if (!(dynamic_cast<LabelEdit*>(capture) || key.repeat))
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_LALT:
-			if (World::game()->favorState.use = false; Piece* pce = dynamic_cast<Piece*>(capture))
-				World::program()->eventFavorStart(pce, pce->show ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);	// same as above (I could probably just call the piece's onHold())
+			World::state()->eventFavorize(false);
 		}
 }
 
@@ -293,7 +294,6 @@ void Scene::onMouseDown(const SDL_MouseButtonEvent& but) {
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
-	select = getSelected(ivec2(but.x, but.y));
 	cstamp = ClickStamp(select, getSelectedScrollArea(), ivec2(but.x, but.y), but.button);
 	if (cstamp.area)	// area goes first so widget can overwrite it's capture
 		cstamp.area->onHold(ivec2(but.x, but.y), but.button);
@@ -312,6 +312,7 @@ void Scene::onMouseUp(const SDL_MouseButtonEvent& but) {
 		SDL_SetRelativeMouseMode(SDL_FALSE);
 		simulateMouseMove();
 	}
+
 	if (capture)
 		capture->onUndrag(but.button);
 	if (select && cstamp.inter == select && cursorInClickRange(ivec2(but.x, but.y)))
@@ -335,6 +336,28 @@ void Scene::onMouseLeave() {
 	}
 }
 
+void Scene::onFingerMove(const SDL_TouchFingerEvent& fin) {
+	vec2 size = World::window()->getView();
+	onMouseMove({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x / 2.f), int(fin.dy * size.y / 2.f) });
+}
+
+void Scene::onFingerGesture(const SDL_MultiGestureEvent& ges) {
+	if (dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
+		camera.zoom(int(ges.dDist * float(World::window()->getView().y)));
+}
+
+void Scene::onFingerDown(const SDL_TouchFingerEvent& fin) {
+	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getView());
+	updateSelect(pos);
+	onMouseDown({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y });
+}
+
+void Scene::onFingerUp(const SDL_TouchFingerEvent& fin) {
+	vec2 size = World::window()->getView();
+	onMouseUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, int(fin.x * size.x), int(fin.y * size.y) });
+	updateSelect(ivec2(-1));
+}
+
 void Scene::onText(const char* str) {
 	if (capture)
 		capture->onText(str);
@@ -350,7 +373,9 @@ void Scene::resetLayouts() {
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
 	layout->postInit();
+#ifndef __ANDROID__
 	simulateMouseMove();
+#endif
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {

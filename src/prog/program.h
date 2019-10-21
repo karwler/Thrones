@@ -78,11 +78,13 @@ public:
 	void eventSetupSave(Button* but);
 	void eventSetupLoad(Button* but);
 	void eventShowConfig(Button* but = nullptr);
+	void eventSwitchSetupButtons(Button* but = nullptr);
 
 	// game match
 	void eventOpenMatch();
 	void eventEndTurn(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
+	void eventSwitchFavor(Button* but = nullptr);
 	void eventFavorStart(BoardObject* obj, uint8 mBut);
 	void eventMove(BoardObject* obj, uint8 mBut);
 	void eventFire(BoardObject* obj, uint8 mBut);
@@ -103,6 +105,7 @@ public:
 	void eventSetVolumeSL(Button* but);
 	void eventSetVolumeLE(Button* but);
 	void eventResetSettings(Button* but);
+	void eventSaveSettings(Button* but = nullptr);
 	void eventOpenInfo(Button* but = nullptr);
 
 	// other

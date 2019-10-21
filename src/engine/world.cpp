@@ -16,5 +16,9 @@ int main(int argc, char** argv) {
 	std::locale::global(std::locale(""));
 	std::cout.imbue(std::locale());
 	std::cerr.imbue(std::locale());
-	return World::window()->start();
+	World::window()->start();
+#ifdef __ANDROID__
+	exit(0);
+#endif
+	return 0;
 }

@@ -1,11 +1,20 @@
 #include "oven.h"
 
+#ifndef GL_BGR
+#define GL_BGR 0x80E0
+#endif
+#ifndef GL_BGRA
+#define GL_BGRA 0x80E1
+#endif
+
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
 constexpr char argMaterial = 'm';
 constexpr char argObject = 'o';
 constexpr char argShader = 's';
+constexpr char argShaderE = 'S';
 constexpr char argTexture = 't';
+constexpr char argTextureR = 'T';
 constexpr char messageUsage[] = "usage: tobjtobob <-a|-m|-o|-s|-t> <destination file> <input files>";
 
 // OBJ FILE DATA
@@ -83,8 +92,6 @@ struct Image {
 	Image();
 	Image(Image&& img);
 	Image(string&& fname, SDL_Surface* image, uint16 iformat, uint16 pformat);
-
-	static Image surfaceToImage(string&& fname, SDL_Surface* img);
 };
 
 Image::Image() :
@@ -105,23 +112,6 @@ Image::Image(string&& fname, SDL_Surface* image, uint16 iformat, uint16 pformat)
 	pformat(pformat)
 {}
 
-Image Image::surfaceToImage(string&& name, SDL_Surface* img) {
-	if (img->format->format == SDL_PIXELFORMAT_BGR24 || img->format->format == SDL_PIXELFORMAT_BGRA32)
-		return Image(std::move(name), img, img->format->format == SDL_PIXELFORMAT_BGR24 ? GL_RGB8 : GL_RGBA8, img->format->format == SDL_PIXELFORMAT_BGR24 ? GL_BGR : GL_BGRA);
-
-	if (uint32 format = img->format->BytesPerPixel == 3 ? SDL_PIXELFORMAT_BGR24 : img->format->BytesPerPixel == 4 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_UNKNOWN) {
-		if (SDL_Surface* pic = SDL_ConvertSurfaceFormat(img, format, 0)) {
-			SDL_FreeSurface(img);
-			return Image(std::move(name), pic, pic->format->BytesPerPixel == 3 ? GL_RGB8 : GL_RGBA8, pic->format->BytesPerPixel == 3 ? GL_BGR : GL_BGRA);
-		}
-		std::cerr << "error: failed to convert " << name << " of format " << pixelformatName(img->format->format) << std::endl;
-	} else
-		std::cerr << "error: " << name << " has invalid format " << pixelformatName(img->format->format) << std::endl;
-
-	SDL_FreeSurface(img);
-	return Image();
-}
-
 // AUDIOS
 
 static void loadWav(const char* file, vector<pair<string, Sound>>& auds) {
@@ -138,7 +128,7 @@ static void loadWav(const char* file, vector<pair<string, Sound>>& auds) {
 }
 
 static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
-	FILE* ofh = fopen(file, defaultWriteMode);
+	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
@@ -147,7 +137,7 @@ static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
 	uint32* up = reinterpret_cast<uint32*>(obuf + 2);
 	uint16* sp = reinterpret_cast<uint16*>(obuf + 6);
 	*sp = uint16(auds.size());
-	fwrite(sp, sizeof(*sp), 1, ofh);
+	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
 
 	for (auto& [name, sound] : auds) {
 		obuf[0] = uint8(name.length());
@@ -157,12 +147,12 @@ static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
 		sp[1] = sound.format;
 		sp[2] = sound.samples;
 
-		fwrite(obuf, sizeof(*obuf), audioHeaderSize, ofh);
-		fwrite(name.c_str(), sizeof(*name.c_str()), name.length(), ofh);
-		fwrite(sound.data, sizeof(*sound.data), sound.length, ofh);
+		SDL_RWwrite(ofh, obuf, sizeof(*obuf), audioHeaderSize);
+		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
+		SDL_RWwrite(ofh, sound.data, sizeof(*sound.data), sound.length);
 		sound.free();
 	}
-	fclose(ofh);
+	SDL_RWclose(ofh);
 }
 
 // MATERIALS
@@ -199,21 +189,21 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 }
 
 static void writeMaterials(const char* file, vector<pair<string, Material>>& mtls) {
-	FILE* ofh = fopen(file, defaultWriteMode);
+	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
 	}
 	uint16 mamt = uint16(mtls.size());
-	fwrite(&mamt, sizeof(mamt), 1, ofh);
+	SDL_RWwrite(ofh, &mamt, sizeof(mamt), 1);
 
 	for (const auto& [name, matl] : mtls) {
 		uint8 nlen = uint8(name.length());
-		fwrite(&nlen, sizeof(nlen), 1, ofh);
-		fwrite(name.c_str(), sizeof(*name.c_str()), name.length(), ofh);
-		fwrite(&matl, sizeof(matl), 1, ofh);
+		SDL_RWwrite(ofh, &nlen, sizeof(nlen), 1);
+		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
+		SDL_RWwrite(ofh, &matl, sizeof(matl), 1);
 	}
-	fclose(ofh);
+	SDL_RWclose(ofh);
 }
 
 // OBJECTS
@@ -305,7 +295,7 @@ static void loadObj(const char* file, vector<Blueprint>& bprs) {
 }
 
 static void writeObjects(const char* file, vector<Blueprint>& bprs) {
-	FILE* ofh = fopen(file, defaultWriteMode);
+	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
@@ -313,7 +303,7 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 	uint8 obuf[objectHeaderSize];
 	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
 	*sp = uint16(bprs.size());
-	fwrite(sp, sizeof(*sp), 1, ofh);
+	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
 
 	for (const Blueprint& it : bprs) {
 		if (it.data.size() > 64000)
@@ -323,12 +313,12 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 		sp[0] = uint16(it.elems.size());
 		sp[1] = uint16(it.data.size());
 
-		fwrite(obuf, sizeof(*obuf), objectHeaderSize, ofh);
-		fwrite(it.name.c_str(), sizeof(*it.name.c_str()), it.name.length(), ofh);
-		fwrite(it.elems.data(), sizeof(*it.elems.data()), it.elems.size(), ofh);
-		fwrite(it.data.data(), sizeof(*it.data.data()), it.data.size(), ofh);
+		SDL_RWwrite(ofh, obuf, sizeof(*obuf), objectHeaderSize);
+		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
+		SDL_RWwrite(ofh, it.elems.data(), sizeof(*it.elems.data()), it.elems.size());
+		SDL_RWwrite(ofh, it.data.data(), sizeof(*it.data.data()), it.data.size());
 	}
-	fclose(ofh);
+	SDL_RWclose(ofh);
 }
 
 // SHADERS
@@ -341,7 +331,13 @@ static bool checkSpace(char c) {
 	return isSpace(c) && c != '\n';
 }
 
-static void loadGlsl(const char* file, vector<pair<string, string>>& srcs) {
+static void rewriteTextureStr(string& str, sizet p) {
+	for (; p < str.length();)
+		if (p = str.find("texture2D", p); p != string::npos)
+			str.erase(p += strlen("texture"), 2);
+}
+
+static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool gles) {
 	string text = trim(readFile(file));
 	bool keepLF = false;
 	for (sizet i = 0; i < text.length(); i++) {
@@ -371,12 +367,31 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs) {
 			}
 		}
 	}
+
+	constexpr char verstr[] = "#version ", glesver[] = "300 es\nprecision highp float;";
+#ifdef __APPLE__
+	if (sizet p = text.find(verstr); p != string::npos) {
+		p += strlen(verstr);
+		text.erase(p, text.find('\n', p) - p);
+		text.insert(p, "150");
+		rewriteTextureStr(text, p + strlen(glesver));
+	}
+#else
+	if (gles) {
+		if (sizet p = text.find(verstr); p != string::npos) {
+			p += strlen(verstr);
+			text.erase(p, text.find('\n', p) - p + 1);
+			text.insert(p, glesver);
+			rewriteTextureStr(text, p + strlen(glesver));
+		}
+	}
+#endif
 	if (!text.empty())
 		srcs.emplace_back(filename(file), text);
 }
 
 static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
-	FILE* ofh = fopen(file, defaultWriteMode);
+	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
@@ -384,31 +399,48 @@ static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
 	uint8 obuf[shaderHeaderSize];
 	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
 	obuf[0] = uint8(srcs.size());
-	fwrite(obuf, sizeof(*obuf), 1, ofh);
+	SDL_RWwrite(ofh, obuf, sizeof(*obuf), 1);
 
 	for (const auto& [name, text] : srcs) {
 		*obuf = uint8(name.length());
 		*sp = uint16(text.length());
 
-		fwrite(obuf, sizeof(*obuf), shaderHeaderSize, ofh);
-		fwrite(name.c_str(), sizeof(*name.c_str()), name.length(), ofh);
-		fwrite(text.c_str(), sizeof(*text.c_str()), text.length(), ofh);
+		SDL_RWwrite(ofh, obuf, sizeof(*obuf), shaderHeaderSize);
+		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
+		SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
 	}
-	fclose(ofh);
+	SDL_RWclose(ofh);
 }
 
 // TEXTURES
 
-static void loadBmp(const char* file, vector<Image>& imgs) {
+static SDL_Surface* convertSurface(SDL_Surface* img, bool regular) {
+	uint32 pf3 = regular ? SDL_PIXELFORMAT_BGR24 : SDL_PIXELFORMAT_RGB24;
+	uint32 pf4 = regular ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_RGBA32;
+	if (img->format->format == pf3 || img->format->format == pf4)
+		return img;
+
+	if (uint32 format = img->format->BytesPerPixel == 3 ? pf3 : img->format->BytesPerPixel == 4 ? pf4 : uint32(SDL_PIXELFORMAT_UNKNOWN))
+		if (SDL_Surface* pic = SDL_ConvertSurfaceFormat(img, format, 0)) {
+			SDL_FreeSurface(img);
+			return pic;
+		}
+	SDL_FreeSurface(img);
+	return nullptr;
+}
+
+static void loadBmp(const char* file, vector<Image>& imgs, bool regular) {
 	if (SDL_Surface* src = SDL_LoadBMP(file)) {
-		if (Image img = Image::surfaceToImage(filename(delExt(file)), src); img.image)
-			imgs.push_back(std::move(img));
+		if (string name = filename(delExt(file)); src = convertSurface(src, regular))
+			imgs.emplace_back(std::move(name), src, src->format->BytesPerPixel == 3 ? GL_RGB8 : GL_RGBA8, src->format->BytesPerPixel == 3 ? (regular ? GL_BGR : GL_RGB) : (regular ? GL_BGRA : GL_RGBA));
+		else
+			std::cerr << "error: failed to convert " << name << std::endl;
 	} else
 		std::cerr << "error: couldn't read " << file << linend << SDL_GetError() << std::endl;
 }
 
 static void writeImages(const char* file, vector<Image>& imgs) {
-	FILE* ofh = fopen(file, defaultWriteMode);
+	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
@@ -416,7 +448,7 @@ static void writeImages(const char* file, vector<Image>& imgs) {
 	uint8 obuf[textureHeaderSize];
 	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
 	*sp = uint16(imgs.size());
-	fwrite(sp, sizeof(*sp), 1, ofh);
+	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
 
 	for (const Image& it : imgs) {
 		obuf[0] = uint8(it.name.length());
@@ -426,33 +458,34 @@ static void writeImages(const char* file, vector<Image>& imgs) {
 		sp[3] = uint16(it.iformat);
 		sp[4] = uint16(it.pformat);
 
-		fwrite(obuf, sizeof(*obuf), textureHeaderSize, ofh);
-		fwrite(it.name.c_str(), sizeof(*it.name.c_str()), it.name.length(), ofh);
-		fwrite(it.image->pixels, sizeof(uint8), uint(it.image->pitch * it.image->h), ofh);
+		SDL_RWwrite(ofh, obuf, sizeof(*obuf), textureHeaderSize);
+		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
+		SDL_RWwrite(ofh, it.image->pixels, sizeof(uint8), uint(it.image->pitch * it.image->h));
 		SDL_FreeSurface(it.image);
 	}
-	fclose(ofh);
+	SDL_RWclose(ofh);
 }
 
 // PROGRAM
 
-template <class T>
-void process(const char* dest, const vector<string>& files, void (*loader)(const char*, vector<T>&), void (*writer)(const char*, vector<T>&)) {
+template <class T, class F, class... A>
+void process(const char* dest, const vector<string>& files, F loader, void (*writer)(const char*, vector<T>&), A... args) {
 	vector<T> dats;
 	for (const string& it : files)
-		loader(it.c_str(), dats);
+		loader(it.c_str(), dats, args...);
 
 	if (!dats.empty())
 		writer(dest, dats);
 	else
 		std::cout << "nothing to write" << std::endl;
 }
+
 #ifdef _WIN32
 int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
-	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argTexture }); arg.getVals().empty())
+	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
 		std::cout << "no input files" << linend << messageUsage << std::endl;
 	else if (const char* dest = arg.getOpt(argAudio))
 		process(dest, arg.getVals(), loadWav, writeAudios);
@@ -461,9 +494,13 @@ int main(int argc, char** argv) {
 	else if (dest = arg.getOpt(argObject))
 		process(dest, arg.getVals(), loadObj, writeObjects);
 	else if (dest = arg.getOpt(argShader))
-		process(dest, arg.getVals(), loadGlsl, writeShaders);
+		process(dest, arg.getVals(), loadGlsl, writeShaders, false);
+	else if (dest = arg.getOpt(argShaderE))
+		process(dest, arg.getVals(), loadGlsl, writeShaders, true);
 	else if (dest = arg.getOpt(argTexture))
-		process(dest, arg.getVals(), loadBmp, writeImages);
+		process(dest, arg.getVals(), loadBmp, writeImages, true);
+	else if (dest = arg.getOpt(argTextureR))
+		process(dest, arg.getVals(), loadBmp, writeImages, false);
 	else {
 		std::cout << "error: invalid mode" << linend << messageUsage << std::endl;
 		return -1;

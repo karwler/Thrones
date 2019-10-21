@@ -151,7 +151,7 @@ static void leaveRoom(uint8 pid, bool sendList = true) {
 }
 
 static void connectPlayer(SDLNet_SocketSet sockets, TCPsocket server) {
-	if (players.size() >= maxPlayers) {
+	if (players.size() >= maxPlayers) {	// TODO: version check
 		sendRejection(server);
 		print(std::cout, "rejected incoming connection");
 		return;

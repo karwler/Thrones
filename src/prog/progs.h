@@ -6,22 +6,15 @@
 // for handling program state specific things that occur in all states
 class ProgState {
 protected:
-	static constexpr int tooltipLimit = 600;
-	static constexpr int tooltipHeight = 16;
-	static constexpr int lineHeight = 30;
-	static constexpr int superHeight = 40;
-	static constexpr int superSpacing = 10;
-	static constexpr int iconSize = 64;
-	static constexpr char arrowLeft[] = "<";
-	static constexpr char arrowRight[] = ">";
-
 	struct Text {
 		string text;
 		int length, height;
 
-		Text(string str, int height = lineHeight);
+		Text(string str, int height);
 
-		static int strLen(const string& str, int height = lineHeight);
+		static int strLen(const string& str, int height);
+		template <class T> static int maxLen(T pos, T end, int height);
+		static int maxLen(const vector<vector<string>*>& lists, int height);
 	};
 
 	struct ConfigIO {
@@ -47,7 +40,15 @@ protected:
 		Label* pieceTotal;
 	};
 
+	static constexpr int tooltipLimit = 500;
+	static constexpr char arrowLeft[] = "<";
+	static constexpr char arrowRight[] = ">";
+
+	int lineHeight, superHeight, tooltipHeight;
+	int lineSpacing, superSpacing, iconSize;
+
 public:
+	ProgState();
 	virtual ~ProgState() = default;	// to keep the compiler happy
 
 	virtual void eventEscape() {}
@@ -55,19 +56,52 @@ public:
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
+	virtual void eventFavorize(bool) {}
 	virtual void eventCameraReset();
+	void eventResize();
 
-	virtual Layout* createLayout();
-	static Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
-	static Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
-	static pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX);
-
+	virtual RootLayout* createLayout();
+	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
+	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
+	pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX);
+	Popup* createPopupConfig();
 protected:
-	template <class T> static int findMaxLength(T pos, T end, int height = lineHeight);
-	static int findMaxLength(const vector<vector<string>*>& lists, int height = lineHeight);
-	static Texture makeTooltip(const string& text, int limit = tooltipLimit, int height = tooltipHeight);
-	static Texture makeTooltip(const vector<string>& lines, int limit = tooltipLimit, int height = tooltipHeight);
+	Texture makeTooltip(const string& text);
+	Texture makeTooltip(const vector<string>& lines);
+
+	vector<Widget*> createConfigList(ConfigIO& wio, bool active);
+	static string tileFortressString(const Com::Config& cfg);
+	static string middleFortressString(const Com::Config& cfg);
+	static string pieceTotalString(const Com::Config& cfg);
+private:
+	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
+	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
+
+template <class T>
+int ProgState::Text::maxLen(T pos, T end, int height) {
+	int width = 0;
+	for (; pos != end; pos++)
+		if (int len = strLen(*pos, height); len > width)
+			width = len;
+	return width;
+}
+
+inline ProgState::ProgState() {
+	eventResize();
+}
+
+inline string ProgState::tileFortressString(const Com::Config& cfg) {
+	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+}
+
+inline string ProgState::middleFortressString(const Com::Config& cfg) {
+	return toStr(cfg.homeSize.x - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+}
+
+inline string ProgState::pieceTotalString(const Com::Config& cfg) {
+	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
+}
 
 class ProgMenu : public ProgState {
 public:
@@ -75,7 +109,7 @@ public:
 
 	virtual void eventEscape() override;
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 };
 
 class ProgLobby : public ProgState {
@@ -89,7 +123,7 @@ public:
 
 	virtual void eventEscape() override;
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
@@ -97,12 +131,8 @@ public:
 	bool roomsMaxed() const;
 	bool roomNameOk(const string& name);
 private:
-	static Label* createRoom(string name, bool open);
+	 Label* createRoom(string name, bool open);
 };
-
-inline ProgLobby::ProgLobby(vector<pair<string, bool>>&& rooms) :
-	rooms(rooms)
-{}
 
 inline void ProgLobby::delRoom(const string& name) {
 	rlist->deleteWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin()));
@@ -133,31 +163,11 @@ public:
 
 	virtual void eventEscape() override;
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 
 	void updateStartButton();	// canStart only applies to State::host
 	void updateConfigWidgets();
-	static Popup* createPopupConfig();
-private:
-	static vector<Widget*> createConfigList(ConfigIO& wio, bool active);
-	static void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
-	static void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
-	static string tileFortressString(const Com::Config& cfg);
-	static string middleFortressString(const Com::Config& cfg);
-	static string pieceTotalString(const Com::Config& cfg);
 };
-
-inline string ProgRoom::tileFortressString(const Com::Config& cfg) {
-	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
-}
-
-inline string ProgRoom::middleFortressString(const Com::Config& cfg) {
-	return toStr(cfg.homeSize.x - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
-}
-
-inline string ProgRoom::pieceTotalString(const Com::Config& cfg) {
-	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
-}
 
 class ProgSetup : public ProgState {
 public:
@@ -179,6 +189,7 @@ private:
 	svec2 lastHold;		// position of last object that the cursor was dragged over
 	vector<uint16> counters;
 	Layout* icons;
+	Draglet* deleteIcon;
 
 public:
 	ProgSetup();
@@ -197,14 +208,17 @@ public:
 	uint16 getCount(uint8 type) const;
 	uint8 getSelected() const;
 	void selectNext(bool fwd);
+	bool getDeleteLock() const;
+	void setDeleteLock(bool on);
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 	Popup* createPopupSaveLoad(bool save);
 
 	void setSelected(uint8 sel);
 private:
-	static Layout* getTicons();
-	static Layout* getPicons();
+	void setInteractivity(bool dlock = false);
+	Layout* makeTicons();
+	Layout* makePicons();
 	uint8 findNextSelect(bool fwd);
 	void switchIcon(uint8 type, bool on, bool isTile);
 };
@@ -229,11 +243,19 @@ inline void ProgSetup::selectNext(bool fwd) {
 	setSelected(findNextSelect(fwd));
 }
 
+inline bool ProgSetup::getDeleteLock() const {
+	return deleteIcon->selected;
+}
+
+inline void ProgSetup::setDeleteLock(bool on) {
+	setInteractivity(deleteIcon->selected = on);
+}
+
 class ProgMatch : public ProgState {
 public:
 	Label* message;
 private:
-	Label* favorIcon;
+	Draglet* favorIcon;
 	Label* turnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 	uint16 unplacedDragons;
@@ -243,14 +265,20 @@ public:
 
 	virtual void eventEscape() override;
 	virtual void eventWheel(int ymov) override;
+	virtual void eventFavorize(bool on) override;
 	virtual void eventCameraReset() override;
+	bool selectFavorIcon(bool on);
 	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
 	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
 	void decreaseDragonIcon();
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 };
+
+inline bool ProgMatch::selectFavorIcon(bool on) {
+	return favorIcon ? favorIcon->selected = on : false;
+}
 
 class ProgSettings : public ProgState {
 public:
@@ -269,7 +297,7 @@ public:
 
 	virtual void eventEscape() override;
 	
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 
 	SDL_DisplayMode currentMode() const;
 	static string dispToFstr(const SDL_DisplayMode& mode);
@@ -288,21 +316,20 @@ public:
 
 	virtual void eventEscape() override;
 
-	virtual Layout* createLayout() override;
+	virtual RootLayout* createLayout() override;
 
 private:
-	static void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	static void appendCPU(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	static void appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	static void appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)());
-	static void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
-	static void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
-	static void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	static void appendAudioDevices(vector<Widget*>& lines, int width, vector<string>& titles, int iscapture);
-	static void appendDrivers(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(), const char* (*value)(int));
-	static void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
-	static void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
-
+	void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	void appendCPU(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	void appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	void appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)());
+	void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
+	void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
+	void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
+	void appendAudioDevices(vector<Widget*>& lines, int width, vector<string>& titles, int iscapture);
+	void appendDrivers(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(), const char* (*value)(int));
+	void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
+	void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
 	static string versionText(const SDL_version& ver);
 };
 

@@ -6,7 +6,6 @@ void Shape::init(ShaderGUI* gui) {
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
-	GLuint vbo;
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -15,15 +14,13 @@ void Shape::init(ShaderGUI* gui) {
 	glVertexAttribPointer(gui->vertex, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
 	glEnableVertexAttribArray(gui->uvloc);
 	glVertexAttribPointer(gui->uvloc, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-
-	glBindVertexArray(0);
-	glDeleteBuffers(1, &vbo);
 }
 
 void Shape::free(ShaderGUI* gui) {
 	glBindVertexArray(vao);
 	glDisableVertexAttribArray(gui->vertex);
 	glDisableVertexAttribArray(gui->uvloc);
+	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 }
 
@@ -68,7 +65,7 @@ void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, G
 	glUniform1f(World::gui()->zloc, z);
 	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_QUADS, 0, Shape::corners);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, Shape::corners);
 }
 
 // BUTTON
@@ -272,34 +269,34 @@ void Label::updateTextTex() {
 
 // DRAGLET
 
-Draglet::Draglet(Size relSize, BCall leftCall, BCall holdCall, BCall rightCall, GLuint bgTex, const vec4& color, const Texture& tooltip, string text, Alignment alignment, bool showBG, Layout* parent, sizet id) :
+Draglet::Draglet(Size relSize, BCall leftCall, BCall holdCall, BCall rightCall, GLuint bgTex, const vec4& color, const Texture& tooltip, string text, Alignment alignment, bool showTop, bool showBG, Layout* parent, sizet id) :
 	Label(relSize, std::move(text), leftCall, rightCall, tooltip, alignment, showBG, bgTex, color, parent, id),
-	dragging(false),
 	selected(false),
+	showTop(showTop),
+	showingTop(false),
 	hcall(holdCall)
 {}
 
 void Draglet::draw() const {
 	Rect frm = frame();
-	vec4 bclr = color * dimFactor;
-	vec4 tclr = vec4(dimFactor);
-	drawRect(rect(), frm, bclr, bgTex);
-	if (textTex.valid())
-		drawRect(textRect(), frm, tclr, textTex.getID());
+	if (drawRect(rect(), frm, color * dimFactor, bgTex); textTex.valid())
+		drawRect(textRect(), frm, dimFactor, textTex.getID());
 
 	if (selected) {
 		Rect rbg = rect();
-		drawRect(Rect(rbg.pos(), ivec2(rbg.w, olSize)), colorLight, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), colorLight, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), colorLight, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), colorLight, World::scene()->blank(), -1.f);
+		vec4 clr = colorLight * dimFactor;
+		drawRect(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->blank(), -1.f);
+		drawRect(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->blank(), -1.f);
+		drawRect(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
+		drawRect(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
 	}
-	if (dragging) {
-		ivec2 siz = size() / 2;
-		ivec2 pos = mousePos() - siz / 2;
-		drawRect(Rect(pos, siz), bclr, bgTex, -1.f);
-		if (textTex.valid())
-			drawRect(Rect(textPos(textTex, align, pos, siz, textMargin / 2), textTex.getRes() / 2), tclr, textTex.getID(), -1.f);
+}
+
+void Draglet::drawTop() const {
+	if (showingTop) {
+		ivec2 siz = size() / 2, pos = mousePos() - siz / 2;
+		if (drawRect(Rect(pos, siz), color * dimFactor, bgTex, -1.f);  textTex.valid())
+			drawRect(Rect(textPos(textTex, align, pos, siz, textMargin / 2), textTex.getRes() / 2), dimFactor, textTex.getID(), -1.f);
 	}
 }
 
@@ -310,15 +307,18 @@ void Draglet::onClick(const ivec2&, uint8 mBut) {
 
 void Draglet::onHold(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && lcall) {
-		dragging = true;
 		World::scene()->capture = this;
 		World::prun(hcall, this);
 	}
 }
 
+void Draglet::onDrag(const ivec2&, const ivec2&) {
+	showingTop = showTop;
+}
+
 void Draglet::onUndrag(uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {
-		dragging = false;
+		showingTop = false;
 		World::scene()->capture = nullptr;
 		World::prun(lcall, this);
 	}
@@ -467,7 +467,7 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 		confirm();
 		World::prun(ecall, this);
 		break;
-	case SDL_SCANCODE_ESCAPE:
+	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
 		cancel();
 	}
 }

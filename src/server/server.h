@@ -3,6 +3,8 @@
 #include "utils/text.h"
 #ifdef __APPLE__
 #include <SDL2_net/SDL_net.h>
+#elif defined(__ANDROID__) || defined(_WIN32)
+#include <SDL_net.h>
 #else
 #include <SDL2/SDL_net.h>
 #endif

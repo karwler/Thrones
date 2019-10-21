@@ -5,6 +5,7 @@
 // class that makes accessing stuff easier
 class World {
 public:
+	static constexpr char argExternal = 'e';
 	static constexpr char argSetup = 'd';
 
 	static Arguments args;
@@ -22,8 +23,8 @@ public:
 	template <class T> static T* state();
 	static Settings* sets();
 	static Scene* scene();
-	static ShaderGeometry* geom();
-	static ShaderGUI* gui();
+	static const ShaderGeometry* geom();
+	static const ShaderGUI* gui();
 
 #ifdef _WIN32
 	static void setArgs(PWSTR pCmdLine);
@@ -75,11 +76,11 @@ inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
-inline ShaderGeometry* World::geom() {
+inline const ShaderGeometry* World::geom() {
 	return windowSys.getGeom();
 }
 
-inline ShaderGUI* World::gui() {
+inline const ShaderGUI* World::gui() {
 	return windowSys.getGUI();
 }
 #ifdef _WIN32

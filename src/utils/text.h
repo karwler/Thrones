@@ -1,14 +1,24 @@
 #pragma once
 
-#if !defined(_DEBUG) && !defined(NDEBUG)
+#if !(defined(_DEBUG) || defined(DEBUG)) && !defined(NDEBUG)
 #define NDEBUG
+#elif defined(_DEBUG) && !defined(DEBUG)
+#define DEBUG
 #endif
 #ifdef DEBUG
 #define MALLOC_CHECK_ 2
 #endif
-#define SDL_MAIN_HANDLED
 
+#ifndef __ANDROID__
+#define SDL_MAIN_HANDLED
+#elif !defined(OPENGLES)
+#define OPENGLES
+#endif
+#if defined(__ANDROID__) || defined(_WIN32)
+#include <SDL.h>
+#else
 #include <SDL2/SDL.h>
+#endif
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <array>
@@ -72,6 +82,7 @@ constexpr char linend[] = "\n";
 #endif
 constexpr char defaultReadMode[] = "rb";
 constexpr char defaultWriteMode[] = "wb";
+constexpr char commonVersion[] = "0.4.1";
 
 // utility
 
@@ -351,17 +362,17 @@ inline string makeIniLine(const string& key, const string& val) {
 template <class T = string>
 T readFile(const string& file) {
 	T data;
-	FILE* ifh = fopen(file.c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
 	if (!ifh)
 		return data;
-	fseek(ifh, 0, SEEK_END);
-	ulong len = ulong(ftell(ifh));
-	fseek(ifh, 0, SEEK_SET);
+	int64 len = SDL_RWsize(ifh);
+	if (len <= 0)
+		return data;
 
-	data.resize(len);
-	if (sizet read = fread(data.data(), sizeof(*data.data()), data.size(), ifh); read != len)
+	data.resize(sizet(len));
+	if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read != data.size())
 		data.resize(read);
-	fclose(ifh);
+	SDL_RWclose(ifh);
 	return data;
 }
 

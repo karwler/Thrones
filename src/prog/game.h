@@ -118,7 +118,7 @@ public:
 	void prepareMatch();
 	void setOwnTilesInteract(Tile::Interact lvl, bool dim = false);
 	void setMidTilesInteract(Tile::Interact lvl, bool dim = false);
-	void setOwnPiecesVisible(bool on);
+	void setOwnPiecesVisible(bool on, bool event = true);
 	void disableOwnPiecesInteract(bool rigid, bool dim = false);
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^

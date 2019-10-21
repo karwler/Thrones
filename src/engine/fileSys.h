@@ -1,6 +1,9 @@
 #pragma once
 
 #include "utils/objects.h"
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
 
 struct Settings {
 	static constexpr char loopback[] = "127.0.0.1";
@@ -47,14 +50,15 @@ struct Setup {
 // handles all filesystem interactions
 class FileSys {
 private:
-	static constexpr char fileAudios[] = "data/audio.dat";
-	static constexpr char fileMaterials[] = "data/materials.dat";
-	static constexpr char fileObjects[] = "data/objects.dat";
-	static constexpr char fileConfigs[] = "data/game.ini";
-	static constexpr char fileSettings[] = "data/settings.ini";
-	static constexpr char fileSetups[] = "data/setup.ini";
-	static constexpr char fileShaders[] = "data/shaders.dat";
-	static constexpr char fileTextures[] = "data/textures.dat";
+	static string dirData, dirConfig;
+	static constexpr char fileAudios[] = "audio.dat";
+	static constexpr char fileMaterials[] = "materials.dat";
+	static constexpr char fileObjects[] = "objects.dat";
+	static constexpr char fileShaders[] = "shaders.dat";
+	static constexpr char fileTextures[] = "textures.dat";
+	static constexpr char fileConfigs[] = "game.ini";
+	static constexpr char fileSettings[] = "settings.ini";
+	static constexpr char fileSetups[] = "setup.ini";
 
 	static constexpr char iniKeywordMaximized[] = "maximized";
 	static constexpr char iniKeywordDisplay[] = "display";
@@ -88,7 +92,8 @@ private:
 	static constexpr char iniKeywordFar[] = "far";
 
 public:
-	static int setWorkingDir();
+	static void init();
+
 	static Settings* loadSettings();
 	static bool saveSettings(const Settings* sets);
 	static umap<string, Com::Config> loadConfigs(const char* file = fileConfigs);
@@ -101,11 +106,31 @@ public:
 	static umap<string, string> loadShaders();
 	static umap<string, Texture> loadTextures();
 
+	static string dataPath(const char* file);
+	static string configPath(const char* file);
 private:
+	static bool createDir(const string& path);
+
 	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
 	static void readShift(const string& line, Com::Config& conf);
 };
+
+inline string FileSys::dataPath(const char* file) {
+	return dirData + file;
+}
+
+inline string FileSys::configPath(const char* file) {
+	return dirConfig + file;
+}
+
+inline bool FileSys::createDir(const string& path) {
+#ifdef _WIN32
+	return CreateDirectoryW(stow(path).c_str(), 0);
+#else
+	return !mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+#endif
+}
 
 template <sizet N, sizet S>
 void FileSys::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {

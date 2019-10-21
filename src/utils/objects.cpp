@@ -51,10 +51,9 @@ GMesh::GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uin
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
-	GLuint vbo;
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(*vertices.data()), vertices.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(*vertices.data())), vertices.data(), GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(World::geom()->vertex);
 	glVertexAttribPointer(World::geom()->vertex, psiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
@@ -63,14 +62,9 @@ GMesh::GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uin
 	glEnableVertexAttribArray(World::geom()->uvloc);
 	glVertexAttribPointer(World::geom()->uvloc, tsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, tuv)));
 
-	GLuint ebo;
 	glGenBuffers(1, &ebo);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(*elements.data()), elements.data(), GL_STATIC_DRAW);
-
-	glBindVertexArray(0);
-	glDeleteBuffers(1, &vbo);
-	glDeleteBuffers(1, &ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(elements.size() * sizeof(*elements.data())), elements.data(), GL_STATIC_DRAW);
 }
 
 void GMesh::free() {
@@ -78,12 +72,14 @@ void GMesh::free() {
 	glDisableVertexAttribArray(World::geom()->vertex);
 	glDisableVertexAttribArray(World::geom()->normal);
 	glDisableVertexAttribArray(World::geom()->uvloc);
+	glDeleteBuffers(1, &ebo);
+	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 }
 
 // OBJECT
 
-Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
+Object::Object(const vec3& pos, const vec3& ert, const vec3& scl, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
 	mesh(mesh),
 	matl(matl),
 	coli(coli),
@@ -92,17 +88,17 @@ Object::Object(const vec3& pos, const vec3& rot, const vec3& scl, const GMesh* m
 	rigid(rigid),
 	pos(pos),
 	scl(scl),
-	rot(quat(rot))
+	rot(ert)
 {
 	setTransform(trans, normat, pos, rot, scl);
 }
 
 void Object::draw() const {
 	if (show) {
-		glBindVertexArray(mesh->vao);
+		glBindVertexArray(mesh->getVao());
 		updateTransform(trans, normat);
 		updateColor(matl->diffuse, matl->specular, matl->shininess, matl->alpha, tex);
-		glDrawElements(mesh->shape, mesh->ecnt, GMesh::elemType, nullptr);
+		glDrawElements(mesh->getShape(), mesh->getEcnt(), GMesh::elemType, nullptr);
 	}
 }
 
@@ -139,22 +135,22 @@ BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, G
 
 void BoardObject::draw() const {
 	if (show) {
-		glBindVertexArray(mesh->vao);
+		glBindVertexArray(mesh->getVao());
 		updateTransform(getTrans(), getNormat());
 		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->shininess, matl->alpha, tex);
-		glDrawElements(mesh->shape, mesh->ecnt, GMesh::elemType, nullptr);
+		glDrawElements(mesh->getShape(), mesh->getEcnt(), GMesh::elemType, nullptr);
 	}
 }
 
 void BoardObject::drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const {
 	vec3 ray = World::scene()->pickerRay(mousePos());
-	glBindVertexArray(tmesh->vao);
+	glBindVertexArray(tmesh->getVao());
 
 	mat4 model;
 	setTransform(model, World::scene()->getCamera()->getPos() - ray * (World::scene()->getCamera()->getPos().y / ray.y) + vec3(0.f, ypos, 0.f), getRot(), getScl());
 	updateTransform(model, getNormat());
 	updateColor(tdiffuse, matl->specular, matl->shininess, 0.9f, ttexture);
-	glDrawElements(tmesh->shape, tmesh->ecnt, GMesh::elemType, nullptr);
+	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), GMesh::elemType, nullptr);
 }
 
 void BoardObject::setRaycast(bool on, bool dim) {

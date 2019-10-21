@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=0.4.1
+Name=Thrones
+Exec=Thrones/thrones
+Icon=Thrones/data/thrones.bmp
+Comment=Thrones Board Game
+GenericName=Board Game
+Keywords=Board;Game
+Categories=Game
+Type=Application
+Terminal=false
+X-MultipleArgs=false
+StartupNotify=true

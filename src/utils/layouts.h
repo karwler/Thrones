@@ -4,9 +4,6 @@
 
 // container for other widgets
 class Layout : public Widget {
-public:
-	static constexpr int defaultItemSpacing = 5;
-
 protected:
 	vector<Widget*> widgets;
 	vector<ivec2> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
@@ -14,7 +11,7 @@ protected:
 	const bool vertical;				// how to arrange widgets
 
 public:
-	Layout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Layout() override;
 
 	virtual void draw() const override;
@@ -58,7 +55,7 @@ protected:
 	const vec4 bgColor;
 
 public:
-	RootLayout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = defaultBgColor);
+	RootLayout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, const vec4& bgColor = defaultBgColor);
 	virtual ~RootLayout() override = default;
 
 	virtual void draw() const override;
@@ -74,11 +71,11 @@ public:
 private:
 	Size sizeY;			// use Widget's relSize as sizeX
 
-	static constexpr int margin = defaultItemSpacing;
+	static constexpr int margin = 5;
 	static const vec4 colorBackground;
 
 public:
-	Popup(const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = defaultItemSpacing, const vec4& bgColor = uniformBgColor);
+	Popup(const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = 0, const vec4& bgColor = uniformBgColor);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
@@ -99,7 +96,7 @@ private:
 	static constexpr float scrollThrottle = 10.f;
 
 public:
-	ScrollArea(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = defaultItemSpacing, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	ScrollArea(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~ScrollArea() override = default;
 
 	virtual void draw() const override;

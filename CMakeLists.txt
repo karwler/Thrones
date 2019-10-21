@@ -1,21 +1,79 @@
-# project properties
 cmake_minimum_required(VERSION 3.10.2)
 project(Thrones LANGUAGES CXX)
 if(CMAKE_CONFIGURATION_TYPES)
 	set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
 endif()
 
-# additional stuff
-set(DATA_NAME "game_data")
-string(CONCAT SERVER_NAME ${PROJECT_NAME} "_Server")
-set(OVEN_NAME "toven")
+# target names and source/resource files
 
-# source files
-set(SRC_FILES
+set(SERVER_NAME "Server")
+set(DATA_NAME "assets")
+set(ADATA_NAME "${DATA_NAME}_android")
+set(OVEN_NAME "oven")
+
+set(ASSET_WAV
+	"rsc/audio/ammo.wav"
+	"rsc/audio/move.wav")
+
+set(ASSET_DAT
+	"rsc/data/cursor.bmp"
+	"rsc/data/romanesque.ttf"
+	"rsc/data/thrones.bmp")
+
+set(ASSET_MTL
+	"rsc/materials/regular.mtl")
+
+set(ASSET_OBJ
+	"rsc/objects/breached.obj"
+	"rsc/objects/catapult.obj"
+	"rsc/objects/crossbowman.obj"
+	"rsc/objects/dragon.obj"
+	"rsc/objects/elephant.obj"
+	"rsc/objects/fortress.obj"
+	"rsc/objects/ground.obj"
+	"rsc/objects/lancer.obj"
+	"rsc/objects/outline.obj"
+	"rsc/objects/plane.obj"
+	"rsc/objects/ranger.obj"
+	"rsc/objects/screen.obj"
+	"rsc/objects/spearman.obj"
+	"rsc/objects/table.obj"
+	"rsc/objects/throne.obj"
+	"rsc/objects/tile.obj"
+	"rsc/objects/trebuchet.obj"
+	"rsc/objects/warhorse.obj")
+
+set(ASSET_SHD
 	"rsc/shaders/geometry.frag"
 	"rsc/shaders/geometry.vert"
 	"rsc/shaders/gui.frag"
-	"rsc/shaders/gui.vert"
+	"rsc/shaders/gui.vert")
+
+set(ASSET_BMP
+	"rsc/textures/catapult.bmp"
+	"rsc/textures/crossbowman.bmp"
+	"rsc/textures/crosshair.bmp"
+	"rsc/textures/dragon.bmp"
+	"rsc/textures/elephant.bmp"
+	"rsc/textures/forest.bmp"
+	"rsc/textures/fortress.bmp"
+	"rsc/textures/grass.bmp"
+	"rsc/textures/lancer.bmp"
+	"rsc/textures/mountain.bmp"
+	"rsc/textures/plains.bmp"
+	"rsc/textures/ranger.bmp"
+	"rsc/textures/rock.bmp"
+	"rsc/textures/spearman.bmp"
+	"rsc/textures/throne.bmp"
+	"rsc/textures/title.bmp"
+	"rsc/textures/trebuchet.bmp"
+	"rsc/textures/wall.bmp"
+	"rsc/textures/warhorse.bmp"
+	"rsc/textures/water.bmp")
+
+set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_BMP})
+
+set(THRONES_SRC
 	"src/engine/audioSys.cpp"
 	"src/engine/audioSys.h"
 	"src/engine/fileSys.cpp"
@@ -48,219 +106,347 @@ set(SRC_FILES
 	"src/utils/utils.h"
 	"src/utils/widgets.cpp"
 	"src/utils/widgets.h")
-
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	list(APPEND SRC_FILES "rsc/resource.rc")
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	list(APPEND THRONES_SRC "rsc/thrones.rc")
 endif()
+list(APPEND THRONES_SRC ${ASSET_SHD})
 
-# library/framework directories
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	if(MSVC)
-		if(${CMAKE_SIZEOF_VOID_P} MATCHES "8")
-			set(LIB_DIR "${CMAKE_SOURCE_DIR}/lib/msvc64")
-		else()
-			set(LIB_DIR "${CMAKE_SOURCE_DIR}/lib/msvc32")
-		endif()
-	endif()
-	
-	link_directories(${LIB_DIR})
-	set(DLL_FILES
-		"libfreetype-6.dll"
-		"SDL2.dll"
-		"SDL2_net.dll"
-		"SDL2_ttf.dll"
-		"zlib1.dll")	
-elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-	find_library(LIB_SDL2 SDL2)
-	find_library(LIB_SDL2_NET SDL2_net)
-	find_library(LIB_SDL2_TTF SDL2_ttf)
-	find_library(LIB_OPENGL OpenGL)
-endif()
-
-# definitions
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	add_definitions(-D_UNICODE -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
-endif()
-
-if(CMAKE_CONFIGURATION_TYPES)
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -D_DEBUG")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
-elseif(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-	add_definitions(-DDEBUG -D_DEBUG)
-else()
-	add_definitions(-DNDEBUG)
-endif()
-
-# set main target
-add_executable(${PROJECT_NAME} ${SRC_FILES})
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
-add_dependencies(${PROJECT_NAME} ${DATA_NAME} ${SERVER_NAME})
-
-# include directories and link libraries
-include_directories("${CMAKE_SOURCE_DIR}/src")
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	include_directories("${CMAKE_SOURCE_DIR}/lib/includeGL" "${CMAKE_SOURCE_DIR}/lib/includeSDL")
-	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf glew32s glu32 opengl32)
-elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-	include_directories("${CMAKE_SOURCE_DIR}/lib/includeGL")
-	target_link_libraries(${PROJECT_NAME} ${LIB_SDL2} ${LIB_SDL2_NET} ${LIB_SDL2_TTF} ${LIB_OPENGL})
-else()
-	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf GLEW GLU GL)
-endif()
-
-# target properties
-set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
-set_target_properties(${PROJECT_NAME} PROPERTIES
-						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
-						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
-
-if((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
-	if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -no-pie")
-	else()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-covered-switch-default -Wno-exit-time-destructors -Wno-global-constructors")
-	endif()
-
-	if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-	else()
-		if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s")
-		endif()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-padded")
-	endif()
-
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
-endif()
-
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	set_target_properties(${PROJECT_NAME} PROPERTIES
-							OUTPUT_NAME ${PROJECT_NAME}
-							LINK_FLAGS "/SUBSYSTEM:WINDOWS")
-else()
-	string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
-	set_target_properties(${PROJECT_NAME} PROPERTIES
-							OUTPUT_NAME ${PROJECT_NAME_LOWER})
-endif()
-
-# post buils commands
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	foreach(dll_file ${DLL_FILES})
-		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-							COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIB_DIR}/${dll_file}" ${EXECUTABLE_OUTPUT_PATH})
-	endforeach()
-endif()
-
-# game data copier target
-file(GLOB ASSET_WAV LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/audio/*.wav")
-file(GLOB ASSET_DAT LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/data/*")
-file(GLOB ASSET_MTL LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/materials/*.mtl")
-file(GLOB ASSET_OBJ LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/objects/*.obj")
-file(GLOB ASSET_SHD LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/shaders/*.frag" "${CMAKE_SOURCE_DIR}/rsc/shaders/*.vert")
-file(GLOB ASSET_BMP LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/rsc/textures/*.bmp")
-set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_BMP})
-add_custom_target(${DATA_NAME} ALL
-					SOURCES ${DATA_SRC}
-					COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/rsc/data" "${EXECUTABLE_OUTPUT_PATH}/data"
-					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -a "${EXECUTABLE_OUTPUT_PATH}/data/audio.dat" ${ASSET_WAV}
-					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -m "${EXECUTABLE_OUTPUT_PATH}/data/materials.dat" ${ASSET_MTL}
-					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -o "${EXECUTABLE_OUTPUT_PATH}/data/objects.dat" ${ASSET_OBJ}
-					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -s "${EXECUTABLE_OUTPUT_PATH}/data/shaders.dat" ${ASSET_SHD}
-					COMMAND ${EXECUTABLE_OUTPUT_PATH}/${OVEN_NAME} -t "${EXECUTABLE_OUTPUT_PATH}/data/textures.dat" ${ASSET_BMP})
-add_dependencies(${DATA_NAME} ${OVEN_NAME})
-
-# set server program target
 set(SERVER_SRC
 	"src/server/server.cpp"
 	"src/server/server.h"
 	"src/server/serverProg.cpp"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
-add_executable(${SERVER_NAME} ${SERVER_SRC})
-target_compile_features(${SERVER_NAME} PUBLIC cxx_std_17)
-
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-	target_link_libraries(${SERVER_NAME} ${LIB_SDL2} ${LIB_SDL2_NET})
-else()
-	target_link_libraries(${SERVER_NAME} SDL2 SDL2_net)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	list(APPEND SERVER_SRC "rsc/server.rc")
 endif()
 
-set_target_properties(${SERVER_NAME} PROPERTIES
-						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
-						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	set_target_properties(${SERVER_NAME} PROPERTIES
-							OUTPUT_NAME ${SERVER_NAME}
-							LINK_FLAGS "/SUBSYSTEM:CONSOLE")
-else()
-	string(TOLOWER ${SERVER_NAME} SERVER_NAME_LOWER)
-	set_target_properties(${SERVER_NAME} PROPERTIES
-							OUTPUT_NAME ${SERVER_NAME_LOWER})
-endif()
-
-# set asset building program target
 set(OVEN_SRC
 	"src/oven/oven.cpp"
 	"src/oven/oven.h"
 	"src/oven/ovenProg.cpp"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
+
+# dependencies
+
+if(NOT VER_SDL)
+	set(VER_SDL "2.0.10")
+endif()
+if(NOT VER_NET)
+	set(VER_NET "2.0.1")
+endif()
+if(NOT VER_TTF)
+	set(VER_TTF "2.0.15")
+endif()
+if(NOT VER_GLEW)
+	set(VER_GLEW "2.1.0")
+endif()
+if(NOT VER_GLM)
+	set(VER_GLM "0.9.9.6")
+endif()
+set(DIR_LIB "${CMAKE_SOURCE_DIR}/lib")
+
+function(downloadLib URL DST)
+	get_filename_component(FILE "${URL}" NAME)
+	if(NOT EXISTS "${DST}/${FILE}")
+		message(STATUS "Downloading ${URL}")
+		file(DOWNLOAD "${URL}" "${DST}/${FILE}")
+
+		if(FILE MATCHES ".zip$")
+			execute_process(COMMAND "${CMAKE_COMMAND}" -E tar xf "${FILE}" WORKING_DIRECTORY "${DST}")
+		elseif(FILE MATCHES ".tar.gz$")
+			execute_process(COMMAND "${CMAKE_COMMAND}" -E tar xzf "${FILE}" WORKING_DIRECTORY "${DST}")
+		elseif(FILE MATCHES ".dmg$")
+			execute_process(COMMAND hdiutil attach "${DST}/${FILE}")
+			string(FIND "${FILE}" "-" FID)
+			string(SUBSTRING "${FILE}" 0 ${FID} FNAME)
+			file(COPY "/Volumes/${FNAME}/${FNAME}.framework" DESTINATION "${DST}")
+		endif()
+	else()
+		message(STATUS "Found ${DST}/${FILE}")
+	endif()
+endfunction()
+
+function(renameLibdir SRC DST)
+	if(EXISTS "${SRC}")
+		if(EXISTS "${DST}")
+			file(REMOVE_RECURSE "${DST}")
+		endif()
+		file(RENAME "${SRC}" "${DST}")
+	endif()
+endfunction()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+		set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}")
+		set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}")
+		set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}")
+		set(DIR_GLEW "${DIR_LIB}/glew-${VER_GLEW}")
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(BIN_SDL "${DIR_SDL}/lib/x64")
+			set(BIN_NET "${DIR_NET}/lib/x64")
+			set(BIN_TTF "${DIR_TTF}/lib/x64")
+		else()
+			set(BIN_SDL "${DIR_SDL}/lib/x86")
+			set(BIN_NET "${DIR_NET}/lib/x86")
+			set(BIN_TTF "${DIR_TTF}/lib/x86")
+		endif()
+		set(LIB_SDL "${BIN_SDL}")
+		set(LIB_NET "${BIN_NET}")
+		set(LIB_TTF "${BIN_TTF}")
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(LIB_GLEW "${DIR_GLEW}/lib/Release/x64")
+		else()
+			set(LIB_GLEW "${DIR_GLEW}/lib/Release/Win32")
+		endif()
+		set(INC_SDL "${DIR_SDL}/include")
+		set(INC_NET "${DIR_NET}/include")
+		set(INC_TTF "${DIR_TTF}/include")
+		set(URL_SDL "https://www.libsdl.org/release/SDL2-devel-${VER_SDL}-VC.zip")
+		set(URL_NET "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-${VER_NET}-VC.zip")
+		set(URL_TTF "https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-${VER_TTF}-VC.zip")
+		set(URL_GLEW "https://netix.dl.sourceforge.net/project/glew/glew/2.1.0/glew-${VER_GLEW}-win32.zip")
+	else()
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}/x86_64-w64-mingw32")
+			set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}/x86_64-w64-mingw32")
+			set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}/x86_64-w64-mingw32")
+		else()
+			set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}/i686-w64-mingw32")
+			set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}/i686-w64-mingw32")
+			set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}/i686-w64-mingw32")
+		endif()
+		set(DIR_GLEW "${DIR_LIB}/glew-${VER_GLEW}")
+		set(BIN_SDL "${DIR_SDL}/bin")
+		set(BIN_NET "${DIR_NET}/bin")
+		set(BIN_TTF "${DIR_TTF}/bin")
+		set(LIB_SDL "${DIR_SDL}/lib")
+		set(LIB_NET "${DIR_NET}/lib")
+		set(LIB_TTF "${DIR_TTF}/lib")
+		set(LIB_GLEW "${DIR_GLEW}/lib")
+		set(INC_SDL "${DIR_SDL}/include/SDL2")
+		set(INC_NET "${DIR_NET}/include/SDL2")
+		set(INC_TTF "${DIR_TTF}/include/SDL2")
+		set(URL_SDL "https://www.libsdl.org/release/SDL2-devel-${VER_SDL}-mingw.tar.gz")
+		set(URL_NET "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-${VER_NET}-mingw.tar.gz")
+		set(URL_TTF "https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-${VER_TTF}-mingw.tar.gz")
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(URL_GLEW "http://www.grhmedia.com/glew/glew-${VER_GLEW}-mingw-w64.zip")
+		else()
+			set(URL_GLEW "http://www.grhmedia.com/glew/glew-${VER_GLEW}-mingw.zip")
+		endif()
+	endif()
+	file(MAKE_DIRECTORY "${DIR_LIB}")
+	downloadLib("${URL_SDL}" "${DIR_LIB}")
+	downloadLib("${URL_NET}" "${DIR_LIB}")
+	downloadLib("${URL_TTF}" "${DIR_LIB}")
+	downloadLib("${URL_GLEW}" "${DIR_LIB}")
+	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
+
+	link_directories("${LIB_SDL}" "${LIB_NET}" "${LIB_TTF}" "${LIB_GLEW}")
+	include_directories("${INC_SDL}" "${INC_NET}" "${INC_TTF}" "${DIR_GLEW}/include" "${DIR_LIB}/glm")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	file(MAKE_DIRECTORY "${DIR_LIB}")
+	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.dmg" "${DIR_LIB}")
+	downloadLib("https://www.libsdl.org/projects/SDL_net/release/SDL2_net-${VER_NET}.dmg" "${DIR_LIB}")
+	downloadLib("https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-${VER_TTF}.dmg" "${DIR_LIB}")
+	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
+
+	find_library(LIB_SDL "SDL2" HINTS "${DIR_LIB}")
+	find_library(LIB_NET "SDL2_net" HINTS "${DIR_LIB}")
+	find_library(LIB_TTF "SDL2_ttf" HINTS "${DIR_LIB}")
+	find_library(LIB_OPENGL "OpenGL")
+	include_directories("${DIR_LIB}/glm")
+endif()
+include_directories("${CMAKE_SOURCE_DIR}/src")
+
+set(DIR_PAND "${CMAKE_SOURCE_DIR}/android")
+if(LIBDROID)
+	set(DIR_LDROID "${DIR_PAND}/app/jni")
+	set(DIR_ASDL "${DIR_LDROID}/SDL/android-project")
+
+	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.tar.gz" "${DIR_LDROID}")
+	downloadLib("https://www.libsdl.org/projects/SDL_net/release/SDL2_net-${VER_NET}.tar.gz" "${DIR_LDROID}")
+	downloadLib("https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-${VER_TTF}.tar.gz" "${DIR_LDROID}")
+	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LDROID}")
+	renameLibdir("${DIR_LDROID}/SDL2-${VER_SDL}" "${DIR_LDROID}/SDL")
+	renameLibdir("${DIR_LDROID}/SDL2_net-${VER_NET}" "${DIR_LDROID}/SDL_net")
+	renameLibdir("${DIR_LDROID}/SDL2_ttf-${VER_TTF}" "${DIR_LDROID}/SDL_ttf")
+	file(COPY "${DIR_ASDL}/gradle" "${DIR_ASDL}/build.gradle" "${DIR_ASDL}/gradle.properties" "${DIR_ASDL}/gradlew" "${DIR_ASDL}/gradlew.bat" "${DIR_ASDL}/settings.gradle" DESTINATION "${DIR_PAND}")
+	file(COPY "${DIR_ASDL}/app/src/main/java/org" DESTINATION "${DIR_PAND}/app/src/main/java")
+endif()
+
+# compiler/linker flags
+
+if(EXTERNAL)
+	add_definitions(-DEXTERNAL)
+endif()
+if(OPENGLES)
+	add_definitions(-DOPENGLES)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	add_definitions(-D_UNICODE -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
+endif()
+
+if(CMAKE_CONFIGURATION_TYPES)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNDEBUG")	
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -D_DEBUG")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	add_definitions(-DDEBUG -D_DEBUG)
+else()
+	add_definitions(-DNDEBUG)
+endif()
+
+set(FLG_ANY "-fno-pie -no-pie -fno-stack-protector -Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-switch -Wno-switch-enum -Wno-unused-result")
+set(FLG_DEBUG "-g")
+set(FLG_RELEASE "-O3 -s -Wno-padded")
+set(FLG_GNU "-Wall -Wextra -Wpedantic")
+set(FLG_CLANG "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-covered-switch-default -Wno-exit-time-destructors -Wno-global-constructors -Wno-unused-command-line-argument")
+
+if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLG_ANY}")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${FLG_ANY} ${FLG_DEBUG}")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${FLG_ANY} ${FLG_RELEASE}")
+	if(NOT CMAKE_CONFIGURATION_TYPES)
+		if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLG_DEBUG}")
+		else()
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLG_RELEASE}")
+		endif()
+	endif()
+	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLG_GNU}")
+		set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${FLG_GNU}")
+		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${FLG_GNU} ${FLG_GNU_RELEASE}")
+	else()
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLG_CLANG}")
+		set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${FLG_CLANG}")
+		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${FLG_CLANG}")
+	endif()
+endif()
+
+# main target
+
+function(setCommonTargetProperties TARGET_NAME OUT_DIR SUBSYSTEM)
+	set_target_properties(${TARGET_NAME} PROPERTIES
+							RUNTIME_OUTPUT_DIRECTORY "${OUT_DIR}"
+							RUNTIME_OUTPUT_DIRECTORY_DEBUG "${OUT_DIR}"
+							RUNTIME_OUTPUT_DIRECTORY_RELEASE "${OUT_DIR}")
+	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+		set_target_properties(${TARGET_NAME} PROPERTIES
+								OUTPUT_NAME ${TARGET_NAME}
+								LINK_FLAGS "/SUBSYSTEM:${SUBSYSTEM}")
+	else()
+		string(TOLOWER ${TARGET_NAME} TARGET_NAME_LOWER)
+		set_target_properties(${TARGET_NAME} PROPERTIES
+								OUTPUT_NAME ${TARGET_NAME_LOWER})
+	endif()
+endfunction()
+
+add_executable(${PROJECT_NAME} ${THRONES_SRC})
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+add_dependencies(${PROJECT_NAME} ${DATA_NAME})
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+
+set(DIR_RSC "${CMAKE_SOURCE_DIR}/rsc")
+set(EXE_DIR "${CMAKE_BINARY_DIR}/bin")
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	set(APP_DIR "${EXE_DIR}/${PROJECT_NAME}.app/Contents")
+	set(DATA_DIR "${APP_DIR}/Resources")
+	set(FRAM_DIR "${APP_DIR}/Frameworks")
+	set(FRAM_SDL "SDL2.framework")
+	set(FRAM_NET "SDL2_net.framework")
+	set(FRAM_TTF "SDL2_ttf.framework")
+
+	target_link_libraries(${PROJECT_NAME} "${LIB_SDL}" "${LIB_NET}" "${LIB_TTF}" "${LIB_OPENGL}")
+	setCommonTargetProperties(${PROJECT_NAME} "${APP_DIR}/MacOS" "")
+else()
+	set(DATA_DIR "${EXE_DIR}/data")
+
+	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf)
+	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+		target_link_libraries(${PROJECT_NAME} glew32s glu32 opengl32)
+	elseif(OPENGLES)
+		target_link_libraries(${PROJECT_NAME} GLESv2)
+	else()
+		target_link_libraries(${PROJECT_NAME} GLEW GLU GL)
+	endif()
+	setCommonTargetProperties(${PROJECT_NAME} "${EXE_DIR}" "WINDOWS")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_NET}/SDL2_net.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${FRAM_DIR}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_TTF}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_SDL}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_NET}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_TTF}" "${FRAM_DIR}/${FRAM_TTF}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/Info.plist" "${APP_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.icns" "${DATA_DIR}")
+else()
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
+
+endif()
+
+# game data copier targets
+
+function(addDataCopierTarget TARGET_NAME DST OPT_SHD OPT_BMP SINGLE_FILES)
+	add_custom_target(${TARGET_NAME} ALL SOURCES ${DATA_SRC}
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${SINGLE_FILES} "${DST}"
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" -a "${DST}/audio.dat" ${ASSET_WAV}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" -m "${DST}/materials.dat" ${ASSET_MTL}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" -o "${DST}/objects.dat" ${ASSET_OBJ}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST}/shaders.dat" ${ASSET_SHD}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_BMP} "${DST}/textures.dat" ${ASSET_BMP}
+						WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+	add_dependencies(${TARGET_NAME} ${OVEN_NAME})
+endfunction()
+
+if(OPENGLES)
+	addDataCopierTarget(${DATA_NAME} "${DATA_DIR}" "-S" "-T" "${ASSET_DAT}")
+else()
+	addDataCopierTarget(${DATA_NAME} "${DATA_DIR}" "-s" "-t" "${ASSET_DAT}")
+endif()
+addDataCopierTarget(${ADATA_NAME} "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf")
+
+# server program target
+
+add_executable(${SERVER_NAME} ${SERVER_SRC})
+target_compile_features(${SERVER_NAME} PUBLIC cxx_std_17)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	target_link_libraries(${SERVER_NAME} "${LIB_SDL}" "${LIB_NET}")
+else()
+	target_link_libraries(${SERVER_NAME} SDL2 SDL2_net)
+endif()
+setCommonTargetProperties(${SERVER_NAME} "${EXE_DIR}" "CONSOLE")
+
+# asset building program target
+
 add_executable(${OVEN_NAME} ${OVEN_SRC})
 target_compile_features(${OVEN_NAME} PUBLIC cxx_std_17)
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-	target_link_libraries(${OVEN_NAME} ${LIB_SDL2})
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	target_link_libraries(${OVEN_NAME} "${LIB_SDL}")
 else()
 	target_link_libraries(${OVEN_NAME} SDL2)
 endif()
+setCommonTargetProperties(${OVEN_NAME} "${EXE_DIR}" "CONSOLE")
 
-set_target_properties(${OVEN_NAME} PROPERTIES
-						RUNTIME_OUTPUT_DIRECTORY_DEBUG ${EXECUTABLE_OUTPUT_PATH}
-						RUNTIME_OUTPUT_DIRECTORY_RELEASE ${EXECUTABLE_OUTPUT_PATH})
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	set_target_properties(${OVEN_NAME} PROPERTIES
-							OUTPUT_NAME ${OVEN_NAME}
-							LINK_FLAGS "/SUBSYSTEM:CONSOLE")
-else()
-	set_target_properties(${OVEN_NAME} PROPERTIES
-							OUTPUT_NAME ${OVEN_NAME})
-endif()
+# prettyfiers
 
-# I don't know how to make these work in a function
-if(MSVC)
-	foreach(source IN LISTS SRC_FILES)
-		get_filename_component(dirs ${source} PATH)
-		string(REPLACE "/" ";" dirs "${dirs}")
-		list(REMOVE_AT dirs 0)
-		list(INSERT dirs 0 "Source")
-		string(REPLACE ";" "\\" dirs "${dirs}")
-		source_group("${dirs}" FILES ${source})
-	endforeach()
-
-	foreach(source IN LISTS DATA_SRC)
-		get_filename_component(dirs ${source} PATH)
-		string(REPLACE "${CMAKE_SOURCE_DIR}/rsc" "" dirs "${dirs}")
-		string(REPLACE "/" ";" dirs "${dirs}")
-		list(INSERT dirs 0 "Source")
-		string(REPLACE ";" "\\" dirs "${dirs}")
-		source_group("${dirs}" FILES ${source})
-	endforeach()
-
-	foreach(source IN LISTS SERVER_SRC)
-		get_filename_component(dirs ${source} PATH)
-		string(REPLACE "/" ";" dirs "${dirs}")
-		list(REMOVE_AT dirs 0)
-		list(INSERT dirs 0 "Source")
-		string(REPLACE ";" "\\" dirs "${dirs}")
-		source_group("${dirs}" FILES ${source})
-	endforeach()
-
-	foreach(source IN LISTS OVEN_SRC)
-		get_filename_component(dirs ${source} PATH)
-		string(REPLACE "/" ";" dirs "${dirs}")
-		list(REMOVE_AT dirs 0)
-		list(INSERT dirs 0 "Source")
-		string(REPLACE ";" "\\" dirs "${dirs}")
-		source_group("${dirs}" FILES ${source})
-	endforeach()
-endif()
+set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC})
+foreach(FSRC IN LISTS ALL_SRC)
+	get_filename_component(FGRP "${FSRC}" DIRECTORY)
+	string(REPLACE "/" ";" FGRP "${FGRP}")
+	list(REMOVE_AT FGRP 0)
+	list(INSERT FGRP 0 "Source")
+	string(REPLACE ";" "\\" FGRP "${FGRP}")
+	source_group("${FGRP}" FILES "${FSRC}")
+endforeach()

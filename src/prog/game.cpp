@@ -218,7 +218,7 @@ void Game::updateFavorState() {
 Com::Tile Game::pollFavor() {
 	Com::Tile favor = checkFavor();
 	if (ffpad.show) {
-		favorState.piece = nullptr;
+		favorState = FavorState();
 		updateFavorState();
 	}
 	return favor;
@@ -345,7 +345,7 @@ void Game::setTiles(Tile* tiles, int16 yofs, bool inter) {
 
 void Game::setMidTiles() {
 	for (int8 i = 0; i < config.homeSize.x; i++)
-		*tiles.mid(i) = Tile(gtop(svec2(i, 0)), config.objectSize, Com::Tile::empty, nullptr, &Program::eventMoveTile, nullptr, false, false);
+		*tiles.mid(i) = Tile(gtop(svec2(i, 0)), config.objectSize, Com::Tile::empty, nullptr, nullptr, nullptr, false, false);
 }
 
 void Game::setPieces(Piece* pieces, float rot, const Material* matl) {
@@ -370,9 +370,9 @@ void Game::setPieceInteract(Piece* piece, bool on, bool dim, GCall hgcall, GCall
 	piece->urcall = urcall;
 }
 
-void Game::setOwnPiecesVisible(bool on) {
+void Game::setOwnPiecesVisible(bool on, bool event) {
 	for (Piece* it = pieces.own(); it != pieces.ene(); it++)
-		if (setPieceInteract(it, on, false, nullptr, on ? &Program::eventMovePiece : nullptr, nullptr); pieceOnHome(it))
+		if (setPieceInteract(it, on, false, nullptr, on && event ? &Program::eventMovePiece : nullptr, nullptr); pieceOnHome(it))
 			it->setActive(on);
 }
 

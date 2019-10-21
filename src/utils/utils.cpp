@@ -22,7 +22,7 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 
 Texture::Texture(SDL_Surface* img) {
 	if (img) {
-		id = loadGL(res = ivec2(img->w, img->h), GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
+		id = loadGL(res = ivec2(img->w, img->h), GL_RGBA8, defaultFormat4, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
 		SDL_FreeSurface(img);
 	} else
 		*this = Texture();

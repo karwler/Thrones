@@ -32,22 +32,37 @@ public:
 // vertex data that's shared between objects
 class GMesh {
 public:
-	GLuint vao;
-	uint16 ecnt;	// number of elements
-	uint8 shape;	// GLenum for how to handle elements
-
 	static constexpr GLenum elemType = GL_UNSIGNED_SHORT;
 private:
 	static constexpr uint psiz = 3, pofs = 0;
 	static constexpr uint nsiz = 3, nofs = 3;
 	static constexpr uint tsiz = 2, tofs = 6;
 
+	GLuint vao, vbo, ebo;
+	uint16 ecnt;	// number of elements
+	uint8 shape;	// GLenum for how to handle elements
+
 public:
 	GMesh();
 	GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape = GL_TRIANGLES);
 
 	void free();
+	GLuint getVao() const;
+	uint16 getEcnt() const;
+	uint8 getShape() const;
 };
+
+inline GLuint GMesh::getVao() const {
+	return vao;
+}
+
+inline uint16 GMesh::getEcnt() const {
+	return ecnt;
+}
+
+inline uint8 GMesh::getShape() const {
+	return shape;
+}
 
 #define DCLASS_CONSTRUCT(Class, Base) \
 	Class() = default; \
@@ -86,7 +101,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Object, Interactable)
-	Object(const vec3& pos, const vec3& rot = vec3(0.f), const vec3& scl = vec3(1.f), const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = false, bool show = true);
+	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = false, bool show = true);
 
 	virtual void draw() const;
 

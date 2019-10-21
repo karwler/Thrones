@@ -3,8 +3,8 @@
 MAINICON ICON "thrones.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1,0,0,0
-PRODUCTVERSION 1,0,0,0
+FILEVERSION 0,4,1,0
+PRODUCTVERSION 0,4,1,0
 FILETYPE 0x1L
 
 BEGIN
@@ -13,11 +13,11 @@ BEGIN
 		BLOCK "040904e4"
 		BEGIN
 			VALUE "FileDescription", "Thrones"
-			VALUE "FileVersion", "1.0.0.0\0"
+			VALUE "FileVersion", "0.4.1"
 			VALUE "InternalName", "thrones"
 			VALUE "OriginalFilename", "Thrones.exe"
 			VALUE "ProductName", "Thrones"
-			VALUE "ProductVersion", "1.0.0.0\0"
+			VALUE "ProductVersion", "0.4.1"
 		END
 	END
 

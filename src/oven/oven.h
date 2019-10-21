@@ -1,8 +1,14 @@
 #pragma once
 
 #include "utils/text.h"
-#ifdef __APPLE
+#ifdef __APPLE__
+#ifdef OPENGLES
+#include <OpenGLES/ES3/gl.h>
+#else
 #include <OpenGL/gl.h>
+#endif
+#elif defined(OPENGLES)
+#include <GLES3/gl3.h>
 #else
 #ifdef _WIN32
 #define GLEW_STATIC
@@ -51,3 +57,17 @@ struct Vertex {
 	Vertex() = default;
 	Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv);
 };
+
+#ifdef __APPLE__
+inline void glBindVertexArray(GLuint arr) {
+	glBindVertexArrayAPPLE(arr);
+}
+
+inline void glGenVertexArrays(GLsizei n, GLuint* arrs) {
+	glGenVertexArraysAPPLE(n, arrs);
+}
+
+inline void glDeleteVertexArrays(GLsizei n, const GLuint* arrs) {
+	glDeleteVertexArraysAPPLE(n, arrs);
+}
+#endif

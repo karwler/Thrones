@@ -44,6 +44,12 @@ inline ivec2 mousePos() {
 	return p;
 }
 
+#ifdef OPENGLES
+inline void glClearDepth(double d) {
+	glClearDepthf(float(d));
+}
+#endif
+
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
@@ -107,6 +113,14 @@ inline Rect Rect::intersect(const Rect& rect) const {
 
 class Texture {
 private:
+#ifdef OPENGLES
+	static constexpr GLenum defaultFormat3 = GL_RGB;
+	static constexpr GLenum defaultFormat4 = GL_RGBA;
+#else
+	static constexpr GLenum defaultFormat3 = GL_BGR;
+	static constexpr GLenum defaultFormat4 = GL_BGRA;
+#endif
+
 	GLuint id;
 	ivec2 res;
 
@@ -121,7 +135,7 @@ public:
 	ivec2 getRes() const;
 	bool valid() const;
 
-	static Texture loadBlank(const vec3& color = vec3(1.f));
+	static Texture loadBlank();
 private:
 	static GLuint loadGL(const ivec2& size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter);
 };
@@ -144,11 +158,12 @@ inline ivec2 Texture::getRes() const {
 }
 
 inline bool Texture::valid() const {
-	return res.x != 0 && res.y != 0;
+	return res.x && res.y;
 }
 
-inline Texture Texture::loadBlank(const vec3& color) {
-	return Texture(loadGL(ivec2(1), GL_RGB8, GL_BGR, GL_FLOAT, &color, GL_CLAMP_TO_EDGE, GL_NEAREST), ivec2(1));
+inline Texture Texture::loadBlank() {
+	constexpr uint8 color[3] = { 255, 255, 255 };
+	return Texture(loadGL(ivec2(1), GL_RGB8, defaultFormat3, GL_UNSIGNED_BYTE, color, GL_CLAMP_TO_EDGE, GL_NEAREST), ivec2(1));
 }
 
 // for Object and Widget
@@ -228,6 +243,12 @@ bool outRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const 
 template <class T, glm::qualifier Q = glm::defaultp>
 glm::vec<2, T, Q> swap(const T& x, const T& y, bool swap) {
 	return swap ? glm::vec<2, T, Q>(y, x) : glm::vec<2, T, Q>(x, y);
+}
+
+template <class T>
+T swapBits(T n, uint8 i, uint8 j) {
+	T x = ((n >> i) & 1) ^ ((n >> j) & 1);
+	return n ^ ((x << i) | (x << j));
 }
 
 // container stuff

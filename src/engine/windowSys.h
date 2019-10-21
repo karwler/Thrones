@@ -6,18 +6,26 @@
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
+#if defined(__ANDROID__) || defined(_WIN32)
+#include <SDL_ttf.h>
+#else
 #include <SDL2/SDL_ttf.h>
+#endif
 #endif
 
 // loads different font sizes from one font and handles basic log display
 class FontSet {
 private:
-	static constexpr char fileFont[] = "data/romanesque.ttf";
+	static constexpr char fileFont[] = "romanesque.ttf";
 	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
 	static constexpr int fontTestHeight = 100;
 	static constexpr int logSize = 18;
 	static constexpr float fallbackScale = 0.9f;
+#ifdef OPENGLES
+	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// R and B need to be flipped
+#else
 	static constexpr SDL_Color textColor = { 255, 193, 37, 255 };
+#endif
 	static constexpr SDL_Color logColor = { 230, 220, 220, 220 };
 
 	float heightScale;	// for scaling down font size to fit requested height
@@ -37,7 +45,7 @@ public:
 	Texture render(const string& text, int height);
 	Texture render(const string& text, int height, uint length);
 
-	void writeLog(string&& text, const ivec2& res);
+	void writeLog(string&& text, const ShaderGUI* gui, const ivec2& res);
 	void closeLog();	// doesn't get called in destructor
 
 private:
@@ -67,15 +75,29 @@ public:
 
 private:
 	static GLuint loadShader(const string& source, GLenum type);
+	template <class C, class I> static void checkStatus(GLuint id, GLenum stat, C check, I info);
 };
 
 inline Shader::~Shader() {
 	glDeleteProgram(program);
 }
 
+template <class C, class I>
+void Shader::checkStatus(GLuint id, GLenum stat, C check, I info) {
+	GLint res;
+	if (check(id, stat, &res); res == GL_FALSE) {
+		string err;
+		check(id, GL_INFO_LOG_LENGTH, &res);
+		err.resize(sizet(res));
+		info(id, res, nullptr, err.data());
+		throw std::runtime_error(err);
+	}
+}
+
 class ShaderGeometry : public Shader {
 public:
-	GLint pview, model, normat, vertex, uvloc, normal, texsamp, viewPos;
+	GLuint vertex, uvloc, normal;
+	GLint pview, model, normat, texsamp, viewPos;
 	GLint materialDiffuse, materialSpecular, materialShininess, materialAlpha;
 	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
@@ -85,29 +107,23 @@ public:
 
 class ShaderGUI : public Shader {
 public:
-	GLint pview, rect, uvrc, zloc, vertex, uvloc;
+	GLuint vertex, uvloc;
+	GLint pview, rect, uvrc, zloc;
 	GLint color, texsamp;
-private:
 	Shape wrect;
 
 public:
 	ShaderGUI(const string& srcVert, const string& srcFrag);
 	~ShaderGUI();
-
-	void bindRect() const;
 };
-
-inline void ShaderGUI::bindRect() const {
-	glBindVertexArray(wrect.vao);
-}
 
 // handles window events and contains video settings
 class WindowSys {
 public:
 	static constexpr char title[] = "Thrones";
 private:
-	static constexpr char fileIcon[] = "data/thrones.bmp";
-	static constexpr char fileCursor[] = "data/cursor.bmp";
+	static constexpr char fileIcon[] = "thrones.bmp";
+	static constexpr char fileCursor[] = "cursor.bmp";
 	static constexpr char fileSceneVert[] = "geometry.vert";
 	static constexpr char fileSceneFrag[] = "geometry.frag";
 	static constexpr char fileGuiVert[] = "gui.vert";
@@ -116,7 +132,9 @@ private:
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
 	static constexpr uint8 fallbackCursorSize = 18;
-	
+	static constexpr float logTexUV[4] = { 0.f, 0.f, 1.f, 1.f };
+	static constexpr float logTexColor[4] = { 1.f, 1.f, 1.f, 1.f };
+
 	uptr<AudioSys> audio;
 	uptr<Program> program;
 	uptr<Scene> scene;
@@ -135,10 +153,9 @@ private:
 public:
 	WindowSys();
 
-	int start();
+	void start();
 	void close();
 
-	float getDSec() const;
 	ivec2 getView() const;
 	uint8 getCursorHeight() const;
 	vector<ivec2> displaySizes() const;
@@ -156,8 +173,8 @@ public:
 	Program* getProgram();
 	Scene* getScene();
 	Settings* getSets();
-	ShaderGeometry* getGeom();
-	ShaderGUI* getGUI();
+	const ShaderGeometry* getGeom() const;
+	const ShaderGUI* getGUI() const;
 
 private:
 	void init();
@@ -179,10 +196,6 @@ private:
 
 inline void WindowSys::close() {
 	run = false;
-}
-
-inline float WindowSys::getDSec() const {
-	return dSec;
 }
 
 inline ivec2 WindowSys::getView() const {
@@ -213,11 +226,11 @@ inline Settings* WindowSys::getSets() {
 	return sets.get();
 }
 
-inline ShaderGeometry* WindowSys::getGeom() {
+inline const ShaderGeometry* WindowSys::getGeom() const {
 	return geom.get();
 }
 
-inline ShaderGUI* WindowSys::getGUI() {
+inline const ShaderGUI* WindowSys::getGUI() const {
 	return gui.get();
 }
 
@@ -231,6 +244,9 @@ inline uint32 WindowSys::windowID() const {
 
 template <class T>
 bool WindowSys::checkResolution(T& val, const vector<T>& modes) {
+#ifdef __ANDROID__
+	return true;
+#else
 	typename vector<T>::const_iterator it;
 	if (it = std::find(modes.begin(), modes.end(), val); it != modes.end() || modes.empty())
 		return true;
@@ -238,4 +254,5 @@ bool WindowSys::checkResolution(T& val, const vector<T>& modes) {
 	for (it = modes.begin(); it != modes.end() && *it < val; it++);
 	val = it == modes.begin() ? *it : *(it - 1);
 	return false;
+#endif
 }

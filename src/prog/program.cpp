@@ -32,21 +32,25 @@ void Program::eventConnectCancel(Button*) {
 
 void Program::eventUpdateAddress(Button* but) {
 	World::sets()->address = static_cast<LabelEdit*>(but)->getText();
+	eventSaveSettings();
 }
 
 void Program::eventResetAddress(Button* but) {
 	World::sets()->address = Settings::loopback;
 	static_cast<LabelEdit*>(but)->setText(World::sets()->address);
+	eventSaveSettings();
 }
 
 void Program::eventUpdatePort(Button* but) {
 	World::sets()->port = uint16(sstoul(static_cast<LabelEdit*>(but)->getText()));
 	static_cast<LabelEdit*>(but)->setText(toStr(World::sets()->port));
+	eventSaveSettings();
 }
 
 void Program::eventResetPort(Button* but) {
 	World::sets()->port = Com::defaultPort;
 	static_cast<LabelEdit*>(but)->setText(toStr(World::sets()->port));
+	eventSaveSettings();
 }
 
 // LOBBY MENU
@@ -63,7 +67,7 @@ void Program::eventOpenLobby(uint8* data) {
 }
 
 void Program::eventHostRoomInput(Button*) {
-	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventHostRoomRequest, Com::roomNameLimit));
+	World::scene()->setPopup(state->createPopupInput("Name:", &Program::eventHostRoomRequest, Com::roomNameLimit));
 }
 
 void Program::eventHostRoomRequest(Button*) {
@@ -76,9 +80,9 @@ void Program::eventHostRoomRequest(Button*) {
 			throw "Name taken";
 		netcp->sendData(writeRoomName(Com::Code::rnew, name));
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to create room: ") + err.message, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(string("Failed to create room: ") + err.message, &Program::eventClosePopup));
 	} catch (const char* err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 
@@ -87,14 +91,14 @@ void Program::eventHostRoomReceive(uint8* data) {
 		info = (info | INF_HOST) & ~INF_GUEST_WAITING;
 		eventOpenRoom();
 	} else
-		World::scene()->setPopup(ProgState::createPopupMessage("Failed to host room", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Failed to host room", &Program::eventClosePopup));
 }
 
 void Program::eventJoinRoomRequest(Button* but) {
 	try {
 		netcp->sendData(writeRoomName(Com::Code::join, static_cast<Label*>(but)->getText()));
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to join room: ") + err.message, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(string("Failed to join room: ") + err.message, &Program::eventClosePopup));
 	}
 }
 
@@ -117,7 +121,7 @@ void Program::eventStartGame(Button*) {
 	try {
 		game.sendStart();
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to start game: ") + err.message, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(string("Failed to start game: ") + err.message, &Program::eventClosePopup));
 	}
 }
 
@@ -161,7 +165,7 @@ void Program::eventConfigDelete(Button*) {
 }
 
 void Program::eventConfigCopyInput(Button*) {
-	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventConfigCopy));
+	World::scene()->setPopup(state->createPopupInput("Name:", &Program::eventConfigCopy));
 }
 
 void Program::eventConfigCopy(Button*) {
@@ -170,11 +174,11 @@ void Program::eventConfigCopy(Button*) {
 		setSaveConfig(ph->confs.emplace(name, game.config).first->first);
 		World::scene()->resetLayouts();
 	} else
-		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
 void Program::eventConfigNewInput(Button*) {
-	World::scene()->setPopup(ProgState::createPopupInput("Name:", &Program::eventConfigNew));
+	World::scene()->setPopup(state->createPopupInput("Name:", &Program::eventConfigNew));
 }
 
 void Program::eventConfigNew(Button*) {
@@ -183,7 +187,7 @@ void Program::eventConfigNew(Button*) {
 		setSaveConfig(ph->confs.emplace(name, Com::Config()).first->first);
 		World::scene()->resetLayouts();
 	} else
-		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
 void Program::eventUpdateConfig(Button*) {
@@ -226,7 +230,7 @@ void Program::postConfigUpdate() {
 		if ((info & (INF_UNIQ | INF_GUEST_WAITING)) == INF_GUEST_WAITING)	// only send if is host on remote server with guest
 			game.sendConfig();
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to send config data: ") + err.message, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(string("Failed to send config data: ") + err.message, &Program::eventClosePopup));
 	}
 	pr->confs[game.configName] = game.config;
 	FileSys::saveConfigs(pr->confs);
@@ -256,7 +260,7 @@ void Program::eventExitRoom(Button*) {
 		World::netcp()->sendData(Com::Code::leave);
 	} catch (const NetcpException& err) {
 		disconnect();
-		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventOpenMainMenu));
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventOpenMainMenu));
 	}
 }
 
@@ -400,9 +404,9 @@ void Program::eventSetupNext(Button*) {
 			ps->enemyReady ? eventOpenMatch() : eventShowWaitPopup();
 		}
 	} catch (const string& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(string("Failed to send setup: ") + err.message, &Program::eventAbortGame));
+		World::scene()->setPopup(state->createPopupMessage(string("Failed to send setup: ") + err.message, &Program::eventAbortGame));
 	}
 }
 
@@ -414,7 +418,7 @@ void Program::eventSetupBack(Button*) {
 }
 
 void Program::eventShowWaitPopup(Button*) {
-	World::scene()->setPopup(ProgState::createPopupMessage("Waiting for player...", &Program::eventAbortGame, "Exit"));
+	World::scene()->setPopup(state->createPopupMessage("Waiting for player...", &Program::eventAbortGame, "Exit"));
 }
 
 void Program::eventOpenSetupSave(Button*) {
@@ -430,7 +434,7 @@ void Program::eventSetupNew(Button* but) {
 	if (umap<string, Setup>& setups = static_cast<ProgSetup*>(state.get())->setups; setups.find(name) == setups.end())
 		popuplateSetup(setups.emplace(name, Setup()).first->second);
 	else
-		World::scene()->setPopup(ProgState::createPopupMessage("Name taken", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Name taken", &Program::eventClosePopup));
 }
 
 void Program::eventSetupSave(Button* but) {
@@ -496,7 +500,12 @@ void Program::eventSetupLoad(Button* but) {
 }
 
 void Program::eventShowConfig(Button*) {
-	World::scene()->setPopup(ProgRoom::createPopupConfig());
+	World::scene()->setPopup(state->createPopupConfig());
+}
+
+void Program::eventSwitchSetupButtons(Button*) {
+	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ps->setDeleteLock(!ps->getDeleteLock());
 }
 
 // GAME MATCH
@@ -521,6 +530,10 @@ void Program::eventPlaceDragon(Button*) {
 		game.placeDragon(pos, pce);
 }
 
+void Program::eventSwitchFavor(Button*) {
+	state->eventFavorize(!game.favorState.use);
+}
+
 void Program::eventFavorStart(BoardObject* obj, uint8) {
 	game.favorState.piece = static_cast<Piece*>(obj);
 	game.updateFavorState();
@@ -537,7 +550,7 @@ void Program::eventMove(BoardObject* obj, uint8 mBut) {
 		if (!err.empty())
 			static_cast<ProgMatch*>(state.get())->message->setText(err);
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
 	}
 }
 
@@ -551,7 +564,7 @@ void Program::eventFire(BoardObject* obj, uint8) {
 		if (!err.empty())
 			static_cast<ProgMatch*>(state.get())->message->setText(err);
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
 	}
 }
 
@@ -563,7 +576,7 @@ void Program::eventAbortGame(Button*) {
 		netcp->sendData(Com::Code::leave);
 	} catch (const NetcpException& err) {
 		disconnect();
-		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventOpenMainMenu));
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventOpenMainMenu));
 	}
 }
 
@@ -582,7 +595,7 @@ void Program::uninitGame() {
 void Program::finishMatch(bool win) {
 	if (info & INF_UNIQ)
 		disconnect();
-	World::scene()->setPopup(ProgState::createPopupMessage(win ? "You win" : "You lose", &Program::eventPostFinishMatch));
+	World::scene()->setPopup(state->createPopupMessage(win ? "You win" : "You lose", &Program::eventPostFinishMatch));
 }
 
 void Program::eventPostFinishMatch(Button*) {
@@ -594,7 +607,7 @@ void Program::eventPostFinishMatch(Button*) {
 		if (eventOpenRoom(); info & INF_GUEST_WAITING)
 			eventPlayerHello(false);
 	} catch (const NetcpException& err) {
-		World::scene()->setPopup(ProgState::createPopupMessage(err.message, &Program::eventAbortGame));
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
 	}
 }
 
@@ -607,9 +620,9 @@ void Program::eventPlayerLeft() {
 	if (uninitGame(); info & INF_HOST) {
 		info &= ~INF_GUEST_WAITING;
 		eventOpenRoom();
-		World::scene()->setPopup(ProgState::createPopupMessage("Player left", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Player left", &Program::eventClosePopup));
 	} else
-		World::scene()->setPopup(ProgState::createPopupMessage("Host left", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Host left", &Program::eventClosePopup));
 }
 
 // SETTINGS
@@ -625,10 +638,12 @@ void Program::eventApplySettings(Button*) {
 	ps->screen->setCurOpt(uint8(World::sets()->screen));
 	ps->winSize->setText(toStr(World::sets()->size, ProgSettings::rv2iSeparator));
 	ps->dspMode->setText(ProgSettings::dispToFstr(World::sets()->mode));
+	eventSaveSettings();
 }
 
 void Program::eventSetVsync(Button* but) {
 	World::window()->setVsync(Settings::VSync(static_cast<SwitchBox*>(but)->getCurOpt() - 1));
+	eventSaveSettings();
 }
 
 void Program::eventSetSamples(Button* but) {
@@ -645,6 +660,7 @@ void Program::eventSetGammaLE(Button* but) {
 	World::window()->setGamma(sstof(le->getText()));
 	le->setText(toStr(World::sets()->gamma));
 	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->gamma * ProgSettings::gammaStepFactor));
+	eventSaveSettings();
 }
 
 void Program::eventSetVolumeSL(Button* but) {
@@ -657,10 +673,15 @@ void Program::eventSetVolumeLE(Button* but) {
 	World::sets()->avolume = std::clamp(uint8(sstoul(le->getText())), uint8(0), uint8(SDL_MIX_MAXVOLUME));
 	le->setText(toStr(World::sets()->avolume));
 	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(World::sets()->avolume);
+	eventSaveSettings();
 }
 
 void Program::eventResetSettings(Button*) {
 	World::window()->resetSettings();
+}
+
+void Program::eventSaveSettings(Button*) {
+	FileSys::saveSettings(World::sets());
 }
 
 void Program::eventOpenInfo(Button*) {
@@ -689,10 +710,10 @@ void Program::connect(Netcp* net, const char* msg) {
 	try {
 		netcp.reset(net);
 		netcp->connect();
-		World::scene()->setPopup(ProgState::createPopupMessage(msg, &Program::eventConnectCancel, "Cancel"));
+		World::scene()->setPopup(state->createPopupMessage(msg, &Program::eventConnectCancel, "Cancel"));
 	} catch (const char* err) {
 		disconnect();
-		World::scene()->setPopup(ProgState::createPopupMessage(err, &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 

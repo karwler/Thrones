@@ -131,7 +131,7 @@ private:
 	uint32 moveTime;	// timestamp of last recorded mouseMove
 	Camera camera;
 	vector<Object*> objects;
-	uptr<Layout> layout;
+	uptr<RootLayout> layout;
 	uptr<Popup> popup;
 	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
@@ -144,6 +144,7 @@ private:
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
 	static constexpr uint32 moveTimeout = 50;
+
 public:
 	Scene();
 	~Scene();
@@ -158,6 +159,10 @@ public:
 	void onMouseUp(const SDL_MouseButtonEvent& but);
 	void onMouseWheel(const SDL_MouseWheelEvent& whe);
 	void onMouseLeave();
+	void onFingerMove(const SDL_TouchFingerEvent& fin);
+	void onFingerGesture(const SDL_MultiGestureEvent& ges);
+	void onFingerDown(const SDL_TouchFingerEvent& fin);
+	void onFingerUp(const SDL_TouchFingerEvent& fin);
 	void onText(const char* str);
 
 	const CMesh* collim(const string& name) const;

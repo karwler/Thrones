@@ -3,7 +3,7 @@
 // FONT SET
 
 FontSet::FontSet() :
-	fontData(readFile<vector<uint8>>(fileFont))
+	fontData(readFile<vector<uint8>>(FileSys::dataPath(fileFont)))
 {
 	if (!(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight)))
 		throw std::runtime_error(TTF_GetError());
@@ -39,7 +39,7 @@ int FontSet::length(const string& text, int height) {
 	return len;
 }
 
-void FontSet::writeLog(string&& text, const ivec2& res) {
+void FontSet::writeLog(string&& text, const ShaderGUI* gui, const ivec2& res) {
 	logLines.push_back(std::move(text));
 	if (uint maxl = uint(res.y / int(float(logSize) / heightScale)); logLines.size() > maxl)
 		logLines.erase(logLines.begin(), logLines.begin() + pdift(logLines.size() - maxl));
@@ -50,19 +50,12 @@ void FontSet::writeLog(string&& text, const ivec2& res) {
 	str.pop_back();
 	logTex.close();
 	if (logTex = TTF_RenderUTF8_Blended_Wrapped(logFont, str.c_str(), logColor, uint(res.x)); logTex.valid()) {
+		float trans[4] = { 0.f, 0.f, float(logTex.getRes().x), float(logTex.getRes().y) };
+		glUseProgram(gui->program);
+		glBindVertexArray(gui->wrect.getVao());
+		glUniform4fv(gui->rect, 1, trans);
 		glBindTexture(GL_TEXTURE_2D, logTex.getID());
-		glColor4f(1.f, 1.f, 1.f, 1.f);
-
-		glBegin(GL_QUADS);
-		glTexCoord2i(0, 0);
-		glVertex2i(0, 0);
-		glTexCoord2i(1, 0);
-		glVertex2i(logTex.getRes().x, 0);
-		glTexCoord2i(1, 1);
-		glVertex2i(logTex.getRes().x, logTex.getRes().y);
-		glTexCoord2i(0, 1);
-		glVertex2i(0, logTex.getRes().y);
-		glEnd();
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, Shape::corners);
 	}
 }
 
@@ -86,17 +79,7 @@ Shader::Shader(const string& srcVert, const string& srcFrag) {
 	glDetachShader(program, frag);
 	glDeleteShader(vert);
 	glDeleteShader(frag);
-
-	GLint result;
-	if (glGetProgramiv(program, GL_LINK_STATUS, &result); result == GL_FALSE) {
-		GLint infoLen;
-		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &infoLen);
-
-		string err;
-		err.resize(sizet(infoLen));
-		glGetProgramInfoLog(program, infoLen, nullptr, err.data());
-		throw std::runtime_error(err);
-	}
+	checkStatus(program, GL_LINK_STATUS, glGetProgramiv, glGetProgramInfoLog);
 }
 
 GLuint Shader::loadShader(const string& source, GLenum type) {
@@ -104,17 +87,7 @@ GLuint Shader::loadShader(const string& source, GLenum type) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &src, nullptr);
 	glCompileShader(shader);
-
-	GLint result;
-	if (glGetShaderiv(shader, GL_COMPILE_STATUS, &result); result == GL_FALSE) {
-		GLint infoLen;
-		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
-
-		string err;
-		err.resize(sizet(infoLen));
-		glGetShaderInfoLog(shader, infoLen, nullptr, err.data());
-		throw std::runtime_error(err);
-	}
+	checkStatus(shader, GL_COMPILE_STATUS, glGetShaderiv, glGetShaderInfoLog);
 	return shader;
 }
 
@@ -122,12 +95,12 @@ ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag)
 {
 	glUseProgram(program);
+	vertex = GLuint(glGetAttribLocation(program, "vertex"));
+	uvloc = GLuint(glGetAttribLocation(program, "uvloc"));
+	normal = GLuint(glGetAttribLocation(program, "normal"));
 	pview = glGetUniformLocation(program, "pview");
 	model = glGetUniformLocation(program, "model");
 	normat = glGetUniformLocation(program, "normat");
-	vertex = glGetAttribLocation(program, "vertex");
-	uvloc = glGetAttribLocation(program, "uvloc");
-	normal = glGetAttribLocation(program, "normal");
 	materialDiffuse = glGetUniformLocation(program, "material.diffuse");
 	materialSpecular = glGetUniformLocation(program, "material.specular");
 	materialShininess = glGetUniformLocation(program, "material.shininess");
@@ -146,12 +119,12 @@ ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag)
 {
 	glUseProgram(program);
+	vertex = GLuint(glGetAttribLocation(program, "vertex"));
+	uvloc = GLuint(glGetAttribLocation(program, "uvloc"));
 	pview = glGetUniformLocation(program, "pview");
 	rect = glGetUniformLocation(program, "rect");
 	uvrc = glGetUniformLocation(program, "uvrc");
 	zloc = glGetUniformLocation(program, "zloc");
-	vertex = glGetAttribLocation(program, "vertex");
-	uvloc = glGetAttribLocation(program, "uvloc");
 	color = glGetUniformLocation(program, "color");
 	texsamp = glGetUniformLocation(program, "texsamp");
 	glUniform1i(texsamp, 0);
@@ -173,7 +146,7 @@ WindowSys::WindowSys() :
 	cursor(nullptr)
 {}
 
-int WindowSys::start() {
+void WindowSys::start() {
 	try {
 		init();
 		exec();
@@ -187,12 +160,9 @@ int WindowSys::start() {
 #endif
 	}
 	cleanup();
-	return 0;
 }
 
 void WindowSys::init() {
-	if (int err = FileSys::setWorkingDir())
-		throw std::runtime_error("failed to set working directory (" + toStr(err) + ')');
 	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO))
 		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
 	if (TTF_Init())
@@ -202,12 +172,8 @@ void WindowSys::init() {
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	SDL_StopTextInput();
 	SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
-	SDL_EventState(SDL_FINGERDOWN, SDL_DISABLE);
-	SDL_EventState(SDL_FINGERUP, SDL_DISABLE);
-	SDL_EventState(SDL_FINGERMOTION, SDL_DISABLE);
 	SDL_EventState(SDL_DOLLARGESTURE, SDL_DISABLE);
 	SDL_EventState(SDL_DOLLARRECORD, SDL_DISABLE);
-	SDL_EventState(SDL_MULTIGESTURE, SDL_DISABLE);
 	SDL_EventState(SDL_CLIPBOARDUPDATE, SDL_DISABLE);
 	SDL_EventState(SDL_DROPFILE, SDL_DISABLE);
 	SDL_EventState(SDL_DROPBEGIN, SDL_DISABLE);
@@ -217,6 +183,7 @@ void WindowSys::init() {
 	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
 
+	FileSys::init();
 	sets.reset(FileSys::loadSettings());
 	fonts.reset(new FontSet);
 	createWindow();
@@ -249,14 +216,13 @@ void WindowSys::exec() {
 				program->getNetcp()->tick();
 		} catch (const NetcpException& err) {
 			program->disconnect();
-			scene->setPopup(ProgState::createPopupMessage(err.message, &Program::eventPostDisconnectGame));
+			scene->setPopup(program->getState()->createPopupMessage(err.message, &Program::eventPostDisconnectGame));
 		}
 
 		uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
 		for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
 			handleEvent(event);
 	}
-	FileSys::saveSettings(sets.get());
 }
 
 void WindowSys::cleanup() {
@@ -284,19 +250,29 @@ void WindowSys::createWindow() {
 	case Settings::Screen::desktop:
 		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 	}
+	int winPos = SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display);
 
 	// create new window
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+#ifdef OPENGLES
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, sets->msamples != 0);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sets->msamples);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+#ifdef __APPLE__
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 #ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
-	if (!(window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), sets->size.x, sets->size.y, flags)))
+	if (!(window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
+#ifndef __ANDROID__
 	checkCurDisplay();
 	checkResolution(sets->size, displaySizes());
 	checkResolution(sets->mode, displayModes());
@@ -305,14 +281,16 @@ void WindowSys::createWindow() {
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 	} else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
+#endif
 	SDL_SetWindowBrightness(window, sets->gamma);
 
 	// load icons
-	if (SDL_Surface* icon = SDL_LoadBMP(fileIcon)) {
+#ifndef __ANDROID__
+	if (SDL_Surface* icon = SDL_LoadBMP(FileSys::dataPath(fileIcon).c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
-	if (SDL_Surface* icon = SDL_LoadBMP(fileCursor)) {
+	if (SDL_Surface* icon = SDL_LoadBMP(FileSys::dataPath(fileCursor).c_str())) {
 		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
 			cursorHeight = uint8(icon->h);
 			SDL_SetCursor(cursor);
@@ -321,13 +299,16 @@ void WindowSys::createWindow() {
 		SDL_FreeSurface(icon);
 	} else
 		cursorHeight = fallbackCursorSize;
+#endif
 
 	// create context and set up rendering
 	if (!(context = SDL_GL_CreateContext(window)))
 		throw std::runtime_error(string("failed to create context:") + linend + SDL_GetError());
 	setSwapInterval();
+#if !defined(OPENGLES) && !defined(__APPLE__)
 	glewExperimental = GL_TRUE;
 	glewInit();
+#endif
 	updateViewport();
 
 	glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -340,20 +321,19 @@ void WindowSys::createWindow() {
 	glCullFace(GL_FRONT);
 	glFrontFace(GL_CCW);
 	glEnable(GL_TEXTURE_2D);
+#ifndef OPENGLES
 	sets->msamples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
+#endif
 
 	umap<string, string> sources = FileSys::loadShaders();
 	geom.reset(new ShaderGeometry(sources.at(fileSceneVert), sources.at(fileSceneFrag)));
 	gui.reset(new ShaderGUI(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
 	glActiveTexture(GL_TEXTURE0);
 
-	// for startup log
-	glUseProgram(0);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0, curView.x, curView.y, 0, -1.0, 1.0);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	// init startup log
+	glUniform4fv(gui->uvrc, 1, logTexUV);
+	glUniform1f(gui->zloc, 0.f);
+	glUniform4fv(gui->color, 1, logTexColor);
 }
 
 void WindowSys::destroyWindow() {
@@ -378,6 +358,18 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_MOUSEWHEEL:
 		scene->onMouseWheel(event.wheel);
 		break;
+	case SDL_FINGERMOTION:
+		scene->onFingerMove(event.tfinger);
+		break;
+	case SDL_MULTIGESTURE:
+		scene->onFingerGesture(event.mgesture);
+		break;
+	case SDL_FINGERDOWN:
+		scene->onFingerDown(event.tfinger);
+		break;
+	case SDL_FINGERUP:
+		scene->onFingerUp(event.tfinger);
+		break;
 	case SDL_KEYDOWN:
 		scene->onKeyDown(event.key);
 		break;
@@ -401,23 +393,20 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 
 void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	switch (winEvent.event) {
-	case SDL_WINDOWEVENT_SIZE_CHANGED:
-		updateViewport();
-		scene->onResize();
-		break;
 	case SDL_WINDOWEVENT_LEAVE:
 		scene->onMouseLeave();
 		break;
+	case SDL_WINDOWEVENT_SIZE_CHANGED:
+		scene->onResize();
+		break;
 	case SDL_WINDOWEVENT_MOVED:	// doesn't work on windows for some reason
-		if (checkCurDisplay() && sets->screen <= Settings::Screen::borderless && !checkResolution(sets->size, displaySizes()))
-			SDL_SetWindowSize(window, sets->size.x, sets->size.y);
+		checkCurDisplay();
 	}
 }
 
 void WindowSys::writeLog(string&& text) {
-	glUseProgram(0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	fonts->writeLog(std::move(text), curView);
+	fonts->writeLog(std::move(text), gui.get(), curView);
 	SDL_GL_SwapWindow(window);
 }
 
@@ -457,10 +446,11 @@ void WindowSys::setScreen(uint8 display, Settings::Screen screen, const ivec2& s
 	sets->mode = mode;
 	checkResolution(sets->mode, displayModes());
 	setWindowMode();
-	scene->onResize();
+	scene->resetLayouts();	// necessary to reset widgets' pixel sizes
 }
 
 void WindowSys::setWindowMode() {
+#ifndef __ANDROID__
 	if (sets->screen <= Settings::Screen::borderless) {
 		SDL_SetWindowFullscreen(window, 0);
 		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
@@ -475,10 +465,17 @@ void WindowSys::setWindowMode() {
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
 	updateViewport();
+#endif
 }
 
 void WindowSys::updateViewport() {
+#ifdef __ANDROID__
+	SDL_Rect rect;
+	SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window), &rect);	// SDL_GL_GetDrawableSize don't work properly
+	curView = ivec2(rect.w, rect.h);
+#else
 	SDL_GL_GetDrawableSize(window, &curView.x, &curView.y);
+#endif
 	glViewport(0, 0, curView.x, curView.y);
 }
 

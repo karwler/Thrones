@@ -139,7 +139,7 @@ Popup::Popup(const pair<Size, Size>& relSize, vector<Widget*>&& children, BCall 
 
 void Popup::draw() const {
 	Rect rct = rect();
-	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());						// dim other widgets
+	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());					// dim other widgets
 	drawRect(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->blank());	// draw background
 	Layout::draw();
 }

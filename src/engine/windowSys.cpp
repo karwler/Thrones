@@ -1,4 +1,7 @@
 #include "windowSys.h"
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
 
 // FONT SET
 
@@ -91,6 +94,18 @@ GLuint Shader::loadShader(const string& source, GLenum type) {
 	return shader;
 }
 
+template <class C, class I>
+void Shader::checkStatus(GLuint id, GLenum stat, C check, I info) {
+	GLint res;
+	if (check(id, stat, &res); res == GL_FALSE) {
+		string err;
+		check(id, GL_INFO_LOG_LENGTH, &res);
+		err.resize(sizet(res));
+		info(id, res, nullptr, err.data());
+		throw std::runtime_error(err);
+	}
+}
+
 ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag)
 {
@@ -149,7 +164,13 @@ WindowSys::WindowSys() :
 void WindowSys::start() {
 	try {
 		init();
-		exec();
+		oldTime = SDL_GetTicks();
+#ifdef EMSCRIPTEN
+		emscripten_set_main_loop_arg([](void* w) { static_cast<WindowSys*>(w)->exec(); }, this, 0, true);
+#else
+		while (run)
+			exec();
+#endif
 	} catch (const std::runtime_error& e) {
 		std::cerr << e.what() << std::endl;
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", e.what(), window);
@@ -169,8 +190,17 @@ void WindowSys::init() {
 		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
 	if (SDLNet_Init())
 		throw std::runtime_error(string("failed to initialize networking:") + linend + SDLNet_GetError());
+
+#if SDL_VERSION_ATLEAST(2, 0, 10)
+	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+#else
+	SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
+#endif
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-	SDL_StopTextInput();
+	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+	SDL_EventState(SDL_TEXTEDITING, SDL_DISABLE);
 	SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
 	SDL_EventState(SDL_DOLLARGESTURE, SDL_DISABLE);
 	SDL_EventState(SDL_DOLLARRECORD, SDL_DISABLE);
@@ -182,6 +212,7 @@ void WindowSys::init() {
 	SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
+	SDL_StopTextInput();
 
 	FileSys::init();
 	sets.reset(FileSys::loadSettings());
@@ -197,32 +228,30 @@ void WindowSys::init() {
 	scene.reset(new Scene);
 	program.reset(new Program);
 	fonts->closeLog();
+	program->start();
 }
 
 void WindowSys::exec() {
-	program->start();
-	for (uint32 oldTime = SDL_GetTicks(); run;) {
-		uint32 newTime = SDL_GetTicks();
-		dSec = float(newTime - oldTime) / ticksPerSec;
-		oldTime = newTime;
+	uint32 newTime = SDL_GetTicks();
+	dSec = float(newTime - oldTime) / ticksPerSec;
+	oldTime = newTime;
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		scene->draw();
-		SDL_GL_SwapWindow(window);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	scene->draw();
+	SDL_GL_SwapWindow(window);
 
-		scene->tick(dSec);
-		try {
-			if (program->getNetcp())
-				program->getNetcp()->tick();
-		} catch (const NetcpException& err) {
-			program->disconnect();
-			scene->setPopup(program->getState()->createPopupMessage(err.message, &Program::eventPostDisconnectGame));
-		}
-
-		uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
-		for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
-			handleEvent(event);
+	scene->tick(dSec);
+	try {
+		if (program->getNetcp())
+			program->getNetcp()->tick();
+	} catch (const NetcpException& err) {
+		program->disconnect();
+		scene->setPopup(program->getState()->createPopupMessage(err.message, &Program::eventPostDisconnectGame));
 	}
+
+	uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
+	for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
+		handleEvent(event);
 }
 
 void WindowSys::cleanup() {
@@ -267,12 +296,12 @@ void WindowSys::createWindow() {
 #else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(EMSCRIPTEN)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 #endif
 	if (!(window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	checkCurDisplay();
 	checkResolution(sets->size, displaySizes());
 	checkResolution(sets->mode, displayModes());
@@ -285,7 +314,7 @@ void WindowSys::createWindow() {
 	SDL_SetWindowBrightness(window, sets->gamma);
 
 	// load icons
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	if (SDL_Surface* icon = SDL_LoadBMP(FileSys::dataPath(fileIcon).c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
@@ -450,7 +479,7 @@ void WindowSys::setScreen(uint8 display, Settings::Screen screen, const ivec2& s
 }
 
 void WindowSys::setWindowMode() {
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	if (sets->screen <= Settings::Screen::borderless) {
 		SDL_SetWindowFullscreen(window, 0);
 		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
@@ -499,6 +528,21 @@ bool WindowSys::checkCurDisplay() {
 		return true;
 	}
 	return false;
+}
+
+template <class T>
+bool WindowSys::checkResolution(T& val, const vector<T>& modes) {
+#if defined(__ANDROID__) || defined(EMSCRIPTEN)
+	return true;
+#else
+	typename vector<T>::const_iterator it;
+	if (it = std::find(modes.begin(), modes.end(), val); it != modes.end() || modes.empty())
+		return true;
+
+	for (it = modes.begin(); it != modes.end() && *it < val; it++);
+	val = it == modes.begin() ? *it : *(it - 1);
+	return false;
+#endif
 }
 
 vector<ivec2> WindowSys::displaySizes() const {

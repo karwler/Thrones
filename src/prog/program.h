@@ -12,6 +12,7 @@ public:
 		INF_UNIQ = 2,			// is using or connected to single NetcpHost session
 		INF_GUEST_WAITING = 4	// shall only be set if INF_HOST is set
 	} info;
+	string curConfig;
 private:
 	uptr<ProgState> state;
 	uptr<Netcp> netcp;
@@ -54,6 +55,10 @@ public:
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
 	void eventPrcSliderUpdate(Button* but);
+	void eventTileSliderUpdate(Button* but);
+	void eventMiddleSliderUpdate(Button* but);
+	void eventPieceSliderUpdate(Button* but);
+	void eventKickPlayer(Button* but = nullptr);
 	void eventPlayerHello(bool onJoin);
 	void eventExitRoom(Button* but = nullptr);
 
@@ -77,6 +82,7 @@ public:
 	void eventSetupNew(Button* but);
 	void eventSetupSave(Button* but);
 	void eventSetupLoad(Button* but);
+	void eventSetupDelete(Button* but);
 	void eventShowConfig(Button* but = nullptr);
 	void eventSwitchSetupButtons(Button* but = nullptr);
 
@@ -85,7 +91,8 @@ public:
 	void eventEndTurn(Button* but = nullptr);
 	void eventPlaceDragon(Button* but = nullptr);
 	void eventSwitchFavor(Button* but = nullptr);
-	void eventFavorStart(BoardObject* obj, uint8 mBut);
+	void eventSwitchFavorNow(Button* but = nullptr);
+	void eventFavorStart(BoardObject* obj, uint8 mBut = 0);
 	void eventMove(BoardObject* obj, uint8 mBut);
 	void eventFire(BoardObject* obj, uint8 mBut);
 	void eventAbortGame(Button* but = nullptr);
@@ -93,6 +100,7 @@ public:
 	void finishMatch(bool win);
 	void eventPostFinishMatch(Button* but = nullptr);
 	void eventPostDisconnectGame(Button* but = nullptr);
+	void eventHostLeft(uint8* data);
 	void eventPlayerLeft();
 
 	// settings
@@ -104,6 +112,8 @@ public:
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);
 	void eventSetVolumeLE(Button* but);
+	void eventSetScaleTiles(Button* but);
+	void eventSetScalePieces(Button* but);
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
 	void eventOpenInfo(Button* but = nullptr);
@@ -113,6 +123,7 @@ public:
 	void eventExit(Button* but = nullptr);
 	void eventSBNext(Button* but);
 	void eventSBPrev(Button* but);
+	void eventSLUpdateLE(Button* but);
 	void eventDummy(Button* = nullptr) {}
 	void disconnect();
 
@@ -121,8 +132,10 @@ public:
 	Game* getGame();
 
 private:
-	static vector<uint8> writeRoomName(Com::Code code, const string& name);
+	void sendRoomName(Com::Code code, const string& name);
 	void postConfigUpdate();
+	static void setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint16 oarea, uint16 narea, bool scale);
+	static void updateAmtSlider(uint16* amts, LabelEdit** wgts, uint8 cnt, Slider* sld);
 	void setSaveConfig(const string& name, bool save = true);
 	void placeTile(Tile* tile, uint8 type);
 	void placePiece(svec2 pos, uint8 type, Piece* occupant);

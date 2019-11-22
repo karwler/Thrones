@@ -1,4 +1,4 @@
-package com.carnkaw.thrones;
+package org.duravia.thrones;
 
 import org.libsdl.app.SDLActivity;
 

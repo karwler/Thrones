@@ -130,10 +130,10 @@ inline void Widget::drawRect(const Rect& rect, Rect frame, const vec4& color, GL
 // clickable widget with function calls for left and right click (it's rect is drawn so you can use it like a spacer with color)
 class Button : public Widget {
 public:
+	BCall lcall, rcall;
 	vec4 color;
 protected:
 	vec4 dimFactor;
-	BCall lcall, rcall;
 	Texture tipTex;		// memory is handled by the button
 	GLuint bgTex;
 
@@ -143,7 +143,7 @@ private:
 	static constexpr int cursorMargin = 2;
 
 public:
-	Button(Size relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Button(Size relSize = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Button() override;
 
 	virtual void draw() const override;
@@ -153,16 +153,11 @@ public:
 
 	virtual bool selectable() const override;
 	void setDim(float factor);
-	void setLcall(BCall pcl);
 	void drawTooltip() const;
 };
 
 inline void Button::setDim(float factor) {
 	dimFactor = vec4(factor, factor, factor, dimFactor.a);
-}
-
-inline void Button::setLcall(BCall pcl) {
-	lcall = pcl;
 }
 
 // if you don't know what a checkbox is then I don't know what to tell ya
@@ -171,7 +166,7 @@ public:
 	bool on;
 
 public:
-	CheckBox(Size relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	CheckBox(Size relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~CheckBox() override = default;
 
 	virtual void draw() const override;
@@ -199,7 +194,7 @@ private:
 	int diffSliderMouse;
 
 public:
-	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall finishCall = nullptr, BCall updateCall = nullptr, const Texture& tooltip = Texture(), GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Slider(Size relSize = 1.f, int value = 0, int minimum = 0, int maximum = 255, BCall finishCall = nullptr, BCall updateCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Slider() override = default;
 
 	virtual void draw() const override;
@@ -210,6 +205,7 @@ public:
 
 	int getVal() const;
 	void setVal(int value);
+	void set(int value, int minimum, int maximum);
 
 	Rect barRect() const;
 	Rect sliderRect() const;
@@ -226,10 +222,6 @@ inline int Slider::getVal() const {
 
 inline void Slider::setVal(int value) {
 	val = std::clamp(value, vmin, vmax);
-}
-
-inline int Slider::sliderPos() const {
-	return position().x + size().y/4 + val * sliderLim() / vmax;
 }
 
 // it's a little ass backwards but labels (aka a line of text) are buttons
@@ -249,7 +241,7 @@ protected:
 	bool showBG;
 
 public:
-	Label(Size relSize = 1.f, string text = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Label(Size relSize = 1.f, string text = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Label() override;
 
 	virtual void draw() const override;
@@ -286,7 +278,7 @@ private:
 	BCall hcall;
 
 public:
-	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = vec4(1.f), const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showTop = true, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Draglet(Size relSize = 1.f, BCall leftCall = nullptr, BCall holdCall = nullptr, BCall rightCall = nullptr, GLuint bgTex = 0, const vec4& color = vec4(1.f), float dim = 1.f, const Texture& tooltip = Texture(), string text = string(), Alignment alignment = Alignment::left, bool showTop = true, bool showBG = true, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~Draglet() override = default;
 
 	virtual void draw() const override;
@@ -304,7 +296,7 @@ private:
 	uint curOpt;
 
 public:
-	SwitchBox(Size relSize = 1.f, vector<string> opts = {}, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	SwitchBox(Size relSize = 1.f, vector<string> opts = {}, string curOption = string(), BCall call = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~SwitchBox() override = default;
 
 	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
@@ -313,6 +305,7 @@ public:
 	virtual void setText(const string& str) override;
 	uint getCurOpt() const;
 	void setCurOpt(uint id);
+	void set(vector<string>&& opts, uint id);
 private:
 	void shiftOption(int mov);
 };
@@ -334,7 +327,7 @@ private:
 	int textOfs;	// text's horizontal offset
 
 public:
-	LabelEdit(Size relSize = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), uint limit = UINT_MAX, Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	LabelEdit(Size relSize = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, uint limit = UINT_MAX, Alignment alignment = Alignment::left, bool showBG = true, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~LabelEdit() override = default;
 
 	virtual void drawTop() const override;

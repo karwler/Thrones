@@ -7,6 +7,11 @@ class World {
 public:
 	static constexpr char argExternal = 'e';
 	static constexpr char argSetup = 'd';
+#ifdef EMSCRIPTEN
+	static constexpr char envLocale[] = "C";
+#else
+	static constexpr char envLocale[] = "";
+#endif
 
 	static Arguments args;
 private:

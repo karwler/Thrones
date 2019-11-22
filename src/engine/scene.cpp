@@ -2,12 +2,12 @@
 
 // CAMERA
 
-const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 9.f, 9.f);
-const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 12.f, 10.f);
-const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, 2.5f);
-const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, 1.f);
+const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 9.f, Com::Config::boardWidth / 2.f + 9.f);
+const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 12.f, Com::Config::boardWidth / 2.f + 10.f);
+const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 2.5f);
+const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 1.f);
 const vec3 Camera::up(0.f, 1.f, 0.f);
-const vec3 Camera::center(Com::Config::boardWidth / 2.f, 0.f, 0.f);
+const vec3 Camera::center(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f);
 
 Camera::Camera(const vec3& pos, const vec3& lat, float pmax, float ymax) :
 	moving(false),
@@ -26,12 +26,12 @@ void Camera::updateView() const {
 }
 
 void Camera::updateProjection() {
-	ivec2 res = World::window()->getView();
-	proj = glm::perspective(glm::radians(fov), float(res.x) / float(res.y), znear, zfar);
+	vec2 res = World::window()->getView();
+	proj = glm::perspective(glm::radians(fov), res.x / res.y, znear, zfar);
 
-	vec2 hsiz(float(res.x / 2), float(res.y / 2));
+	res /= 2.f;
 	glUseProgram(World::gui()->program);
-	glUniform2fv(World::gui()->pview, 1, glm::value_ptr(hsiz));
+	glUniform2fv(World::gui()->pview, 1, glm::value_ptr(res));
 }
 
 void Camera::setPos(const vec3& newPos, const vec3& newLat) {
@@ -175,16 +175,13 @@ Scene::Scene() :
 	capture(nullptr),
 	mouseMove(0),
 	moveTime(0),
+	mouseLast(false),
 	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
 	layout(new RootLayout),	// dummy layout in case a function gets called preemptively
-	light(vec3(Com::Config::boardWidth / 2.f, 4.f, 0.f), vec3(1.f, 0.98f, 0.92f), 0.8f, 140.f),
+	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f, 140.f),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
-	texes(FileSys::loadTextures()),
-	collims({
-		pair(string(), CMesh()),
-		pair("tile", CMesh::makeDefault())
-	})
+	texes(FileSys::loadTextures())
 {}
 
 Scene::~Scene() {
@@ -192,8 +189,6 @@ Scene::~Scene() {
 	for (auto& [name, tex] : texes)
 		tex.free();
 	for (auto& [name, mesh] : meshes)
-		mesh.free();
-	for (auto& [name, mesh] : collims)
 		mesh.free();
 }
 
@@ -211,10 +206,8 @@ void Scene::draw() {
 		popup->draw();
 	if (dynamic_cast<Widget*>(capture))
 		capture->drawTop();
-#ifndef __ANDROID__
-	if (Button* but = dynamic_cast<Button*>(select); but)
+	if (Button* but = dynamic_cast<Button*>(select); but && mouseLast)
 		but->drawTooltip();
-#endif
 }
 
 void Scene::tick(float dSec) {
@@ -247,14 +240,25 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 			World::state()->eventNumpress(uint8(key.keysym.scancode - SDL_SCANCODE_1));
 			break;
 		case SDL_SCANCODE_LALT:
-			World::state()->eventFavorize(true);
+			World::state()->eventFavorize(FavorAct::on);
+			break;
+		case SDL_SCANCODE_LSHIFT:
+			World::state()->eventFavorize(FavorAct::now);
+			break;
+		case SDL_SCANCODE_SPACE:
+			World::state()->eventEndTurn();
+			break;
+		case SDL_SCANCODE_LCTRL:
+			SDL_SetRelativeMouseMode(SDL_TRUE);
 			break;
 		case SDL_SCANCODE_C:
 			World::state()->eventCameraReset();
 			break;
 		case SDL_SCANCODE_RETURN:
-			if (popup)		// right now this is only necessary for popups, so no fancy virtual functions
+			if (popup)
 				World::prun(popup->kcall, nullptr);
+			else
+				World::state()->eventEnter();
 			break;
 		case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
 			if (popup)
@@ -267,19 +271,24 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 	if (!(dynamic_cast<LabelEdit*>(capture) || key.repeat))
 		switch (key.keysym.scancode) {
-		case SDL_SCANCODE_LALT:
-			World::state()->eventFavorize(false);
+		case SDL_SCANCODE_LALT: case SDL_SCANCODE_LSHIFT:
+			World::state()->eventFavorize(FavorAct::off);
+			break;
+		case SDL_SCANCODE_LCTRL:
+			SDL_SetRelativeMouseMode(SDL_FALSE);
+			simulateMouseMove();
 		}
 }
 
-void Scene::onMouseMove(const SDL_MouseMotionEvent& mot) {
-	if ((mot.state & SDL_BUTTON_MMASK) && !camera.moving) {
+void Scene::onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse) {
+	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LCTRL] && !camera.moving) {
 		vec2 rot(glm::radians(float(mot.yrel) / 2.f), glm::radians(float(-mot.xrel) / 2.f));
 		camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 		return;
 	}
 	mouseMove = ivec2(mot.xrel, mot.yrel);
 	moveTime = mot.timestamp;
+	mouseLast = mouse;
 
 	updateSelect(ivec2(mot.x, mot.y));
 	if (capture)
@@ -288,9 +297,19 @@ void Scene::onMouseMove(const SDL_MouseMotionEvent& mot) {
 		World::state()->eventDrag(mot.state);
 }
 
-void Scene::onMouseDown(const SDL_MouseButtonEvent& but) {
+void Scene::onMouseDown(const SDL_MouseButtonEvent& but, bool mouse) {
+	switch (but.button) {
+	case SDL_BUTTON_MIDDLE:
+		return World::state()->eventEndTurn();
+	case SDL_BUTTON_X1:
+		return World::state()->eventFavorize(FavorAct::on);
+	case SDL_BUTTON_X2:
+		return World::state()->eventFavorize(FavorAct::now);
+	}
+
 	if (cstamp.but)
 		return;
+	mouseLast = mouse;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 
@@ -301,18 +320,15 @@ void Scene::onMouseDown(const SDL_MouseButtonEvent& but) {
 		cstamp.inter->onHold(ivec2(but.x, but.y), but.button);
 	if (!capture)		// can be set by previous onHold calls
 		World::state()->eventDrag(SDL_BUTTON(but.button));
-	if (but.button == SDL_BUTTON_MIDDLE)
-		SDL_SetRelativeMouseMode(SDL_TRUE);
 }
 
-void Scene::onMouseUp(const SDL_MouseButtonEvent& but) {
+void Scene::onMouseUp(const SDL_MouseButtonEvent& but, bool mouse) {
+	if (but.button == SDL_BUTTON_X1 || but.button == SDL_BUTTON_X2)
+		return World::state()->eventFavorize(FavorAct::off);
+
 	if (but.button != cstamp.but)
 		return;
-	if (but.button == SDL_BUTTON_MIDDLE) {	// in case camera was being moved
-		SDL_SetRelativeMouseMode(SDL_FALSE);
-		simulateMouseMove();
-	}
-
+	mouseLast = mouse;
 	if (capture)
 		capture->onUndrag(but.button);
 	if (select && cstamp.inter == select && cursorInClickRange(ivec2(but.x, but.y)))
@@ -323,7 +339,7 @@ void Scene::onMouseUp(const SDL_MouseButtonEvent& but) {
 }
 
 void Scene::onMouseWheel(const SDL_MouseWheelEvent& whe) {
-	if (ScrollArea* box = getSelectedScrollArea())
+	if (mouseLast = true; ScrollArea* box = getSelectedScrollArea())
 		box->onScroll(ivec2(whe.x, whe.y) * scrollFactorWheel);
 	else if (whe.y)
 		World::state()->eventWheel(whe.y);
@@ -338,7 +354,7 @@ void Scene::onMouseLeave() {
 
 void Scene::onFingerMove(const SDL_TouchFingerEvent& fin) {
 	vec2 size = World::window()->getView();
-	onMouseMove({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x / 2.f), int(fin.dy * size.y / 2.f) });
+	onMouseMove({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, false);
 }
 
 void Scene::onFingerGesture(const SDL_MultiGestureEvent& ges) {
@@ -349,12 +365,12 @@ void Scene::onFingerGesture(const SDL_MultiGestureEvent& ges) {
 void Scene::onFingerDown(const SDL_TouchFingerEvent& fin) {
 	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getView());
 	updateSelect(pos);
-	onMouseDown({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y });
+	onMouseDown({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, false);
 }
 
 void Scene::onFingerUp(const SDL_TouchFingerEvent& fin) {
 	vec2 size = World::window()->getView();
-	onMouseUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, int(fin.x * size.x), int(fin.y * size.y) });
+	onMouseUp({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, int(fin.x * size.x), int(fin.y * size.y) }, false);
 	updateSelect(ivec2(-1));
 }
 
@@ -373,9 +389,7 @@ void Scene::resetLayouts() {
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
 	layout->postInit();
-#ifndef __ANDROID__
 	simulateMouseMove();
-#endif
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
@@ -429,7 +443,7 @@ Interactable* Scene::getSelected(const ivec2& mPos) {
 Interactable* Scene::getScrollOrObject(const ivec2& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
-	return !popup ? static_cast<Interactable*>(rayCast(pickerRay(mPos))) : static_cast<Interactable*>(popup.get());
+	return !popup ? static_cast<Interactable*>(findBoardObject(mPos)) : static_cast<Interactable*>(popup.get());
 }
 
 ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
@@ -442,48 +456,25 @@ ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
 	return dynamic_cast<ScrollArea*>(parent);
 }
 
-Object* Scene::rayCast(const vec3& ray) const {
-	float min = FLT_MAX;
-	Object* mob = nullptr;
-	for (Object* obj : objects) {
-		if (!obj->rigid)	// assuming that obj->coli is set
-			continue;
+BoardObject* Scene::findBoardObject(const ivec2& mPos) const {
+	vec3 isct = rayXZIsct(pickerRay(mPos));
+	if (const vec4& bb = World::game()->getBoardBounds(); isct.x < bb.x || isct.x >= bb.z || isct.z < bb.y || isct.z >= bb.a)
+		return nullptr;
 
-		const mat4& trans = obj->getTrans();
-		for (uint16 i = 0; i < obj->coli->esiz; i += 3)
-			if (float t; rayIntersectsTriangle(camera.getPos(), ray, trans * vec4(obj->coli->verts[obj->coli->elems[i]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+1]], 1.f), trans * vec4(obj->coli->verts[obj->coli->elems[i+2]], 1.f), t) && t <= min) {
-				min = t;
-				mob = obj;
-			}
-	}
-	return mob;
-}
-
-bool Scene::rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t) {
-	vec3 e1 = v1 - v0;
-	vec3 e2 = v2 - v0;
-	vec3 h = glm::cross(dir, e2);
-	float a = glm::dot(e1, h);
-	if (a > -FLT_EPSILON && a < FLT_EPSILON)
-		return false;
-
-	float f = 1.f / a;
-	vec3 s = ori - v0;
-	float u = f * glm::dot(s, h);
-	if (u < 0.f || u > 1.f)
-		return false;
-
-	vec3 q = glm::cross(s, e1);
-	float v = f * glm::dot(dir, q);
-	if (v < 0.f || u + v > 1.f)
-		return false;
-
-	t = f * glm::dot(e2, q);
-	return t > FLT_EPSILON;
+	svec2 pp = World::game()->ptog(isct);
+	for (Piece& it : World::game()->getPieces())
+		if (it.rigid && World::game()->ptog(it.getPos()) == pp)
+			return &it;
+	if (uint16 id = World::game()->posToId(pp); id < World::game()->getTiles().getSize())
+		if (Tile& it = World::game()->getTiles()[id]; it.rigid)
+			return &it;
+	return nullptr;
 }
 
 void Scene::simulateMouseMove() {
-	ivec2 pos;
-	uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
-	onMouseMove({ SDL_MOUSEMOTION, SDL_GetTicks(), World::window()->windowID(), 0, state, pos.x, pos.y, 0, 0 });
+	if (ivec2 pos; mouseLast) {
+		uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
+		onMouseMove({ SDL_MOUSEMOTION, SDL_GetTicks(), World::window()->windowID(), 0, state, pos.x, pos.y, 0, 0 }, mouseLast);
+	} else
+		onMouseMove({ SDL_FINGERMOTION, SDL_GetTicks(), World::window()->windowID(), SDL_TOUCH_MOUSEID, 0, -1, -1, 0, 0 }, mouseLast);
 }

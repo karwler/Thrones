@@ -70,12 +70,12 @@ void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, G
 
 // BUTTON
 
-Button::Button(Size relSize, BCall leftCall, BCall rightCall, const Texture& tooltip, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+Button::Button(Size relSize, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
 	Widget(relSize, parent, id),
-	color(color),
-	dimFactor(1.f),
 	lcall(leftCall),
 	rcall(rightCall),
+	color(color),
+	dimFactor(dim, dim, dim, 1.f),
 	tipTex(tooltip),
 	bgTex(bgTex ? bgTex : World::scene()->blank())
 {}
@@ -125,8 +125,8 @@ void Button::drawTooltip() const {
 
 // CHECK BOX
 
-CheckBox::CheckBox(Size relSize, bool on, BCall leftCall, BCall rightCall, const Texture& tooltip, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, tooltip, bgTex, color, parent, id),
+CheckBox::CheckBox(Size relSize, bool on, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Button(relSize, leftCall, rightCall, tooltip, dim, bgTex, color, parent, id),
 	on(on)
 {}
 
@@ -150,8 +150,8 @@ Rect CheckBox::boxRect() const {
 
 // SLIDER
 
-Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall finishCall, BCall updateCall, const Texture& tooltip, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Button(relSize, finishCall, updateCall, tooltip, bgTex, color, parent, id),
+Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall finishCall, BCall updateCall, const Texture& tooltip, float dim, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Button(relSize, finishCall, updateCall, tooltip, dim, bgTex, color, parent, id),
 	val(value),
 	vmin(minimum),
 	vmax(maximum),
@@ -185,8 +185,14 @@ void Slider::onUndrag(uint8 mBut) {
 	}
 }
 
+void Slider::set(int value, int minimum, int maximum) {
+	vmin = minimum;
+	vmax = maximum;
+	setVal(value);
+}
+
 void Slider::setSlider(int xpos) {
-	setVal(vmin + int(std::round(float((xpos - position().x - size().y/4) * vmax) / float(sliderLim()))));
+	setVal(vmin + int(std::round(float((xpos - position().x - size().y/4) * (vmax - vmin)) / float(sliderLim()))));
 	World::prun(rcall, this);
 }
 
@@ -201,6 +207,11 @@ Rect Slider::sliderRect() const {
 	return Rect(sliderPos(), pos.y, barSize, siz.y);
 }
 
+int Slider::sliderPos() const {
+	int lim = vmax - vmin;
+	return position().x + size().y/4 + (lim ? (val - vmin) * sliderLim() / lim : sliderLim());
+}
+
 int Slider::sliderLim() const {
 	ivec2 siz = size();
 	return siz.x - siz.y/2 - barSize;
@@ -208,8 +219,8 @@ int Slider::sliderLim() const {
 
 // LABEL
 
-Label::Label(Size relSize, string text, BCall leftCall, BCall rightCall, const Texture& tooltip, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Button(relSize, leftCall, rightCall, tooltip, bgTex, color, parent, id),
+Label::Label(Size relSize, string text, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Button(relSize, leftCall, rightCall, tooltip, dim, bgTex, color, parent, id),
 	text(std::move(text)),
 	align(alignment),
 	showBG(showBG)
@@ -269,8 +280,8 @@ void Label::updateTextTex() {
 
 // DRAGLET
 
-Draglet::Draglet(Size relSize, BCall leftCall, BCall holdCall, BCall rightCall, GLuint bgTex, const vec4& color, const Texture& tooltip, string text, Alignment alignment, bool showTop, bool showBG, Layout* parent, sizet id) :
-	Label(relSize, std::move(text), leftCall, rightCall, tooltip, alignment, showBG, bgTex, color, parent, id),
+Draglet::Draglet(Size relSize, BCall leftCall, BCall holdCall, BCall rightCall, GLuint bgTex, const vec4& color, float dim, const Texture& tooltip, string text, Alignment alignment, bool showTop, bool showBG, Layout* parent, sizet id) :
+	Label(relSize, std::move(text), leftCall, rightCall, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
 	selected(false),
 	showTop(showTop),
 	showingTop(false),
@@ -326,8 +337,8 @@ void Draglet::onUndrag(uint8 mBut) {
 
 // SWITCH BOX
 
-SwitchBox::SwitchBox(Size relSize, vector<string> opts, string curOption, BCall call, const Texture& tooltip, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Label(relSize, std::move(curOption), call, call, tooltip, alignment, showBG, bgTex, color, parent, id),
+SwitchBox::SwitchBox(Size relSize, vector<string> opts, string curOption, BCall call, const Texture& tooltip, float dim, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Label(relSize, std::move(curOption), call, call, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
 	options(std::move(opts)),
 	curOpt(uint(std::find(options.begin(), options.end(), text) - options.begin()))
 {
@@ -350,14 +361,17 @@ bool SwitchBox::selectable() const {
 }
 
 void SwitchBox::setText(const string& str) {
-	uint op = uint(std::find(options.begin(), options.end(), str) - options.begin());
-	curOpt = op < options.size() ? op : 0;
-	Label::setText(options[curOpt]);
+	setCurOpt(uint(std::find(options.begin(), options.end(), str) - options.begin()));
 }
 
 void SwitchBox::setCurOpt(uint id) {
 	curOpt = std::clamp(id, 0u, uint(options.size() - 1));
 	Label::setText(options[curOpt]);
+}
+
+void SwitchBox::set(vector<string>&& opts, uint id) {
+	options = std::move(opts);
+	setCurOpt(id);
 }
 
 void SwitchBox::shiftOption(int mov) {
@@ -367,8 +381,8 @@ void SwitchBox::shiftOption(int mov) {
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, const Texture& tooltip, uint limit, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Label(relSize, std::move(line), leftCall, rightCall, tooltip, alignment, showBG, bgTex, color, parent, id),
+LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, const Texture& tooltip, float dim, uint limit, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Label(relSize, std::move(line), leftCall, rightCall, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
 	oldText(text),
 	ecall(retCall),
 	limit(limit),

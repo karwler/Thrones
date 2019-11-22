@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -71,8 +72,7 @@ using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 using glm::ivec2;
-using svec2 = glm::vec<2, int16, glm::defaultp>;
-using nvec2 = glm::vec<2, uint16, glm::defaultp>;
+using svec2 = glm::vec<2, uint16, glm::defaultp>;
 using mvec2 = glm::vec<2, sizet, glm::defaultp>;
 
 #ifdef _WIN32
@@ -328,7 +328,7 @@ string ntosPadded(T num, uint pad) {
 	return str.length() < pad ? string(pad - str.length(), '0') + str : str;
 }
 
-template <class U, class S>	// U has to be an unsigned type and S has to be the signed equivalent of U
+template <class U, class S, std::enable_if_t<std::is_unsigned<U>::value && std::is_signed<S>::value, int> = 0>
 U cycle(U pos, U siz, S mov) {
 	U rst = pos + U(mov % S(siz));
 	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;

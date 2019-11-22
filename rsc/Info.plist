@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string>thrones.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.carnkaw.thrones</string>
+	<string>org.duravia.thrones</string>
 	<key>CFBundleName</key>
 	<string>Thrones</string>
 	<key>CFBundlePackageType</key>

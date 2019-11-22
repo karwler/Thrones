@@ -4,13 +4,6 @@
 #include "utils/objects.h"
 #include <random>
 
-struct FavorState {
-	Piece* piece;	// when dragging piece
-	bool use;		// when holding down lalt
-
-	FavorState();
-};
-
 enum Action : uint8 {
 	ACT_NONE  = 0x00,
 	ACT_MOVE  = 0x01,	// regular position change
@@ -18,57 +11,56 @@ enum Action : uint8 {
 	ACT_ATCK  = 0x04,	// movement attack
 	ACT_FIRE  = 0x08,	// firing attack
 	ACT_WIN   = 0x10,	// actor won
-	ACT_LOOSE = 0x20	// actor lost
+	ACT_LOOSE = 0x20,	// actor lost
+	ACT_MS    = ACT_MOVE | ACT_SWAP,
+	ACT_AF    = ACT_ATCK | ACT_FIRE
 };
 ENUM_OPERATIONS(Action, uint8)
 
 class Record {
 public:
 	Piece* actor;	// the moved piece/the killer
-	Piece* swapper;	// who swapped with acter
 	Action action;
 
 public:
-	Record(Piece* actor = nullptr, Piece* swapper = nullptr, Action action = ACT_NONE);
+	Record(Piece* actor = nullptr, Action action = ACT_NONE);
 
-	void update(Piece* doActor, Piece* didSwap, Action didActions);
+	void update(Piece* doActor, Action didActions);
 	void updateProtectionColors(bool on) const;
 	bool isProtectedMember(Piece* pce) const;
 private:
-	void updateProtectionColor(Piece* pce, bool on) const;
-	bool pieceProtected(Piece* pce) const;		// piece mustn't be nullptr
+	bool actorProtected() const;		// actor mustn't be nullptr
 };
 
 inline bool Record::isProtectedMember(Piece* pce) const {
-	return (actor == pce || swapper == pce) && pieceProtected(pce);
+	return actor == pce && actorProtected();
 }
 
-inline void Record::updateProtectionColor(Piece* pce, bool on) const {
-	pce->setEmission(pieceProtected(pce) && on ? pce->getEmission() | BoardObject::EMI_DIM : pce->getEmission() & ~BoardObject::EMI_DIM);
-}
-
-inline bool Record::pieceProtected(Piece* pce) const {
-	return pce->getType() == Com::Piece::warhorse && (action & (ACT_SWAP | ACT_ATCK | ACT_FIRE));
+inline bool Record::actorProtected() const {
+	return actor->getType() == Com::Piece::warhorse && (action & ACT_ATCK);
 }
 
 // handles game logic
 class Game {
 public:
-	Com::Config config;
-	string configName;
-	FavorState favorState;	// favor state when dragging piece
-
 	static constexpr float screenYUp = 0.f;
 	static constexpr float screenYDown = -4.2f;
 private:
-	static const array<uint16 (*)(uint16, uint16), 4> adjacentStraight;
-	static const array<uint16 (*)(uint16, uint16), 8> adjacentFull;
+	static const array<uint16 (*)(uint16, svec2), 4> adjacentStraight;
+	static const array<uint16 (*)(uint16, svec2), 8> adjacentFull;
+
+	Com::Config config;
+	uint16 boardHeight;	// total number of rows
+	float objectSize;	// width and height of a tile/piece
+	vec2 tilesOffset;	// top left corner
+	vec2 bobOffset;		// offset for gtop
+	vec4 boardBounds;
 
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
 	Buffer sendb;
 
-	GMesh gridat;
+	Mesh gridat;
 	Object ground, board, bgrid, screen, ffpad;
 	TileCol tiles;
 	PieceCol pieces;
@@ -81,38 +73,41 @@ public:
 	Game();
 	~Game();
 
+	const Com::Config& getConfig();
 	TileCol& getTiles();
 	Tile* getTile(svec2 pos);
-	bool isHomeTile(Tile* til) const;
-	bool isEnemyTile(Tile* til) const;
+	bool isHomeTile(const Tile* til) const;
+	bool isEnemyTile(const Tile* til) const;
 	PieceCol& getPieces();
 	Piece* getOwnPieces(Com::Piece type);
-	Piece* findPiece(svec2 pos);
-	bool isOwnPiece(Piece* pce) const;
-	bool isEnemyPiece(Piece* pce) const;
+	bool isOwnPiece(const Piece* pce) const;
+	bool isEnemyPiece(const Piece* pce) const;
 	bool pieceOnBoard(const Piece* piece) const;
 	bool pieceOnHome(const Piece* piece) const;
 	Object* getScreen();
+	void setFfpadPos(bool force = false, svec2 pos = svec2(UINT16_MAX));
+	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
 	bool getMyTurn() const;
 	uint8 getFavorCount() const;
 	uint8 getFavorTotal() const;
+	const vec4& getBoardBounds() const;
 	svec2 ptog(const vec3& p) const;
 	vec3 gtop(svec2 p, float z = 0.f) const;
+	uint16 posToId(svec2 p) const;
 
-	void tick();
 	void sendStart();
 	void sendConfig(bool onJoin = false);
 	void sendSetup();
+	void recvConfig(uint8* data);
 	void recvStart(uint8* data);
-	void recvTiles(uint8* data);
-	void recvPieces(uint8* data);
+	void recvSetup(uint8* data);
 	void recvMove(uint8* data);
 	void recvKill(uint8* data);
 	void recvBreach(uint8* data);
 	void recvRecord(uint8* data);
-	vector<Object*> initObjects();
+	vector<Object*> initObjects(const Com::Config& cfg);
 #ifdef DEBUG
-	vector<Object*> initDummyObjects();
+	vector<Object*> initDummyObjects(const Com::Config& cfg);
 #endif
 	void uninitObjects();
 	void prepareMatch();
@@ -131,7 +126,6 @@ public:
 	void fillInFortress();
 	void takeOutFortress();
 
-	void updateFavorState();
 	void pieceMove(Piece* piece, svec2 pos, Piece* occupant, bool forceSwitch);
 	void pieceFire(Piece* killer, svec2 pos, Piece* piece);
 	void placeDragon(svec2 pos, Piece* occupant);
@@ -139,35 +133,40 @@ public:
 	void endTurn();
 
 private:
+	void updateConfigValues();
 	Piece* getPieces(Piece* pieces, Com::Piece type);
+	Piece* findPiece(Piece* beg, Piece* end, svec2 pos);
 	void setBgrid();
 	void setMidTiles();
-	void setTiles(Tile* tiles, int16 yofs, bool inter);
-	void setPieces(Piece* pieces, float rot, const Material* matl);
+	void setTiles(Tile* tils, uint16 yofs, bool inter);
+	void setPieces(Piece* pces, float rot, const Material* matl);
 	static void setTilesInteract(Tile* tiles, uint16 num, Tile::Interact lvl, bool dim = false);
 	static void setPieceInteract(Piece* piece, bool on, bool dim, GCall hgcall, GCall ulcall, GCall urcall);
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
 	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
 	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf);
+	uint16 tileCompressionSize() const;
 	uint8 compressTile(uint16 e) const;
-	static Com::Tile decompressTile(uint8* src, uint16 i);
-	Com::Tile pollFavor();	// resets FF indicator
-	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
-	void useFavor();
+	static Com::Tile decompressTile(const uint8* src, uint16 i);
 
-	void concludeAction(bool end);
-	void checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action action, Com::Tile favor);
-	template <class F, class... A> void checkMoveDestination(svec2 pos, svec2 dst, Com::Tile favor, F check, A... args);
-	uset<uint16> collectTilesBySingle(svec2 pos, Com::Tile favor, bool& favorUsed);
-	uset<uint16> collectTilesByArea(svec2 pos, Com::Tile favor, bool& favorUsed, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
-	uset<uint16> collectTilesByType(svec2 pos, Com::Tile favor, bool& favorUsed);
-	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type) const;
-	static bool spaceAvailible(uint16 pos);
-	static bool spaceAvailibleDummy(uint16 pos);
-	void checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst);
-	uset<uint16> collectTilesByDistance(svec2 pos, int16 dist);
+	void concludeAction(Action last, FavorAct fact, Com::Tile favor);
+	void checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action action, FavorAct fact, Com::Tile favor);
+	template <class F, class... A> void checkMoveDestination(svec2 pos, svec2 dst, F check, A... args);
+	void collectTilesBySingle(uset<uint16>& tcol, uint16 pos);
+	void collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
+	void collectTilesByArea(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
+	void collectTilesByType(uset<uint16>& tcol, uint16 pos);
+	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type);
+	static bool spaceAvailibleAny(uint16 pos);
+	bool spaceAvailibleAlly(uint16 pos);
+	static bool spaceAvailibleDragon(uint16 pos);
+	void checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst, FavorAct fact, Com::Tile favor);
+	uset<uint16> collectTilesByDistance(svec2 pos, uint16 dist);
+	static bool canForestFF(FavorAct fact, Com::Tile favor, Tile* src);
+	bool canForestFF(FavorAct fact, Com::Tile favor, Tile* src, Tile* dst, Piece* occ) const;
+	void checkFavorAction(Tile* src, Tile* dst, Piece* occupant, Action action, FavorAct fact, Com::Tile favor);
 	void checkAttack(Piece* killer, Piece* victim, Tile* dtil) const;
-	bool survivalCheck(Piece* piece, Tile* stil, Tile* dtil, Action action, Com::Tile favor);
+	bool survivalCheck(Piece* piece, Piece* occupant, Tile* stil, Tile* dtil, Action action, FavorAct fact, Com::Tile favor);
 	void failSurvivalCheck(Piece* piece, Action action);
 	bool checkWin();
 	bool checkThroneWin(Piece* thrones);
@@ -177,17 +176,21 @@ private:
 	void removePiece(Piece* piece);				// remove from board
 	void updateFortress(Tile* fort, bool breached);
 
-	uint16 posToId(svec2 p);
-	svec2 idToPos(uint16 i);
-	uint16 invertId(uint16 i);
+	svec2 idToPos(uint16 i) const;
+	uint16 invertId(uint16 i) const;
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
 	uint16 inversePieceId(Piece* piece) const;
-	std::default_random_engine createRandomEngine();
+	string pastRecordAction() const;
+	static std::default_random_engine createRandomEngine();
 };
 
 inline Game::~Game() {
 	gridat.free();
+}
+
+inline const Com::Config& Game::getConfig() {
+	return config;
 }
 
 inline TileCol& Game::getTiles() {
@@ -195,14 +198,14 @@ inline TileCol& Game::getTiles() {
 }
 
 inline Tile* Game::getTile(svec2 pos) {
-	return tiles.mid(pos.y * config.homeSize.x + pos.x);
+	return &tiles[pos.y * config.homeSize.x + pos.x];
 }
 
-inline bool Game::isHomeTile(Tile* til) const {
+inline bool Game::isHomeTile(const Tile* til) const {
 	return til >= tiles.own();
 }
 
-inline bool Game::isEnemyTile(Tile* til) const {
+inline bool Game::isEnemyTile(const Tile* til) const {
 	return til < tiles.mid();
 }
 
@@ -214,20 +217,20 @@ inline Piece* Game::getOwnPieces(Com::Piece type) {
 	return getPieces(pieces.own(), type);
 }
 
-inline bool Game::isOwnPiece(Piece* pce) const {
+inline bool Game::isOwnPiece(const Piece* pce) const {
 	return pce < pieces.ene();
 }
 
-inline bool Game::isEnemyPiece(Piece* pce) const {
+inline bool Game::isEnemyPiece(const Piece* pce) const {
 	return pce >= pieces.ene();
 }
 
 inline bool Game::pieceOnBoard(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), svec2(0, -int16(config.homeSize.y)), svec2(config.homeSize.x - 1, config.homeSize.y));
+	return inRange(ptog(piece->getPos()), svec2(0), svec2(config.homeSize.x - 1, boardHeight - 1));
 }
 
 inline bool Game::pieceOnHome(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), svec2(0, 1), svec2(config.homeSize.x - 1, config.homeSize.y));
+	return inRange(ptog(piece->getPos()), svec2(0, config.homeSize.y + 1), svec2(config.homeSize.x - 1, boardHeight - 1));
 }
 
 inline Object* Game::getScreen() {
@@ -246,8 +249,12 @@ inline uint8 Game::getFavorTotal() const {
 	return favorTotal;
 }
 
+inline const vec4& Game::getBoardBounds() const {
+	return boardBounds;
+}
+
 inline void Game::setOwnTilesInteract(Tile::Interact lvl, bool dim) {
-	setTilesInteract(tiles.own(), config.numTiles, lvl, dim);
+	setTilesInteract(tiles.own(), tiles.getHome(), lvl, dim);
 }
 
 inline void Game::setMidTilesInteract(Tile::Interact lvl, bool dim) {
@@ -255,38 +262,39 @@ inline void Game::setMidTilesInteract(Tile::Interact lvl, bool dim) {
 }
 
 inline vector<uint16> Game::countOwnTiles() const {
-	return countTiles(tiles.own(), config.numTiles, vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end() - 1));
+	return countTiles(tiles.own(), tiles.getHome(), vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end() - 1));
 }
 
 inline vector<uint16> Game::countMidTiles() const {
 	return countTiles(tiles.mid(), config.homeSize.x, vector<uint16>(config.middleAmounts.begin(), config.middleAmounts.end()));
 }
 
-template <class T>
-void Game::setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id) {
-	for (sizet i = 0; i < size; i++)
-		dst[id+i] = &data[i];
-	id += size;
+inline uint16 Game::tileCompressionSize() const {
+	return tiles.getExtra() / 2 + tiles.getExtra() % 2;
 }
 
-inline uint8 Game::compressTile(uint16 e) const {
-	return uint8(uint8(tiles.mid(e)->getType()) << (e % 2 * 4));
+inline uint8 Game::compressTile(uint16 i) const {
+	return uint8(uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4));
 }
 
-inline Com::Tile Game::decompressTile(uint8* src, uint16 i) {
+inline Com::Tile Game::decompressTile(const uint8* src, uint16 i) {
 	return Com::Tile((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
-inline Com::Tile Game::checkFavor() {
-	return ffpad.show ? getTile(ptog(ffpad.getPos()))->getType() : Com::Tile::empty;
+inline void Game::collectTilesBySingle(uset<uint16>& tcol, uint16 pos) {
+	return collectTilesByStraight(tcol, pos, 1, spaceAvailibleAny, adjacentFull.data(), uint8(adjacentFull.size()));
 }
 
-inline uset<uint16> Game::collectTilesBySingle(svec2 pos, Com::Tile favor, bool& favorUsed) {
-	return collectTilesByArea(pos, favor, favorUsed, 1, spaceAvailibleDummy, adjacentFull.data(), uint8(adjacentFull.size()));
-}
-
-inline bool Game::spaceAvailibleDummy(uint16) {
+inline bool Game::spaceAvailibleAny(uint16) {
 	return true;
+}
+
+inline bool Game::canForestFF(FavorAct fact, Com::Tile favor, Tile* src) {
+	return fact == FavorAct::now && favor == Com::Tile::forest && src->getType() == Com::Tile::forest;
+}
+
+inline bool Game::canForestFF(FavorAct fact, Com::Tile favor, Tile* src, Tile* dst, Piece* occ) const {
+	return canForestFF(fact, favor, src) && dst->getType() == Com::Tile::forest && isOwnPiece(occ);
 }
 
 inline void Game::recvMove(uint8* data) {
@@ -302,23 +310,23 @@ inline void Game::recvBreach(uint8* data) {
 }
 
 inline svec2 Game::ptog(const vec3& p) const {
-	return svec2((p.x - config.objectSize / 2.f) / config.objectSize, p.z / config.objectSize);
+	return svec2((vec2(p.x, p.z) - tilesOffset) / objectSize);
 }
 
 inline vec3 Game::gtop(svec2 p, float z) const {
-	return vec3(p.x * config.objectSize + config.objectSize / 2.f, z, p.y * config.objectSize);
+	return vec3(float(p.x) * objectSize + bobOffset.x, z, float(p.y) * objectSize + bobOffset.y);
 }
 
-inline uint16 Game::posToId(svec2 p) {
-	return uint16((p.y + config.homeSize.y) * config.homeSize.x + p.x);
+inline uint16 Game::posToId(svec2 p) const {
+	return uint16(p.y * config.homeSize.x + p.x);
 }
 
-inline svec2 Game::idToPos(uint16 i) {
-	return svec2(int16(i % config.homeSize.x), int16(i / config.homeSize.x) - config.homeSize.y);
+inline svec2 Game::idToPos(uint16 i) const {
+	return svec2(i % config.homeSize.x, i / config.homeSize.x);
 }
 
-inline uint16 Game::invertId(uint16 i) {
-	return config.boardSize - i - 1;
+inline uint16 Game::invertId(uint16 i) const {
+	return tiles.getSize() - i - 1;
 }
 
 inline uint16 Game::tileId(const Tile* tile) const {
@@ -330,5 +338,5 @@ inline uint16 Game::inverseTileId(const Tile* tile) const {
 }
 
 inline uint16 Game::inversePieceId(Piece* piece) const {
-	return piece ? isOwnPiece(piece) ? uint16(piece - pieces.own()) + config.numPieces : uint16(piece - pieces.ene()) : UINT16_MAX;
+	return piece ? isOwnPiece(piece) ? uint16(piece - pieces.own()) + pieces.getNum() : uint16(piece - pieces.ene()) : UINT16_MAX;
 }

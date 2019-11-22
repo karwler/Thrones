@@ -61,17 +61,18 @@ void Interactable::onClick(const ivec2&, uint8) {}
 
 // DIJKSTRA
 
-vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize) {
+vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, svec2 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize) {
 	// init graph
-	vector<Adjacent> grid(size);
-	for (uint16 i = 0; i < size; i++)
+	uint16 area = size.x * size.y;
+	vector<Adjacent> grid(area);
+	for (uint16 i = 0; i < area; i++)
 		if (grid[i].cnt = 0; stepable(i) || i == src)	// ignore rules for starting point cause it can be a blocking piece
 			for (uint8 m = 0; m < movSize; m++)
-				if (uint16 ni = vmov[m](i, width); ni < size && stepable(ni))
+				if (uint16 ni = vmov[m](i, size); ni < area && stepable(ni))
 					grid[i].adj[grid[i].cnt++] = ni;
 
-	vector<bool> visited(size, false);
-	vector<uint16> dist(size, UINT16_MAX);
+	vector<bool> visited(area, false);
+	vector<uint16> dist(area, UINT16_MAX);
 	dist[src] = 0;
 
 	// dijkstra

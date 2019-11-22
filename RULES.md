@@ -31,8 +31,8 @@
 - While on Plains, may move over any number of connected Plains if only moving that turn.  
 
 ### Warhorse (armored cavalry) <img src="rsc/textures/warhorse.bmp" width="32" height="32" title="Warhorse">  
-- May switch positions with any number/type of allied/enemy pieces.  
-- Cannot be attacked if it attacked during the previous turn.  
+- Cannot be attacked if it removed a piece during the previous turn.  
+- May switch positions with any number of allied and enemy pieces if not attacking that turn.  
 
 ### Elephant (heavy cavalry) <img src="rsc/textures/elephant.bmp" width="32" height="32" title="Elephant">  
 - Cannot be engaged if occupying a Plains except by a Dragon.  
@@ -43,36 +43,41 @@
 - Always passes both survival checks but cannot attack Forest.  
 
 ### Throne (royal guard) <img src="rsc/textures/throne.bmp" width="32" height="32" title="Throne">  
-- Can attack any piece on any tile including Elephants, Warhorse and unbreached Fortress tiles.  
+- Always passes Survival Checks while attacking any piece/tile including Elephants, Warhorse and unbreached Fortress tiles.  
 
 
 ## Playing The Game  
 
 ### Your Turn  
-Each player must make only one of these actions per turn.  
-- Move a piece one tile in any direction, unless otherwise specified.  
-- Switch positions with an adjacent, allied piece of a different type.  
-- Engage another piece or occupied Fortress either by:  
+Each player must choose to either move/switch pieces, attack, or fire each turn.  
+- Move and/or Switch pieces in any order  
+  - Move a piece one tile in any direction, unless otherwise specified.  
+  - Switch positions with an adjacent, allied piece of a different type.  
+- Engage another piece or occupied Fortress either by  
   - Attacking: Occupying a tile and removing it's piece.  
-  - Firing: Attacking a piece on a different tile without moving.  
+  - Firing: Removing a piece on a different tile without moving.  
 
 ### Survival  
-To take any Actions on to/off of a Mountain or Water tile, like firing onto or moving off it, a piece must first make a Survival Check to see if fate impeded their efforts. It’s owner must roll an even-numbered die, flip a coin, or players must use #2 method in Standard Gameplay.  
-- Survive the check with an even number; the piece may move, attack, or fire for that turn.  
+If a piece is move/switching from, attacking onto/from, or firing onto/from a  Mountain or Water tile, a Survival Check is made to see if fate impeded its efforts.  
+This is done by flipping a coin, rolling an even-numbered die, or using the #2 method in Standard Gameplay.  
+Remember, if a piece is only moving onto a Mountain or Water tile, no check occurs!  
+- Survive the check with an even number; the piece may move, attack, or fire that turn.  
 - Fail the check with an odd number; the move/firing does not occur, and the player ends their turn. If the check failed during an attack, the piece is removed from the game.  
 
-Throne pieces cannot be removed by a failed check; the turn ends when they fail instead.  
 If Rangers switch positions with a piece occupying a Mountain, or if Spearmen switch positions with a piece occupying Water, both pieces always pass the Survival Check that their switching piece always passes that turn.  
 
 ### Then a Dragon Showed Up  
-If they did not place it at the beginning of the game, a player may choose to use their turn to place their Dragon on any unoccupied, homeland Mountain. Alternately, they can choose to place it in their homeland Fortress and restart that turn, removing any piece (opponent or allied) occupying that Fortress from the game.  
+If they did not place it at the beginning of the game, a player may choose to use their turn to place their Dragon on any unoccupied, homeland Mountain.  
+Alternately, they can choose to place it in their homeland Fortress and restart that turn, removing any piece (opponent or allied) occupying that Fortress from the game.  
 
 ### Breaching Fortresses  
-A piece occupying a Fortress cannot be engaged until the Fortress is breached. A successful attack or firing (determined by a Survival Check) breaches the Fortress tile. A breached Fortress is flipped upside-down, and its occupant now vulnerable to attack next turn. It does not restore itself until it is unoccupied at a turn’s end.  
-On a successful check, a Throne will breach the Fortress AND remove it’s occupier in one move.  
+A piece occupying a Fortress cannot be engaged until the Fortress is breached. A successful attack or firing (determined by a Survival Check) breaches the Fortress tile.  
+A breached Fortress is flipped upside-down, and its occupant now vulnerable to attack next turn. The Fortress does not restore itself until it is unoccupied at a turn’s end.  
+A Throne’s attack will breach the Fortress AND remove it’s occupier in one move.  
+A Warhorse can switch positions with a piece occupying a Fortress but it cannot switch positions with an enemy Warhorse in any circumstances.  
 
 ### Fate’s Favor  
-When the game starts with a Throne occupying a Fortress, and/or when the Throne occupies a Fortress different from the one it did previously, it’s controller gains a special, single-use Fate’s Favor tile (indicated by taking one of the extra tiles the game has):  
+When the game starts with a Throne occupying a Fortress, and/or when the Throne occupies a Fortress different from the one it did previously, it’s controller gains a special, single-use Fate’s Favor tile (indicated by taking one of the extra tiles the game has)  
 - Haste (Plains): Adds 1 tile of movement to an allied piece that player controls.  
 - Ambush (Forest): Switches positions of two allied pieces on Forests that player controls.  
 - Cunning (Mountain): Automatically pass a Survival Check that player controls.  

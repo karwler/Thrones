@@ -82,18 +82,6 @@ inline Shader::~Shader() {
 	glDeleteProgram(program);
 }
 
-template <class C, class I>
-void Shader::checkStatus(GLuint id, GLenum stat, C check, I info) {
-	GLint res;
-	if (check(id, stat, &res); res == GL_FALSE) {
-		string err;
-		check(id, GL_INFO_LOG_LENGTH, &res);
-		err.resize(sizet(res));
-		info(id, res, nullptr, err.data());
-		throw std::runtime_error(err);
-	}
-}
-
 class ShaderGeometry : public Shader {
 public:
 	GLuint vertex, uvloc, normal;
@@ -145,6 +133,7 @@ private:
 	uptr<ShaderGUI> gui;
 	uptr<FontSet> fonts;
 	ivec2 curView;
+	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 	SDL_Cursor* cursor;
@@ -240,19 +229,4 @@ inline int WindowSys::displayID() const {
 
 inline uint32 WindowSys::windowID() const {
 	return SDL_GetWindowID(window);
-}
-
-template <class T>
-bool WindowSys::checkResolution(T& val, const vector<T>& modes) {
-#ifdef __ANDROID__
-	return true;
-#else
-	typename vector<T>::const_iterator it;
-	if (it = std::find(modes.begin(), modes.end(), val); it != modes.end() || modes.empty())
-		return true;
-
-	for (it = modes.begin(); it != modes.end() && *it < val; it++);
-	val = it == modes.begin() ? *it : *(it - 1);
-	return false;
-#endif
 }

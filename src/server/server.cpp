@@ -22,35 +22,30 @@ Date Date::now() {
 
 // CONFIG
 
+const array<string, Config::survivalNames.size()> Config::survivalNames = {
+	"disable",
+	"finish",
+	"kill"
+};
+
 Config::Config() :
 	homeSize(9, 4),
 	survivalPass(randomLimit / 2),
-	favorLimit(4),
+	survivalMode(Survival::disable),
+	favorLimit(true),
+	favorMax(4),
 	dragonDist(4),
+	dragonSingle(true),
 	dragonDiag(true),
-	multistage(false),
-	survivalKill(false),
 	tileAmounts({ 11, 10, 7, 7, 1 }),
 	middleAmounts({ 1, 1, 1, 1 }),
-	pieceAmounts({ 2, 2, 2, 1, 1, 2, 1, 2, 1, 1 }),
+	pieceAmounts({ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 }),
 	winFortress(1),
 	winThrone(1),
 	capturers({ false, false, false, false, false, false, false, false, false, true }),
 	shiftLeft(true),
 	shiftNear(true)
-{
-	updateValues();
-}
-
-void Config::updateValues() {
-	numTiles = homeSize.y * homeSize.x;				// should equal the sum of tileAmounts
-	extraSize = (homeSize.y + 1) * homeSize.x;
-	boardSize = (homeSize.y * 2 + 1) * homeSize.x;	// aka. total amount of tiles
-	
-	numPieces = calcSum(pieceAmounts);
-	piecesSize = numPieces * 2;
-	objectSize = boardWidth / float(std::max(homeSize.x, uint16(homeSize.y * 2 + 1)));
-}
+{}
 
 Config& Config::checkValues() {
 	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
@@ -60,35 +55,34 @@ Config& Config::checkValues() {
 	for (uint8 i = 0; i < tileAmounts.size() - 2; i++)
 		if (tileAmounts[i] && tileAmounts[i] < homeSize.y)
 			tileAmounts[i] = homeSize.y;
-	tileAmounts[uint8(Tile::fortress)] = hsize - floorAmounts(calcSum(tileAmounts, tileAmounts.size() - 1), tileAmounts.data(), hsize, tileAmounts.size() - 2, homeSize.y);
+	uint16 tamt = floorAmounts(countTilesNonFort(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 2), homeSize.y);
+	tileAmounts[uint8(Tile::fortress)] = hsize - ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 2));
 	for (uint8 i = 0; tileAmounts[uint8(Tile::fortress)] > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 2 ? i + 1 : 0) {
 		tileAmounts[i]++;
 		tileAmounts[uint8(Tile::fortress)]--;
 	}
-	floorAmounts(calcSum(middleAmounts), middleAmounts.data(), homeSize.x / 2, middleAmounts.size() - 1);
+	floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
 
-	uint16 plim = hsize < maxNumPieces ? hsize : maxNumPieces;
-	uint16 psize = floorAmounts(calcSum(pieceAmounts), pieceAmounts.data(), plim, pieceAmounts.size() - 1);
-	
-	if (!winFortress && !winThrone)
-		winFortress = winThrone = 1;
+	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, uint8(pieceAmounts.size() - 1));
+	if (!psize)
+		psize = pieceAmounts[uint8(Piece::throne)] = 1;
+
 	winFortress = std::clamp(winFortress, uint16(0), tileAmounts[uint8(Tile::fortress)]);
-	if (winThrone && !pieceAmounts[uint8(Piece::throne)]) {
-		if (psize == plim)
-			(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
-		pieceAmounts[uint8(Piece::throne)]++;
-	} else
-		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
+	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
+	if (!winFortress && !winThrone)
+		if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
+			if (psize == hsize)
+				(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
+			pieceAmounts[uint8(Piece::throne)]++;
+		}
 
 	if (std::find(capturers.begin(), capturers.end(), true) == capturers.end())
 		std::fill(capturers.begin(), capturers.end(), true);
-
-	updateValues();
 	return *this;
 }
 
-uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, uint16 floor) {
-	for (sizet i = ei; total > limit; i = i ? i - 1 : ei)
+uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, uint8 ei, uint16 floor) {
+	for (uint8 i = ei; total > limit; i = i ? i - 1 : ei)
 		if (amts[i] > floor) {
 			amts[i]--;
 			total--;
@@ -96,20 +90,26 @@ uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, 
 	return total;
 }
 
+uint16 Com::Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
+	for (uint8 i = 0; total < floor; i = i < ei ? i + 1 : 0) {
+		amts[i]++;
+		total++;
+	}
+	return total;
+}
+
 void Config::toComData(uint8* data) const {
+	*data++ = uint8(homeSize.x);
+	*data++ = uint8(homeSize.y);
+	*data++ = survivalPass;
+	*data++ = uint8(survivalMode);
+	*data++ = favorLimit;
+	*data++ = favorMax;
+	*data++ = dragonDist;
+	*data++ = dragonSingle;
+	*data++ = dragonDiag;
+
 	uint16* sp = reinterpret_cast<uint16*>(data);
-	SDLNet_Write16(homeSize.x, sp++);
-	SDLNet_Write16(homeSize.y, sp++);
-
-	uint8* bp = reinterpret_cast<uint8*>(sp);
-	*bp++ = survivalPass;
-	*bp++ = favorLimit;
-	*bp++ = dragonDist;
-	*bp++ = dragonDiag;
-	*bp++ = multistage;
-	*bp++ = survivalKill;
-
-	sp = reinterpret_cast<uint16*>(bp);
 	for (uint16 v : tileAmounts)
 		SDLNet_Write16(v, sp++);
 	for (uint16 v : middleAmounts)
@@ -119,25 +119,23 @@ void Config::toComData(uint8* data) const {
 	SDLNet_Write16(winFortress, sp++);
 	SDLNet_Write16(winThrone, sp++);
 
-	bp = std::copy(capturers.begin(), capturers.end(), reinterpret_cast<uint8*>(sp));
-	*bp++ = shiftLeft;
-	*bp++ = shiftNear;
+	data = std::copy(capturers.begin(), capturers.end(), reinterpret_cast<uint8*>(sp));
+	*data++ = shiftLeft;
+	*data++ = shiftNear;
 }
 
 void Config::fromComData(uint8* data) {
+	homeSize.x = *data++;
+	homeSize.y = *data++;
+	survivalPass = *data++;
+	survivalMode = Survival(*data++);
+	favorLimit = *data++;
+	favorMax = *data++;
+	dragonDist = *data++;
+	dragonSingle = *data++;
+	dragonDiag = *data++;
+
 	uint16* sp = reinterpret_cast<uint16*>(data);
-	homeSize.x = SDLNet_Read16(sp++);
-	homeSize.y = SDLNet_Read16(sp++);
-
-	uint8* bp = reinterpret_cast<uint8*>(sp);
-	survivalPass = *bp++;
-	favorLimit = *bp++;
-	dragonDist = *bp++;
-	dragonDiag = *bp++;
-	multistage = *bp++;
-	survivalKill = *bp++;
-
-	sp = reinterpret_cast<uint16*>(bp);
 	for (uint16& v : tileAmounts)
 		v = SDLNet_Read16(sp++);
 	for (uint16& v : middleAmounts)
@@ -147,13 +145,12 @@ void Config::fromComData(uint8* data) {
 	winFortress = SDLNet_Read16(sp++);
 	winThrone = SDLNet_Read16(sp++);
 
-	bp = reinterpret_cast<uint8*>(sp);
-	std::copy(bp, bp + pieceMax, capturers.begin());
-	bp += pieceMax;
+	data = reinterpret_cast<uint8*>(sp);
+	std::copy(data, data + pieceMax, capturers.begin());
+	data += pieceMax;
 
-	shiftLeft = *bp++;
-	shiftNear = *bp++;
-	updateValues();
+	shiftLeft = *data++;
+	shiftNear = *data++;
 }
 
 string Config::capturersString() const {
@@ -178,7 +175,7 @@ int Com::sendRejection(TCPsocket server) {
 	int sent = 0;
 	if (TCPsocket tmps = SDLNet_TCP_Accept(server)) {
 		uint8 data[dataHeadSize] = { uint8(Code::full) };
-		SDLNet_Write16(codeSizes[data[0]], data + 1);
+		SDLNet_Write16(codeSizes.at(Code(data[0])), data + 1);
 		sent = SDLNet_TCP_Send(tmps, data, dataHeadSize);
 		SDLNet_TCP_Close(tmps);
 	}
@@ -192,26 +189,83 @@ string Com::readName(const uint8* data) {
 	return name;
 }
 
-// BUFFER
-
-void Buffer::push(const vector<uint16>& vec) {
-	for (uint16 i = 0; i < vec.size(); i++)
-		SDLNet_Write16(vec[i], data + i * sizeof(uint16) + size);
-	size += uint16(vec.size() * sizeof(uint16));
+string Com::readVersion(uint8* data) {
+	string name;
+	name.resize(SDLNet_Read16(data + 1) - dataHeadSize);
+	std::copy_n(data + dataHeadSize, name.length(), name.data());
+	return name;
 }
 
-void Buffer::push(const uint8* vec, uint16 len) {
-	std::copy_n(vec, len, data + size);
-	size += len;
+// BUFFER
+
+Buffer::Buffer() :
+	dpos(0)
+{}
+
+void Buffer::clear() {
+	data.clear();
+	dpos = 0;
+}
+
+void Buffer::push(const vector<uint16>& vec) {
+	checkEnd(dpos + uint(vec.size()) * sizeof(*vec.data()));
+	for (uint16 i = 0; i < vec.size(); i++, dpos += sizeof(*vec.data()))
+		SDLNet_Write16(vec[i], data.data() + dpos);
+}
+
+void Buffer::push(const uint8* vec, uint len) {
+	uint end = checkEnd(dpos + len);
+	std::copy_n(vec, len, data.data() + dpos);
+	dpos = end;
+}
+
+void Buffer::push(uint8 val) {
+	uint end = checkEnd(dpos + 1);
+	data[dpos] = val;
+	dpos = end;
 }
 
 void Buffer::push(uint16 val) {
-	SDLNet_Write16(val, data + size);
-	size += sizeof(val);
+	uint end = checkEnd(dpos + sizeof(val));
+	SDLNet_Write16(val, data.data() + dpos);
+	dpos = end;
 }
 
-uint16 Buffer::writeHead(Com::Code code, uint16 clen, uint16 pos) {
-	data[pos++] = uint8(code);
-	SDLNet_Write16(clen, data + pos);
-	return pos + sizeof(uint16);
+uint Buffer::preallocate(Com::Code code, uint dlen) {
+	uint end = checkEnd(dpos + dlen);
+	data[dpos] = uint8(code);
+	SDLNet_Write16(dlen, data.data() + dpos + 1);
+	uint ret = dpos + Com::dataHeadSize;
+	dpos = end;
+	return ret;
+}
+
+uint Buffer::pushHead(Com::Code code, uint dlen) {
+	uint end = checkEnd(dpos + Com::dataHeadSize);
+	data[dpos] = uint8(code);
+	SDLNet_Write16(dlen, data.data() + dpos + 1);
+	return dpos = end;
+}
+
+uint Buffer::write(uint8 val, uint pos) {
+	data[pos] = val;
+	return pos += sizeof(val);
+}
+
+uint Buffer::write(uint16 val, uint pos) {
+	SDLNet_Write16(val, data.data() + pos);
+	return pos + sizeof(val);
+}
+
+const char* Buffer::send(TCPsocket socket) {
+	const char* err = send(socket, dpos);
+	if (!err)
+		clear();
+	return err;
+}
+
+uint Buffer::checkEnd(uint end) {
+	if (end > data.size())
+		data.resize(end);
+	return end;
 }

@@ -206,7 +206,7 @@ private:
 	};
 
 public:
-	static vector<uint16> travelDist(uint16 src, uint16 dlim, uint16 width, uint16 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, uint16), uint8 movSize);
+	static vector<uint16> travelDist(uint16 src, uint16 dlim, svec2 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
 };
 
 inline constexpr Dijkstra::Node::Node(uint16 id, uint16 dst) :
@@ -245,10 +245,15 @@ glm::vec<2, T, Q> swap(const T& x, const T& y, bool swap) {
 	return swap ? glm::vec<2, T, Q>(y, x) : glm::vec<2, T, Q>(x, y);
 }
 
-template <class T>
+template <class T, std::enable_if_t<std::is_unsigned<T>::value, int> = 0>
 T swapBits(T n, uint8 i, uint8 j) {
 	T x = ((n >> i) & 1) ^ ((n >> j) & 1);
 	return n ^ ((x << i) | (x << j));
+}
+
+template <class T>
+uint8 numDigits(T num) {
+	return num ? uint8(std::log10(float(num > 0 ? num : -num))) + 1 : 1;
 }
 
 // container stuff

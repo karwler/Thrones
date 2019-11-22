@@ -33,6 +33,7 @@ struct Settings {
 	float gamma;
 	ivec2 size;
 	SDL_DisplayMode mode;
+	bool scaleTiles, scalePieces;
 	string address;
 	uint16 port;
 
@@ -68,17 +69,20 @@ private:
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordMsamples[] = "samples";
 	static constexpr char iniKeywordGamma[] = "gamma";
+	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
+	static constexpr char iniKeywordScalePieces[] = "scale_pieces";
 	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
 	static constexpr char iniKeywordBoardSize[] = "size";
-	static constexpr char iniKeywordSurvival[] = "survival";
-	static constexpr char iniKeywordFavors[] = "favors";
+	static constexpr char iniKeywordSurvivalPass[] = "survival_pass";
+	static constexpr char iniKeywordSurvivalMode[] = "survival_mode";
+	static constexpr char iniKeywordFavorLimit[] = "favor_limit";
+	static constexpr char iniKeywordFavorMax[] = "favor_max";
 	static constexpr char iniKeywordDragonDist[] = "dragon_dist";
+	static constexpr char iniKeywordDragonSingle[] = "dragon_single";
 	static constexpr char iniKeywordDragonDiag[] = "dragon_diag";
-	static constexpr char iniKeywordMultistage[] = "multistage";
-	static constexpr char iniKeywordSurvivalKill[] = "survival_kill";
 	static constexpr char iniKeywordTile[] = "tile_";
 	static constexpr char iniKeywordMiddle[] = "middle_";
 	static constexpr char iniKeywordPiece[] = "piece_";
@@ -102,7 +106,7 @@ public:
 	static bool saveSetups(const umap<string, Setup>& sets);
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
-	static umap<string, GMesh> loadObjects();
+	static umap<string, Mesh> loadObjects();
 	static umap<string, string> loadShaders();
 	static umap<string, Texture> loadTextures();
 
@@ -130,16 +134,4 @@ inline bool FileSys::createDir(const string& path) {
 #else
 	return !mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 #endif
-}
-
-template <sizet N, sizet S>
-void FileSys::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
-	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
-		amts[id] = uint16(sstol(it.second));
-}
-
-template <sizet N, sizet S>
-void FileSys::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
-	for (sizet i = 0; i < amts.size(); i++)
-		text += makeIniLine(word + names[i], toStr(amts[i]));
 }

@@ -1,50 +1,15 @@
 #include "engine/world.h"
 #include <glm/gtc/matrix_inverse.hpp>
 
-// CMESH
-
-const vec3 CMesh::defaultVertices[defaultVertexSize] = {
-	vec3(-0.5f, 0.f, -0.5f),
-	vec3(0.5f, 0.f, -0.5f),
-	vec3(0.5f, 0.f, 0.5f),
-	vec3(-0.5f, 0.f, 0.5f)
-};
-
-CMesh::CMesh() :
-	elems(nullptr),
-	verts(nullptr),
-	esiz(0)
-{}
-
-CMesh::CMesh(uint16 ec, uint16 vc) :
-	elems(new uint16[ec]),
-	verts(new vec3[vc]),
-	esiz(ec)
-{}
-
-void CMesh::free() {
-	delete[] elems;
-	delete[] verts;
-}
-
-CMesh CMesh::makeDefault(const vec3& ofs) {
-	CMesh mesh(defaultElementSize, defaultVertexSize);
-	std::copy_n(defaultElements, defaultElementSize, mesh.elems);
-	std::copy_n(defaultVertices, defaultVertexSize, mesh.verts);
-	for (uint16 i = 0; i < defaultVertexSize; i++)
-		mesh.verts[i] += ofs;
-	return mesh;
-}
-
 // GMESH
 
-GMesh::GMesh() :
+Mesh::Mesh() :
 	vao(0),
 	ecnt(0),
 	shape(0)
 {}
 
-GMesh::GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape) :
+Mesh::Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape) :
 	ecnt(uint16(elements.size())),
 	shape(shape)
 {
@@ -67,7 +32,7 @@ GMesh::GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uin
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(elements.size() * sizeof(*elements.data())), elements.data(), GL_STATIC_DRAW);
 }
 
-void GMesh::free() {
+void Mesh::free() {
 	glBindVertexArray(vao);
 	glDisableVertexAttribArray(World::geom()->vertex);
 	glDisableVertexAttribArray(World::geom()->normal);
@@ -79,10 +44,9 @@ void GMesh::free() {
 
 // OBJECT
 
-Object::Object(const vec3& pos, const vec3& ert, const vec3& scl, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
+Object::Object(const vec3& pos, const vec3& ert, const vec3& scl, const Mesh* mesh, const Material* matl, GLuint tex, bool rigid, bool show) :
 	mesh(mesh),
 	matl(matl),
-	coli(coli),
 	tex(tex),
 	show(show),
 	rigid(rigid),
@@ -98,7 +62,7 @@ void Object::draw() const {
 		glBindVertexArray(mesh->getVao());
 		updateTransform(trans, normat);
 		updateColor(matl->diffuse, matl->specular, matl->shininess, matl->alpha, tex);
-		glDrawElements(mesh->getShape(), mesh->getEcnt(), GMesh::elemType, nullptr);
+		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 	}
 }
 
@@ -124,8 +88,8 @@ void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& 
 
 const vec3 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f);
 
-BoardObject::BoardObject(const vec3& pos, float rot, float size, GCall hgcall, GCall ulcall, GCall urcall, const GMesh* mesh, const Material* matl, GLuint tex, const CMesh* coli, bool rigid, bool show) :
-	Object(pos, vec3(0.f, rot, 0.f), vec3(size, 1.f, size), mesh, matl, tex, coli, rigid, show),
+BoardObject::BoardObject(const vec3& pos, float rot, const vec3& scl, GCall hgcall, GCall ulcall, GCall urcall, const Mesh* mesh, const Material* matl, GLuint tex, bool rigid, bool show) :
+	Object(pos, vec3(0.f, rot, 0.f), scl, mesh, matl, tex, rigid, show),
 	hgcall(hgcall),
 	ulcall(ulcall),
 	urcall(urcall),
@@ -138,19 +102,17 @@ void BoardObject::draw() const {
 		glBindVertexArray(mesh->getVao());
 		updateTransform(getTrans(), getNormat());
 		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->shininess, matl->alpha, tex);
-		glDrawElements(mesh->getShape(), mesh->getEcnt(), GMesh::elemType, nullptr);
+		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 	}
 }
 
-void BoardObject::drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const {
-	vec3 ray = World::scene()->pickerRay(mousePos());
+void BoardObject::drawTopMesh(float ypos, const Mesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const {
 	glBindVertexArray(tmesh->getVao());
-
 	mat4 model;
-	setTransform(model, World::scene()->getCamera()->getPos() - ray * (World::scene()->getCamera()->getPos().y / ray.y) + vec3(0.f, ypos, 0.f), getRot(), getScl());
+	setTransform(model, World::scene()->rayXZIsct(World::scene()->pickerRay(mousePos())) + vec3(0.f, ypos, 0.f), getRot(), getScl());
 	updateTransform(model, getNormat());
 	updateColor(tdiffuse, matl->specular, matl->shininess, 0.9f, ttexture);
-	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), GMesh::elemType, nullptr);
+	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), Mesh::elemType, nullptr);
 }
 
 void BoardObject::setRaycast(bool on, bool dim) {
@@ -166,7 +128,7 @@ void BoardObject::setEmission(Emission emi) {
 // TILE
 
 Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show) :
-	BoardObject(pos, 0.f, size, hgcall, ulcall, urcall, nullptr, World::scene()->material("tile"), 0, World::scene()->collim("tile"), rigid, getShow(show, type)),
+	BoardObject(pos, 0.f, vec3(size, type != Com::Tile::fortress ? size : 1.f, size), hgcall, ulcall, urcall, nullptr, World::scene()->material("tile"), 0, rigid, getShow(show, type)),
 	breached(false)
 {
 	setTypeSilent(type);
@@ -213,7 +175,7 @@ void Tile::setTypeSilent(Com::Tile newType) {
 
 void Tile::setBreached(bool yes) {
 	breached = yes;
-	setEmission(breached ? getEmission() & EMI_DIM : getEmission() & ~EMI_DIM);
+	setEmission(breached ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
 	mesh = World::scene()->mesh(type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress");
 }
 
@@ -224,18 +186,16 @@ void Tile::setInteractivity(Interact lvl, bool dim) {
 
 // TILE COL
 
-TileCol::TileCol(const Com::Config& conf) :
-	tl(new Tile[conf.boardSize]),
-	home(conf.numTiles),
-	extra(conf.extraSize),
-	size(conf.boardSize)
+TileCol::TileCol() :
+	tl(nullptr),
+	home(0)
 {}
 
 void TileCol::update(const Com::Config& conf) {
-	if (conf.boardSize != size) {
-		home = conf.numTiles;
-		extra = conf.extraSize;
-		size = conf.boardSize;
+	if (uint16 cnt = conf.homeSize.x * conf.homeSize.y; cnt != home) {
+		home = cnt;
+		extra = home + conf.homeSize.x;
+		size = extra + home;
 
 		delete[] tl;
 		tl = new Tile[size];
@@ -248,14 +208,14 @@ const vec3 Piece::fireIconColor(1.f, 0.1f, 0.1f);
 const vec3 Piece::attackHorseColor(0.9f, 0.7f, 0.7f);
 
 Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show) :
-	BoardObject(pos, rot, size, hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), World::scene()->collim("tile"), rigid, show),
+	BoardObject(pos, rot, vec3(size), hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), rigid, show),
 	lastFortress(UINT16_MAX),
 	type(type)
 {}
 
 void Piece::drawTop() const {
 	if (drawTopSelf)
-		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f : 0.01f, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
+		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f * getScl().y : 0.01f, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
 		drawTopMesh(0.1f, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
@@ -265,7 +225,7 @@ void Piece::drawTop() const {
 
 void Piece::onHold(const ivec2&, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
-		if (drawTopSelf = mBut == SDL_BUTTON_LEFT || type == Com::Piece::warhorse)
+		if (drawTopSelf = mBut == SDL_BUTTON_LEFT || !firingDistance())
 			show = false;
 		else
 			SDL_ShowCursor(SDL_DISABLE);
@@ -305,16 +265,15 @@ void Piece::updatePos(svec2 bpos, bool active) {
 
 // PIECE COL
 
-PieceCol::PieceCol(const Com::Config& conf) :
-	pc(new Piece[conf.piecesSize]),
-	num(conf.numPieces),
-	size(conf.piecesSize)
+PieceCol::PieceCol() :
+	pc(nullptr),
+	num(0)
 {}
 
 void PieceCol::update(const Com::Config& conf) {
-	if (conf.piecesSize != size) {
-		num = conf.numPieces;
-		size = conf.piecesSize;
+	if (uint16 cnt = conf.countPieces(); cnt != num) {
+		num = cnt;
+		size = cnt * 2;
 
 		delete[] pc;
 		pc = new Piece[size];

@@ -29,10 +29,9 @@ public:
 	virtual void connect();
 	virtual void tick();
 	void sendData(Buffer& sendb);
-	template <class T> void sendData(const vector<T>& vec);
 	void sendData(Com::Code code);
+	template <class T> void sendData(const vector<T>& vec);
 
-	static void cprocDiscard(uint8* data);
 	static void cprocWait(uint8* data);
 	static void cprocLobby(uint8* data);
 	static void cprocGame(uint8* data);
@@ -42,16 +41,13 @@ protected:
 	void openSockets(const char* host, TCPsocket& sock);
 	void closeSocket(TCPsocket& sock);
 	void checkSocket();
+	void sendVersion();
 };
 
 template <class T>
 void Netcp::sendData(const vector<T>& vec) {
-	if (uint16 len = uint16(vec.size() * sizeof(T)); SDLNet_TCP_Send(socket, vec.data(), len) != len)
+	if (int len = int(vec.size() * sizeof(T)); SDLNet_TCP_Send(socket, vec.data(), len) != len)
 		throw NetcpException(SDLNet_GetError());
-}
-
-inline void Netcp::cprocDiscard(uint8* data) {
-	std::cerr << "unexprected data with code " << uint(data[0]) << std::endl;
 }
 
 inline void Netcp::setCncproc(void (*proc)(uint8*)) {
@@ -69,4 +65,12 @@ public:
 
 	virtual void connect() override;
 	virtual void tick() override;
+
+	static void cprocDiscard(uint8* data);
+	static void cprocValidate(uint8* data);
+	void validate(uint8* data);
 };
+
+inline void NetcpHost::cprocDiscard(uint8* data) {
+	std::cerr << "unexprected data with code " << uint(data[0]) << std::endl;
+}

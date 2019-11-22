@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
 	World::setArgs(argc, argv);
 #endif
 	std::setlocale(LC_ALL, "");
-	std::locale::global(std::locale(""));
+	std::locale::global(std::locale(World::envLocale));
 	std::cout.imbue(std::locale());
 	std::cerr.imbue(std::locale());
 	World::window()->start();

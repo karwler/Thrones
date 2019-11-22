@@ -5,32 +5,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// vertex data for raycast detection
-class CMesh {
-public:
-	uint16* elems;
-	vec3* verts;
-	uint16 esiz;
-
-private:
-	static constexpr uint16 defaultElementSize = 6;
-	static constexpr uint16 defaultVertexSize = 4;
-	static constexpr uint16 defaultElements[defaultElementSize] = {
-		0, 1, 2,
-		0, 2, 3
-	};
-	static const vec3 defaultVertices[defaultVertexSize];
-
-public:
-	CMesh();
-	CMesh(uint16 ec, uint16 vc);
-
-	void free();
-	static CMesh makeDefault(const vec3& ofs = vec3(0.f));
-};
-
 // vertex data that's shared between objects
-class GMesh {
+class Mesh {
 public:
 	static constexpr GLenum elemType = GL_UNSIGNED_SHORT;
 private:
@@ -43,8 +19,8 @@ private:
 	uint8 shape;	// GLenum for how to handle elements
 
 public:
-	GMesh();
-	GMesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape = GL_TRIANGLES);
+	Mesh();
+	Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape = GL_TRIANGLES);
 
 	void free();
 	GLuint getVao() const;
@@ -52,15 +28,15 @@ public:
 	uint8 getShape() const;
 };
 
-inline GLuint GMesh::getVao() const {
+inline GLuint Mesh::getVao() const {
 	return vao;
 }
 
-inline uint16 GMesh::getEcnt() const {
+inline uint16 Mesh::getEcnt() const {
 	return ecnt;
 }
 
-inline uint8 GMesh::getShape() const {
+inline uint8 Mesh::getShape() const {
 	return shape;
 }
 
@@ -87,9 +63,8 @@ inline uint8 GMesh::getShape() const {
 // 3D object with triangles
 class Object : public Interactable {
 public:
-	const GMesh* mesh;
+	const Mesh* mesh;
 	const Material* matl;
-	const CMesh* coli;
 	GLuint tex;
 	bool show;		// if drawn
 	bool rigid;		// if affected by raycast
@@ -101,7 +76,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(Object, Interactable)
-	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = false, bool show = true);
+	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = false, bool show = true);
 
 	virtual void draw() const;
 
@@ -111,8 +86,8 @@ public:
 	void setRot(const quat& qut);
 	const vec3& getScl() const;
 	void setScl(const vec3& vec);
-	const mat4& getTrans() const;
 protected:
+	const mat4& getTrans() const;
 	const mat3& getNormat() const;
 
 	static void updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture);
@@ -178,7 +153,7 @@ private:
 
 public:
 	DCLASS_CONSTRUCT(BoardObject, Object)
-	BoardObject(const vec3& pos, float rot = 0.f, float size = 1.f, GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const GMesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, const CMesh* coli = nullptr, bool rigid = true, bool show = true);
+	BoardObject(const vec3& pos, float rot = 0.f, const vec3& scl = vec3(1.f), GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = true, bool show = true);
 
 	virtual void draw() const override;
 
@@ -186,7 +161,7 @@ public:
 	void setEmission(Emission emi);
 	void setRaycast(bool on, bool dim = false);
 protected:
-	void drawTopMesh(float ypos, const GMesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
+	void drawTopMesh(float ypos, const Mesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
 };
 ENUM_OPERATIONS(BoardObject::Emission, uint8)
 
@@ -253,14 +228,16 @@ inline bool Tile::getShow(bool show, Com::Tile type) {
 class TileCol {
 private:
 	Tile* tl;
-	uint16 home, extra, size;
+	uint16 home, extra, size;	// home = number of home tiles, extra = home + board width, size = all tiles
 
 public:
-	TileCol() = default;
-	TileCol(const Com::Config& conf);
+	TileCol();
 	~TileCol();
 
 	void update(const Com::Config& conf);
+	uint16 getHome() const;
+	uint16 getExtra() const;
+	uint16 getSize() const;
 
 	Tile& operator[](uint16 i);
 	const Tile& operator[](uint16 i) const;
@@ -278,6 +255,18 @@ public:
 
 inline TileCol::~TileCol() {
 	delete[] tl;
+}
+
+inline uint16 TileCol::getHome() const {
+	return home;
+}
+
+inline uint16 TileCol::getExtra() const {
+	return extra;
+}
+
+inline uint16 TileCol::getSize() const {
+	return size;
 }
 
 inline Tile& TileCol::operator[](uint16 i) {
@@ -351,7 +340,7 @@ public:
 	Com::Piece getType() const;
 	uint8 firingDistance() const;	// 0 if non-firing piece
 	void setActive(bool on);
-	void updatePos(svec2 bpos = svec2(INT16_MIN), bool active = false);
+	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool active = false);
 	bool getDrawTopSelf() const;
 };
 
@@ -360,7 +349,7 @@ inline Com::Piece Piece::getType() const {
 }
 
 inline uint8 Piece::firingDistance() const {
-	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet ? uint8(type) - int16(Com::Piece::crossbowman) + 1 : 0;
+	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet ? uint8(type) - uint8(Com::Piece::crossbowman) + 1 : 0;
 }
 
 inline void Piece::setActive(bool on) {
@@ -375,14 +364,15 @@ inline bool Piece::getDrawTopSelf() const {
 class PieceCol {
 private:
 	Piece* pc;
-	uint16 num, size;
+	uint16 num, size;	// num = number of one player's pieces, i.e. size / 2
 
 public:
-	PieceCol() = default;
-	PieceCol(const Com::Config& conf);
+	PieceCol();
 	~PieceCol();
 
 	void update(const Com::Config& conf);
+	uint16 getNum() const;
+	uint16 getSize() const;
 
 	Piece& operator[](uint16 i);
 	const Piece& operator[](uint16 i) const;
@@ -398,6 +388,14 @@ public:
 
 inline PieceCol::~PieceCol() {
 	delete[] pc;
+}
+
+inline uint16 PieceCol::getNum() const {
+	return num;
+}
+
+inline uint16 PieceCol::getSize() const {
+	return size;
 }
 
 inline Piece& PieceCol::operator[](uint16 i) {
@@ -439,3 +437,9 @@ inline Piece* PieceCol::ene(pdift i) {
 inline const Piece* PieceCol::ene(pdift i) const {
 	return pc + num + i;
 }
+
+enum class FavorAct : uint8 {
+	off,
+	on,
+	now
+};

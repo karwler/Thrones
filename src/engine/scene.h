@@ -129,6 +129,7 @@ public:
 private:
 	ivec2 mouseMove;	// last recorded cursor position difference
 	uint32 moveTime;	// timestamp of last recorded mouseMove
+	bool mouseLast;		// last input was mouse or touch
 	Camera camera;
 	vector<Object*> objects;
 	uptr<RootLayout> layout;
@@ -136,10 +137,9 @@ private:
 	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
 	Light light;
-	umap<string, GMesh> meshes;
+	umap<string, Mesh> meshes;
 	umap<string, Material> materials;
 	umap<string, Texture> texes;
-	umap<string, CMesh> collims;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
@@ -154,9 +154,9 @@ public:
 	void onResize();
 	void onKeyDown(const SDL_KeyboardEvent& key);
 	void onKeyUp(const SDL_KeyboardEvent& key);
-	void onMouseMove(const SDL_MouseMotionEvent& mot);
-	void onMouseDown(const SDL_MouseButtonEvent& but);
-	void onMouseUp(const SDL_MouseButtonEvent& but);
+	void onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse = true);
+	void onMouseDown(const SDL_MouseButtonEvent& but, bool mouse = true);
+	void onMouseUp(const SDL_MouseButtonEvent& but, bool mouse = true);
 	void onMouseWheel(const SDL_MouseWheelEvent& whe);
 	void onMouseLeave();
 	void onFingerMove(const SDL_TouchFingerEvent& fin);
@@ -165,8 +165,7 @@ public:
 	void onFingerUp(const SDL_TouchFingerEvent& fin);
 	void onText(const char* str);
 
-	const CMesh* collim(const string& name) const;
-	const GMesh* mesh(const string& name) const;
+	const Mesh* mesh(const string& name) const;
 	const Material* material(const string& name) const;
 	const Texture* getTex(const string& name) const;
 	GLuint texture(const string& name) const;
@@ -182,6 +181,7 @@ public:
 	ivec2 getMouseMove() const;
 	bool cursorInClickRange(const ivec2& mPos) const;
 	vec3 pickerRay(const ivec2& mPos) const;
+	vec3 rayXZIsct(const vec3& ray) const;
 
 	void updateSelect(const ivec2& mPos);
 private:
@@ -190,8 +190,7 @@ private:
 	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
-	Object* rayCast(const vec3& ray) const;
-	static bool rayIntersectsTriangle(const vec3& ori, const vec3& dir, const vec3& v0, const vec3& v1, const vec3& v2, float& t);
+	BoardObject* findBoardObject(const ivec2& mPos) const;
 	void simulateMouseMove();
 };
 
@@ -231,11 +230,11 @@ inline vec3 Scene::pickerRay(const ivec2& mPos) const {
 	return camera.direction(mPos) * Camera::zfar;
 }
 
-inline const CMesh* Scene::collim(const string& name) const {
-	return &collims.at(name);
+inline vec3 Scene::rayXZIsct(const vec3& ray) const {
+	return camera.getPos() - ray * (camera.getPos().y / ray.y);
 }
 
-inline const GMesh* Scene::mesh(const string& name) const {
+inline const Mesh* Scene::mesh(const string& name) const {
 	return &meshes.at(name);
 }
 

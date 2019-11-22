@@ -29,6 +29,8 @@ Settings::Settings() :
 	gamma(1.f),
 	size(1280, 720),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
+	scaleTiles(true),
+	scalePieces(false),
 	address(loopback),
 	port(Com::defaultPort)
 {}
@@ -46,9 +48,11 @@ void Setup::clear() {
 string FileSys::dirData, FileSys::dirConfig;
 
 void FileSys::init() {
-#ifdef __ANDROID__
+#if defined(__ANDROID__)
 	if (const char* path = SDL_AndroidGetExternalStoragePath())
 		dirConfig = path + string("/");
+#elif defined(EMSCRIPTEN)
+	dirData = "/";
 #else
 	const char* eopt = World::args.getOpt(World::argExternal);
 #ifdef EXTERNAL
@@ -65,7 +69,7 @@ void FileSys::init() {
 		if (SDL_free(path); !external)
 			dirConfig = dirData;
 	}
-#ifdef _WIN32
+#if defined(_WIN32)
 	if (const char* path = SDL_getenv("AppData"); external && path) {
 		dirConfig = path + string("/Thrones/");
 		std::replace(dirConfig.begin(), dirConfig.end(), '\\', '/');
@@ -76,7 +80,7 @@ void FileSys::init() {
 		dirConfig = path + string("/Library/Preferences/Thrones/");
 		createDir(dirConfig);
 	}
-#else
+#elif !defined(EMSCRIPTEN)
 	if (const char* path = SDL_getenv("HOME"); external && path) {
 		dirConfig = path + string("/.config/thrones/");
 		createDir(dirConfig);
@@ -87,6 +91,7 @@ void FileSys::init() {
 
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
+#ifndef EMSCRIPTEN
 	for (const string& line : readFileLines(configPath(fileSettings))) {
 		pairStr il = readIniLine(line);
 #ifndef __ANDROID__
@@ -113,15 +118,23 @@ Settings* FileSys::loadSettings() {
 			sets->gamma = std::clamp(sstof(il.second), 0.f, Settings::gammaMax);
 		else if (il.first == iniKeywordAVolume)
 			sets->avolume = std::clamp(uint8(sstoul(il.second)), uint8(0), uint8(SDL_MIX_MAXVOLUME));
+		else if (il.first == iniKeywordScaleTiles)
+			sets->scaleTiles = stob(il.second);
+		else if (il.first == iniKeywordScalePieces)
+			sets->scalePieces = stob(il.second);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
 			sets->port = uint16(sstoul(il.second));
 	}
+#endif
 	return sets;
 }
 
 bool FileSys::saveSettings(const Settings* sets) {
+#ifdef EMSCRIPTEN
+	return true;
+#else
 	string text;
 #ifndef __ANDROID__
 	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
@@ -136,32 +149,38 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
 	text += makeIniLine(iniKeywordGamma, toStr(sets->gamma));
 	text += makeIniLine(iniKeywordAVolume, toStr(sets->avolume));
+	text += makeIniLine(iniKeywordScaleTiles, btos(sets->scaleTiles));
+	text += makeIniLine(iniKeywordScalePieces, btos(sets->scalePieces));
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, toStr(sets->port));
 	return writeFile(configPath(fileSettings), text);
+#endif
 }
 
 umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
 	umap<string, Com::Config> confs;
+#ifndef EMSCRIPTEN
 	Com::Config* cit = nullptr;
 	for (const string& line : readFileLines(configPath(file))) {
 		if (string title = readIniTitle(line); !title.empty())
 			cit = &confs.emplace(std::move(title), Com::Config()).first->second;
 		else if (cit) {
 			if (pairStr it = readIniLine(line); !strcicmp(it.first, iniKeywordBoardSize))
-				cit->homeSize = stoiv<nvec2>(it.second.c_str(), strtoul);
-			else if (!strcicmp(it.first, iniKeywordSurvival))
-				cit->survivalPass = uint8(sstoul(it.second));
-			else if (!strcicmp(it.first, iniKeywordFavors))
-				cit->favorLimit = uint8(sstoul(it.second));
+				cit->homeSize = stoiv<svec2>(it.second.c_str(), strtol);
+			else if (!strcicmp(it.first, iniKeywordSurvivalPass))
+				cit->survivalPass = uint8(sstol(it.second));
+			else if (!strcicmp(it.first, iniKeywordSurvivalMode))
+				cit->survivalMode = strToEnum<Com::Config::Survival>(Com::Config::survivalNames, it.second);
+			else if (!strcicmp(it.first, iniKeywordFavorLimit))
+				cit->favorLimit = stob(it.second);
+			else if (!strcicmp(it.first, iniKeywordFavorMax))
+				cit->favorMax = uint8(sstol(it.second));
 			else if (!strcicmp(it.first, iniKeywordDragonDist))
-				cit->dragonDist = uint8(sstoul(it.second));
+				cit->dragonDist = uint8(sstol(it.second));
+			else if (!strcicmp(it.first, iniKeywordDragonSingle))
+				cit->dragonSingle = stob(it.second);
 			else if (!strcicmp(it.first, iniKeywordDragonDiag))
 				cit->dragonDiag = stob(it.second);
-			else if (!strcicmp(it.first, iniKeywordMultistage))
-				cit->multistage = stob(it.second);
-			else if (!strcicmp(it.first, iniKeywordSurvivalKill))
-				cit->survivalKill = stob(it.second);
 			else if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
 				readAmount(it, len, Com::tileNames, cit->tileAmounts);
 			else if (len = strlen(iniKeywordMiddle); !strncicmp(it.first, iniKeywordMiddle, len))
@@ -178,7 +197,14 @@ umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
 				readShift(it.second, *cit);
 		}
 	}
+#endif
 	return !confs.empty() ? confs : umap<string, Com::Config>{ pair(Com::Config::defaultName, Com::Config()) };
+}
+
+template <sizet N, sizet S>
+void FileSys::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
+	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
+		amts[id] = uint16(sstol(it.second));
 }
 
 void FileSys::readShift(const string& line, Com::Config& conf) {
@@ -195,16 +221,20 @@ void FileSys::readShift(const string& line, Com::Config& conf) {
 }
 
 bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* file) {
+#ifdef EMSCRIPTEN
+	return true;
+#else
 	string text;
 	for (const pair<const string, Com::Config>& it : confs) {
 		text += makeIniLine(it.first);
 		text += makeIniLine(iniKeywordBoardSize, toStr(it.second.homeSize));
-		text += makeIniLine(iniKeywordSurvival, toStr(it.second.survivalPass));
-		text += makeIniLine(iniKeywordFavors, toStr(it.second.favorLimit));
+		text += makeIniLine(iniKeywordSurvivalPass, toStr(it.second.survivalPass));
+		text += makeIniLine(iniKeywordSurvivalMode, Com::Config::survivalNames[uint8(it.second.survivalMode)]);
+		text += makeIniLine(iniKeywordFavorLimit, btos(it.second.favorLimit));
+		text += makeIniLine(iniKeywordFavorMax, toStr(it.second.favorMax));
 		text += makeIniLine(iniKeywordDragonDist, toStr(it.second.dragonDist));
+		text += makeIniLine(iniKeywordDragonSingle, btos(it.second.dragonSingle));
 		text += makeIniLine(iniKeywordDragonDiag, btos(it.second.dragonDiag));
-		text += makeIniLine(iniKeywordMultistage, btos(it.second.multistage));
-		text += makeIniLine(iniKeywordSurvivalKill, btos(it.second.survivalKill));
 		writeAmounts(text, iniKeywordTile, Com::tileNames, it.second.tileAmounts);
 		writeAmounts(text, iniKeywordMiddle, Com::tileNames, it.second.middleAmounts);
 		writeAmounts(text, iniKeywordPiece, Com::pieceNames, it.second.pieceAmounts);
@@ -215,10 +245,18 @@ bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* fi
 		text += linend;
 	}
 	return writeFile(configPath(file), text);
+#endif
+}
+
+template <sizet N, sizet S>
+void FileSys::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
+	for (sizet i = 0; i < amts.size(); i++)
+		text += makeIniLine(word + names[i], toStr(amts[i]));
 }
 
 umap<string, Setup> FileSys::loadSetups() {
 	umap<string, Setup> sets;
+#ifndef EMSCRIPTEN
 	umap<string, Setup>::iterator sit;
 	for (const string& line : readFileLines(configPath(fileSetups))) {
 		if (string title = readIniTitle(line); !title.empty())
@@ -232,10 +270,14 @@ umap<string, Setup> FileSys::loadSetups() {
 				sit->second.pieces.emplace(stoiv<svec2>(it.first.c_str() + len, strtol), strToEnum<Com::Piece>(Com::pieceNames, it.second));
 		}
 	}
+#endif
 	return sets;
 }
 
 bool FileSys::saveSetups(const umap<string, Setup>& sets) {
+#ifdef EMSCRIPTEN
+	return true;
+#else
 	string text;
 	for (const pair<const string, Setup>& it : sets) {
 		text += makeIniLine(it.first);
@@ -248,6 +290,7 @@ bool FileSys::saveSetups(const umap<string, Setup>& sets) {
 		text += linend;
 	}
 	return writeFile(configPath(fileSetups), text);
+#endif
 }
 
 umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
@@ -318,7 +361,7 @@ umap<string, Material> FileSys::loadMaterials() {
 	return mtls;
 }
 
-umap<string, GMesh> FileSys::loadObjects() {
+umap<string, Mesh> FileSys::loadObjects() {
 	World::window()->writeLog("loading objects");
 	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileObjects).c_str(), defaultReadMode);
 	if (!ifh)
@@ -327,7 +370,7 @@ umap<string, GMesh> FileSys::loadObjects() {
 	glUseProgram(World::geom()->program);
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, GMesh> mshs(size + 1);
+	umap<string, Mesh> mshs(size + 1);
 	mshs.emplace();
 
 	uint8 ibuf[objectHeaderSize];
@@ -344,7 +387,7 @@ umap<string, GMesh> FileSys::loadObjects() {
 		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
 		SDL_RWread(ifh, elems.data(), sizeof(*elems.data()), elems.size());
 		SDL_RWread(ifh, verts.data(), sizeof(*verts.data()), verts.size());
-		mshs.emplace(std::move(name), GMesh(verts, elems));
+		mshs.emplace(std::move(name), Mesh(verts, elems));
 	}
 	SDL_RWclose(ifh);
 	return mshs;

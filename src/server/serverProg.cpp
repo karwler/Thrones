@@ -39,11 +39,13 @@ Player::Player(TCPsocket socket) :
 {}
 
 constexpr uint32 checkTimeout = 500;
+constexpr uint8 maxPlayers = maxRooms * 2;
 constexpr char argPort = 'p';
 constexpr char argLog = 'l';
 constexpr char argVerbose = 'v';
 
 static bool running = true;
+static SDLNet_SocketSet sockets = nullptr;
 static Buffer sendb;
 static vector<Player> players;
 static umap<string, bool> rooms;	// name, isFull
@@ -65,28 +67,28 @@ static string addressToStr(const IPaddress* addr) {
 	return str + toStr(addr->port);
 }
 
-static const char* sendRoomList(TCPsocket socket) {
-	sendb.pushHead(Code::rlist);
+static const char* sendRoomList(TCPsocket socket, Code code = Code::rlist) {
+	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
 	sendb.push(uint8(rooms.size()));
 	for (const pair<const string, bool>& it : rooms) {
 		sendb.push(vector<uint8>{ uint8(it.second), uint8(it.first.length()) });
 		sendb.push(it.first);
 	}
-	SDLNet_Write16(sendb.size, sendb.data + 1);
+	sendb.write(uint16(sendb.size()), ofs);
 	return sendb.send(socket);
 }
 
 static void sendRoomData(Code code, const string& name, const vector<uint8>& extra = {}) {
-	sendb.pushHead(code);
+	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
 	sendb.push(extra);
 	sendb.push(uint8(name.length()));
 	sendb.push(name);
-	SDLNet_Write16(sendb.size, sendb.data + 1);
+	sendb.write(uint16(sendb.size()), ofs);
 	for (uint8 i = 0; i < players.size(); i++)
 		if (players[i].state == Player::State::lobby)
-			if (SDLNet_TCP_Send(players[i].sock, sendb.data, sendb.size) != sendb.size)
-				print(std::cerr, "failed to send room data '" + toStr(uint8(code)) + "' of '" + name + "' to player '" + toStr(i) + "': " + SDLNet_GetError());
-	sendb.size = 0;
+			if (const char* err = sendb.send(players[i].sock, sendb.size()))
+				print(std::cerr, "failed to send room data '" + toStr(uint8(code)) + "' of '" + name + "' to player '" + toStr(i) + "': " + err);
+	sendb.clear();
 }
 
 static void createRoom(uint8* data, uint8 pid) {
@@ -104,44 +106,34 @@ static void createRoom(uint8* data, uint8 pid) {
 }
 
 static void joinRoom(uint8* data, uint8 pid) {
-	if (string name = readName(data); rooms[name])
+	string name = readName(data);
+	if (uint8 ptc = uint8(std::find_if(players.begin(), players.end(), [pid, &name](Player& it) -> bool { return &it != &players[pid] && it.room == name; }) - players.begin()); rooms.count(name) && rooms[name] && ptc < players.size()) {
 		players[pid].room = std::move(name);
-	else {
-		sendb.pushHead(Code::cnjoin);
-		sendb.push(uint8(false));
-		if (const char* err = sendb.send(players[pid].sock))
+		players[pid].state = Player::State::guest;
+		players[pid].partner = ptc;
+		players[ptc].partner = pid;
+		sendRoomData(Code::ropen, players[pid].room, { uint8(rooms[players[pid].room] = false) });
+		if (sendb.pushHead(Code::hello); const char* err = sendb.send(players[ptc].sock))
+			print(std::cerr, "failed to send join request from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
+	} else {
+		sendb.pushHead(Code::cnjoin, Com::dataHeadSize + 1);
+		if (sendb.push(uint8(false)); const char* err = sendb.send(players[pid].sock))
 			print(std::cerr, "failed to send join rejection to player '" + toStr(pid) + "': " + err);
-		return;
 	}
-	for (uint8 i = 0; i < players.size(); i++)
-		if (i != pid && players[i].room == players[pid].room) {
-			players[pid].partner = i;
-			players[i].partner = pid;
-			break;
-		}
-	players[pid].state = Player::State::guest;
-	sendRoomData(Code::ropen, players[pid].room, { false });
-
-	sendb.pushHead(Code::hello);
-	if (uint8 ptc = players[pid].partner; const char* err = sendb.send(players[ptc].sock))
-		print(std::cerr, "failed to send join request from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
 }
 
 static void leaveRoom(uint8 pid, bool sendList = true) {
 	uint8 ptc = players[pid].partner;
 	if (players[pid].state == Player::State::guest) {
+		sendRoomData(Code::ropen, players[pid].room, { uint8(rooms[players[pid].room] = true) });
 		if (sendb.pushHead(Code::leave); const char* err = sendb.send(players[ptc].sock))
 			print(std::cerr, "failed to send leave info from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
-		sendRoomData(Code::ropen, players[pid].room, { true });
 	} else {		// must be host
 		rooms.erase(players[pid].room);
-		if (ptc < players.size()) {
-			if (players[ptc].state = Player::State::lobby; const char* err = sendRoomList(players[ptc].sock))
-				print(std::cerr, "failed to send room list to player '" + toStr(ptc) + "': " + err);
-			if (sendb.pushHead(Code::leave); const char* err = sendb.send(players[ptc].sock))
-				print(std::cerr, "failed to send leave info from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
-		}
 		sendRoomData(Code::rerase, players[pid].room);
+		if (ptc < players.size())
+			if (players[ptc].state = Player::State::lobby; const char* err = sendRoomList(players[ptc].sock, Code::hgone))
+				print(std::cerr, "failed to send room list to player '" + toStr(ptc) + "': " + err);
 	}
 
 	if (players[pid].state = Player::State::lobby; ptc < players.size())
@@ -150,8 +142,8 @@ static void leaveRoom(uint8 pid, bool sendList = true) {
 		print(std::cerr, "failed to send room list to player '" + toStr(pid) + "': " + err);
 }
 
-static void connectPlayer(SDLNet_SocketSet sockets, TCPsocket server) {
-	if (players.size() >= maxPlayers) {	// TODO: version check
+static void connectPlayer(TCPsocket server) {
+	if (players.size() >= maxPlayers) {
 		sendRejection(server);
 		print(std::cout, "rejected incoming connection");
 		return;
@@ -163,8 +155,6 @@ static void connectPlayer(SDLNet_SocketSet sockets, TCPsocket server) {
 			throw SDLNet_GetError();
 		if (SDLNet_TCP_AddSocket(sockets, psock) < 0)
 			throw SDLNet_GetError();
-		if (const char* err = sendRoomList(psock))
-			throw err;
 		players.emplace_back(psock);
 		print(std::cout, "player '" + toStr(players.size() - 1) + "' connected");
 	} catch (const char* err) {
@@ -174,28 +164,42 @@ static void connectPlayer(SDLNet_SocketSet sockets, TCPsocket server) {
 	}
 }
 
-static void disconnectPlayer(SDLNet_SocketSet sockets, uint8 pid) {
+static void disconnectPlayer(uint8 pid) {
 	if (players[pid].state != Player::State::lobby)
 		leaveRoom(pid, false);
 	SDLNet_TCP_DelSocket(sockets, players[pid].sock);
 	SDLNet_TCP_Close(players[pid].sock);
 
 	for (Player& it : players)
-		if (it.state != Player::State::lobby && it.partner > pid)
+		if (it.partner > pid && it.partner < players.size())
 			it.partner--;
 	players.erase(players.begin() + pid);
 	print(std::cout, "player '" + toStr(pid) + "' disconnected");
 }
 
-static bool checkPlayer(uint8 pid) {
-	if (!SDLNet_SocketReady(players[pid].sock))
-		return true;
-	int len = players[pid].recvb.recv(players[pid].sock);
-	if (len <= 0)
-		return false;
+static void validatePlayer(uint8* data, uint8 pid) {
+	if (string ver = readVersion(data); std::find(compatibleVersions.begin(), compatibleVersions.end(), ver) != compatibleVersions.end()) {
+		if (const char* err = sendRoomList(players[pid].sock)) {
+			print(std::cerr, "failed to send room list to player '" + toStr(pid) + "': " + err);
+			disconnectPlayer(pid);
+		}
+	} else {
+		uint16 len = uint16(strlen(commonVersion));
+		sendb.pushHead(Com::Code::version, dataHeadSize + len);
+		sendb.push(reinterpret_cast<const uint8*>(commonVersion), len);
+		sendb.send(players[pid].sock);
 
-	players[pid].recvb.processRecv(len, [pid](uint8* data) {
+		print(std::cout, "failed to validate player '" + toStr(pid) + "' of version '" + ver + "'");
+		disconnectPlayer(pid);
+	}
+}
+
+static bool checkPlayer(uint8 pid) {
+	return !players[pid].recvb.recv(players[pid].sock, [pid](uint8* data) {
 		switch (Code(data[0])) {
+		case Code::version:
+			validatePlayer(data, pid);
+			break;
 		case Code::rnew:
 			createRoom(data + dataHeadSize, pid);
 			break;
@@ -205,23 +209,18 @@ static bool checkPlayer(uint8 pid) {
 		case Code::leave:
 			leaveRoom(pid);
 			break;
+		case Code::kick:
+			leaveRoom(players[pid].partner);
+			break;
 		default:
-			if (Code(data[0]) >= Code::hello)
-				sendb.push(data, SDLNet_Read16(data + 1));
-			else
+			if (uint16 size = SDLNet_Read16(data + 1); Code(data[0]) < Code::hello)
 				print(std::cerr, "invalid net code from player " + toStr(pid));
+			else if (uint8 ptc = players[pid].partner; ptc >= players.size())
+				print(std::cerr, "data with code '" + toStr(data[0]) + "' of size '" + toStr(size) + "' to invalid partner '" + toStr(ptc) + "' of player '" + toStr(pid) + "'");
+			else if (const char* err = players[pid].recvb.send(players[ptc].sock, size))
+				print(std::cerr, "failed to send data with codde '" + toStr(data[0]) + "' of size '" + toStr(size) + "' from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
 		}
 	});
-	if (sendb.size) {
-		if (uint8 ptc = players[pid].partner; ptc >= players.size()) {
-			sendb.size = 0;
-			print(std::cerr, "data with code '" + toStr(sendb.data[0]) + "' of size '" + toStr(sendb.size) + "' to invalid partner '" + toStr(ptc) + "' of player '" + toStr(pid) + "'");
-		} else if (const char* err = sendb.send(players[ptc].sock)) {
-			sendb.size = 0;
-			print(std::cerr, "failed to send data with codde '" + toStr(sendb.data[0]) + "' of size '" + toStr(sendb.size) + "' from player '" + toStr(pid) + "' to player '" + toStr(ptc) + "': " + err);
-		}
-	}
-	return true;
 }
 
 template <sizet S>
@@ -267,15 +266,15 @@ static void checkInput() {
 		printTable(table, "Rooms:", { "NAME", "OPEN" });
 		break; }
 	case 'P': {
-		vector<array<string, 6>> table(players.size() + 1);
+		vector<array<string, 5>> table(players.size() + 1);
 		for (sizet i = 0; i < players.size(); i++) {
-			table[i+1] = { toStr(i), addressToStr(SDLNet_TCP_GetPeerAddress(players[i].sock)), toStr(players[i].recvb.size), Player::stateNames[uint8(players[i].state)], "", "" };
+			table[i+1] = { toStr(i), addressToStr(SDLNet_TCP_GetPeerAddress(players[i].sock)), Player::stateNames[uint8(players[i].state)], "", "" };
 			if (players[i].state != Player::State::lobby)
 				table[i+1][4] = players[i].room;
 			if (players[i].partner < players.size())
 				table[i+1][5] = toStr(players[i].partner);
 		}
-		printTable(table, "Players:", { "ID", "ADDRESS", "RSIZE", "STATE", "ROOM", "PARTNER" });
+		printTable(table, "Players:", { "ID", "ADDRESS", "STATE", "ROOM", "PARTNER" });
 		break; }
 	case 'Q':
 		running = false;
@@ -305,7 +304,6 @@ int main(int argc, char** argv) {
 	signal(SIGTERM, eventExit);
 
 	TCPsocket server = nullptr;
-	SDLNet_SocketSet sockets = nullptr;
 	try {
 		Arguments args(argc, argv, { argLog, argVerbose }, { argPort });
 		const char* cfstr = args.getOpt(argPort);
@@ -318,7 +316,7 @@ int main(int argc, char** argv) {
 			throw SDL_GetError();
 		if (SDLNet_Init())
 			throw SDLNet_GetError();
-		print(std::cout, "using port " + toStr(port));
+		print(std::cout, "Thrones Server " + string(commonVersion) + linend + "using port " + toStr(port));
 
 		IPaddress address;
 		if (SDLNet_ResolveHost(&address, nullptr, port))
@@ -341,14 +339,14 @@ int main(int argc, char** argv) {
 	while (running) {
 		if (SDLNet_CheckSockets(sockets, checkTimeout) > 0) {
 			if (SDLNet_SocketReady(server))
-				connectPlayer(sockets, server);
+				connectPlayer(server);
 			for (uint8 i = 0; i < players.size(); i++) {
 				try {
 					if (!checkPlayer(i))
-						disconnectPlayer(sockets, i--);
+						disconnectPlayer(i--);
 				} catch (const char* err) {
 					print(std::cerr, "player '" + toStr(i) + "' error: " + err);
-					disconnectPlayer(sockets, i--);
+					disconnectPlayer(i--);
 				}
 			}
 		}

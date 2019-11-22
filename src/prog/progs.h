@@ -22,41 +22,45 @@ protected:
 		LabelEdit* height;
 		Slider* survivalSL;
 		LabelEdit* survivalLE;
-		LabelEdit* favors;
+		SwitchBox* survivalMode;
+		CheckBox* favorLimit;
+		LabelEdit* favorMax;
 		LabelEdit* dragonDist;
+		CheckBox* dragonSingle;
 		CheckBox* dragonDiag;
-		CheckBox* multistage;
-		CheckBox* survivalKill;
-		array<LabelEdit*, Com::tileMax> tiles;
+		array<LabelEdit*, Com::tileMax-1> tiles;
 		array<LabelEdit*, Com::tileMax-1> middles;
 		array<LabelEdit*, Com::pieceMax> pieces;
+		Label* tileFortress;
+		Label* middleFortress;
+		Label* pieceTotal;
 		LabelEdit* winFortress;
 		LabelEdit* winThrone;
 		LabelEdit* capturers;
 		CheckBox* shiftLeft;
 		CheckBox* shiftNear;
-		Label* tileFortress;
-		Label* middleFortress;
-		Label* pieceTotal;
 	};
 
-	static constexpr int tooltipLimit = 500;
 	static constexpr char arrowLeft[] = "<";
 	static constexpr char arrowRight[] = ">";
+	static constexpr float defaultDim = 0.5f;
 
 	int lineHeight, superHeight, tooltipHeight;
 	int lineSpacing, superSpacing, iconSize;
+	int tooltipLimit;
 
 public:
 	ProgState();
 	virtual ~ProgState() = default;	// to keep the compiler happy
 
 	virtual void eventEscape() {}
+	virtual void eventEnter() {}
 	virtual void eventNumpress(uint8) {}
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
-	virtual void eventFavorize(bool) {}
+	virtual void eventFavorize(FavorAct act);
+	virtual void eventEndTurn() {}
 	virtual void eventCameraReset();
 	void eventResize();
 
@@ -64,43 +68,35 @@ public:
 	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
 	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
 	pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX);
-	Popup* createPopupConfig();
-protected:
-	Texture makeTooltip(const string& text);
-	Texture makeTooltip(const vector<string>& lines);
+	Popup* createPopupConfig(const Com::Config& cfg);
 
-	vector<Widget*> createConfigList(ConfigIO& wio, bool active);
 	static string tileFortressString(const Com::Config& cfg);
 	static string middleFortressString(const Com::Config& cfg);
 	static string pieceTotalString(const Com::Config& cfg);
+protected:
+	Texture makeTooltip(const string& text);
+	Texture makeTooltipL(const vector<string>& lines);
+
+	vector<Widget*> createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active);
 private:
 	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
 	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
-
-template <class T>
-int ProgState::Text::maxLen(T pos, T end, int height) {
-	int width = 0;
-	for (; pos != end; pos++)
-		if (int len = strLen(*pos, height); len > width)
-			width = len;
-	return width;
-}
 
 inline ProgState::ProgState() {
 	eventResize();
 }
 
 inline string ProgState::tileFortressString(const Com::Config& cfg) {
-	return toStr(cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+	return toStr(cfg.countFreeTiles());
 }
 
 inline string ProgState::middleFortressString(const Com::Config& cfg) {
-	return toStr(cfg.homeSize.x - Com::Config::calcSum(cfg.middleAmounts, Com::tileMax - 1) * 2);
+	return toStr(cfg.homeSize.x - cfg.countMiddles() * 2);
 }
 
 inline string ProgState::pieceTotalString(const Com::Config& cfg) {
-	return toStr(cfg.numPieces) + '/' + toStr(cfg.numTiles < Com::Config::maxNumPieces ? cfg.numTiles : Com::Config::maxNumPieces);
+	return toStr(cfg.countPieces()) + '/' + toStr(cfg.homeSize.x * cfg.homeSize.y);
 }
 
 class ProgMenu : public ProgState {
@@ -108,6 +104,7 @@ public:
 	virtual ~ProgMenu() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 
 	virtual RootLayout* createLayout() override;
 };
@@ -122,6 +119,7 @@ public:
 	virtual ~ProgLobby() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 
 	virtual RootLayout* createLayout() override;
 
@@ -129,7 +127,7 @@ public:
 	void delRoom(const string& name);
 	void openRoom(const string& name, bool open);
 	bool roomsMaxed() const;
-	bool roomNameOk(const string& name);
+	bool roomTaken(const string& name);
 private:
 	 Label* createRoom(string name, bool open);
 };
@@ -138,16 +136,12 @@ inline void ProgLobby::delRoom(const string& name) {
 	rlist->deleteWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin()));
 }
 
-inline void ProgLobby::openRoom(const string& name, bool open) {
-	static_cast<Label*>(rlist->getWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin())))->color = Widget::colorNormal * (open ? 1.f : 0.5f);
-}
-
 inline bool ProgLobby::roomsMaxed() const {
 	return rooms.size() >= Com::maxRooms;
 }
 
-inline bool ProgLobby::roomNameOk(const string& name) {
-	return std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) == rooms.end();
+inline bool ProgLobby::roomTaken(const string& name) {
+	return std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) != rooms.end();
 }
 
 class ProgRoom : public ProgState {
@@ -156,17 +150,22 @@ public:
 	ConfigIO wio;
 private:
 	Label* startButton;
+	Label* kickButton;
 
 public:
 	ProgRoom();
 	virtual ~ProgRoom() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 
 	virtual RootLayout* createLayout() override;
 
 	void updateStartButton();	// canStart only applies to State::host
-	void updateConfigWidgets();
+	void updateConfigWidgets(const Com::Config& cfg);
+	static void updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt, uint16 min, uint16 rest);
+private:
+	static void updateWinSlider(Label* amt, uint16 val, uint16 max);
 };
 
 class ProgSetup : public ProgState {
@@ -196,6 +195,7 @@ public:
 	virtual ~ProgSetup() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 	virtual void eventNumpress(uint8 num) override;
 	virtual void eventWheel(int ymov) override;
 	virtual void eventDrag(uint32 mStat) override;
@@ -256,6 +256,7 @@ public:
 	Label* message;
 private:
 	Draglet* favorIcon;
+	Draglet* fnowIcon;
 	Label* turnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 	uint16 unplacedDragons;
@@ -264,11 +265,17 @@ public:
 	virtual ~ProgMatch() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 	virtual void eventWheel(int ymov) override;
-	virtual void eventFavorize(bool on) override;
+	virtual void eventFavorize(FavorAct act) override;
+	virtual void eventEndTurn() override;
 	virtual void eventCameraReset() override;
-	bool selectFavorIcon(bool on);
+	bool favorIconOn() const;
+	bool fnowIconOn() const;
+	FavorAct favorIconSelect() const;
+	void selectFavorIcon(FavorAct act, bool force = true);
 	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
+	void updateFnowIcon(bool on = false, uint8 cnt = 0);
 	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
 	void decreaseDragonIcon();
@@ -276,8 +283,12 @@ public:
 	virtual RootLayout* createLayout() override;
 };
 
-inline bool ProgMatch::selectFavorIcon(bool on) {
-	return favorIcon ? favorIcon->selected = on : false;
+inline bool ProgMatch::favorIconOn() const {
+	return favorIcon && favorIcon->lcall;
+}
+
+inline bool ProgMatch::fnowIconOn() const {
+	return fnowIcon && fnowIcon->lcall;
 }
 
 class ProgSettings : public ProgState {
@@ -296,6 +307,7 @@ public:
 	virtual ~ProgSettings() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 	
 	virtual RootLayout* createLayout() override;
 
@@ -315,6 +327,7 @@ public:
 	virtual ~ProgInfo() override = default;
 
 	virtual void eventEscape() override;
+	virtual void eventEnter() override;
 
 	virtual RootLayout* createLayout() override;
 

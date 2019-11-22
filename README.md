@@ -13,6 +13,8 @@ Used libraries are GLEW, GLM, SDL2, SDL2_net, SDL2_ttf and by extension FreeType
 The CMakeLists.txt is written for CMake 3.10.2 with Clang, GCC or MSVC which need to support C++17.  
 
 CMake variables:  
+- ARCH : string = system default  
+  - can be set to 32 or 64 for Clang or GCC  
 - CMAKE_BUILD_TYPE : string = Release  
   - can be set to "Debug"  
 - EXTERNAL : bool = 0  
@@ -21,22 +23,26 @@ CMake variables:
   - download libraries for Android Studio  
 - OPENGLES : bool = 0  
   - use OpenGL ES  
+- VER_GLEW : string = 2.1.0  
+  - GLEW version to download  
+- VER_GLM : string = 0.9.9.6  
+  - GLM version to download  
 - VER_SDL : string = 2.0.10  
   - SDL version to download  
 - VER_NET : string = 2.0.1  
   - SDL_net version to download  
 - VER_TTF : string = 2.0.15  
   - SDL_ttf version to download  
-- VER_GLEW : string = 2.1.0  
-  - GLEW version to download  
-- VER_GLM : string = 0.9.9.6  
-  - GLM version to download  
 
 ### Android  
 The "android" directory can be imported in Android Studio as a project, which builds only the game client.  
 To install the necessary additional files, run CMake with the "-DLIBDROID=1" option.  
 Next the CMake target "assets_android" needs to be built separately, which will create the assets in "android/app/src/main/assets". The requirements for this are as listed for the other systems.  
 If you're on Windows, make sure that your Git supports symbolic links or check that "android/app/jni/src" contains the files of "src".  
+
+### Emscripten  
+A makefile with a target for the game client can be created with the CMake file, which requires emsdk to be installed. Additional libraries will be downloaded.  
+Before building the program, the assets for OpenGL ES need to be built, using the method below and the created "data" directory has to be copied to the directory of the makefile for the Emscripten build.  
 
 ### Linux  
 The only supported compilers are Clang and GCC. All dependencies need to be installed manually.  
@@ -59,7 +65,7 @@ Enter the address and port of the computer on which the server instance is runni
 
 The game program requires OpenGL 3.0 or OpenGL ES 3.0.  
 Game configurations are stored with unique names in "game.ini", tile/piece setups in "setup.ini" and other client settings in "settings.ini".  
-On Android these files are in the "/storage/sdcard0/Android/data/com.carnkaw.thrones/files" directory, on Linux in "$HOME/.config/thrones", on macOS in "$HOME/Library/Preferences/Thrones" and on Windows in "%AppData%/Thrones".  
+On Android these files are in the "/storage/sdcard0/Android/data/org.duravia.thrones/files" directory, on Linux in "$HOME/.config/thrones", on macOS in "$HOME/Library/Preferences/Thrones" and on Windows in "%AppData%/Thrones".  
 The files can also be stored in "data" when running in portable mode on Linux or Windows or within the application bundle on macOS.  
 
 Game client command line options:  
@@ -89,11 +95,12 @@ The game starts with the setup, which consists of the following phases:
 
 Press "Next" or "Prev" to switch between phases.  
 You can place tiles/pieces by dragging them from the icon bar or by using the mouse wheel/number keys to select one and holding the left mouse button and dragging across the board.  
-Tiles/pieces can be switched by dragging them using the left mouse button or cleared by holding the right mouse button and dragging or using the "Delete" button.  
+Tiles/pieces can be switched by dragging them using the left mouse button or cleared by holding the right mouse button and dragging or using the "Delete" button in combination with the left mouse button.  
 Fortress tiles will be places automatically, where no tiles were placed.  
-After the setup the server program determines the first player, the middle row tiles will be rearranged accordingly and the actual match starts.  
+After the setup the server program determines the first player, the middle row tiles will be rearranged accordingly and the match starts.  
 
-You can move pieces by dragging them using the left mouse button and fire by dragging a piece using the right mouse button.  
+You can move pieces by dragging them using the left mouse button and fire by dragging a piece with the right mouse button.  
 Because by default the warhorse switches with any piece, drag it with the right mouse button to explicitly attack.  
-To use a move/attack/fire fate's favor, hold down the left alt key while dragging the piece.  
-The camera can be rotated by holding down the middle mouse button and reset by pressing C.  
+To initialize a Fate's Favor turn, hold down the left Alt key/X2 mouse button while taking the first action or hold down left Shift/X1 mouse button to use the Fate's Favor's effect on the current action. Alternatively, the "FF" button can be used.  
+A turn ends by pressing the Space bar/middle mouse button, clicking the "Finish" button or when the limit of actions has been exhausted.  
+The camera can be rotated by holding down the left Ctrl key and moving the mouse, zoomed with the mouse wheel and reset by pressing C.  

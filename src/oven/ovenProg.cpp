@@ -1,12 +1,5 @@
 #include "oven.h"
 
-#ifndef GL_BGR
-#define GL_BGR 0x80E0
-#endif
-#ifndef GL_BGRA
-#define GL_BGRA 0x80E1
-#endif
-
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
 constexpr char argMaterial = 'm';
@@ -414,7 +407,23 @@ static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
 
 // TEXTURES
 
+static void scaleSurface(SDL_Surface*& img, float factor = 0.5f) {
+	if (SDL_Surface* dst = SDL_CreateRGBSurface(img->flags, int(float(img->w) * factor), int(float(img->h) * factor), img->format->BitsPerPixel, img->format->Rmask, img->format->Gmask, img->format->Bmask, img->format->Amask)) {
+		if (SDL_Rect rect = { 0, 0, dst->w, dst->h }; !SDL_BlitScaled(img, nullptr, dst, &rect)) {
+			SDL_FreeSurface(img);
+			img = dst;
+		} else {
+			std::cerr << "failed to scale surface: " << SDL_GetError() << std::endl;
+			SDL_FreeSurface(dst);
+		}
+	} else
+		std::cerr << "failed to create scaled surface: " << SDL_GetError() << std::endl;
+}
+
 static SDL_Surface* convertSurface(SDL_Surface* img, bool regular) {
+	if (!regular)
+		scaleSurface(img);
+
 	uint32 pf3 = regular ? SDL_PIXELFORMAT_BGR24 : SDL_PIXELFORMAT_RGB24;
 	uint32 pf4 = regular ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_RGBA32;
 	if (img->format->format == pf3 || img->format->format == pf4)
@@ -429,10 +438,28 @@ static SDL_Surface* convertSurface(SDL_Surface* img, bool regular) {
 	return nullptr;
 }
 
+static uint16 getPformat(uint8 psiz, bool regular) {
+	switch (psiz) {
+	case 3:
+#ifdef GL_BGR
+		return regular ? GL_BGR : GL_RGB;
+#else
+		return GL_RGB;
+#endif
+	case 4:
+#ifdef GL_BGRA
+		return regular ? GL_BGRA : GL_RGBA;
+#else
+		return GL_RGBA;
+#endif
+	}
+	return 0;
+}
+
 static void loadBmp(const char* file, vector<Image>& imgs, bool regular) {
 	if (SDL_Surface* src = SDL_LoadBMP(file)) {
 		if (string name = filename(delExt(file)); src = convertSurface(src, regular))
-			imgs.emplace_back(std::move(name), src, src->format->BytesPerPixel == 3 ? GL_RGB8 : GL_RGBA8, src->format->BytesPerPixel == 3 ? (regular ? GL_BGR : GL_RGB) : (regular ? GL_BGRA : GL_RGBA));
+			imgs.emplace_back(std::move(name), src, src->format->BytesPerPixel == 3 ? GL_RGB8 : GL_RGBA8, getPformat(src->format->BytesPerPixel, regular));
 		else
 			std::cerr << "error: failed to convert " << name << std::endl;
 	} else

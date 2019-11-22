@@ -18,6 +18,7 @@ Netcp::~Netcp() {
 
 void Netcp::connect() {
 	openSockets(World::sets()->address.c_str(), socket);
+	sendVersion();
 	cncproc = &Netcp::cprocWait;
 }
 
@@ -48,6 +49,8 @@ void Netcp::cprocWait(uint8* data) {
 	switch (Code(data[0])) {
 	case Code::full:
 		throw NetcpException("Server full");
+	case Code::version:
+		throw NetcpException("Server expected version " + readVersion(data));
 	case Code::rlist:
 		World::program()->info &= ~Program::INF_UNIQ;
 		World::program()->eventOpenLobby(data + dataHeadSize);
@@ -82,6 +85,9 @@ void Netcp::cprocLobby(uint8* data) {
 		World::program()->info &= ~Program::INF_GUEST_WAITING;
 		World::state<ProgRoom>()->updateStartButton();
 		break;
+	case Code::hgone:
+		World::program()->eventHostLeft(data + dataHeadSize);
+		break;
 	case Code::hello:
 		World::program()->info |= Program::INF_GUEST_WAITING;
 		World::program()->eventPlayerHello(true);
@@ -90,8 +96,8 @@ void Netcp::cprocLobby(uint8* data) {
 		World::program()->eventJoinRoomReceive(data + dataHeadSize);
 		break;
 	case Code::config:
-		World::game()->config.fromComData(data + dataHeadSize);
-		World::state<ProgRoom>()->updateConfigWidgets();
+		World::game()->recvConfig(data + dataHeadSize);
+		World::state<ProgRoom>()->updateConfigWidgets(World::game()->getConfig());
 		break;
 	case Code::start:
 		World::game()->recvStart(data + dataHeadSize);
@@ -110,14 +116,14 @@ void Netcp::cprocGame(uint8* data) {
 	case Code::leave:
 		World::program()->eventPlayerLeft();
 		break;
+	case Code::hgone:
+		World::program()->eventHostLeft(data + dataHeadSize);
+		break;
 	case Code::hello:
 		World::program()->info |= Program::INF_GUEST_WAITING;
 		break;
-	case Code::tiles:
-		World::game()->recvTiles(data + dataHeadSize);
-		break;
-	case Code::pieces:
-		World::game()->recvPieces(data + dataHeadSize);
+	case Code::setup:
+		World::game()->recvSetup(data + dataHeadSize);
 		break;
 	case Code::move:
 		World::game()->recvMove(data + dataHeadSize);
@@ -137,18 +143,22 @@ void Netcp::cprocGame(uint8* data) {
 }
 
 void Netcp::checkSocket() {
-	if (SDLNet_SocketReady(socket)) {
-		int len = recvb.recv(socket);
-		if (len <= 0)
-			throw NetcpException("Connection lost");
-		recvb.processRecv(len, cncproc);
-	}
+	if (recvb.recv(socket, cncproc))
+		throw NetcpException("Connection lost");
+}
+
+void Netcp::sendVersion() {
+	uint16 len = uint16(strlen(commonVersion));
+	vector<uint8> data(Com::dataHeadSize + len);
+	data[0] = uint8(Code::version);
+	SDLNet_Write16(uint16(data.size()), data.data() + 1);
+	std::copy_n(commonVersion, len, data.data() + dataHeadSize);
+	sendData(data);
 }
 
 void Netcp::sendData(Buffer& sendb) {
 	if (const char* err = sendb.send(socket))
 		throw NetcpException(err);
-	sendb.size = 0;
 }
 
 void Netcp::sendData(Com::Code code) {
@@ -171,7 +181,7 @@ NetcpHost::~NetcpHost() {
 
 void NetcpHost::connect() {
 	openSockets(nullptr, server);
-	cncproc = &Netcp::cprocDiscard;
+	cncproc = &NetcpHost::cprocDiscard;
 }
 
 void NetcpHost::tick() {
@@ -186,11 +196,32 @@ void NetcpHost::tick() {
 				throw NetcpException(SDLNet_GetError());
 			if (SDLNet_TCP_AddSocket(socks, socket) < 0)
 				throw NetcpException(SDLNet_GetError());
-			World::game()->sendStart();
+			cncproc = &NetcpHost::cprocValidate;
 		} catch (const NetcpException& err) {
 			closeSocket(socket);
 			std::cerr << "failed to connect guest: " << err.message << std::endl;
 		}
 	}
 	checkSocket();
+}
+
+void NetcpHost::cprocValidate(uint8* data) {
+	static_cast<NetcpHost*>(World::netcp())->validate(data);
+}
+
+void NetcpHost::validate(uint8* data) {
+	if (Code(*data) == Code::version) {
+		if (string ver = readVersion(data); std::find(compatibleVersions.begin(), compatibleVersions.end(), ver) != compatibleVersions.end())
+			World::game()->sendStart();
+		else {
+			sendVersion();
+			closeSocket(socket);
+			cncproc = &NetcpHost::cprocDiscard;
+			std::cout << "failed to validate guest of version " << ver << std::endl;
+		}
+	} else {
+		cprocDiscard(data);
+		closeSocket(socket);
+		cncproc = &NetcpHost::cprocDiscard;
+	}
 }

@@ -29,10 +29,8 @@ namespace Com {
 
 constexpr uint16 defaultPort = 39741;
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
-constexpr uint16 dataMaxSize = 2048;
-constexpr uint8 roomNameLimit = 32;
-constexpr uint8 maxRooms = (dataMaxSize - dataHeadSize - sizeof(uint8)) / (sizeof(uint8) * 2 + roomNameLimit);
-constexpr uint8 maxPlayers = maxRooms * 2;
+constexpr uint8 roomNameLimit = 64;
+constexpr uint8 maxRooms = 64;
 
 enum class Tile : uint8 {
 	plains,
@@ -80,179 +78,217 @@ const array<string, pieceMax> pieceNames = {
 };
 
 enum class Code : uint8 {
-	full,	// server full
-	rlist,	// list all rooms (amount + flags + names)
-	rnew,	// create new room (room name)
-	cnrnew,	// confirm new room (yes/no)
-	rerase,	// delete a room (name info)
-	ropen,	// info whether a room can be accessed (not full + name)
-	join,	// player joins room (room name)
-	leave,	// player leaves room
-	hello,	// player has joined
-	cnjoin,	// confirm join	(yes/no + config)
-	config,	// player sending game config
-	start,	// start setup phase (has first turn info)
-	tiles,	// player ready to start match (tile info)
-	pieces,	// arrives after ^ and is the last ready signal (piece info)
-	move,	// piece move (piece + position info)
-	kill,	// piece die (piece info)
-	breach,	// fortress state change (breached or not info)
-	record	// turn record data (piece + has attacked or switched info)
+	version,	// version info
+	full,		// server full
+	rlist,		// list all rooms (amount + flags + names)
+	rnew,		// create new room (room name)
+	cnrnew,		// confirm new room (yes/no)
+	rerase,		// delete a room (name info)
+	ropen,		// info whether a room can be accessed (not full + name)
+	join,		// player joins room (room name)
+	leave,		// guest leaves room
+	hgone,		// host left room (room list)
+	kick,		// kick player
+	hello,		// player has joined
+	cnjoin,		// confirm join	(yes/no + config)
+	config,		// player sending game config
+	start,		// start setup phase (has first turn info)
+	setup,		// ais the last ready signal (tile + piece info)
+	move,		// piece move (piece + position info)
+	kill,		// piece die (piece info)
+	breach,		// fortress state change (breached or not info)
+	record		// turn record data (piece + has attacked or switched info)
+};
+
+const array<string, 1> compatibleVersions = {
+	commonVersion
 };
 
 // variable game properties (shall never be changed after loading)
 class Config {
 public:
-	nvec2 homeSize;
+	enum class Survival : uint8 {
+		disable,
+		finish,
+		kill
+	};
+	static const array<string, uint8(Survival::kill)+1> survivalNames;
+
+	svec2 homeSize;		// neither width nor height shall exceed UINT8_MAX
 	uint8 survivalPass;
-	uint8 favorLimit;
+	Survival survivalMode;
+	bool favorLimit;
+	uint8 favorMax;
 	uint8 dragonDist;
+	bool dragonSingle;
 	bool dragonDiag;
-	bool multistage;
-	bool survivalKill;
 	array<uint16, tileMax> tileAmounts;
 	array<uint16, tileMax-1> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
 	uint16 winFortress, winThrone;
 	array<bool, pieceMax> capturers;
 	bool shiftLeft, shiftNear;
-
-	uint16 extraSize;	// home size + mid size
-	uint16 boardSize;	// total number of tiles
-	uint16 numTiles;	// number of own homeland tiles (must be calculated using tileAmounts)
-	uint16 numPieces;	// number of own pieces (must be calculated using pieceAmounts)
-	uint16 piecesSize;	// total number of pieces
-	float objectSize;	// width and height of a tile/piece
 	
 	static constexpr char defaultName[] = "default";
-	static constexpr uint16 maxNumPieces = (dataMaxSize - dataHeadSize) / 2;
-	static constexpr uint16 dataSize = sizeof(homeSize) + sizeof(survivalPass) + sizeof(favorLimit) + sizeof(dragonDist) + sizeof(uint8) + sizeof(uint8) + sizeof(uint8) + tileMax * sizeof(uint16) + (tileMax - 1) * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8) + sizeof(uint8) + sizeof(uint8);
+	static constexpr uint16 dataSize = sizeof(uint8) * 2 + sizeof(survivalPass) + sizeof(survivalMode) + sizeof(uint8) + sizeof(favorMax) + sizeof(dragonDist) + sizeof(uint8) + sizeof(uint8) + tileMax * sizeof(uint16) + (tileMax - 1) * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8) + sizeof(uint8) + sizeof(uint8);
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
-private:
-	static constexpr nvec2 minHomeSize = { 4, 2 };
-	static constexpr nvec2 maxHomeSize = { 89, 44 };
+	static constexpr svec2 minHomeSize = { 5, 2 };
+	static constexpr svec2 maxHomeSize = { 101, 50 };
 
 public:
 	Config();
 
-	void updateValues();
 	Config& checkValues();
 	void toComData(uint8* data) const;
 	void fromComData(uint8* data);
-	uint16 tileCompressionSize() const;
-	uint16 pieceDataSize() const;
 	string capturersString() const;
 	void readCapturers(const string& line);
+	uint16 countTilesNonFort() const;
+	uint16 countMiddles() const;
+	uint16 countPieces() const;
+	uint16 countFreeTiles() const;
+	uint16 countFreeMiddles() const;
+	uint16 countFreePieces() const;
 
-	template <class T, sizet S> static T calcSum(const array<T, S>& nums, sizet size = S);
 private:
-	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, sizet ei, uint16 floor = 0);
+	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, uint8 ei, uint16 floor = 0);
+	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
 };
 
-inline uint16 Config::tileCompressionSize() const {
-	return dataHeadSize + extraSize / 2 + extraSize % 2;
+inline uint16 Com::Config::countTilesNonFort() const {
+	return std::accumulate(tileAmounts.begin(), tileAmounts.end() - 1, uint16(0));
 }
 
-inline uint16 Config::pieceDataSize() const {
-	return dataHeadSize + numPieces * sizeof(uint16);
+inline uint16 Config::countMiddles() const {
+	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), uint16(0));
 }
 
-template <class T, sizet S>
-T Config::calcSum(const array<T, S>& nums, sizet size) {
-	T res = T(0);
-	for (sizet i = 0; i < size; i++)
-		res += nums[i];
-	return res;
+inline uint16 Config::countPieces() const {
+	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), uint16(0));
+}
+
+inline uint16 Config::countFreeTiles() const {
+	return homeSize.x * homeSize.y - countTilesNonFort();
+}
+
+inline uint16 Config::countFreeMiddles() const {
+	return homeSize.x / 2 - countMiddles();
+}
+
+inline uint16 Config::countFreePieces() const {
+	return homeSize.x * homeSize.y - countPieces();
 }
 
 int sendRejection(TCPsocket server);
 string readName(const uint8* data);
+string readVersion(uint8* data);
 
-constexpr array<uint16, uint8(Code::record)+1> codeSizes = {	// 0 means variable length
-	dataHeadSize,					// full
-	0,								// room list (room count * (name.len + name))
-	0,								// room create (name.len + name)
-	dataHeadSize + sizeof(uint8),	// confirm room create
-	0,								// room delete (name.len + name)
-	0,								// room is open (state + name.len + name)
-	0,								// join room (name.len + name)
-	dataHeadSize,					// leave room
-	dataHeadSize,					// player in room
-	dataHeadSize + Config::dataSize,					// confirm join room
-	dataHeadSize + Config::dataSize,					// game config
-	dataHeadSize + sizeof(uint8) + Config::dataSize,	// game start
-	0,													// tile setup (tiles.num / 2)
-	0,													// piece setup (pieces.num * 2)
-	dataHeadSize + sizeof(uint16) * 2,					// piece move
-	dataHeadSize + sizeof(uint16),						// piece kill
-	dataHeadSize + sizeof(uint8) + sizeof(uint16),		// fortress breach
-	dataHeadSize + sizeof(uint8) + sizeof(uint16) * 2	// turn record
+const umap<Code, uint16> codeSizes = {
+	pair(Code::full, dataHeadSize),
+	pair(Code::cnrnew, dataHeadSize + uint16(sizeof(uint8))),
+	pair(Code::leave, dataHeadSize),
+	pair(Code::kick, dataHeadSize),
+	pair(Code::hello, dataHeadSize),
+	pair(Code::config, dataHeadSize + Config::dataSize),
+	pair(Code::start, dataHeadSize + uint16(sizeof(uint8)) + Config::dataSize),
+	pair(Code::move, dataHeadSize + uint16(sizeof(uint16) * 2)),
+	pair(Code::kill, dataHeadSize + uint16(sizeof(uint16))),
+	pair(Code::breach, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16))),
+	pair(Code::record, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16)))
 };
 
 }
 
-// for making sending stuff easier
-struct Buffer {
-	uint16 size;	// shall not exceed bufSize, is never actually checked though
-	uint8 data[Com::dataMaxSize];
+// for sending/receiving network data (mustn't be used for both simultaneously)
+class Buffer {
+private:
+	vector<uint8> data;
+	uint dpos;
 
+public:
 	Buffer();
+
+	uint8& operator[](uint i);
+	uint size() const;
+	void clear();
 
 	void push(const vector<uint8>& vec);
 	void push(const vector<uint16>& vec);
 	void push(const string& str);
-	void push(const uint8* vec, uint16 len);
+	void push(const uint8* vec, uint len);
 	void push(uint8 val);
 	void push(uint16 val);
-	void pushHead(Com::Code code);			// shouldn't be used for codes with variable length
-	uint16 writeHead(Com::Code code, uint16 clen, uint16 pos = 0);	// returns new pos
-	const char* send(TCPsocket socket);		// returns error code or nullptr on success
-	int recv(TCPsocket socket);
-	template <class F, class... A> void processRecv(int len, F finish, A... args);
+	uint preallocate(Com::Code code);			// set head and preallocate space (returns end pos of head)
+	uint preallocate(Com::Code code, uint dlen);
+	uint pushHead(Com::Code code);				// should only be used for codes with fixed length (returns end pos of head)
+	uint pushHead(Com::Code code, uint dlen);	// should only be used for codes with variable length (returns end pos of head)
+	uint write(uint8 val, uint pos);
+	uint write(uint16 val, uint pos);
+
+	const char* send(TCPsocket socket);				// sends all data and clears
+	const char* send(TCPsocket socket, uint cnt);	// returns error code or nullptr on success (doesn't clear data)
+	template <class F> const char* recv(TCPsocket socket, F proc);
+
+private:
+	uint checkEnd(uint end);
 };
 
-inline Buffer::Buffer() :
-	size(0)
-{}
+inline uint8& Buffer::operator[](uint i) {
+	return data[i];
+}
+
+inline uint Buffer::size() const {
+	return dpos;
+}
 
 inline void Buffer::push(const vector<uint8>& vec) {
-	push(vec.data(), uint16(vec.size()));
+	push(vec.data(), uint(vec.size()));
 }
 
 inline void Buffer::push(const string& str) {
-	push(reinterpret_cast<const uint8*>(str.c_str()), uint16(str.length()));
+	push(reinterpret_cast<const uint8*>(str.c_str()), uint(str.length()));
 }
 
-inline void Buffer::push(uint8 val) {
-	data[size++] = val;
+inline uint Buffer::preallocate(Com::Code code) {
+	return preallocate(code, Com::codeSizes.at(code));
 }
 
-inline void Buffer::pushHead(Com::Code code) {
-	size = writeHead(code, Com::codeSizes[uint8(code)], size);
+inline uint Buffer::pushHead(Com::Code code) {
+	return pushHead(code, Com::codeSizes.at(code));
 }
 
-inline const char* Buffer::send(TCPsocket socket) {
-	return SDLNet_TCP_Send(socket, data, size) == size ? reinterpret_cast<const char*>(size = 0) : SDLNet_GetError();
+inline const char* Buffer::send(TCPsocket socket, uint cnt) {
+	return SDLNet_TCP_Send(socket, data.data(), int(cnt)) != int(cnt) ? SDLNet_GetError() : nullptr;
 }
 
-inline int Buffer::recv(TCPsocket socket) {
-	return SDLNet_TCP_Recv(socket, data + size, Com::dataMaxSize - size);
-}
+template <class F>
+inline const char* Buffer::recv(TCPsocket socket, F proc) {
+	if (!SDLNet_SocketReady(socket))
+		return nullptr;
+	if (dpos < Com::dataHeadSize) {
+		checkEnd(Com::dataHeadSize);
+		int len = SDLNet_TCP_Recv(socket, data.data() + dpos, int(Com::dataHeadSize - dpos));
+		if (len <= 0)
+			return SDLNet_GetError();
+		if (dpos += uint(len); dpos < Com::dataHeadSize)
+			return nullptr;
+	}
 
-template <class F, class... A>
-void Buffer::processRecv(int len, F finish, A... args) {
-	uint8* dtp = data;
-	do {
-		if (int await = SDLNet_Read16(dtp + 1), left = await - size; size + len >= Com::dataHeadSize && len >= left) {
-			finish(dtp, args...);
-			len -= left;
-			dtp += left;
-			size = 0;
-		} else {
-			if (size += len; dtp != data)
-				std::copy_n(dtp, size, data);
-			len = 0;
-		}
-	} while (len);
+	uint16 end = SDLNet_Read16(data.data() + 1);
+	if (end > dpos) {
+		if (!SDLNet_SocketReady(socket))
+			return nullptr;
+		checkEnd(end);
+		int len = SDLNet_TCP_Recv(socket, data.data() + dpos, int(end - dpos));
+		if (len <= 0)
+			return SDLNet_GetError();
+		dpos += uint(len);
+	}
+	if (dpos >= end) {
+		proc(data.data());
+		data.clear();
+		dpos = 0;
+	}
+	return nullptr;
 }

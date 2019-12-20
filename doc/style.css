@@ -1,0 +1,97 @@
+body {
+	background-color: #100000;
+	color: #FFC125;
+	font-family: Arial, sans-serif;
+}
+
+input button submit {
+	border: none;
+}
+
+a {
+	color: inherit;
+	text-decoration: inherit;
+}
+
+nav img {
+	height: 2.3em;
+	float: left;
+}
+
+nav a {
+	background-color: #891919;
+	text-align: center;
+	text-shadow: 2px 2px #000000;
+	box-shadow: 4px 4px #000000;
+	font-size: 2em;
+	margin: 0 0 10px 20px;
+	padding: 2px 10px;
+	border-radius: 10px;
+	transition: 0.2s;
+	float: left;
+}
+
+nav a:hover {
+	color: #FFD030;
+	background-color: #A02020;
+	box-shadow: 0 0 40px #A02020;
+}
+
+nav div.flim {
+	clear: both;
+}
+
+h3.intro {
+	margin-bottom: 0;
+}
+
+p.intro {
+	margin-top: 0.6em;
+}
+
+div.links {
+	padding-bottom: 1.2em;
+}
+
+div.links div {
+	font-weight: bold;
+	padding-bottom: 0.1em;
+}
+
+div.links img {
+	height: 1.2em;
+	padding-right: 0.8em;
+}
+
+div.wallpapers {
+	padding-bottom: 1em;
+}
+
+div.tiles {
+	padding-bottom: 1em;
+}
+
+div.tiles img {
+	height: 2em;
+	padding-right: 1em;
+}
+
+div.pieces {
+	padding-bottom: 1em;
+}
+
+div.pieces img {
+	height: 2em;
+	padding-left: 1em;
+}
+
+table.listing td:first-child {
+	font-weight: bold;
+	vertical-align: top;
+	padding-right: 1em;
+}
+
+span.date {
+	font-size: 0.4em;
+	padding-left: 1em;
+}

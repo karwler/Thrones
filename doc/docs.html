@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Thrones - Documentation</title>
+	<link rel="icon" type="image/bmp" href="../rsc/data/thrones.bmp">
+	<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+	<nav>
+		<img src="../rsc/textures/title.bmp">
+		<a href="rules.html">Rules</a>
+		<a href="docs.html">Docs</a>
+		<div class="flim"></div>
+	</nav>
+
+	<h1>1 Miscellaneous</h1>
+
+	<h2>1.1 Dependencies</h2>
+	<p>This list refers to the provided binaries, not strictly the source code.</p>
+	<h3>Android</h3>
+	<ul>
+		<li>Android 4.4 KitKat</li>
+		<li>OpenGL ES 3.0</li>
+	</ul>
+	<h3>Emscripten</h3>
+	<ul>
+		<li>WebGL 2.0</li>
+	</ul>
+	<h3>Linux</h3>
+	<ul>
+		<li>Linux 3.2.0 64-bit</li>
+		<li>OpenGL 3.0 (x86) or OpenGL ES 3.0 (ARM)</li>
+		<li>GLEW 2.1.0</li>
+		<li>SDL2 2.0.10</li>
+		<li>SDL2_net 2.0.1</li>
+		<li>SDL2_ttf 2.0.15</li>
+	</ul>
+	<h3>macOS</h3>
+	<ul>
+		<li>OpenGL 3.2</li>
+	</ul>
+	<h3>Windows</h3>
+	<ul>
+		<li>Windows XP (32-bit) or Windows 7 (64-bit)</li>
+		<li>OpenGL 3.0</li>
+		<li>MS Visual C++ Redistribute 2017 (32-bit) or 2019 (64-bit)</li>
+	</ul>
+
+	<h2>1.2 UI</h2>
+	<p>Widgets that can be interacted with or have tooltips are highlighted when the user hovers the mouse cursor over them. The "Escape" or "Back" key always perform a given menu's "exit" action, while "Return" performs a popup's "confirm" action.</p>
+	<h3>Checkbox</h3>
+	<p>Can be toggled with either the left or the right mouse button.</p>
+	<h3>Scroll area</h3>
+	<p>Can be scrolled with either a scroll bar on the right, the mouse wheel or by left click holding and dragging inside the area.</p>
+	<h3>Slider</h3>
+	<p>Most slider's changes will be fully applied only once the dragging is done.</p>
+	<h3>Switchbox</h3>
+	<p>Can by cycled forwards with the "&gt;" button or by left clicking the text field and cycling backwards works by pressing the "&lt;" button or right clicking the text field.</p>
+	<h3>Text edit</h3>
+	<p>
+		Currently doesn't fully support editing multibyte characters.<br>
+		Possible editing actions are:
+	</p>
+	<table class="listing">
+		<tr>
+			<td>Left</td>
+			<td>move cursor one character to the left</td>
+		</tr>
+		<tr>
+			<td>Alt + Left</td>
+			<td>move cursor to the start of a word</td>
+		</tr>
+		<tr>
+			<td>Ctrl + Left</td>
+			<td>move cursor to the start</td>
+		</tr>
+		<tr>
+			<td>Right</td>
+			<td>move cursor one character to the right</td>
+		</tr>
+		<tr>
+			<td>Alt + Left</td>
+			<td>move cursor to the end of a word</td>
+		</tr>
+		<tr>
+			<td>Ctrl + Left</td>
+			<td>move cursor to the end</td>
+		</tr>
+		<tr>
+			<td>Backspace</td>
+			<td>delete previous character</td>
+		</tr>
+		<tr>
+			<td>Alt + Backspace</td>
+			<td>delete to the start of a word</td>
+		</tr>
+		<tr>
+			<td>Ctrl + Backspace</td>
+			<td>delete to the start</td>
+		</tr>
+		<tr>
+			<td>Delete</td>
+			<td>delete current character</td>
+		</tr>
+		<tr>
+			<td>Alt + Delete</td>
+			<td>delete to the end of a word</td>
+		</tr>
+		<tr>
+			<td>Ctrl + Delete</td>
+			<td>delete to the end</td>
+		</tr>
+		<tr>
+			<td>Home</td>
+			<td>move cursor to the start</td>
+		</tr>
+		<tr>
+			<td>End</td>
+			<td>move cursor to the end</td>
+		</tr>
+		<tr>
+			<td>Ctrl + V</td>
+			<td>insert clipboard text at cursor's position</td>
+		</tr>
+		<tr>
+			<td>Ctrl + C</td>
+			<td>copy entire text to clipboard</td>
+		</tr>
+		<tr>
+			<td>Ctrl + X</td>
+			<td>cut entire text to clipboard</td>
+		</tr>
+		<tr>
+			<td>Ctrl + Z</td>
+			<td>set text to the original text</td>
+		</tr>
+		<tr>
+			<td>Return</td>
+			<td>confirm new text and stop editing</td>
+		</tr>
+		<tr>
+			<td>Escape or Back</td>
+			<td>set text to the original text and stop editing</td>
+		</tr>
+	</table>
+
+	<h1>2 Preferences</h1>
+	<p>
+		All preferences are stored in INI files.<br>
+		If the game was built for Android or with the "EXTERNAL" define, it'll default to saving preferences outside of the game's directory.<br>
+		The locations are:
+	</p>
+	<table class="listing">
+		<tr>
+			<td>Android</td>
+			<td>/storage/sdcard0/Android/data/org.duravia.thrones/files</td>
+		</tr>
+		<tr>
+			<td>Linux</td>
+			<td>~/.config/thrones</td>
+		</tr>
+		<tr>
+			<td>macOS</td>
+			<td>~/Library/Preferences/Thrones</td>
+		</tr>
+		<tr>
+			<td>Windows</td>
+			<td>%AppData%/Thrones</td>
+		</tr>
+	</table>
+	<p>If the game was built without the "EXTERNAL" define, it'll default to saving preferences in the game's assets directory:</p>
+	<table class="listing">
+		<tr>
+			<td>Linux/Windows</td>
+			<td>Thrones/data</td>
+		</tr>
+		<tr>
+			<td>macOS</td>
+			<td>Thrones.app/Contents/Resources</td>
+		</tr>
+	</table>
+	<p>Either behavior can be explicitly set by running the game with the "-e 0|1" option:</p>
+	<table class="listing">
+		<tr>
+			<td>0</td>
+			<td>don't save externally</td>
+		</tr>
+		<tr>
+			<td>1</td>
+			<td>save externally</td>
+		</tr>
+	</table>
+
+	<h2>2.1 Settings</h2>
+	<p>Game client settings are stored in "settings.ini" and can be edited in the main menu and in the "Settings" menu.</p>
+	<h3>Address</h3>
+	<p>The server's address to connect to when clicking "Connect".</p>
+	<h3>Port</h3>
+	<p>The server's port to connect to when clicking "Connect".</p>
+	<h3>Display</h3>
+	<p>The index of what display to place the window on. Choosing a non-primary display can break the rendering on certain systems.</p>
+	<h3>Screen</h3>
+	<table class="listing">
+		<tr>
+			<td>window</td>
+			<td>regular decorated window</td>
+		</tr>
+		<tr>
+			<td>borderless</td>
+			<td>borderless window</td>
+		</tr>
+		<tr>
+			<td>fullscreen</td>
+			<td>fullscreen with custom mode</td>
+		</tr>
+		<tr>
+			<td>desktop</td>
+			<td>fullscreen with the standard screen mode</td>
+		</tr>
+	</table>
+	<h3>Size</h3>
+	<p>Window size when "Screen" is set to "window" or "borderless".</p>
+	<h3>Mode</h3>
+	<p>The screen mode to use when "Screen" is set to "fullscreen".</p>
+	<h3>Multisamples</h3>
+	<p>Set to "0" to turn off.</p>
+	<h3>VSync</h3>
+	<ul>
+		<li>immediate</li>
+		<li>synchronized</li>
+		<li>adaptive</li>
+	</ul>
+	<h3>Gamma</h3>
+	<p>Aka. brightness. Doesn't work on some systems.</p>
+	<h3>Volume</h3>
+	<p>Volume of sound effects. Disabled by default because the sound effects are terrible and annoying.</p>
+	<h3>Scale tiles</h3>
+	<p>When enabled, the amounts of home and middle tiles will be adjusted accordingly when changing the homeland size. "New_amount_of_each_tile = old_amount * new_area / old_area", the area values referring to either the homeland area for homeland tiles or the width of the board for middle row tiles.</p>
+	<h3>Scale pieces</h3>
+	<p>When enabled, the amounts of a player's pieces will be adjusted accordingly when changing the homeland size. "New_amount_of_each_piece = old_amount * new_area / old_area" floored, the area values referring to the homeland area.</p>
+
+	<h2>2.2 Configurations</h2>
+	<p>
+		Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.
+	</p>
+	<h3>Homeland size</h3>
+	<table class="listing">
+		<tr>
+			<td>width</td>
+			<td>Is equal to the number of tile columns of the board. The minimum is 5 because each row has to have at least one of each tile's type plus a possible fortress and the maximum is 101.</td>
+		</tr>
+		<tr>
+			<td>height</td>
+			<td>Is the number of tile rows of each player's homeland, which is "board_height / 2 - 1". The minimum is 2 because a fortress can't be placed in the bottom row and the maximum is 50, amounting to a maximum board height of 101.</td>
+		</tr>
+	</table>
+	<h3>Survival check pass</h3>
+	<p>The chance of passing a survival check.</p>
+	<h3>Survival check mode</h3>
+	<p>Describes the effect of a failed survival check when not attacking:</p>
+	<table class="listing">
+		<tr>
+			<td>disable</td>
+			<td>If the player hasn't taken any other action that turn, the acting piece will be disabled and the turn continues. If the player has taken an action previously, the turn ends.</td>
+		</tr>
+		<tr>
+			<td>finish</td>
+			<td>End the turn.</td>
+		</tr>
+		<tr>
+			<td>kill</td>
+			<td>Remove the acting piece if it's not a throne and end the turn.</td>
+		</tr>
+	</table>
+	<h3>Fate's Favor limit total</h3>
+	<p>If enabled, "Favor maximum" will be the limit of how many times each player can use Fate's Favor in one match. If disabled, "Favor maximum" will be the limit of how many Fate's Favors each player can stock up.</p>
+	<h3>Fate's Favor maximum</h3>
+	<p>Can be set to a value in the range of 0 to 255. Its effect is described by "Fate's Favor limit total".</p>
+	<h3>Dragon move limit</h3>
+	<p>The limit of how many steps a dragon can take when moving but not switching or attacking. Can be set to a value in the range of 0 to 255.</p>
+	<h3>Dragon move straight</h3>
+	<p>If enabled, a dragon can only move in a straight line. Otherwise one move's steps will be treated separately and the dragon will use the shortest path to a destination.</p>
+	<h3>Dragon move diagonal</h3>
+	<p>If enabled, a dragon can additionally take diagonal steps. Otherwise it's limited to vertical and horizontal steps.</p>
+	<h3>Tile amounts</h3>
+	<p>A list of the amounts of each player's homeland tiles. The minimum amount for each tile type other than a fortress is the homeland height and the maximum of each is the number of remaining free tiles. Sliders' ranges are set accordingly. The amount of fortresses is set to the amount of the remaining free tiles on a homeland. The number of fortresses is limited to "homeland_height * 2 + board_width - 2" and when exceeded, other tile amounts will be increased with the priority being the order of the listed tile types.</p>
+	<h3>Middle amounts</h3>
+	<p>A list of the amounts of middle row tiles per player. The total amount is limited to the range of 0 to "board_width / 2" floored. The amount of fortresses is set to the amount of the remaining free tiles, that is "board_width - total_amount_of_tiles_per_player * 2". The sliders work like the homeland tile amount sliders.</p>
+	<h3>Piece amounts</h3>
+	<p>A list of the amounts of each piece type per player. The total amount of pieces is limited to the range of 1 to the homeland tile count. If there's 0 pieces, the amount of thrones will be set to 1. The sliders work like the tile amount sliders.</p>
+	<h3>Fortresses captured</h3>
+	<p>The number of enemy fortresses that need to be captured in order to win. This value is limited to the number of homeland fortresses.</p>
+	<h3>Thrones killed</h3>
+	<p>The number of enemy thrones that need to be killed in order to win. This number is limited to the number of a player's thrones. If both winning conditions are set to 0, this one will be set to 1. If the amount of thrones is set to 0, it'll be incremented and if the piece limit has been reached, one other piece amount will be decremented in turn, the priority being the reverse order of the listed piece types.</p>
+	<h3>Capturers</h3>
+	<p>A list of piece names which will be able to capture a fortress. If the list is empty, it'll be filled with all piece types.</p>
+	<h3>Shift left</h3>
+	<p>Move conflicting middle row tiles to the left of the player with the first turn.</p>
+	<h3>Shift near</h3>
+	<p>If enabled, start searching for free spaces for conflicting middle row tiles from the position of the conflicting tile. Otherwise start searching from one of the ends of the row.</p>
+
+	<h2>2.3 Setups</h2>
+	<p>
+		Game setups are stored in "setup.ini" and can be edited, saved and loaded in the "Host -&gt; Setup" menu or during the in-game setup phase. The offline editor works the same as setting up a game online, except any checks for proper tile placement and such will be ignored.<br>
+		When loading a setup, it only overwrites the current tiles/pieces of each stage when the loaded setup's corresponding stages' tile/piece data is present.<br>
+		The same setup can be loaded for different configurations, but some tiles and pieces may not get placed due to exceeding limits.
+	</p>
+
+	<h1>3 Networking</h1>
+
+	<h2>3.1 Client</h2>
+	<p>
+		A game client can be used as a server by going into the "Host" menu, optionally setting an appropriate port and the configuration that'll be used for the game rules, and clicking "Open". Once another client successfully connects to the server, a game will start immediately.<br>
+		A client can set an address and port of a server and connect by clicking the "Connect" button in the main menu. When connecting to a regular server program, a list of open rooms will be displayed. A room can be joined by left clicking its name or a new one can be created by clicking "Host". Only a room's host can edit the configuration and start the game.<br>
+	</p>
+
+	<h2>3.2 Server</h2>
+	<p>
+		The server program can be used to host multiple players and is currently limited to a maximum of 128 players and 64 rooms.<br>
+		When running it in the foreground, the following keys can be used:
+	</p>
+	<table class="listing">
+		<tr>
+			<td>L</td>
+			<td>list rooms</td>
+		</tr>
+		<tr>
+			<td>P</td>
+			<td>list players</td>
+		</tr>
+		<tr>
+			<td>Q</td>
+			<td>quit program</td>
+		</tr>
+	</table>
+
+	<p>Command line arguments:</p>
+	<table class="listing">
+		<tr>
+			<td>-p &lt;port&gt;</td>
+			<td>port to use (default is 39741)</td>
+		</tr>
+		<tr>
+			<td>-v</td>
+			<td>write output to console</td>
+		</tr>
+		<tr>
+			<td>-l</td>
+			<td>write output to a log file in the current working directory</td>
+		</tr>
+	</table>
+
+	<h1>4 Game</h1>
+	<p>Every game starts with the setup stage where players place their tiles and pieces. Once both players confirm their setups, the actual match starts.</p>
+
+	<h2>4.1 Setup</h2>
+	<p>
+		The setup stage is a sequence of three phases of placing homeland tiles, middle row tiles and pieces.<br>
+		Tiles/pieces can be placed by dragging them with the left mouse button from the bottom icons or by selecting an icon in the bottom panel and left click holding on a free tile and optionally dragging the cursor across other occupied tiles to replace them. A type can be selected by pressing the icon, using the mouse wheel or pressing a number key. It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and possibly dragging the cursor onto other ones.<br>
+		Fortress tiles will be places automatically, where no tiles were placed.<br>
+		After the setup the host program determines the first player, the middle row tiles will be rearranged accordingly and the match starts.
+	</p>
+	<h3>Buttons</h3>
+	<table class="listing">
+		<tr>
+			<td>Exit</td>
+			<td>Exit the game.</td>
+		</tr>
+		<tr>
+			<td>Config</td>
+			<td>View the current game configuration.</td>
+		</tr>
+		<tr>
+			<td>Save</td>
+			<td>Save current setup.</td>
+		</tr>
+		<tr>
+			<td>Load</td>
+			<td>Load a setup.</td>
+		</tr>
+		<tr>
+			<td>Delete</td>
+			<td>When selected, the left mouse button will remove tiles/pieces instead of placing them.</td>
+		</tr>
+		<tr>
+			<td>Back</td>
+			<td>Go to the previous phase.</td>
+		</tr>
+		<tr>
+			<td>Next</td>
+			<td>Go to the next phase.</td>
+		</tr>
+		<tr>
+			<td>Finish</td>
+			<td>Confirm setup and wait for the other player.</td>
+		</tr>
+	</table>
+
+	<h2>4.2 Match</h2>
+	<p>
+		Normally pieces can be moved by dragging them with the left or right mouse button and whether they'll move, switch or attack depends on the destination.
+		Firing pieces can fire by dragging them with the right mouse button. A warhorse can only attack when being dragged with the right mouse button.<br>
+		Holding the left Alt key or the X1 mouse button on the first action of a turn initializes a Fate's Favor for the piece that will be or is currently being dragged. When holding down left Shift or X2 instead, the Fate's Favor will be used on the current action.<br>
+		A turn ends by pressing the Space bar or middle mouse button or when the limit of actions has been reached.<br>
+		The camera can be rotated by holding down the left Ctrl key, zoomed with the mouse wheel and reset by pressing the C key.
+	</p>
+	<h3>Buttons</h3>
+	<table class="listing">
+		<tr>
+			<td>Exit</td>
+			<td>Exit the game.</td>
+		</tr>
+		<tr>
+			<td>Config</td>
+			<td>View the current game configuration.</td>
+		</tr>
+		<tr>
+			<td>FF: N/L</td>
+			<td>Displays the number of Fate's Favors in the player's possession out of the set limit. Can be selected to initialize a Fate's Favor.</td>
+		</tr>
+		<tr>
+			<td>FF: now</td>
+			<td>Can be selected to use a Fate's Favor on the current action.</td>
+		</tr>
+		<tr>
+			<td>Finish</td>
+			<td>End the turn. Disabled for the first action of a turn.</td>
+		</tr>
+	</table>
+</body>
+</html>

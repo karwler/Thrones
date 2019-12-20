@@ -623,6 +623,7 @@ void Game::failSurvivalCheck(Piece* piece, Action action) {
 	pm->selectFavorIcon(FavorAct::off);
 	pm->updateFavorIcon(false, favorCount, favorTotal);
 	pm->updateFnowIcon();
+	setFfpadPos(true);
 
 	if (piece->getType() != Com::Piece::throne && (action == ACT_ATCK || config.survivalMode == Com::Config::Survival::kill)) {
 		removePiece(piece);

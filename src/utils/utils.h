@@ -125,24 +125,25 @@ private:
 	ivec2 res;
 
 public:
-	Texture(GLuint id = 0, const ivec2& res = ivec2(0));
-	Texture(SDL_Surface* img);											// for text
-	Texture(ivec2 size, GLint iform, GLenum pform, const uint8* pix);	// for image
+	Texture();
+	Texture(SDL_Surface* img);								// for text
+	Texture(SDL_Surface* img, GLint iform, GLenum pform);	// for image
+	Texture(array<uint8, 3> color);							// load blank
 
 	void close();
 	void free();
 	GLuint getID() const;
 	ivec2 getRes() const;
 	bool valid() const;
-
-	static Texture loadBlank();
+	void reload(SDL_Surface* img, GLint iformat, GLenum pformat);
 private:
-	static GLuint loadGL(const ivec2& size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter);
+	void load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
+	void upload(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
 };
 
-inline Texture::Texture(GLuint id, const ivec2& res) :
-	id(id),
-	res(res)
+inline Texture::Texture() :
+	id(0),
+	res(0)
 {}
 
 inline void Texture::free() {
@@ -161,9 +162,14 @@ inline bool Texture::valid() const {
 	return res.x && res.y;
 }
 
-inline Texture Texture::loadBlank() {
-	constexpr uint8 color[3] = { 255, 255, 255 };
-	return Texture(loadGL(ivec2(1), GL_RGB8, defaultFormat3, GL_UNSIGNED_BYTE, color, GL_CLAMP_TO_EDGE, GL_NEAREST), ivec2(1));
+inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
+	upload(img, iformat, pformat, GL_REPEAT, GL_LINEAR);
+	glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+inline void Texture::load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter) {
+	glGenTextures(1, &id);
+	upload(img, iformat, pformat, wrap, filter);
 }
 
 // for Object and Widget

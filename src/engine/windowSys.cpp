@@ -186,6 +186,8 @@ void WindowSys::start() {
 void WindowSys::init() {
 	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO))
 		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
+	if (IMG_Init(imgInitFlags) != imgInitFlags)
+		throw std::runtime_error(string("failed to initialize textures:") + linend + SDL_GetError());
 	if (TTF_Init())
 		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
 	if (SDLNet_Init())
@@ -264,6 +266,7 @@ void WindowSys::cleanup() {
 
 	SDLNet_Quit();
 	TTF_Quit();
+	IMG_Quit();
 	SDL_Quit();
 }
 
@@ -315,11 +318,11 @@ void WindowSys::createWindow() {
 
 	// load icons
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
-	if (SDL_Surface* icon = SDL_LoadBMP(FileSys::dataPath(fileIcon).c_str())) {
+	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileIcon).c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
-	if (SDL_Surface* icon = SDL_LoadBMP(FileSys::dataPath(fileCursor).c_str())) {
+	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileCursor).c_str())) {
 		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
 			cursorHeight = uint8(icon->h);
 			SDL_SetCursor(cursor);

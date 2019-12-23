@@ -22,17 +22,23 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 
 Texture::Texture(SDL_Surface* img) {
 	if (img) {
-		id = loadGL(res = ivec2(img->w, img->h), GL_RGBA8, defaultFormat4, GL_UNSIGNED_BYTE, img->pixels, GL_CLAMP_TO_EDGE, GL_NEAREST);
+		load(img, GL_RGBA8, defaultFormat4, GL_CLAMP_TO_EDGE, GL_NEAREST);
 		SDL_FreeSurface(img);
 	} else
 		*this = Texture();
 }
 
-Texture::Texture(ivec2 size, GLint iform, GLenum pform, const uint8* pix) :
-	id(loadGL(size, iform, pform, GL_UNSIGNED_BYTE, pix, GL_REPEAT, GL_LINEAR)),
-	res(size)
-{
+Texture::Texture(SDL_Surface* img, GLint iform, GLenum pform) {
+	load(img, iform, pform, GL_REPEAT, GL_LINEAR);
 	glGenerateMipmap(GL_TEXTURE_2D);
+	SDL_FreeSurface(img);
+}
+
+Texture::Texture(array<uint8, 3> color) {
+	SDL_Surface surf;
+	surf.w = surf.h = 1;
+	surf.pixels = color.data();
+	load(&surf, GL_RGB8, defaultFormat3, GL_CLAMP_TO_EDGE, GL_NEAREST);
 }
 
 void Texture::close() {
@@ -42,17 +48,14 @@ void Texture::close() {
 	}
 }
 
-GLuint Texture::loadGL(const ivec2& size, GLint iformat, GLenum pformat, GLenum type, const void* pix, GLint wrap, GLint filter) {
-	GLuint id;
-	glGenTextures(1, &id);
+void Texture::upload(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter) {
+	res = ivec2(img->w, img->h);
 	glBindTexture(GL_TEXTURE_2D, id);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, iformat, size.x, size.y, 0, pformat, type, pix);
+	glTexImage2D(GL_TEXTURE_2D, 0, iformat, res.x, res.y, 0, pformat, GL_UNSIGNED_BYTE, img->pixels);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-	return id;
 }
 
 // INTERACTABLE

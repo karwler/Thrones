@@ -110,8 +110,8 @@ class WindowSys {
 public:
 	static constexpr char title[] = "Thrones";
 private:
-	static constexpr char fileIcon[] = "thrones.bmp";
-	static constexpr char fileCursor[] = "cursor.bmp";
+	static constexpr char fileIcon[] = "thrones.png";
+	static constexpr char fileCursor[] = "cursor.png";
 	static constexpr char fileSceneVert[] = "geometry.vert";
 	static constexpr char fileSceneFrag[] = "geometry.frag";
 	static constexpr char fileGuiVert[] = "gui.vert";
@@ -122,6 +122,11 @@ private:
 	static constexpr uint8 fallbackCursorSize = 18;
 	static constexpr float logTexUV[4] = { 0.f, 0.f, 1.f, 1.f };
 	static constexpr float logTexColor[4] = { 1.f, 1.f, 1.f, 1.f };
+#ifdef OPENGLES
+	static constexpr int imgInitFlags = imgInitFull;
+#else
+	static constexpr int imgInitFlags = IMG_INIT_PNG;
+#endif
 
 	uptr<AudioSys> audio;
 	uptr<Program> program;

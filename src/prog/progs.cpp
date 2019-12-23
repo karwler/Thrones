@@ -999,6 +999,7 @@ RootLayout* ProgSettings::createLayout() {
 		"Mode",
 		"Multisamples",
 #endif
+		"Texture scale",
 		"VSync",
 		"Gamma",
 		"Volume",
@@ -1013,6 +1014,7 @@ RootLayout* ProgSettings::createLayout() {
 		"Fullscreen display properties",
 		"Anti-Aliasing multisamples (requires restart)",
 #endif
+		"Scale factor of texture sizes",
 		"Brightness",
 		"Audio volume",
 		"Scale tile amounts when resizing board",
@@ -1024,7 +1026,7 @@ RootLayout* ProgSettings::createLayout() {
 	std::reverse(tips.begin(), tips.end());
 	sizet lnc = txs.size();
 	int descLength = Text::maxLen(txs.begin(), txs.end(), lineHeight);
-	int slleLength = Text::strLen("000", lineHeight) + LabelEdit::caretWidth;
+	int slleLength = Text::strLen("000%", lineHeight) + LabelEdit::caretWidth;
 
 	vector<Widget*> lx[] = { {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
@@ -1052,6 +1054,10 @@ RootLayout* ProgSettings::createLayout() {
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
 #endif
+		new Label(descLength, popBack(txs)),
+		new Slider(1.f, World::sets()->texScale, 1, 100, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, makeTooltip(tips.back())),
+		new LabelEdit(slleLength, toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltipL(vsyncTip)),
 		new SwitchBox(1.f, vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync, makeTooltipL(vsyncTip)),

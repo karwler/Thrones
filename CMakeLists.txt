@@ -16,9 +16,9 @@ set(ASSET_WAV
 	"rsc/audio/move.wav")
 
 set(ASSET_DAT
-	"rsc/data/cursor.bmp"
+	"rsc/data/cursor.png"
 	"rsc/data/romanesque.ttf"
-	"rsc/data/thrones.bmp")
+	"rsc/data/thrones.png")
 
 set(ASSET_MTL
 	"rsc/materials/regular.mtl")
@@ -49,29 +49,29 @@ set(ASSET_SHD
 	"rsc/shaders/gui.frag"
 	"rsc/shaders/gui.vert")
 
-set(ASSET_BMP
-	"rsc/textures/catapult.bmp"
-	"rsc/textures/crossbowman.bmp"
-	"rsc/textures/crosshair.bmp"
-	"rsc/textures/dragon.bmp"
-	"rsc/textures/elephant.bmp"
-	"rsc/textures/forest.bmp"
-	"rsc/textures/fortress.bmp"
-	"rsc/textures/grass.bmp"
-	"rsc/textures/lancer.bmp"
-	"rsc/textures/mountain.bmp"
-	"rsc/textures/plains.bmp"
-	"rsc/textures/ranger.bmp"
-	"rsc/textures/rock.bmp"
-	"rsc/textures/spearman.bmp"
-	"rsc/textures/throne.bmp"
-	"rsc/textures/title.bmp"
-	"rsc/textures/trebuchet.bmp"
-	"rsc/textures/wall.bmp"
-	"rsc/textures/warhorse.bmp"
-	"rsc/textures/water.bmp")
+set(ASSET_IMG
+	"rsc/textures/catapult.png"
+	"rsc/textures/crossbowman.png"
+	"rsc/textures/crosshair.png"
+	"rsc/textures/dragon.png"
+	"rsc/textures/elephant.png"
+	"rsc/textures/forest.png"
+	"rsc/textures/fortress.png"
+	"rsc/textures/grass.png"
+	"rsc/textures/lancer.png"
+	"rsc/textures/mountain.png"
+	"rsc/textures/plains.png"
+	"rsc/textures/ranger.png"
+	"rsc/textures/rock.png"
+	"rsc/textures/spearman.png"
+	"rsc/textures/throne.png"
+	"rsc/textures/title.png"
+	"rsc/textures/trebuchet.png"
+	"rsc/textures/wall.png"
+	"rsc/textures/warhorse.png"
+	"rsc/textures/water.png")
 
-set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_BMP})
+set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_IMG})
 
 set(THRONES_SRC
 	"src/engine/audioSys.cpp"
@@ -133,6 +133,9 @@ set(OVEN_SRC
 if(NOT VER_SDL)
 	set(VER_SDL "2.0.10")
 endif()
+if(NOT VER_IMG)
+	set(VER_IMG "2.0.5")
+endif()
 if(NOT VER_NET)
 	set(VER_NET "2.0.1")
 endif()
@@ -186,19 +189,23 @@ if(EMSCRIPTEN)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 		set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}")
+		set(DIR_NET "${DIR_LIB}/SDL2_image-${VER_IMG}")
 		set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}")
 		set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}")
 		set(DIR_GLEW "${DIR_LIB}/glew-${VER_GLEW}")
 		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 			set(BIN_SDL "${DIR_SDL}/lib/x64")
+			set(BIN_IMG "${DIR_IMG}/lib/x64")
 			set(BIN_NET "${DIR_NET}/lib/x64")
 			set(BIN_TTF "${DIR_TTF}/lib/x64")
 		else()
 			set(BIN_SDL "${DIR_SDL}/lib/x86")
+			set(BIN_IMG "${DIR_IMG}/lib/x86")
 			set(BIN_NET "${DIR_NET}/lib/x86")
 			set(BIN_TTF "${DIR_TTF}/lib/x86")
 		endif()
 		set(LIB_SDL "${BIN_SDL}")
+		set(LIB_NET "${BIN_IMG}")
 		set(LIB_NET "${BIN_NET}")
 		set(LIB_TTF "${BIN_TTF}")
 		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -207,34 +214,42 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 			set(LIB_GLEW "${DIR_GLEW}/lib/Release/Win32")
 		endif()
 		set(INC_SDL "${DIR_SDL}/include")
+		set(INC_SDL "${DIR_IMG}/include")
 		set(INC_NET "${DIR_NET}/include")
 		set(INC_TTF "${DIR_TTF}/include")
 		set(URL_SDL "https://www.libsdl.org/release/SDL2-devel-${VER_SDL}-VC.zip")
+		set(URL_IMG "https://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-${VER_IMG}-VC.zip")
 		set(URL_NET "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-${VER_NET}-VC.zip")
 		set(URL_TTF "https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-${VER_TTF}-VC.zip")
 		set(URL_GLEW "https://netix.dl.sourceforge.net/project/glew/glew/2.1.0/glew-${VER_GLEW}-win32.zip")
 	else()
 		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 			set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}/x86_64-w64-mingw32")
+			set(DIR_IMG "${DIR_LIB}/SDL2_image-${VER_IMG}/x86_64-w64-mingw32")
 			set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}/x86_64-w64-mingw32")
 			set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}/x86_64-w64-mingw32")
 		else()
 			set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}/i686-w64-mingw32")
+			set(DIR_IMG "${DIR_LIB}/SDL2-image-${VER_IMG}/i686-w64-mingw32")
 			set(DIR_NET "${DIR_LIB}/SDL2_net-${VER_NET}/i686-w64-mingw32")
 			set(DIR_TTF "${DIR_LIB}/SDL2_ttf-${VER_TTF}/i686-w64-mingw32")
 		endif()
 		set(DIR_GLEW "${DIR_LIB}/glew-${VER_GLEW}")
 		set(BIN_SDL "${DIR_SDL}/bin")
+		set(BIN_IMG "${DIR_IMG}/bin")
 		set(BIN_NET "${DIR_NET}/bin")
 		set(BIN_TTF "${DIR_TTF}/bin")
 		set(LIB_SDL "${DIR_SDL}/lib")
+		set(LIB_IMG "${DIR_IMG}/lib")
 		set(LIB_NET "${DIR_NET}/lib")
 		set(LIB_TTF "${DIR_TTF}/lib")
 		set(LIB_GLEW "${DIR_GLEW}/lib")
 		set(INC_SDL "${DIR_SDL}/include/SDL2")
+		set(INC_SDL "${DIR_IMG}/include/SDL2")
 		set(INC_NET "${DIR_NET}/include/SDL2")
 		set(INC_TTF "${DIR_TTF}/include/SDL2")
 		set(URL_SDL "https://www.libsdl.org/release/SDL2-devel-${VER_SDL}-mingw.tar.gz")
+		set(URL_IMG "https://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-${VER_IMG}-mingw.tar.gz")
 		set(URL_NET "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-${VER_NET}-mingw.tar.gz")
 		set(URL_TTF "https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-${VER_TTF}-mingw.tar.gz")
 		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -245,21 +260,24 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	endif()
 	file(MAKE_DIRECTORY "${DIR_LIB}")
 	downloadLib("${URL_SDL}" "${DIR_LIB}")
+	downloadLib("${URL_IMG}" "${DIR_LIB}")
 	downloadLib("${URL_NET}" "${DIR_LIB}")
 	downloadLib("${URL_TTF}" "${DIR_LIB}")
 	downloadLib("${URL_GLEW}" "${DIR_LIB}")
 	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
 
-	link_directories("${LIB_SDL}" "${LIB_NET}" "${LIB_TTF}" "${LIB_GLEW}")
-	include_directories("${INC_SDL}" "${INC_NET}" "${INC_TTF}" "${DIR_GLEW}/include" "${DIR_LIB}/glm")
+	link_directories("${LIB_SDL}" "${LIB_IMG}" "${LIB_NET}" "${LIB_TTF}" "${LIB_GLEW}")
+	include_directories("${INC_SDL}" "${INC_IMG}" "${INC_NET}" "${INC_TTF}" "${DIR_GLEW}/include" "${DIR_LIB}/glm")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	file(MAKE_DIRECTORY "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.dmg" "${DIR_LIB}")
+	downloadLib("https://www.libsdl.org/projects/SDL_image/release/SDL2_image-${VER_IMG}.dmg" "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/projects/SDL_net/release/SDL2_net-${VER_NET}.dmg" "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-${VER_TTF}.dmg" "${DIR_LIB}")
 	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
 
 	find_library(LIB_SDL "SDL2" HINTS "${DIR_LIB}")
+	find_library(LIB_NET "SDL2_image" HINTS "${DIR_LIB}")
 	find_library(LIB_NET "SDL2_net" HINTS "${DIR_LIB}")
 	find_library(LIB_TTF "SDL2_ttf" HINTS "${DIR_LIB}")
 	find_library(LIB_OPENGL "OpenGL")
@@ -273,10 +291,12 @@ if(LIBDROID)
 	set(DIR_ASDL "${DIR_LDROID}/SDL/android-project")
 
 	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.tar.gz" "${DIR_LDROID}")
+	downloadLib("https://www.libsdl.org/projects/SDL_image/release/SDL2_image-${VER_IMG}.tar.gz" "${DIR_LDROID}")
 	downloadLib("https://www.libsdl.org/projects/SDL_net/release/SDL2_net-${VER_NET}.tar.gz" "${DIR_LDROID}")
 	downloadLib("https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-${VER_TTF}.tar.gz" "${DIR_LDROID}")
 	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LDROID}")
 	renameLibdir("${DIR_LDROID}/SDL2-${VER_SDL}" "${DIR_LDROID}/SDL")
+	renameLibdir("${DIR_LDROID}/SDL2_image-${VER_IMG}" "${DIR_LDROID}/SDL_image")
 	renameLibdir("${DIR_LDROID}/SDL2_net-${VER_NET}" "${DIR_LDROID}/SDL_net")
 	renameLibdir("${DIR_LDROID}/SDL2_ttf-${VER_TTF}" "${DIR_LDROID}/SDL_ttf")
 	file(COPY "${DIR_ASDL}/gradle" "${DIR_ASDL}/build.gradle" "${DIR_ASDL}/gradle.properties" "${DIR_ASDL}/gradlew" "${DIR_ASDL}/gradlew.bat" "${DIR_ASDL}/settings.gradle" DESTINATION "${DIR_PAND}")
@@ -306,7 +326,7 @@ endif()
 
 set(CXX_COMMON_WARNINGS "-Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-shadow-field -Wno-switch -Wno-switch-enum -Wno-unused-result")
 if(EMSCRIPTEN)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --preload-file ${CMAKE_BINARY_DIR}/data@/ -s TOTAL_MEMORY=536870912 -s WASM=1 -s USE_WEBGL2=1 -s USE_SDL=2 -s USE_SDL_NET=2 -s USE_SDL_TTF=2 -Wall -Wextra -Wpedantic ${CXX_COMMON_WARNINGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --preload-file ${CMAKE_BINARY_DIR}/data@/ -s TOTAL_MEMORY=536870912 -s WASM=1 -s USE_WEBGL2=1 -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='[\"jpg\",\"png\"]' -s USE_SDL_NET=2 -s USE_SDL_TTF=2 -Wall -Wextra -Wpedantic ${CXX_COMMON_WARNINGS}")
 	if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g4 -s DISABLE_EXCEPTION_CATCHING=0")
 	else()
@@ -363,15 +383,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	set(DATA_DIR "${APP_DIR}/Resources")
 	set(FRAM_DIR "${APP_DIR}/Frameworks")
 	set(FRAM_SDL "SDL2.framework")
+	set(FRAM_IMG "SDL2_image.framework")
 	set(FRAM_NET "SDL2_net.framework")
 	set(FRAM_TTF "SDL2_ttf.framework")
 
-	target_link_libraries(${PROJECT_NAME} "${LIB_SDL}" "${LIB_NET}" "${LIB_TTF}" "${LIB_OPENGL}")
+	target_link_libraries(${PROJECT_NAME} "${LIB_SDL}" "${LIB_IMG}" "${LIB_NET}" "${LIB_TTF}" "${LIB_OPENGL}")
 	setCommonTargetProperties(${PROJECT_NAME} "${APP_DIR}/MacOS" "")
 else()
 	set(DATA_DIR "${EXE_DIR}/data")
 
-	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_net SDL2_ttf)
+	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_image SDL2_net SDL2_ttf)
 	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		target_link_libraries(${PROJECT_NAME} glew32s glu32 opengl32)
 	elseif(OPENGLES)
@@ -382,43 +403,27 @@ else()
 	setCommonTargetProperties(${PROJECT_NAME} "${EXE_DIR}")
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_NET}/SDL2_net.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND "${CMAKE_COMMAND}" -E make_directory "${FRAM_DIR}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_TTF}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_SDL}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_NET}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_TTF}" "${FRAM_DIR}/${FRAM_TTF}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/Info.plist" "${APP_DIR}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.icns" "${DATA_DIR}")
-else()
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
-endif()
-
 # game data copier targets
 
-function(addDataCopierTarget TARGET_NAME DST OPT_SHD OPT_BMP SINGLE_FILES)
-	add_custom_target(${TARGET_NAME} ALL SOURCES ${DATA_SRC}
+function(addDataCopierTarget TARGET_NAME TEXTRA DST OPT_SHD OPT_IMG SINGLE_FILES)
+	add_custom_target(${TARGET_NAME} ${TEXTRA} SOURCES ${DATA_SRC}
 						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${SINGLE_FILES} "${DST}"
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" -a "${DST}/audio.dat" ${ASSET_WAV}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" -m "${DST}/materials.dat" ${ASSET_MTL}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" -o "${DST}/objects.dat" ${ASSET_OBJ}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST}/shaders.dat" ${ASSET_SHD}
-						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_BMP} "${DST}/textures.dat" ${ASSET_BMP}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_IMG} "${DST}/textures.dat" ${ASSET_IMG}
 						WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 	add_dependencies(${TARGET_NAME} ${OVEN_NAME})
 endfunction()
 
 if(OPENGLES)
-	addDataCopierTarget(${DATA_NAME} "${DATA_DIR}" "-S" "-T" "${ASSET_DAT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "-T" "${ASSET_DAT}")
 else()
-	addDataCopierTarget(${DATA_NAME} "${DATA_DIR}" "-s" "-t" "${ASSET_DAT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t" "${ASSET_DAT}")
 endif()
-addDataCopierTarget(${ADATA_NAME} "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf")
+addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf")
 
 # server program target
 
@@ -438,11 +443,26 @@ add_executable(${OVEN_NAME} ${OVEN_SRC})
 target_compile_features(${OVEN_NAME} PUBLIC cxx_std_17)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	target_link_libraries(${OVEN_NAME} "${LIB_SDL}")
+	target_link_libraries(${OVEN_NAME} "${LIB_SDL}" "${LIB_IMG}")
 else()
-	target_link_libraries(${OVEN_NAME} SDL2)
+	target_link_libraries(${OVEN_NAME} SDL2 SDL2_image)
 endif()
 setCommonTargetProperties(${OVEN_NAME} "${EXE_DIR}")
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_NET}/SDL2_net.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libjpeg-9.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${FRAM_DIR}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_TTF}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_SDL}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_IMG}" "${FRAM_DIR}/${FRAM_IMG}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_NET}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_directory "${DIR_LIB}/${FRAM_TTF}" "${FRAM_DIR}/${FRAM_TTF}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/Info.plist" "${APP_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.icns" "${DATA_DIR}")
+else()
+	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
+endif()
 
 # prettyfiers
 

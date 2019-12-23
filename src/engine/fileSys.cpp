@@ -26,6 +26,7 @@ Settings::Settings() :
 #endif
 	vsync(VSync::synchronized),
 	msamples(4),
+	texScale(100),
 	gamma(1.f),
 	size(1280, 720),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
@@ -98,7 +99,7 @@ Settings* FileSys::loadSettings() {
 		if (il.first == iniKeywordMaximized)
 			sets->maximized = stob(il.second);
 		else if (il.first == iniKeywordDisplay)
-			sets->display = std::clamp(uint8(sstoul(il.second)), uint8(0), uint8(SDL_GetNumVideoDisplays()));
+			sets->display = uint8(std::clamp(sstoul(il.second), 0ul, ulong(SDL_GetNumVideoDisplays())));
 		else if (il.first == iniKeywordScreen)
 			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
 		else if (il.first == iniKeywordSize)
@@ -112,12 +113,14 @@ Settings* FileSys::loadSettings() {
 			sets->msamples = uint8(sstoul(il.second));
 		else
 #endif
-		if (il.first == iniKeywordVsync)
+		if (il.first == iniKeywordTexScale)
+			sets->texScale = uint8(std::clamp(sstoul(il.second), 1ul, 100ul));
+		else if (il.first == iniKeywordVsync)
 			sets->vsync = Settings::VSync(strToEnum<int8>(Settings::vsyncNames, il.second) - 1);
 		else if (il.first == iniKeywordGamma)
 			sets->gamma = std::clamp(sstof(il.second), 0.f, Settings::gammaMax);
 		else if (il.first == iniKeywordAVolume)
-			sets->avolume = std::clamp(uint8(sstoul(il.second)), uint8(0), uint8(SDL_MIX_MAXVOLUME));
+			sets->avolume = uint8(std::clamp(sstoul(il.second), 0ul, ulong(SDL_MIX_MAXVOLUME)));
 		else if (il.first == iniKeywordScaleTiles)
 			sets->scaleTiles = stob(il.second);
 		else if (il.first == iniKeywordScalePieces)
@@ -420,29 +423,36 @@ umap<string, string> FileSys::loadShaders() {
 
 umap<string, Texture> FileSys::loadTextures() {
 	World::window()->writeLog("loading textures");
+	umap<string, Texture> texs = { pair(string(), Texture({ 255, 255, 255 })) };
+	loadTextures(texs, [](umap<string, Texture>& texs, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { texs.emplace(std::move(name), Texture(img, iform, pform)); });
+	return texs;
+}
+
+void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum)) {
 	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileTextures).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load textures");
 
+	int div = 100 / int(World::sets()->texScale);
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Texture> texs(size + 1);
-	texs.emplace(string(), Texture::loadBlank());
 
 	uint8 ibuf[textureHeaderSize];
-	uint16* sp = reinterpret_cast<uint16*>(ibuf + 1);
-	vector<uint8> pixels;
+	uint32* wp = reinterpret_cast<uint32*>(ibuf + 1);
+	uint16* sp = reinterpret_cast<uint16*>(ibuf + 5);
+	vector<uint8> imgd;
 	string name;
 	for (uint16 i = 0; i < size; i++) {
 		SDL_RWread(ifh, ibuf, sizeof(*ibuf), textureHeaderSize);
 		name.resize(ibuf[0]);
-		ivec2 res(sp[0], sp[1]);
-		pixels.resize(uint(int(sp[2]) * res.y));
+		imgd.resize(wp[0]);
 
 		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
-		SDL_RWread(ifh, pixels.data(), sizeof(*pixels.data()), pixels.size());
-		texs.emplace(std::move(name), Texture(res, sp[3], sp[4], pixels.data()));
+		SDL_RWread(ifh, imgd.data(), sizeof(*imgd.data()), imgd.size());
+		if (SDL_Surface* img = scaleSurface(IMG_Load_RW(SDL_RWFromMem(imgd.data(), int(imgd.size())), SDL_TRUE), div))
+			inset(texs, std::move(name), img, sp[0], sp[1]);
+		else
+			std::cerr << "failed to load " << name << ": " << SDL_GetError() << std::endl;
 	}
 	SDL_RWclose(ifh);
-	return texs;
 }

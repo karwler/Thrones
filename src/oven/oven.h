@@ -15,11 +15,19 @@
 #endif
 #include <GL/glew.h>
 #endif
+#ifdef __APPLE__
+#include <SDL2_image/SDL_image.h>
+#elif defined(__ANDROID__) || defined(_WIN32)
+#include <SDL_image.h>
+#else
+#include <SDL2/SDL_image.h>
+#endif
 
 constexpr uint audioHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 3 + sizeof(uint8);
 constexpr uint objectHeaderSize = sizeof(uint8) + sizeof(uint16) * 2;
 constexpr uint shaderHeaderSize = sizeof(uint8) + sizeof(uint16);
-constexpr uint textureHeaderSize = sizeof(uint8) + sizeof(uint16) * 5;
+constexpr uint textureHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 2;
+constexpr int imgInitFull = IMG_INIT_JPG | IMG_INIT_PNG;
 
 struct Sound {
 	static constexpr SDL_AudioSpec defaultSpec = { 48000, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
@@ -57,6 +65,8 @@ struct Vertex {
 	Vertex() = default;
 	Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv);
 };
+
+SDL_Surface* scaleSurface(SDL_Surface* img, int div);
 
 #ifdef __APPLE__
 inline void glBindVertexArray(GLuint arr) {

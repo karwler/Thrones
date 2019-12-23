@@ -30,6 +30,7 @@ struct Settings {
 	Screen screen;
 	VSync vsync;
 	uint8 msamples;
+	uint8 texScale;
 	float gamma;
 	ivec2 size;
 	SDL_DisplayMode mode;
@@ -68,6 +69,7 @@ private:
 	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordMsamples[] = "samples";
+	static constexpr char iniKeywordTexScale[] = "texture_scale";
 	static constexpr char iniKeywordGamma[] = "gamma";
 	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
 	static constexpr char iniKeywordScalePieces[] = "scale_pieces";
@@ -109,6 +111,7 @@ public:
 	static umap<string, Mesh> loadObjects();
 	static umap<string, string> loadShaders();
 	static umap<string, Texture> loadTextures();
+	static void reloadTextures(umap<string, Texture>& texs);
 
 	static string dataPath(const char* file);
 	static string configPath(const char* file);
@@ -118,6 +121,7 @@ private:
 	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
 	static void readShift(const string& line, Com::Config& conf);
+	static void loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum));
 };
 
 inline string FileSys::dataPath(const char* file) {
@@ -134,4 +138,8 @@ inline bool FileSys::createDir(const string& path) {
 #else
 	return !mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 #endif
+}
+
+inline void FileSys::reloadTextures(umap<string, Texture>& texs) {
+	loadTextures(texs, [](umap<string, Texture>& texs, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { texs[name].reload(img, iform, pform); });
 }

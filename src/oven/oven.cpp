@@ -47,3 +47,20 @@ Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
 	nrm(nrm),
 	tuv(tuv)
 {}
+
+// FUNCTIONS
+
+SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
+	if (div > 1 && img) {
+		if (SDL_Surface* dst = SDL_CreateRGBSurface(img->flags, img->w / div, img->h / div, img->format->BitsPerPixel, img->format->Rmask, img->format->Gmask, img->format->Bmask, img->format->Amask)) {
+			if (SDL_Rect rect = { 0, 0, dst->w, dst->h }; !SDL_BlitScaled(img, nullptr, dst, &rect)) {
+				SDL_FreeSurface(img);
+				return dst;
+			}
+			std::cerr << "failed to scale surface: " << SDL_GetError() << std::endl;
+			SDL_FreeSurface(dst);
+		} else
+			std::cerr << "failed to create scaled surface: " << SDL_GetError() << std::endl;
+	}
+	return img;
+}

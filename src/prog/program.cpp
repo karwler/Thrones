@@ -714,6 +714,22 @@ void Program::eventSetSamples(Button* but) {
 	World::sets()->msamples = uint8(sstoul(static_cast<SwitchBox*>(but)->getText()));
 }
 
+void Program::eventSetTexturesScaleSL(Button* but) {
+	World::sets()->texScale = uint8(static_cast<Slider*>(but)->getVal());
+	World::scene()->reloadTextures();
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->texScale) + '%');
+	eventSaveSettings();
+}
+
+void Program::eventSetTextureScaleLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	World::sets()->texScale = uint8(std::clamp(sstoul(le->getText()), 1ul, 100ul));
+	World::scene()->reloadTextures();
+	le->setText(toStr(World::sets()->texScale) + '%');
+	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(int(World::sets()->texScale));
+	eventSaveSettings();
+}
+
 void Program::eventSetGammaSL(Button* but) {
 	World::window()->setGamma(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::gammaStepFactor);
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->gamma));
@@ -734,7 +750,7 @@ void Program::eventSetVolumeSL(Button* but) {
 
 void Program::eventSetVolumeLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	World::sets()->avolume = std::clamp(uint8(sstoul(le->getText())), uint8(0), uint8(SDL_MIX_MAXVOLUME));
+	World::sets()->avolume = uint8(std::clamp(sstoul(le->getText()), 0ul, ulong(SDL_MIX_MAXVOLUME)));
 	le->setText(toStr(World::sets()->avolume));
 	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(World::sets()->avolume);
 	eventSaveSettings();

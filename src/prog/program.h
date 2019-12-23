@@ -108,6 +108,8 @@ public:
 	void eventApplySettings(Button* but = nullptr);
 	void eventSetVsync(Button* but);
 	void eventSetSamples(Button* but);
+	void eventSetTexturesScaleSL(Button* but);
+	void eventSetTextureScaleLE(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);

@@ -3,7 +3,7 @@ Based on the board game by Chad Anthony Randell.
 See [RULES](doc/rules.html) or [DOCS](doc/docs.html) for details.  
 
 ## Build  
-Used libraries are GLEW, GLM, SDL2, SDL2_net, SDL2_ttf and by extension FreeType and zlib. The included font is Romanesque Serif Regular.  
+Used libraries are GLEW, GLM, SDL2, SDL2_image, SDL2_net, SDL2_ttf and by extension FreeType, libjpeg, libpng and zlib. The included font is Romanesque Serif Regular.  
 The CMakeLists.txt is written for CMake 3.10.2 with Clang, GCC or MSVC which need to support C++17.  
 
 CMake variables:  
@@ -23,6 +23,8 @@ CMake variables:
   - GLM version to download  
 - VER_SDL : string = 2.0.10  
   - SDL version to download  
+- VER_IMG : string = 2.0.5  
+  - SDL_image version to download  
 - VER_NET : string = 2.0.1  
   - SDL_net version to download  
 - VER_TTF : string = 2.0.15  

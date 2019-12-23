@@ -1,7 +1,7 @@
 #pragma once
 
+#include "engine/fileSys.h"
 #include "utils/layouts.h"
-#include "utils/objects.h"
 
 // additional data for rendering objects
 class Camera {
@@ -170,6 +170,7 @@ public:
 	const Texture* getTex(const string& name) const;
 	GLuint texture(const string& name) const;
 	GLuint blank() const;
+	void reloadTextures();
 	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
@@ -252,4 +253,8 @@ inline GLuint Scene::texture(const string& name) const {
 
 inline GLuint Scene::blank() const {
 	return texes.at(string()).getID();
+}
+
+inline void Scene::reloadTextures() {
+	FileSys::reloadTextures(texes);
 }

@@ -78,29 +78,16 @@ bool Blueprint::empty() const {
 
 struct Image {
 	string name;
-	SDL_Surface* image;
+	vector<uint8> data;
 	GLint iformat;
 	GLenum pformat;
 
-	Image();
-	Image(Image&& img);
-	Image(string&& fname, SDL_Surface* image, uint16 iformat, uint16 pformat);
+	Image(string&& fname, vector<uint8>&& data, uint16 iformat, uint16 pformat);
 };
 
-Image::Image() :
-	image(nullptr)
-{}
-
-Image::Image(Image&& img) :
-	name(std::move(img.name)),
-	image(img.image),
-	iformat(img.iformat),
-	pformat(img.pformat)
-{}
-
-Image::Image(string&& fname, SDL_Surface* image, uint16 iformat, uint16 pformat) :
+Image::Image(string&& fname, vector<uint8>&& data, uint16 iformat, uint16 pformat) :
 	name(std::move(fname)),
-	image(image),
+	data(std::move(data)),
 	iformat(iformat),
 	pformat(pformat)
 {}
@@ -407,88 +394,107 @@ static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
 
 // TEXTURES
 
-static void scaleSurface(SDL_Surface*& img, float factor = 0.5f) {
-	if (SDL_Surface* dst = SDL_CreateRGBSurface(img->flags, int(float(img->w) * factor), int(float(img->h) * factor), img->format->BitsPerPixel, img->format->Rmask, img->format->Gmask, img->format->Bmask, img->format->Amask)) {
-		if (SDL_Rect rect = { 0, 0, dst->w, dst->h }; !SDL_BlitScaled(img, nullptr, dst, &rect)) {
-			SDL_FreeSurface(img);
-			img = dst;
-		} else {
-			std::cerr << "failed to scale surface: " << SDL_GetError() << std::endl;
-			SDL_FreeSurface(dst);
-		}
-	} else
-		std::cerr << "failed to create scaled surface: " << SDL_GetError() << std::endl;
+static bool checkFormat(uint32 format, bool regular) {
+#ifndef OPENGLES
+	if (regular && (format == SDL_PIXELFORMAT_BGR24 || format == SDL_PIXELFORMAT_BGRA32))
+		return true;
+#endif
+	return format == SDL_PIXELFORMAT_RGB24 || format == SDL_PIXELFORMAT_RGBA32;
 }
 
-static SDL_Surface* convertSurface(SDL_Surface* img, bool regular) {
-	if (!regular)
-		scaleSurface(img);
-
-	uint32 pf3 = regular ? SDL_PIXELFORMAT_BGR24 : SDL_PIXELFORMAT_RGB24;
-	uint32 pf4 = regular ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_RGBA32;
-	if (img->format->format == pf3 || img->format->format == pf4)
-		return img;
-
-	if (uint32 format = img->format->BytesPerPixel == 3 ? pf3 : img->format->BytesPerPixel == 4 ? pf4 : uint32(SDL_PIXELFORMAT_UNKNOWN))
-		if (SDL_Surface* pic = SDL_ConvertSurfaceFormat(img, format, 0)) {
-			SDL_FreeSurface(img);
-			return pic;
-		}
-	SDL_FreeSurface(img);
-	return nullptr;
+static uint32 getFormat(uint8 bpp, bool regular) {
+#ifndef OPENGLES
+	if (regular)
+		return bpp == 3 ? SDL_PIXELFORMAT_BGR24 : bpp == 4 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_UNKNOWN;
+#endif
+	return bpp == 3 ? SDL_PIXELFORMAT_RGB24 : bpp == 4 ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_UNKNOWN;
 }
 
-static uint16 getPformat(uint8 psiz, bool regular) {
-	switch (psiz) {
-	case 3:
-#ifdef GL_BGR
-		return regular ? GL_BGR : GL_RGB;
-#else
+static uint16 getPformat(uint32 format) {
+	switch (format) {
+#ifndef OPENGLES
+	case SDL_PIXELFORMAT_BGR24:
+		return GL_BGR;
+	case SDL_PIXELFORMAT_BGRA32:
+		return GL_BGRA;
+#endif
+	case SDL_PIXELFORMAT_RGB24:
 		return GL_RGB;
-#endif
-	case 4:
-#ifdef GL_BGRA
-		return regular ? GL_BGRA : GL_RGBA;
-#else
+	case SDL_PIXELFORMAT_RGBA32:
 		return GL_RGBA;
-#endif
 	}
 	return 0;
 }
 
-static void loadBmp(const char* file, vector<Image>& imgs, bool regular) {
-	if (SDL_Surface* src = SDL_LoadBMP(file)) {
-		if (string name = filename(delExt(file)); src = convertSurface(src, regular))
-			imgs.emplace_back(std::move(name), src, src->format->BytesPerPixel == 3 ? GL_RGB8 : GL_RGBA8, getPformat(src->format->BytesPerPixel, regular));
-		else
-			std::cerr << "error: failed to convert " << name << std::endl;
-	} else
-		std::cerr << "error: couldn't read " << file << linend << SDL_GetError() << std::endl;
+static void loadImg(const char* file, vector<Image>& imgs, bool regular) {
+	string name = filename(delExt(file));
+	vector<uint8> data = readFile<vector<uint8>>(file);
+	SDL_Surface* img;
+	if (data.empty() || !(img = IMG_Load_RW(SDL_RWFromMem(data.data(), int(data.size())), SDL_TRUE))) {
+		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
+		return;
+	}
+	bool renew = !regular;
+	if (renew)
+		img = scaleSurface(img, 2);
+
+	uint8 bpp = img->format->BytesPerPixel;
+	if (!checkFormat(img->format->format, regular)) {
+		uint32 format = getFormat(bpp, regular);
+		if (!format) {
+			SDL_FreeSurface(img);
+			std::cerr << "invalid pixel size " << bpp << " of " << name << std::endl;
+			return;
+		}
+		if (SDL_Surface* pic = SDL_ConvertSurfaceFormat(img, format, 0)) {
+			SDL_FreeSurface(img);
+			img = pic;
+			renew = true;
+		} else {
+			SDL_FreeSurface(img);
+			std::cerr << SDL_GetError();
+			return;
+		}
+	}
+
+	if (renew) {
+		data.resize(sizet(img->pitch * img->h));
+		SDL_RWops* dw = SDL_RWFromMem(data.data(), int(data.size()));
+		if (bpp == 3 ? IMG_SaveJPG_RW(img, dw, SDL_FALSE, 100) : IMG_SavePNG_RW(img, dw, SDL_FALSE)) {	// png don't work with 3 byte pixels
+			SDL_RWclose(dw);
+			SDL_FreeSurface(img);
+			std::cerr << "failed to save " << name << ": " << IMG_GetError() << std::endl;
+			return;
+		}
+		data.resize(sizet(SDL_RWtell(dw)));
+		SDL_RWclose(dw);
+	}
+	imgs.emplace_back(std::move(name), std::move(data), bpp == 3 ? GL_RGB8 : GL_RGBA8, getPformat(img->format->format));
+	SDL_FreeSurface(img);
 }
 
 static void writeImages(const char* file, vector<Image>& imgs) {
 	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
-		std::cerr << "error: couldn't write " << file << std::endl;
+		std::cerr << SDL_GetError() << std::endl;
 		return;
 	}
 	uint8 obuf[textureHeaderSize];
-	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
+	uint32* wp = reinterpret_cast<uint32*>(obuf + 1);
+	uint16* sp = reinterpret_cast<uint16*>(obuf + 5);
 	*sp = uint16(imgs.size());
 	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
 
-	for (const Image& it : imgs) {
-		obuf[0] = uint8(it.name.length());
-		sp[0] = uint16(it.image->w);
-		sp[1] = uint16(it.image->h);
-		sp[2] = uint16(it.image->pitch);
-		sp[3] = uint16(it.iformat);
-		sp[4] = uint16(it.pformat);
+	vector<uint32> sizes(imgs.size());
+	for (uint16 i = 0; i < imgs.size(); i++) {
+		obuf[0] = uint8(imgs[i].name.length());
+		wp[0] = uint32(imgs[i].data.size());
+		sp[0] = uint16(imgs[i].iformat);
+		sp[1] = uint16(imgs[i].pformat);
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), textureHeaderSize);
-		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
-		SDL_RWwrite(ofh, it.image->pixels, sizeof(uint8), uint(it.image->pitch * it.image->h));
-		SDL_FreeSurface(it.image);
+		SDL_RWwrite(ofh, imgs[i].name.c_str(), sizeof(*imgs[i].name.c_str()), imgs[i].name.length());
+		SDL_RWwrite(ofh, imgs[i].data.data(), sizeof(*imgs[i].data.data()), imgs[i].data.size());
 	}
 	SDL_RWclose(ofh);
 }
@@ -512,6 +518,11 @@ int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
+	if (SDL_Init(0) || IMG_Init(imgInitFull) != imgInitFull) {
+		std::cerr << SDL_GetError() << std::endl;
+		return -1;
+	}
+
 	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
 		std::cout << "no input files" << linend << messageUsage << std::endl;
 	else if (const char* dest = arg.getOpt(argAudio))
@@ -525,12 +536,13 @@ int main(int argc, char** argv) {
 	else if (dest = arg.getOpt(argShaderE))
 		process(dest, arg.getVals(), loadGlsl, writeShaders, true);
 	else if (dest = arg.getOpt(argTexture))
-		process(dest, arg.getVals(), loadBmp, writeImages, true);
+		process(dest, arg.getVals(), loadImg, writeImages, true);
 	else if (dest = arg.getOpt(argTextureR))
-		process(dest, arg.getVals(), loadBmp, writeImages, false);
-	else {
+		process(dest, arg.getVals(), loadImg, writeImages, false);
+	else
 		std::cout << "error: invalid mode" << linend << messageUsage << std::endl;
-		return -1;
-	}
+
+	IMG_Quit();
+	SDL_Quit();
 	return 0;
 }

@@ -54,11 +54,11 @@ void FontSet::writeLog(string&& text, const ShaderGUI* gui, const ivec2& res) {
 	logTex.close();
 	if (logTex = TTF_RenderUTF8_Blended_Wrapped(logFont, str.c_str(), logColor, uint(res.x)); logTex.valid()) {
 		float trans[4] = { 0.f, 0.f, float(logTex.getRes().x), float(logTex.getRes().y) };
-		glUseProgram(gui->program);
+		glUseProgram(*gui);
 		glBindVertexArray(gui->wrect.getVao());
 		glUniform4fv(gui->rect, 1, trans);
 		glBindTexture(GL_TEXTURE_2D, logTex.getID());
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, Shape::corners);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
 	}
 }
 
@@ -83,8 +83,29 @@ Shader::Shader(const string& srcVert, const string& srcFrag) {
 	glDeleteShader(vert);
 	glDeleteShader(frag);
 	checkStatus(program, GL_LINK_STATUS, glGetProgramiv, glGetProgramInfoLog);
+	glUseProgram(program);
 }
+#ifndef OPENGLES
+Shader::Shader(const string& srcVert, const string& srcGeom, const string& srcFrag) {
+	GLuint vert = loadShader(srcVert, GL_VERTEX_SHADER);
+	GLuint geom = loadShader(srcGeom, GL_GEOMETRY_SHADER);
+	GLuint frag = loadShader(srcFrag, GL_FRAGMENT_SHADER);
 
+	program = glCreateProgram();
+	glAttachShader(program, vert);
+	glAttachShader(program, geom);
+	glAttachShader(program, frag);
+	glLinkProgram(program);
+	glDetachShader(program, vert);
+	glDetachShader(program, geom);
+	glDetachShader(program, frag);
+	glDeleteShader(vert);
+	glDeleteShader(geom);
+	glDeleteShader(frag);
+	checkStatus(program, GL_LINK_STATUS, glGetProgramiv, glGetProgramInfoLog);
+	glUseProgram(program);
+}
+#endif
 GLuint Shader::loadShader(const string& source, GLenum type) {
 	const char* src = source.c_str();
 	GLuint shader = glCreateShader(type);
@@ -97,58 +118,67 @@ GLuint Shader::loadShader(const string& source, GLenum type) {
 template <class C, class I>
 void Shader::checkStatus(GLuint id, GLenum stat, C check, I info) {
 	GLint res;
-	if (check(id, stat, &res); res == GL_FALSE) {
-		string err;
-		check(id, GL_INFO_LOG_LENGTH, &res);
+	string err;
+	if (check(id, GL_INFO_LOG_LENGTH, &res); res) {
 		err.resize(sizet(res));
 		info(id, res, nullptr, err.data());
-		throw std::runtime_error(err);
+		std::cerr << err << std::endl;
 	}
+	if (check(id, stat, &res); res == GL_FALSE)
+		throw std::runtime_error(err);
 }
 
-ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag) :
-	Shader(srcVert, srcFrag)
+ShaderGeometry::ShaderGeometry(const string& srcVert, const string& srcFrag, const Settings* sets) :
+	Shader(srcVert, editShadowAlg(srcFrag, sets->shadowRes, sets->softShadows)),
+	pview(glGetUniformLocation(program, "pview")),
+	model(glGetUniformLocation(program, "model")),
+	normat(glGetUniformLocation(program, "normat")),
+	viewPos(glGetUniformLocation(program, "viewPos")),
+	farPlane(glGetUniformLocation(program, "farPlane")),
+	texsamp(glGetUniformLocation(program, "texsamp")),
+	depthMap(glGetUniformLocation(program, "depthMap")),
+	materialDiffuse(glGetUniformLocation(program, "material.diffuse")),
+	materialSpecular(glGetUniformLocation(program, "material.specular")),
+	materialShininess(glGetUniformLocation(program, "material.shininess")),
+	lightPos(glGetUniformLocation(program, "light.pos")),
+	lightAmbient(glGetUniformLocation(program, "light.ambient")),
+	lightDiffuse(glGetUniformLocation(program, "light.diffuse")),
+	lightLinear(glGetUniformLocation(program, "light.linear")),
+	lightQuadratic(glGetUniformLocation(program, "light.quadratic"))
 {
-	glUseProgram(program);
-	vertex = GLuint(glGetAttribLocation(program, "vertex"));
-	uvloc = GLuint(glGetAttribLocation(program, "uvloc"));
-	normal = GLuint(glGetAttribLocation(program, "normal"));
-	pview = glGetUniformLocation(program, "pview");
-	model = glGetUniformLocation(program, "model");
-	normat = glGetUniformLocation(program, "normat");
-	materialDiffuse = glGetUniformLocation(program, "material.diffuse");
-	materialSpecular = glGetUniformLocation(program, "material.specular");
-	materialShininess = glGetUniformLocation(program, "material.shininess");
-	materialAlpha = glGetUniformLocation(program, "material.alpha");
-	texsamp = glGetUniformLocation(program, "texsamp");
-	viewPos = glGetUniformLocation(program, "viewPos");
-	lightPos = glGetUniformLocation(program, "light.pos");
-	lightAmbient = glGetUniformLocation(program, "light.ambient");
-	lightDiffuse = glGetUniformLocation(program, "light.diffuse");
-	lightLinear = glGetUniformLocation(program, "light.linear");
-	lightQuadratic = glGetUniformLocation(program, "light.quadratic");
 	glUniform1i(texsamp, 0);
+	glUniform1i(depthMap, Light::depthTexa - GL_TEXTURE0);
 }
+
+string ShaderGeometry::editShadowAlg(string src, bool calc, bool soft) {
+	constexpr char svar[] = "float shadow=";
+	if (sizet pos = src.find(svar, src.find("void main()")); pos >= src.length())
+		std::cerr << "failed to set shadow quality" << std::endl;
+	else if (pos += strlen(svar); calc)
+		src.replace(pos, src.find(';', pos) - pos, soft ? "calcShadowSoft()" : "calcShadowHard()");
+	return src;
+}
+
+#ifndef OPENGLES
+ShaderDepth::ShaderDepth(const string& srcVert, const string& srcGeom, const string& srcFrag) :
+	Shader(srcVert, srcGeom, srcFrag),
+	model(glGetUniformLocation(program, "model")),
+	shadowMats(glGetUniformLocation(program, "shadowMats")),
+	lightPos(glGetUniformLocation(program, "lightPos")),
+	farPlane(glGetUniformLocation(program, "farPlane"))
+{}
+#endif
 
 ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
-	Shader(srcVert, srcFrag)
+	Shader(srcVert, srcFrag),
+	pview(glGetUniformLocation(program, "pview")),
+	rect(glGetUniformLocation(program, "rect")),
+	uvrc(glGetUniformLocation(program, "uvrc")),
+	zloc(glGetUniformLocation(program, "zloc")),
+	color(glGetUniformLocation(program, "color")),
+	texsamp(glGetUniformLocation(program, "texsamp"))
 {
-	glUseProgram(program);
-	vertex = GLuint(glGetAttribLocation(program, "vertex"));
-	uvloc = GLuint(glGetAttribLocation(program, "uvloc"));
-	pview = glGetUniformLocation(program, "pview");
-	rect = glGetUniformLocation(program, "rect");
-	uvrc = glGetUniformLocation(program, "uvrc");
-	zloc = glGetUniformLocation(program, "zloc");
-	color = glGetUniformLocation(program, "color");
-	texsamp = glGetUniformLocation(program, "texsamp");
 	glUniform1i(texsamp, 0);
-	wrect.init(this);
-}
-
-ShaderGUI::~ShaderGUI() {
-	glUseProgram(program);
-	wrect.free(this);
 }
 
 // WINDOW SYS
@@ -238,7 +268,6 @@ void WindowSys::exec() {
 	dSec = float(newTime - oldTime) / ticksPerSec;
 	oldTime = newTime;
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	scene->draw();
 	SDL_GL_SwapWindow(window);
 
@@ -285,22 +314,20 @@ void WindowSys::createWindow() {
 	int winPos = SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display);
 
 	// create new window
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 #ifdef OPENGLES
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #else
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, sets->msamples != 0);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sets->msamples);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-#endif
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-#ifdef __APPLE__
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-#else
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 #endif
-#if defined(DEBUG) && !defined(EMSCRIPTEN)
+#ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_RELEASE_BEHAVIOR, 0);
 #endif
 	if (!(window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
@@ -317,7 +344,9 @@ void WindowSys::createWindow() {
 	SDL_SetWindowBrightness(window, sets->gamma);
 
 	// load icons
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#ifdef EMSCRIPTEN
+	cursorHeight = fallbackCursorSize;
+#elif !defined(__ANDROID__)
 	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileIcon).c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
@@ -352,24 +381,28 @@ void WindowSys::createWindow() {
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
 	glFrontFace(GL_CCW);
-	glEnable(GL_TEXTURE_2D);
 #ifndef OPENGLES
 	sets->msamples ? glEnable(GL_MULTISAMPLE) : glDisable(GL_MULTISAMPLE);
 #endif
 
 	umap<string, string> sources = FileSys::loadShaders();
-	geom.reset(new ShaderGeometry(sources.at(fileSceneVert), sources.at(fileSceneFrag)));
+	geom.reset(new ShaderGeometry(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get()));
+#ifndef OPENGLES
+	depth.reset(new ShaderDepth(sources.at(fileDepthVert), sources.at(fileDepthGeom), sources.at(fileDepthFrag)));
+#endif
 	gui.reset(new ShaderGUI(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
-	glActiveTexture(GL_TEXTURE0);
 
 	// init startup log
+	glViewport(0, 0, curView.x, curView.y);
 	glUniform4fv(gui->uvrc, 1, logTexUV);
 	glUniform1f(gui->zloc, 0.f);
 	glUniform4fv(gui->color, 1, logTexColor);
+	glActiveTexture(GL_TEXTURE0);
 }
 
 void WindowSys::destroyWindow() {
 	geom.reset();
+	depth.reset();
 	gui.reset();
 	SDL_FreeCursor(cursor);
 	SDL_GL_DeleteContext(context);
@@ -508,7 +541,6 @@ void WindowSys::updateViewport() {
 #else
 	SDL_GL_GetDrawableSize(window, &curView.x, &curView.y);
 #endif
-	glViewport(0, 0, curView.x, curView.y);
 }
 
 void WindowSys::setGamma(float gamma) {
@@ -523,6 +555,11 @@ void WindowSys::resetSettings() {
 	setSwapInterval();
 	SDL_SetWindowBrightness(window, sets->gamma);
 	scene->resetLayouts();
+}
+
+void WindowSys::reloadGeom() {
+	umap<string, string> sources = FileSys::loadShaders();
+	geom.reset(new ShaderGeometry(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get()));
 }
 
 bool WindowSys::checkCurDisplay() {

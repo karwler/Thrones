@@ -20,7 +20,7 @@ Camera::Camera(const vec3& pos, const vec3& lat, float pmax, float ymax) :
 
 void Camera::updateView() const {
 	mat4 projview = proj * glm::lookAt(pos, lat, up);
-	glUseProgram(World::geom()->program);
+	glUseProgram(*World::geom());
 	glUniformMatrix4fv(World::geom()->pview, 1, GL_FALSE, glm::value_ptr(projview));
 	glUniform3fv(World::geom()->viewPos, 1, glm::value_ptr(pos));
 }
@@ -30,7 +30,7 @@ void Camera::updateProjection() {
 	proj = glm::perspective(glm::radians(fov), res.x / res.y, znear, zfar);
 
 	res /= 2.f;
-	glUseProgram(World::gui()->program);
+	glUseProgram(*World::gui());
 	glUniform2fv(World::gui()->pview, 1, glm::value_ptr(res));
 }
 
@@ -84,18 +84,51 @@ vec3 Camera::direction(const ivec2& mPos) const {
 // LIGHT
 
 Light::Light(const vec3& position, const vec3& color, float ambiFac, float range) :
-	position(position),
+#ifndef OPENGLES
+	depthMap(makeCubemap(World::sets()->shadowRes ? World::sets()->shadowRes : 1, depthTexa)),
+	depthFrame(makeFramebufferNodraw(GL_DEPTH_ATTACHMENT, depthMap)),
+#endif
+	pos(position),
 	ambient(color * ambiFac),
 	diffuse(color),
 	linear(4.5f / range),
 	quadratic(75.f / (range * range))
 {
-	glUseProgram(World::geom()->program);
-	glUniform3fv(World::geom()->lightPos, 1, glm::value_ptr(position));
+	glActiveTexture(GL_TEXTURE0);
+	updateValues(range);
+}
+
+Light::~Light() {
+#ifndef OPENGLES
+	glDeleteFramebuffers(1, &depthFrame);
+	glDeleteTextures(1, &depthMap);
+#endif
+}
+
+void Light::updateValues(float range) {
+	glUseProgram(*World::geom());
+	glUniform3fv(World::geom()->lightPos, 1, glm::value_ptr(pos));
 	glUniform3fv(World::geom()->lightAmbient, 1, glm::value_ptr(ambient));
 	glUniform3fv(World::geom()->lightDiffuse, 1, glm::value_ptr(diffuse));
 	glUniform1f(World::geom()->lightLinear, linear);
 	glUniform1f(World::geom()->lightQuadratic, quadratic);
+	glUniform1f(World::geom()->farPlane, range);
+
+#ifndef OPENGLES
+	mat4 shadowProj = glm::perspective(PI / 2.f, 1.f, snear, range);
+	mat4 shadowTransforms[6] = {
+		shadowProj * lookAt(pos, pos + vec3(1.f, 0.f, 0.f), vec3(0.f, -1.f, 0.f)),
+		shadowProj * lookAt(pos, pos + vec3(-1.f, 0.f, 0.f), vec3(0.f, -1.f, 0.f)),
+		shadowProj * lookAt(pos, pos + vec3(0.f, 1.f, 0.f), vec3(0.f, 0.f, 1.f)),
+		shadowProj * lookAt(pos, pos + vec3(0.f, -1.f, 0.f), vec3(0.f, 0.f, -1.f)),
+		shadowProj * lookAt(pos, pos + vec3(0.f, 0.f, 1.f), vec3(0.f, -1.f, 0.f)),
+		shadowProj * lookAt(pos, pos + vec3(0.f, 0.f, -1.f), vec3(0.f, -1.f, 0.f))
+	};
+	glUseProgram(*World::depth());
+	glUniformMatrix4fv(World::depth()->shadowMats, 6, GL_FALSE, reinterpret_cast<GLfloat*>(shadowTransforms));
+	glUniform3fv(World::depth()->lightPos, 1, glm::value_ptr(pos));
+	glUniform1f(World::depth()->farPlane, range);
+#endif
 }
 
 // CLICK STAMP
@@ -137,7 +170,6 @@ Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
 
 bool Animation::tick(float dSec) {
 	begin.time += dSec;
-
 	if (float td = keyframes.front().time > 0.f ? std::clamp(begin.time / keyframes.front().time, 0.f, 1.f) : 1.f; useObject) {
 		if (keyframes.front().change & Keyframe::CHG_POS)
 			object->setPos(glm::mix(begin.pos, keyframes.front().pos, td));
@@ -177,15 +209,14 @@ Scene::Scene() :
 	moveTime(0),
 	mouseLast(false),
 	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
-	layout(new RootLayout),	// dummy layout in case a function gets called preemptively
-	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f, 140.f),
+	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f),
+	shadowFunc(World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
 	texes(FileSys::loadTextures())
 {}
 
 Scene::~Scene() {
-	glUseProgram(World::geom()->program);
 	for (auto& [name, tex] : texes)
 		tex.free();
 	for (auto& [name, mesh] : meshes)
@@ -193,21 +224,36 @@ Scene::~Scene() {
 }
 
 void Scene::draw() {
-	glUseProgram(World::geom()->program);
+	(this->*shadowFunc)();
+	glUseProgram(*World::geom());
+	glViewport(0, 0, World::window()->getView().x, World::window()->getView().y);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	for (Object* it : objects)
 		it->draw();
-	if (dynamic_cast<Object*>(capture))
-		capture->drawTop();
+	if (Object* obj = dynamic_cast<Object*>(capture))
+		obj->drawTop();
 
-	glUseProgram(World::gui()->program);
+	glUseProgram(*World::gui());
 	glBindVertexArray(World::gui()->wrect.getVao());
 	layout->draw();
 	if (popup)
 		popup->draw();
-	if (dynamic_cast<Widget*>(capture))
-		capture->drawTop();
+	if (Widget* wgt = dynamic_cast<Widget*>(capture))
+		wgt->drawTop();
 	if (Button* but = dynamic_cast<Button*>(select); but && mouseLast)
 		but->drawTooltip();
+}
+
+void Scene::renderShadows() {
+	glUseProgram(*World::depth());
+	glViewport(0, 0, World::sets()->shadowRes, World::sets()->shadowRes);
+	glBindFramebuffer(GL_FRAMEBUFFER, light.depthFrame);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	for (Object* it : objects)
+		it->drawDepth();
+	if (Object* obj = dynamic_cast<Object*>(capture))
+		obj->drawTopDepth();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Scene::tick(float dSec) {
@@ -300,11 +346,19 @@ void Scene::onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse) {
 void Scene::onMouseDown(const SDL_MouseButtonEvent& but, bool mouse) {
 	switch (but.button) {
 	case SDL_BUTTON_MIDDLE:
-		return World::state()->eventEndTurn();
+		World::state()->eventEndTurn();
+		break;
 	case SDL_BUTTON_X1:
-		return World::state()->eventFavorize(FavorAct::on);
+		if (dynamic_cast<ProgMatch*>(World::state()))
+			World::state()->eventFavorize(FavorAct::on);
+		else
+			World::state()->eventEscape();
+		break;
 	case SDL_BUTTON_X2:
-		return World::state()->eventFavorize(FavorAct::now);
+		if (dynamic_cast<ProgMatch*>(World::state()))
+			World::state()->eventFavorize(FavorAct::now);
+		else
+			World::state()->eventEnter();
 	}
 
 	if (cstamp.but)
@@ -379,6 +433,20 @@ void Scene::onText(const char* str) {
 		capture->onText(str);
 }
 
+void Scene::resetShadows() {
+	shadowFunc = World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy;
+	glUseProgram(*World::geom());
+	loadCubemap(light.depthMap, World::sets()->shadowRes ? World::sets()->shadowRes : 1, Light::depthTexa);
+	glActiveTexture(GL_TEXTURE0);
+}
+
+void Scene::reloadShader() {
+	World::window()->reloadGeom();
+	camera.updateProjection();
+	camera.updateView();
+	light.updateValues();
+}
+
 void Scene::resetLayouts() {
 	// clear scene
 	World::fonts()->clear();
@@ -418,6 +486,11 @@ void Scene::unselect() {
 	}
 }
 
+void Scene::updateSelect() {
+	if (mouseLast)
+		updateSelect(mousePos());
+}
+
 void Scene::updateSelect(const ivec2& mPos) {
 	if (Interactable* cur = getSelected(mPos); cur != select) {
 		if (select)
@@ -428,6 +501,9 @@ void Scene::updateSelect(const ivec2& mPos) {
 }
 
 Interactable* Scene::getSelected(const ivec2& mPos) {
+	if (outRange(mPos, ivec2(0), World::window()->getView() - ivec2(1)))
+		return nullptr;
+
 	for (Layout* box = !popup ? layout.get() : popup.get();;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {

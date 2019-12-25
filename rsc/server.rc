@@ -1,8 +1,8 @@
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,4,1,0
-PRODUCTVERSION 0,4,1,0
+FILEVERSION 0,4,2,0
+PRODUCTVERSION 0,4,2,0
 FILETYPE 0x1L
 
 BEGIN
@@ -11,11 +11,11 @@ BEGIN
 		BLOCK "040904e4"
 		BEGIN
 			VALUE "FileDescription", "Thrones Server"
-			VALUE "FileVersion", "0.4.1"
+			VALUE "FileVersion", "0.4.2"
 			VALUE "InternalName", "server"
 			VALUE "OriginalFilename", "Server.exe"
 			VALUE "ProductName", "Thrones Server"
-			VALUE "ProductVersion", "0.4.1"
+			VALUE "ProductVersion", "0.4.2"
 		END
 	END
 

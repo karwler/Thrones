@@ -2,21 +2,20 @@ def buildAsLibrary = project.hasProperty('BUILD_AS_LIBRARY');
 def buildAsApplication = !buildAsLibrary
 if (buildAsApplication) {
 	apply plugin: 'com.android.application'
-}
-else {
+} else {
 	apply plugin: 'com.android.library'
 }
 
 android {
-	compileSdkVersion 26
+	compileSdkVersion 23
 	defaultConfig {
 		if (buildAsApplication) {
 			applicationId "org.duravia.thrones"
 		}
 		minSdkVersion 19
-		targetSdkVersion 26
-		versionCode 1
-		versionName "0.4.1"
+		targetSdkVersion 23
+		versionCode 2
+		versionName "0.4.2"
 		externalNativeBuild {
 			ndkBuild {
 				arguments "APP_PLATFORM=android-19"

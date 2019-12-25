@@ -67,11 +67,18 @@ inline Texture FontSet::render(const string& text, int height, uint length) {
 // for drawing
 class Shader {
 public:
+	static constexpr GLuint vpos = 0, normal = 1, uvloc = 2;
+
 	GLuint program;
 
 public:
 	Shader(const string& srcVert, const string& srcFrag);
+#ifndef OPENGLES
+	Shader(const string& srcVert, const string& srcGeom, const string& srcFrag);
+#endif
 	~Shader();
+
+	operator GLuint() const;
 
 private:
 	static GLuint loadShader(const string& source, GLenum type);
@@ -82,27 +89,44 @@ inline Shader::~Shader() {
 	glDeleteProgram(program);
 }
 
+inline Shader::operator GLuint() const {
+	return program;
+}
+
 class ShaderGeometry : public Shader {
 public:
-	GLuint vertex, uvloc, normal;
-	GLint pview, model, normat, texsamp, viewPos;
-	GLint materialDiffuse, materialSpecular, materialShininess, materialAlpha;
+	GLint pview, model, normat;
+	GLint viewPos, farPlane, texsamp, depthMap;
+	GLint materialDiffuse, materialSpecular, materialShininess;
 	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
 public:
-	ShaderGeometry(const string& srcVert, const string& srcFrag);
+	ShaderGeometry(const string& srcVert, const string& srcFrag, const Settings* sets);
+
+private:
+	static string editShadowAlg(string src, bool calc, bool soft);
+};
+
+class ShaderDepth : public Shader {
+public:
+	GLint model;
+	GLint shadowMats;
+	GLint lightPos, farPlane;
+
+public:
+#ifndef OPENGLES
+	ShaderDepth(const string& srcVert, const string& srcGeom, const string& srcFrag);
+#endif
 };
 
 class ShaderGUI : public Shader {
 public:
-	GLuint vertex, uvloc;
 	GLint pview, rect, uvrc, zloc;
 	GLint color, texsamp;
-	Shape wrect;
+	Quad wrect;
 
 public:
 	ShaderGUI(const string& srcVert, const string& srcFrag);
-	~ShaderGUI();
 };
 
 // handles window events and contains video settings
@@ -112,8 +136,11 @@ public:
 private:
 	static constexpr char fileIcon[] = "thrones.png";
 	static constexpr char fileCursor[] = "cursor.png";
-	static constexpr char fileSceneVert[] = "geometry.vert";
-	static constexpr char fileSceneFrag[] = "geometry.frag";
+	static constexpr char fileGeometryVert[] = "geometry.vert";
+	static constexpr char fileGeometryFrag[] = "geometry.frag";
+	static constexpr char fileDepthVert[] = "depth.vert";
+	static constexpr char fileDepthGeom[] = "depth.geom";
+	static constexpr char fileDepthFrag[] = "depth.frag";
 	static constexpr char fileGuiVert[] = "gui.vert";
 	static constexpr char fileGuiFrag[] = "gui.frag";
 
@@ -135,6 +162,7 @@ private:
 	SDL_Window* window;
 	SDL_GLContext context;
 	uptr<ShaderGeometry> geom;
+	uptr<ShaderDepth> depth;
 	uptr<ShaderGUI> gui;
 	uptr<FontSet> fonts;
 	ivec2 curView;
@@ -161,6 +189,7 @@ public:
 	void setVsync(Settings::VSync vsync);
 	void setGamma(float gamma);
 	void resetSettings();
+	void reloadGeom();
 
 	AudioSys* getAudio();
 	FontSet* getFonts();
@@ -168,6 +197,7 @@ public:
 	Scene* getScene();
 	Settings* getSets();
 	const ShaderGeometry* getGeom() const;
+	const ShaderDepth* getDepth() const;
 	const ShaderGUI* getGUI() const;
 
 private:
@@ -222,6 +252,10 @@ inline Settings* WindowSys::getSets() {
 
 inline const ShaderGeometry* WindowSys::getGeom() const {
 	return geom.get();
+}
+
+inline const ShaderDepth* WindowSys::getDepth() const {
+	return depth.get();
 }
 
 inline const ShaderGUI* WindowSys::getGUI() const {

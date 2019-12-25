@@ -8,11 +8,12 @@
 #ifdef DEBUG
 #define MALLOC_CHECK_ 2
 #endif
+#if (defined(__ANDROID__) || defined(EMSCRIPTEN)) && !defined(OPENGLES)
+#define OPENGLES
+#endif
 
 #ifndef __ANDROID__
 #define SDL_MAIN_HANDLED
-#elif !defined(OPENGLES)
-#define OPENGLES
 #endif
 #if defined(__ANDROID__) || defined(_WIN32)
 #include <SDL.h>
@@ -82,7 +83,7 @@ constexpr char linend[] = "\n";
 #endif
 constexpr char defaultReadMode[] = "rb";
 constexpr char defaultWriteMode[] = "wb";
-constexpr char commonVersion[] = "0.4.1";
+constexpr char commonVersion[] = "0.4.2";
 
 // utility
 

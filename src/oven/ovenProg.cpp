@@ -153,16 +153,16 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 				mtls.push_back(std::move(next));
 		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
 			if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
-				mtls.back().second.diffuse = stofv<vec3>(&line[2], strtof, 1.f);
+				mtls.back().second.diffuse = stofv<vec4>(&line[2], strtof, 1.f);
 			else if (c1 == 'S')
 				mtls.back().second.specular = stofv<vec3>(&line[2], strtof, 1.f);
 		} else if (c0 == 'N') {
 			if (toupper(line[1]) == 'S')
 				mtls.back().second.shininess = sstof(&line[2]) / 1000.f * 128.f;
 		} else if (c0 == 'D')
-			mtls.back().second.alpha = sstof(&line[1]);
+			mtls.back().second.diffuse.a = sstof(&line[1]);
 		else if (c0 == 'T' && toupper(line[1]) == 'R')
-			mtls.back().second.alpha = 1.f - sstof(&line[2]);	// inverse of d
+			mtls.back().second.diffuse.a = 1.f - sstof(&line[2]);	// inverse of d
 	}
 	if (mtls.back().first.empty())
 		mtls.pop_back();
@@ -197,7 +197,7 @@ static uint resolveObjId(int id, uint size) {
 }
 
 static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, uint16>>& elems, Blueprint& obj) {
-	uint sizes[3] = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
+	array<uint, 3> sizes = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
 	array<Element, 3> face;
 	uint8 v = 0, e = 0;
 
@@ -209,7 +209,7 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 		} else if (*str == '/')
 			face[v][e++] = 0;
 
-		if (e && (*str != '/' || e >= 3)) {
+		if (e && (*str != '/' || e >= sizes.size())) {
 			std::fill(face[v].begin() + e, face[v].end(), 0);
 			e = 0;
 			v++;
@@ -247,7 +247,7 @@ static void loadObj(const char* file, vector<Blueprint>& bprs) {
 		return;
 	}
 	vector<vec3> verts = { vec3(0.f) };
-	vector<vec2> tuvs = { vec2(0.f) };
+	vector<vec2> tuvs = { vec2(0.f, 1.f) };
 	vector<vec3> norms = { vec3(0.f) };
 	vector<pair<Element, uint16>> elems;	// mapping of current object's face ids to blueprint elements
 	bprs.emplace_back(filename(delExt(file)));
@@ -311,12 +311,6 @@ static bool checkSpace(char c) {
 	return isSpace(c) && c != '\n';
 }
 
-static void rewriteTextureStr(string& str, sizet p) {
-	for (; p < str.length();)
-		if (p = str.find("texture2D", p); p != string::npos)
-			str.erase(p += strlen("texture"), 2);
-}
-
 static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool gles) {
 	string text = trim(readFile(file));
 	bool keepLF = false;
@@ -348,26 +342,22 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool 
 		}
 	}
 
-	constexpr char verstr[] = "#version ", glesver[] = "300 es\nprecision highp float;";
+	constexpr char verstr[] = "#version ";
 #ifdef __APPLE__
-	if (sizet p = text.find(verstr); p != string::npos) {
+	if (sizet p = text.find(verstr); p < text.length()) {
 		p += strlen(verstr);
-		text.erase(p, text.find('\n', p) - p);
-		text.insert(p, "150");
-		rewriteTextureStr(text, p + strlen(glesver));
+		text.replace(p, text.find('\n', p) - p, "150");
 	}
 #else
 	if (gles) {
-		if (sizet p = text.find(verstr); p != string::npos) {
+		if (sizet p = text.find(verstr); p < text.length()) {
 			p += strlen(verstr);
-			text.erase(p, text.find('\n', p) - p + 1);
-			text.insert(p, glesver);
-			rewriteTextureStr(text, p + strlen(glesver));
+			text.replace(p, text.find('\n', p) - p + 1, "300 es\nprecision highp float;");
 		}
 	}
 #endif
 	if (!text.empty())
-		srcs.emplace_back(filename(file), text);
+		srcs.emplace_back(filename(file), std::move(text));
 }
 
 static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
@@ -408,6 +398,20 @@ static uint32 getFormat(uint8 bpp, bool regular) {
 		return bpp == 3 ? SDL_PIXELFORMAT_BGR24 : bpp == 4 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_UNKNOWN;
 #endif
 	return bpp == 3 ? SDL_PIXELFORMAT_RGB24 : bpp == 4 ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_UNKNOWN;
+}
+
+static uint16 getIformat(uint8 bpp) {
+	switch (bpp) {
+	case 1:
+		return GL_R8;
+	case 2:
+		return GL_RG8;
+	case 3:
+		return GL_RGB8;
+	case 4:
+		return GL_RGBA8;
+	}
+	return 0;
 }
 
 static uint16 getPformat(uint32 format) {
@@ -469,7 +473,7 @@ static void loadImg(const char* file, vector<Image>& imgs, bool regular) {
 		data.resize(sizet(SDL_RWtell(dw)));
 		SDL_RWclose(dw);
 	}
-	imgs.emplace_back(std::move(name), std::move(data), bpp == 3 ? GL_RGB8 : GL_RGBA8, getPformat(img->format->format));
+	imgs.emplace_back(std::move(name), std::move(data), getIformat(bpp), getPformat(img->format->format));
 	SDL_FreeSurface(img);
 }
 

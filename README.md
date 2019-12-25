@@ -37,6 +37,7 @@ Next the CMake target "assets_android" needs to be built separately, which will 
 If you're on Windows, make sure that your Git supports symbolic links or check that "android/app/jni/src" contains the files of "src".  
 
 ### Emscripten  
+There's currently no server program compatible with the web application.  
 A makefile with a target for the game client can be created with the CMake file, which requires emsdk to be installed. Additional libraries will be downloaded.  
 Before building the program, the assets for OpenGL ES need to be built, using the method below and the created "data" directory has to be copied to the directory of the makefile for the Emscripten build.  
 
@@ -51,4 +52,8 @@ All necessary dependencies are downloaded when running CMake.
 
 ### Windows  
 The only supported compilers are MSVC and MinGW. All necessary libraries are downloaded when running CMake.  
-When building the game client in Visual Studio for the first time, "assets" will fail to build and needs to be built separately afterwards to succeed.  
+
+
+## TODO  
+- shadows aren't working properly on some systems  
+- check if macOS builds  

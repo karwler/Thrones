@@ -26,6 +26,11 @@ using GCall = void (Program::*)(BoardObject*, uint8);
 constexpr float PI = float(M_PI);
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
+GLuint makeCubemap(GLsizei res, GLenum active);
+void loadCubemap(GLuint tex, GLsizei res, GLenum active);
+#ifndef OPENGLES
+GLuint makeFramebufferNodraw(GLenum attach, GLuint tex);
+#endif
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format == b.format && a.w == b.w && a.h == b.h && a.refresh_rate == b.refresh_rate;
@@ -138,7 +143,7 @@ public:
 	void reload(SDL_Surface* img, GLint iformat, GLenum pformat);
 private:
 	void load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
-	void upload(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
+	void upload(SDL_Surface* img, GLint iformat, GLenum pformat);
 };
 
 inline Texture::Texture() :
@@ -163,13 +168,8 @@ inline bool Texture::valid() const {
 }
 
 inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
-	upload(img, iformat, pformat, GL_REPEAT, GL_LINEAR);
+	upload(img, iformat, pformat);
 	glGenerateMipmap(GL_TEXTURE_2D);
-}
-
-inline void Texture::load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter) {
-	glGenTextures(1, &id);
-	upload(img, iformat, pformat, wrap, filter);
 }
 
 // for Object and Widget
@@ -179,7 +179,6 @@ public:
 	Interactable() = default;
 	virtual ~Interactable() = default;
 
-	virtual void drawTop() const {}
 	virtual void onClick(const ivec2& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onHold(const ivec2&, uint8) {}
 	virtual void onDrag(const ivec2&, const ivec2&) {}		// mouse move while left button down

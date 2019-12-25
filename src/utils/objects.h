@@ -78,7 +78,10 @@ public:
 	DCLASS_CONSTRUCT(Object, Interactable)
 	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = false, bool show = true);
 
+	void drawDepth() const;
 	virtual void draw() const;
+	virtual void drawTopDepth() const {}
+	virtual void drawTop() const {}
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -90,8 +93,7 @@ protected:
 	const mat4& getTrans() const;
 	const mat3& getNormat() const;
 
-	static void updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture);
-	static void updateTransform(const mat4& model, const mat3& norm);
+	static void updateColor(const vec4& diffuse, const vec3& specular, float shininess, GLuint texture);
 	static void setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl);
 	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl);
 };
@@ -145,7 +147,7 @@ public:
 	GCall hgcall, ulcall, urcall;
 
 protected:
-	static const vec3 moveIconColor;
+	static constexpr float topYpos = 0.1f;
 
 private:
 	float diffuseFactor;
@@ -161,7 +163,8 @@ public:
 	void setEmission(Emission emi);
 	void setRaycast(bool on, bool dim = false);
 protected:
-	void drawTopMesh(float ypos, const Mesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const;
+	void drawTopMeshDepth(float ypos, const Mesh* tmesh) const;
+	void drawTopMesh(float ypos, const Mesh* tmesh, const vec4& tdiffuse, GLuint ttexture) const;
 };
 ENUM_OPERATIONS(BoardObject::Emission, uint8)
 
@@ -179,6 +182,8 @@ public:
 	};
 
 private:
+	static const vec4 moveIconColor;
+
 	Com::Tile type;
 	bool breached;	// only for fortress
 
@@ -186,6 +191,7 @@ public:
 	DCLASS_CONSTRUCT(Tile, BoardObject)
 	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
 
+	virtual void drawTopDepth() const override;
 	virtual void drawTop() const override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
@@ -325,12 +331,13 @@ private:
 	Com::Piece type;
 	bool drawTopSelf;
 
-	static const vec3 fireIconColor, attackHorseColor;
+	static const vec4 moveIconColor, attackHorseColor, fireIconColor;
 
 public:
 	DCLASS_CONSTRUCT(Piece, BoardObject)
 	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
 
+	virtual void drawTopDepth() const override;
 	virtual void drawTop() const override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
@@ -342,6 +349,8 @@ public:
 	void setActive(bool on);
 	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool active = false);
 	bool getDrawTopSelf() const;
+private:
+	float selfTopYpos(const Interactable* occupant) const;
 };
 
 inline Com::Piece Piece::getType() const {
@@ -358,6 +367,10 @@ inline void Piece::setActive(bool on) {
 
 inline bool Piece::getDrawTopSelf() const {
 	return drawTopSelf;
+}
+
+inline float Piece::selfTopYpos(const Interactable* occupant) const {
+	return dynamic_cast<const Piece*>(occupant) && occupant != this ? 1.1f * getScl().y : 0.01f;
 }
 
 // pieces on a board

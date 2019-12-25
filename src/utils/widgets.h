@@ -38,27 +38,23 @@ inline void Size::set(float percent) {
 }
 
 // vertex data for widgets
-class Shape {
+class Quad {
 public:
 	static constexpr uint corners = 4;
 private:
 	static constexpr uint stride = 2;
-	static constexpr float vertices[corners * stride] = {
-		0.f, 0.f,
-		1.f, 0.f,
-		0.f, 1.f,
-		1.f, 1.f
-	};
+	static const float vertices[corners * stride];
 
 	GLuint vao, vbo;
 
 public:
-	void init(ShaderGUI* gui);
-	void free(ShaderGUI* gui);
+	Quad();
+	~Quad();
+
 	GLuint getVao() const;
 };
 
-inline GLuint Shape::getVao() const {
+inline GLuint Quad::getVao() const {
 	return vao;
 }
 
@@ -80,6 +76,7 @@ public:
 	virtual ~Widget() override = default;
 
 	virtual void draw() const {}	// returns frame for possible futher reuse
+	virtual void drawTop() const {}
 	virtual void tick(float) {}
 	virtual void onResize() {}
 	virtual void postInit() {}		// gets called after parent is set and all set up

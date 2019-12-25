@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/layouts.h"
+#include "utils/objects.h"
 
 // for handling program state specific things that occur in all states
 class ProgState {
@@ -58,7 +59,7 @@ public:
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
-	virtual void eventFavorize(FavorAct act);
+	virtual void eventFavorize(FavorAct) {}
 	virtual void eventEndTurn() {}
 	virtual void eventCameraReset();
 	void eventResize();
@@ -343,6 +344,7 @@ private:
 	void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
 	void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
 	static string versionText(const SDL_version& ver);
+	static string ibtos(int val);
 };
 
 inline string ProgInfo::versionText(const SDL_version& ver) {

@@ -58,14 +58,26 @@ inline float Camera::calcYaw(const vec3& pos, float dist) {
 	return std::acos(pos.z / dist) * (pos.x >= 0.f ? 1.f : -1.f);
 }
 
-struct Light {
-	vec3 position;
+class Light {
+public:
+	GLuint depthMap, depthFrame;
+
+	static constexpr GLenum depthTexa = GL_TEXTURE7;
+	static constexpr float defaultRange = 140.f;
+private:
+	static constexpr float snear = 0.1f;
+
+	vec3 pos;
 	vec3 ambient;
 	vec3 diffuse;
 	float linear;
 	float quadratic;
 
-	Light(const vec3& position, const vec3& color, float ambiFac, float range);
+public:
+	Light(const vec3& pos, const vec3& color, float ambiFac, float range = defaultRange);
+	~Light();
+
+	void updateValues(float range = defaultRange);
 };
 
 // saves what widget is being clicked on with what button at what position
@@ -137,6 +149,7 @@ private:
 	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
 	Light light;
+	void (Scene::*shadowFunc)();
 	umap<string, Mesh> meshes;
 	umap<string, Material> materials;
 	umap<string, Texture> texes;
@@ -171,6 +184,8 @@ public:
 	GLuint texture(const string& name) const;
 	GLuint blank() const;
 	void reloadTextures();
+	void resetShadows();
+	void reloadShader();
 	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
@@ -184,8 +199,9 @@ public:
 	vec3 pickerRay(const ivec2& mPos) const;
 	vec3 rayXZIsct(const vec3& ray) const;
 
-	void updateSelect(const ivec2& mPos);
+	void updateSelect();
 private:
+	void updateSelect(const ivec2& mPos);
 	void unselect();
 	Interactable* getSelected(const ivec2& mPos);
 	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
@@ -193,6 +209,9 @@ private:
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	BoardObject* findBoardObject(const ivec2& mPos) const;
 	void simulateMouseMove();
+
+	void renderShadows();
+	void renderDummy() {}
 };
 
 inline Camera* Scene::getCamera() {

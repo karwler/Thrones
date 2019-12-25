@@ -31,7 +31,7 @@
 	<h3>Linux</h3>
 	<ul>
 		<li>Linux 3.2.0 64-bit</li>
-		<li>OpenGL 3.0 (x86) or OpenGL ES 3.0 (ARM)</li>
+		<li>OpenGL 3.3 (x86) or OpenGL ES 3.0 (ARM)</li>
 		<li>FreeType</li>
 		<li>GLEW 2.1.0</li>
 		<li>libjpeg (OpenGL ES)</li>
@@ -40,15 +40,16 @@
 		<li>SDL2_image 2.0.5</li>
 		<li>SDL2_net 2.0.1</li>
 		<li>SDL2_ttf 2.0.15</li>
+		<li>zlib</li>
 	</ul>
 	<h3>macOS</h3>
 	<ul>
-		<li>OpenGL 3.2</li>
+		<li>OpenGL 3.3</li>
 	</ul>
 	<h3>Windows</h3>
 	<ul>
 		<li>Windows XP (32-bit) or Windows 7 (64-bit)</li>
-		<li>OpenGL 3.0</li>
+		<li>OpenGL 3.3</li>
 		<li>MS Visual C++ Redistribute 2017 (32-bit) or 2019 (64-bit)</li>
 	</ul>
 
@@ -204,7 +205,7 @@
 	<h3>Port</h3>
 	<p>The server's port to connect to when clicking "Connect".</p>
 	<h3>Display</h3>
-	<p>The index of what display to place the window on. Choosing a non-primary display can break the rendering on certain systems.</p>
+	<p>The index of what display to place the window on. Choosing a non-primary display can break the rendering on some systems.</p>
 	<h3>Screen</h3>
 	<table class="listing">
 		<tr>
@@ -229,7 +230,11 @@
 	<h3>Mode</h3>
 	<p>The screen mode to use when "Screen" is set to "fullscreen".</p>
 	<h3>Multisamples</h3>
-	<p>Set to "0" to turn off.</p>
+	<p>Set to "0" to turn off. Doesn't work with OpenGL ES.</p>
+	<h3>Shadow resolution</h3>
+	<p>The width/height of the light's shadow cubemap texture. Shadows are disabled if set to 0 or under OpenGL ES.</p>
+	<h3>Soft shadows</h3>
+	<p>Blur the edges of shadows.</p>
 	<h3>Texture scale</h3>
 	<p>Scale of texture sizes.</p>
 	<h3>VSync</h3>

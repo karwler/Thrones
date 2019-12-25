@@ -29,6 +29,7 @@ public:
 	static Settings* sets();
 	static Scene* scene();
 	static const ShaderGeometry* geom();
+	static const ShaderDepth* depth();
 	static const ShaderGUI* gui();
 
 #ifdef _WIN32
@@ -83,6 +84,10 @@ inline Settings* World::sets() {
 
 inline const ShaderGeometry* World::geom() {
 	return windowSys.getGeom();
+}
+
+inline const ShaderDepth* World::depth() {
+	return windowSys.getDepth();
 }
 
 inline const ShaderGUI* World::gui() {

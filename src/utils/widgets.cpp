@@ -1,8 +1,15 @@
 #include "engine/world.h"
 
-// RECTANGLE
+// QUAD
 
-void Shape::init(ShaderGUI* gui) {
+const float Quad::vertices[] = {
+	0.f, 0.f,
+	1.f, 0.f,
+	0.f, 1.f,
+	1.f, 1.f
+};
+
+Quad::Quad() {
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
@@ -10,16 +17,16 @@ void Shape::init(ShaderGUI* gui) {
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-	glEnableVertexAttribArray(gui->vertex);
-	glVertexAttribPointer(gui->vertex, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-	glEnableVertexAttribArray(gui->uvloc);
-	glVertexAttribPointer(gui->uvloc, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
+	glEnableVertexAttribArray(Shader::vpos);
+	glVertexAttribPointer(Shader::vpos, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
+	glEnableVertexAttribArray(Shader::uvloc);
+	glVertexAttribPointer(Shader::uvloc, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
 }
 
-void Shape::free(ShaderGUI* gui) {
+Quad::~Quad() {
 	glBindVertexArray(vao);
-	glDisableVertexAttribArray(gui->vertex);
-	glDisableVertexAttribArray(gui->uvloc);
+	glDisableVertexAttribArray(Shader::vpos);
+	glDisableVertexAttribArray(Shader::uvloc);
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 }
@@ -65,7 +72,7 @@ void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, G
 	glUniform1f(World::gui()->zloc, z);
 	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, Shape::corners);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
 }
 
 // BUTTON

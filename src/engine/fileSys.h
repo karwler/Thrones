@@ -7,6 +7,7 @@
 
 struct Settings {
 	static constexpr char loopback[] = "127.0.0.1";
+	static constexpr uint16 shadowResMax = 1 << 15;
 	static constexpr float gammaMax = 2.f;
 
 	enum class Screen : uint8 {
@@ -31,6 +32,8 @@ struct Settings {
 	VSync vsync;
 	uint8 msamples;
 	uint8 texScale;
+	uint16 shadowRes;
+	bool softShadows;
 	float gamma;
 	ivec2 size;
 	SDL_DisplayMode mode;
@@ -70,6 +73,8 @@ private:
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordMsamples[] = "samples";
 	static constexpr char iniKeywordTexScale[] = "texture_scale";
+	static constexpr char iniKeywordShadowRes[] = "shadow_resolution";
+	static constexpr char iniKeywordSoftShadows[] = "soft_shadows";
 	static constexpr char iniKeywordGamma[] = "gamma";
 	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
 	static constexpr char iniKeywordScalePieces[] = "scale_pieces";

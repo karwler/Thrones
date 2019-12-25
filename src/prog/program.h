@@ -2,6 +2,7 @@
 
 #include "game.h"
 #include "progs.h"
+#include "engine/fileSys.h"
 
 // handles the frontend
 class Program {
@@ -54,7 +55,6 @@ public:
 	void eventConfigNew(Button* but = nullptr);
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateReset(Button* but);
-	void eventPrcSliderUpdate(Button* but);
 	void eventTileSliderUpdate(Button* but);
 	void eventMiddleSliderUpdate(Button* but);
 	void eventPieceSliderUpdate(Button* but);
@@ -110,6 +110,9 @@ public:
 	void eventSetSamples(Button* but);
 	void eventSetTexturesScaleSL(Button* but);
 	void eventSetTextureScaleLE(Button* but);
+	void eventSetShadowResSL(Button* but);
+	void eventSetShadowResLE(Button* but);
+	void eventSetSoftShadows(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);
@@ -126,6 +129,7 @@ public:
 	void eventSBNext(Button* but);
 	void eventSBPrev(Button* but);
 	void eventSLUpdateLE(Button* but);
+	void eventPrcSliderUpdate(Button* but);
 	void eventDummy(Button* = nullptr) {}
 	void disconnect();
 
@@ -142,6 +146,7 @@ private:
 	void placeTile(Tile* tile, uint8 type);
 	void placePiece(svec2 pos, uint8 type, Piece* occupant);
 	void popuplateSetup(Setup& setup);
+	void setShadowRes(uint16 newRes);
 
 	void connect(Netcp* net, const char* msg);
 	void setState(ProgState* newState);

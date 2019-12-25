@@ -31,13 +31,6 @@ int ProgState::Text::maxLen(const vector<vector<string>*>& lists, int height) {
 
 // PROGRAM STATE
 
-void ProgState::eventFavorize(FavorAct act) {
-	if (act == FavorAct::now)
-		eventEnter();
-	else if (act == FavorAct::on)
-		eventEscape();
-}
-
 void ProgState::eventCameraReset() {
 	World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
 }
@@ -997,7 +990,11 @@ RootLayout* ProgSettings::createLayout() {
 		"Screen",
 		"Size",
 		"Mode",
+#endif
+#ifndef OPENGLES
 		"Multisamples",
+		"Shadow resolution",
+		"Soft shadows",
 #endif
 		"Texture scale",
 		"VSync",
@@ -1012,7 +1009,11 @@ RootLayout* ProgSettings::createLayout() {
 		"Window or fullscreen (\"desktop\" is native resolution)",
 		"Window size",
 		"Fullscreen display properties",
+#endif
+#ifndef OPENGLES
 		"Anti-Aliasing multisamples (requires restart)",
+		"Width/height of shadow cubemap",
+		"Soft shadow edges",
 #endif
 		"Scale factor of texture sizes",
 		"Brightness",
@@ -1048,10 +1049,19 @@ RootLayout* ProgSettings::createLayout() {
 		dspMode = new SwitchBox(1.f, std::move(dmodes), dispToFstr(World::sets()->mode), &Program::eventDummy, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
 	}, {
+#endif
+#ifndef OPENGLES
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
 		new SwitchBox(1.f, { "0", "1", "2", "4" }, toStr(World::sets()->msamples), &Program::eventSetSamples, makeTooltip(tips.back())),
 		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+	}, {
+		new Label(descLength, popBack(txs)),
+		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, 15, nullptr, &Program::eventSetShadowResSL, makeTooltip(tips.back())),
+		new LabelEdit(slleLength, toStr(World::sets()->shadowRes), &Program::eventSetShadowResLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+	}, {
+		new Label(descLength, popBack(txs)),
+		new CheckBox(lineHeight, World::sets()->softShadows, &Program::eventSetSoftShadows, &Program::eventSetSoftShadows, makeTooltip(popBack(tips)))
 	}, {
 #endif
 		new Label(descLength, popBack(txs)),
@@ -1158,6 +1168,21 @@ RootLayout* ProgInfo::createLayout() {
 		"Path",
 		"Platform",
 		"OpenGL",
+		"Channels",
+		"Framebuffer size",
+		"Double buffer",
+		"Depth buffer size",
+		"Stencil buffer size",
+		"Accumulator",
+		"Stereo 3D",
+		"Multisample buffers",
+		"Multisamples",
+		"Hardware acceleration",
+		"Context version",
+		"Context flags",
+		"Context sharing",
+		"Framebuffer sRGB",
+		"Release Behaviour",
 #if !defined(OPENGLES) && !defined(__APPLE__)
 		"GLEW",
 #endif
@@ -1229,16 +1254,62 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 	}
 	args.pop_back();
 
+	int red, green, blue, alpha, buffer, dbuffer, depth, stencil, ared, agreen, ablue, aalpha, stereo, msbuffers, msamples, accvisual, vmaj, vmin, cflags, cprofile, swcc, srgb, crb;
+	SDL_GL_GetAttribute(SDL_GL_RED_SIZE, &red);
+	SDL_GL_GetAttribute(SDL_GL_GREEN_SIZE, &green);
+	SDL_GL_GetAttribute(SDL_GL_BLUE_SIZE, &blue);
+	SDL_GL_GetAttribute(SDL_GL_ALPHA_SIZE, &alpha);
+	SDL_GL_GetAttribute(SDL_GL_BUFFER_SIZE, &buffer);
+	SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &dbuffer);
+	SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &depth);
+	SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, &stencil);
+	SDL_GL_GetAttribute(SDL_GL_ACCUM_RED_SIZE, &ared);
+	SDL_GL_GetAttribute(SDL_GL_ACCUM_GREEN_SIZE, &agreen);
+	SDL_GL_GetAttribute(SDL_GL_ACCUM_BLUE_SIZE, &ablue);
+	SDL_GL_GetAttribute(SDL_GL_ACCUM_ALPHA_SIZE, &aalpha);
+	SDL_GL_GetAttribute(SDL_GL_STEREO, &stereo);
+	SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &msbuffers);
+	SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &msamples);
+	SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL, &accvisual);
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &vmaj);
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &vmin);
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_FLAGS, &cflags);
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &cprofile);
+	SDL_GL_GetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, &swcc);
+	SDL_GL_GetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, &srgb);
+	SDL_GL_GetAttribute(SDL_GL_CONTEXT_RELEASE_BEHAVIOR, &crb);
 #ifndef __APPLE__
-	GLint glverm, glvern;
-	glGetIntegerv(GL_MAJOR_VERSION, &glverm);
-	glGetIntegerv(GL_MINOR_VERSION, &glvern);
+	GLint gvmaj, gvmin;
+	glGetIntegerv(GL_MAJOR_VERSION, &gvmaj);
+	glGetIntegerv(GL_MINOR_VERSION, &gvmin);
 #ifdef OPENGLES
-	string glvers = "ES " + toStr(glverm) + '.' + toStr(glvern);
+	string glvers = "ES " + toStr(gvmaj) + '.' + toStr(gvmin);
 #else
-	string glvers = toStr(glverm) + '.' + toStr(glvern);
+	string glvers = toStr(gvmaj) + '.' + toStr(gvmin);
 #endif
 #endif
+	string cvers = toStr(vmaj) + '.' + toStr(vmin);
+	if (cprofile & SDL_GL_CONTEXT_PROFILE_CORE)
+		cvers += " Core";
+	if (cprofile & SDL_GL_CONTEXT_PROFILE_ES)
+		cvers += " ES";
+	if (cprofile & SDL_GL_CONTEXT_PROFILE_COMPATIBILITY)
+		cvers += " Compatibility";
+
+	string sflags;
+	if (cflags & SDL_GL_CONTEXT_DEBUG_FLAG)
+		sflags += "Debug ";
+	if (cflags & SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG)
+		sflags += "ForwardCompatible ";
+	if (cflags & SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG)
+		sflags += "RobustAccess ";
+	if (cflags & SDL_GL_CONTEXT_RESET_ISOLATION_FLAG)
+		sflags += "ResetIsolation ";
+	if (sflags.empty())
+		sflags = "None";
+	else
+		sflags.pop_back();
+
 	SDL_version bver, ncver, tcver;
 	SDL_GetVersion(&bver);
 	Text slv(versionText(bver), lineHeight);
@@ -1253,9 +1324,24 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, SDL_GetPlatform()) }, false, lineSpacing),
 #ifndef __APPLE__
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, std::move(glvers)) }, false, lineSpacing),
-#ifndef OPENGLES
-		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, reinterpret_cast<const char*>(glewGetString(GLEW_VERSION))) }, false, lineSpacing),
 #endif
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, 'R' + toStr(red) + " G" + toStr(green) + " B" + toStr(blue) + " A" + toStr(alpha)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(buffer)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(dbuffer)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(depth)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(stencil)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, 'R' + toStr(ared) + " G" + toStr(agreen) + " B" + toStr(ablue) + " A" + toStr(aalpha)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(stereo)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(msbuffers)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(msamples)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(accvisual)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, std::move(cvers)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, std::move(sflags)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(swcc)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(srgb)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, ibtos(crb)) }, false, lineSpacing),
+#if !defined(OPENGLES) && !defined(__APPLE__)
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, reinterpret_cast<const char*>(glewGetString(GLEW_VERSION))) }, false, lineSpacing),
 #endif
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(GLM_VERSION_MAJOR) + '.' + toStr(GLM_VERSION_MINOR) + '.' + toStr(GLM_VERSION_PATCH) + '.' + toStr(GLM_VERSION_REVISION)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(slv.length, std::move(slv.text)), new Label(slr.length, std::move(slr.text)), new Label(1.f, SDL_GetRevision()), new Label(scv.length, std::move(scv.text)) }, false, lineSpacing),
@@ -1434,4 +1520,12 @@ void ProgInfo::appendRenderers(vector<Widget*>& lines, int width, const vector<s
 		if (i < SDL_GetNumRenderDrivers() - 1)
 			lines.push_back(new Widget(lineHeight / 2));
 	}
+}
+
+string ProgInfo::ibtos(int val) {
+	if (!val)
+		return "off";
+	if (val == 1)
+		return "on";
+	return toStr(val);
 }

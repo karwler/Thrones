@@ -27,6 +27,12 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	msamples(4),
 	texScale(100),
+#ifdef OPENGLES
+	shadowRes(0),
+#else
+	shadowRes(1024),
+#endif
+	softShadows(true),
 	gamma(1.f),
 	size(1280, 720),
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
@@ -111,6 +117,10 @@ Settings* FileSys::loadSettings() {
 #ifndef OPENGLES
 		if (il.first == iniKeywordMsamples)
 			sets->msamples = uint8(sstoul(il.second));
+		else if (il.first == iniKeywordShadowRes)
+			sets->shadowRes = uint16(std::clamp(sstoul(il.second), 0ul, ulong(Settings::shadowResMax)));
+		else if (il.first == iniKeywordSoftShadows)
+			sets->softShadows = stob(il.second);
 		else
 #endif
 		if (il.first == iniKeywordTexScale)
@@ -148,7 +158,10 @@ bool FileSys::saveSettings(const Settings* sets) {
 #endif
 #ifndef OPENGLES
 	text += makeIniLine(iniKeywordMsamples, toStr(sets->msamples));
+	text += makeIniLine(iniKeywordShadowRes, toStr(sets->shadowRes));
+	text += makeIniLine(iniKeywordSoftShadows, btos(sets->softShadows));
 #endif
+	text += makeIniLine(iniKeywordTexScale, toStr(sets->texScale));
 	text += makeIniLine(iniKeywordVsync, Settings::vsyncNames[uint8(int8(sets->vsync)+1)]);
 	text += makeIniLine(iniKeywordGamma, toStr(sets->gamma));
 	text += makeIniLine(iniKeywordAVolume, toStr(sets->avolume));
@@ -370,7 +383,7 @@ umap<string, Mesh> FileSys::loadObjects() {
 	if (!ifh)
 		throw std::runtime_error("failed to load objects");
 
-	glUseProgram(World::geom()->program);
+	glUseProgram(*World::geom());
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
 	umap<string, Mesh> mshs(size + 1);

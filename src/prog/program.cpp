@@ -249,10 +249,6 @@ void Program::setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint1
 		amts[i] = scale && narea != oarea ? uint16(std::round(float(amts[i]) * float(narea) / float(oarea))) : uint16(sstoul(wgts[i]->getText()));
 }
 
-void Program::eventPrcSliderUpdate(Button* but) {
-	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(static_cast<Slider*>(but)->getVal()) + '%');
-}
-
 void Program::eventTileSliderUpdate(Button* but) {
 	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
 	Com::Config& cfg = pr->confs[curConfig];
@@ -406,7 +402,7 @@ void Program::eventMovePiece(BoardObject* obj, uint8) {
 		if (dst)
 			dst->setPos(src->getPos());
 		src->setPos(game.gtop(pos));
-		World::scene()->updateSelect(mousePos());
+		World::scene()->updateSelect();
 	}
 }
 
@@ -730,6 +726,34 @@ void Program::eventSetTextureScaleLE(Button* but) {
 	eventSaveSettings();
 }
 
+void Program::eventSetShadowResSL(Button* but) {
+	int val = static_cast<Slider*>(but)->getVal();
+	setShadowRes(val >= 0 ? uint16(std::pow(2, val)) : 0);
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->shadowRes));
+	eventSaveSettings();
+}
+
+void Program::eventSetShadowResLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	setShadowRes(uint16(std::clamp(sstoul(le->getText()), 0ul, ulong(Settings::shadowResMax))));
+	le->setText(toStr(World::sets()->shadowRes));
+	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1);
+	eventSaveSettings();
+}
+
+void Program::setShadowRes(uint16 newRes) {
+	bool reload = bool(World::sets()->shadowRes) != bool(newRes);
+	World::sets()->shadowRes = newRes;
+	if (World::scene()->resetShadows(); reload)
+		World::scene()->reloadShader();
+}
+
+void Program::eventSetSoftShadows(Button* but) {
+	World::sets()->softShadows = static_cast<CheckBox*>(but)->on;
+	World::scene()->reloadShader();
+	eventSaveSettings();
+}
+
 void Program::eventSetGammaSL(Button* but) {
 	World::window()->setGamma(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::gammaStepFactor);
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->gamma));
@@ -796,6 +820,10 @@ void Program::eventSBPrev(Button* but) {
 
 void Program::eventSLUpdateLE(Button* but) {
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(static_cast<Slider*>(but)->getVal()));
+}
+
+void Program::eventPrcSliderUpdate(Button* but) {
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(static_cast<Slider*>(but)->getVal()) + '%');
 }
 
 void Program::connect(Netcp* net, const char* msg) {

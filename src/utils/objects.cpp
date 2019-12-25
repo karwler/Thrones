@@ -20,12 +20,12 @@ Mesh::Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(*vertices.data())), vertices.data(), GL_STATIC_DRAW);
 
-	glEnableVertexAttribArray(World::geom()->vertex);
-	glVertexAttribPointer(World::geom()->vertex, psiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
-	glEnableVertexAttribArray(World::geom()->normal);
-	glVertexAttribPointer(World::geom()->normal, nsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, nrm)));
-	glEnableVertexAttribArray(World::geom()->uvloc);
-	glVertexAttribPointer(World::geom()->uvloc, tsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, tuv)));
+	glEnableVertexAttribArray(Shader::vpos);
+	glVertexAttribPointer(Shader::vpos, psiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
+	glEnableVertexAttribArray(Shader::normal);
+	glVertexAttribPointer(Shader::normal, nsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, nrm)));
+	glEnableVertexAttribArray(Shader::uvloc);
+	glVertexAttribPointer(Shader::uvloc, tsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, tuv)));
 
 	glGenBuffers(1, &ebo);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -34,9 +34,9 @@ Mesh::Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8
 
 void Mesh::free() {
 	glBindVertexArray(vao);
-	glDisableVertexAttribArray(World::geom()->vertex);
-	glDisableVertexAttribArray(World::geom()->normal);
-	glDisableVertexAttribArray(World::geom()->uvloc);
+	glDisableVertexAttribArray(Shader::vpos);
+	glDisableVertexAttribArray(Shader::normal);
+	glDisableVertexAttribArray(Shader::uvloc);
 	glDeleteBuffers(1, &ebo);
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
@@ -57,26 +57,29 @@ Object::Object(const vec3& pos, const vec3& ert, const vec3& scl, const Mesh* me
 	setTransform(trans, normat, pos, rot, scl);
 }
 
-void Object::draw() const {
+void Object::drawDepth() const {
 	if (show) {
 		glBindVertexArray(mesh->getVao());
-		updateTransform(trans, normat);
-		updateColor(matl->diffuse, matl->specular, matl->shininess, matl->alpha, tex);
+		glUniformMatrix4fv(World::depth()->model, 1, GL_FALSE, glm::value_ptr(trans));
 		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 	}
 }
 
-void Object::updateColor(const vec3& diffuse, const vec3& specular, float shininess, float alpha, GLuint texture) {
-	glUniform3fv(World::geom()->materialDiffuse, 1, glm::value_ptr(diffuse));
-	glUniform3fv(World::geom()->materialSpecular, 1, glm::value_ptr(specular));
-	glUniform1f(World::geom()->materialShininess, shininess);
-	glUniform1f(World::geom()->materialAlpha, alpha);
-	glBindTexture(GL_TEXTURE_2D, texture);
+void Object::draw() const {
+	if (show) {
+		glBindVertexArray(mesh->getVao());
+		glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(trans));
+		glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(normat));
+		updateColor(matl->diffuse, matl->specular, matl->shininess, tex);
+		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
+	}
 }
 
-void Object::updateTransform(const mat4& model, const mat3& norm) {
-	glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(model));
-	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(norm));
+void Object::updateColor(const vec4& diffuse, const vec3& specular, float shininess, GLuint texture) {
+	glUniform4fv(World::geom()->materialDiffuse, 1, glm::value_ptr(diffuse));
+	glUniform3fv(World::geom()->materialSpecular, 1, glm::value_ptr(specular));
+	glUniform1f(World::geom()->materialShininess, shininess);
+	glBindTexture(GL_TEXTURE_2D, texture);
 }
 
 void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl) {
@@ -85,8 +88,6 @@ void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& 
 }
 
 // GAME OBJECT
-
-const vec3 BoardObject::moveIconColor(0.9f, 0.9f, 0.9f);
 
 BoardObject::BoardObject(const vec3& pos, float rot, const vec3& scl, GCall hgcall, GCall ulcall, GCall urcall, const Mesh* mesh, const Material* matl, GLuint tex, bool rigid, bool show) :
 	Object(pos, vec3(0.f, rot, 0.f), scl, mesh, matl, tex, rigid, show),
@@ -100,18 +101,28 @@ BoardObject::BoardObject(const vec3& pos, float rot, const vec3& scl, GCall hgca
 void BoardObject::draw() const {
 	if (show) {
 		glBindVertexArray(mesh->getVao());
-		updateTransform(getTrans(), getNormat());
-		updateColor(matl->diffuse * diffuseFactor, matl->specular, matl->shininess, matl->alpha, tex);
+		glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(getTrans()));
+		glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(getNormat()));
+		updateColor(vec4(matl->diffuse.x * diffuseFactor, matl->diffuse.y * diffuseFactor, matl->diffuse.z * diffuseFactor, matl->diffuse.a), matl->specular, matl->shininess, tex);
 		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 	}
 }
 
-void BoardObject::drawTopMesh(float ypos, const Mesh* tmesh, const vec3& tdiffuse, GLuint ttexture) const {
+void BoardObject::drawTopMeshDepth(float ypos, const Mesh* tmesh) const {
 	glBindVertexArray(tmesh->getVao());
 	mat4 model;
 	setTransform(model, World::scene()->rayXZIsct(World::scene()->pickerRay(mousePos())) + vec3(0.f, ypos, 0.f), getRot(), getScl());
-	updateTransform(model, getNormat());
-	updateColor(tdiffuse, matl->specular, matl->shininess, 0.9f, ttexture);
+	glUniformMatrix4fv(World::depth()->model, 1, GL_FALSE, glm::value_ptr(model));
+	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), Mesh::elemType, nullptr);
+}
+
+void BoardObject::drawTopMesh(float ypos, const Mesh* tmesh, const vec4& tdiffuse, GLuint ttexture) const {
+	glBindVertexArray(tmesh->getVao());
+	mat4 model;
+	setTransform(model, World::scene()->rayXZIsct(World::scene()->pickerRay(mousePos())) + vec3(0.f, ypos, 0.f), getRot(), getScl());
+	glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(model));
+	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(getNormat()));
+	updateColor(tdiffuse, matl->specular, matl->shininess, ttexture);
 	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), Mesh::elemType, nullptr);
 }
 
@@ -127,6 +138,8 @@ void BoardObject::setEmission(Emission emi) {
 
 // TILE
 
+const vec4 Tile::moveIconColor(1.f, 1.f, 1.f, 9.9f);
+
 Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show) :
 	BoardObject(pos, 0.f, vec3(size, type != Com::Tile::fortress ? size : 1.f, size), hgcall, ulcall, urcall, nullptr, World::scene()->material("tile"), 0, rigid, getShow(show, type)),
 	breached(false)
@@ -134,8 +147,12 @@ Tile::Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulca
 	setTypeSilent(type);
 }
 
+void Tile::drawTopDepth() const {
+	drawTopMeshDepth(topYpos, mesh);
+}
+
 void Tile::drawTop() const {
-	drawTopMesh(0.1f, mesh, matl->diffuse, tex);
+	drawTopMesh(topYpos, mesh, matl->diffuse * moveIconColor, tex);
 }
 
 void Tile::onHold(const ivec2&, uint8 mBut) {
@@ -204,8 +221,9 @@ void TileCol::update(const Com::Config& conf) {
 
 // PIECE
 
-const vec3 Piece::fireIconColor(1.f, 0.1f, 0.1f);
-const vec3 Piece::attackHorseColor(0.9f, 0.7f, 0.7f);
+const vec4 Piece::moveIconColor(0.9f, 0.9f, 0.9f, 0.9f);
+const vec4 Piece::attackHorseColor(0.9f, 0.7f, 0.7f, 0.9f);
+const vec4 Piece::fireIconColor(1.f, 0.1f, 0.1f, 0.9f);
 
 Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show) :
 	BoardObject(pos, rot, vec3(size), hgcall, ulcall, urcall, World::scene()->mesh(Com::pieceNames[uint8(type)]), matl, World::scene()->blank(), rigid, show),
@@ -213,12 +231,17 @@ Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgca
 	type(type)
 {}
 
+void Piece::drawTopDepth() const {
+	if (drawTopSelf)
+		drawTopMeshDepth(selfTopYpos(World::scene()->select), mesh);
+}
+
 void Piece::drawTop() const {
 	if (drawTopSelf)
-		drawTopMesh(dynamic_cast<Piece*>(World::scene()->select) && World::scene()->select != this ? 1.1f * getScl().y : 0.01f, mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
+		drawTopMesh(selfTopYpos(World::scene()->select), mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
-		drawTopMesh(0.1f, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
+		drawTopMesh(topYpos, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
 		glEnable(GL_DEPTH_TEST);
 	}
 }
@@ -260,7 +283,7 @@ void Piece::onUnhover() {
 void Piece::updatePos(svec2 bpos, bool active) {
 	setPos(World::game()->gtop(bpos));
 	setActive(active);
-	World::scene()->updateSelect(mousePos());
+	World::scene()->updateSelect();
 }
 
 // PIECE COL

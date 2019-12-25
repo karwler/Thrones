@@ -282,5 +282,5 @@ mvec2 ScrollArea::visibleWidgets() const {
 
 void ScrollArea::moveListPos(const ivec2& mov) {
 	listPos = glm::clamp(ivec2(listPos + mov), ivec2(0), listLim());
-	World::scene()->updateSelect(mousePos());
+	World::scene()->updateSelect();
 }

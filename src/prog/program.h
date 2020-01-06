@@ -148,15 +148,11 @@ private:
 	void popuplateSetup(Setup& setup);
 	void setShadowRes(uint16 newRes);
 
-	void connect(Netcp* net, const char* msg);
+	void connect(bool client, const char* msg);
 	void setState(ProgState* newState);
 	BoardObject* pickBob(svec2& pos, Piece*& pce);
 };
 ENUM_OPERATIONS(Program::Info, uint8)
-
-inline void Program::disconnect() {
-	netcp.reset();
-}
 
 inline ProgState* Program::getState() {
 	return state.get();

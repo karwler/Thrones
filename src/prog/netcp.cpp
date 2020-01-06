@@ -5,10 +5,14 @@ using namespace Com;
 
 Netcp::Netcp(uint8 maxSockets) :
 	socket(nullptr),
-	cncproc(nullptr)
+	cncproc(nullptr),
+	webs(false)
 {
+#ifdef EMSCRIPTEN
+	waitSend = false;
+#endif
 	if (!(socks = SDLNet_AllocSocketSet(maxSockets)))
-		throw SDLNet_GetError();
+		throw NetError(SDLNet_GetError());
 }
 
 Netcp::~Netcp() {
@@ -18,19 +22,29 @@ Netcp::~Netcp() {
 
 void Netcp::connect() {
 	openSockets(World::sets()->address.c_str(), socket);
-	sendVersion();
+#ifdef EMSCRIPTEN
+	waitSend = true;
+#else
+	sendVersion(socket, webs);
+#endif
 	cncproc = &Netcp::cprocWait;
+}
+
+void Netcp::disconnect() {
+	if (webs && socket)
+		sendWaitClose(socket);
+	closeSocket(socket);
 }
 
 void Netcp::openSockets(const char* host, TCPsocket& sock) {
 	IPaddress address;
 	if (SDLNet_ResolveHost(&address, host, World::sets()->port))
-		throw SDLNet_GetError();
+		throw NetError(SDLNet_GetError());
 	if (!(sock = SDLNet_TCP_Open(&address)))
-		throw SDLNet_GetError();
+		throw NetError(SDLNet_GetError());
 	if (SDLNet_TCP_AddSocket(socks, sock) < 0) {
 		closeSocket(sock);
-		throw SDLNet_GetError();
+		throw NetError(SDLNet_GetError());
 	}
 }
 
@@ -41,16 +55,28 @@ void Netcp::closeSocket(TCPsocket& sock) {
 }
 
 void Netcp::tick() {
+#ifdef EMSCRIPTEN
+	if (waitSend) {
+		try {
+			sendVersion(socket, webs);
+			waitSend = false;
+		} catch (const NetError&) {}
+	}
+#endif
 	if (SDLNet_CheckSockets(socks, 0) > 0)
-		checkSocket();
+		(this->*cncproc)();
 }
 
-void Netcp::cprocWait(uint8* data) {
+void Netcp::cprocWait() {
+	uint8* data = recvb.recv(socket, webs);
+	if (!data)
+		return;
+
 	switch (Code(data[0])) {
 	case Code::full:
-		throw NetcpException("Server full");
+		throw NetError("Server full");
 	case Code::version:
-		throw NetcpException("Server expected version " + readVersion(data));
+		throw NetError("Server expected version " + readVersion(data));
 	case Code::rlist:
 		World::program()->info &= ~Program::INF_UNIQ;
 		World::program()->eventOpenLobby(data + dataHeadSize);
@@ -60,11 +86,16 @@ void Netcp::cprocWait(uint8* data) {
 		World::game()->recvStart(data + dataHeadSize);
 		break;
 	default:
-		throw NetcpException("Invalid response: " + toStr(*data));
+		throw NetError("Invalid response: " + toStr(*data));
 	}
+	recvb.clear();
 }
 
-void Netcp::cprocLobby(uint8* data) {
+void Netcp::cprocLobby() {
+	uint8* data = recvb.recv(socket, webs);
+	if (!data)
+		return;
+
 	switch (Code(data[0])) {
 	case Code::rlist:
 		World::program()->eventOpenLobby(data + dataHeadSize);
@@ -105,9 +136,14 @@ void Netcp::cprocLobby(uint8* data) {
 	default:
 		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in lobby" << std::endl;
 	}
+	recvb.clear();
 }
 
-void Netcp::cprocGame(uint8* data) {
+void Netcp::cprocGame() {
+	uint8* data = recvb.recv(socket, webs);
+	if (!data)
+		return;
+
 	switch (Code(data[0])) {
 	case Code::rlist:
 		World::program()->uninitGame();
@@ -140,32 +176,34 @@ void Netcp::cprocGame(uint8* data) {
 	default:
 		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in game" << std::endl;
 	}
+	recvb.clear();
 }
 
-void Netcp::checkSocket() {
-	if (recvb.recv(socket, cncproc))
-		throw NetcpException("Connection lost");
+void Netcp::cprocValidate() {
+	switch (recvb.recvInit(socket, webs)) {
+	case Buffer::Init::connect:
+		World::game()->sendStart();
+		break;
+	case Buffer::Init::version:
+		sendVersion(socket, webs);
+	case Buffer::Init::error:
+		closeSocket(socket);
+		cncproc = &NetcpHost::cprocDiscard;
+	}
 }
 
-void Netcp::sendVersion() {
-	uint16 len = uint16(strlen(commonVersion));
-	vector<uint8> data(Com::dataHeadSize + len);
-	data[0] = uint8(Code::version);
-	SDLNet_Write16(uint16(data.size()), data.data() + 1);
-	std::copy_n(commonVersion, len, data.data() + dataHeadSize);
-	sendData(data);
+void Netcp::cprocDiscard() {
+	if (uint8* data = recvb.recv(socket, webs)) {
+		std::cerr << "unexprected data with code '" << uint(data[0]) << '\'' << std::endl;
+		recvb.clear();
+	}
 }
 
-void Netcp::sendData(Buffer& sendb) {
-	if (const char* err = sendb.send(socket))
-		throw NetcpException(err);
-}
-
-void Netcp::sendData(Com::Code code) {
-	uint8 data[Com::dataHeadSize] = { uint8(code) };
-	SDLNet_Write16(Com::dataHeadSize, data + 1);
-	if (SDLNet_TCP_Send(socket, data, Com::dataHeadSize) != Com::dataHeadSize)
-		throw NetcpException(SDLNet_GetError());
+void Netcp::sendData(Code code) {
+	uint8 data[dataHeadSize] = { uint8(code) };
+	SDLNet_Write16(dataHeadSize, data + 1);
+	if (SDLNet_TCP_Send(socket, data, dataHeadSize) != dataHeadSize)
+		throw NetError(SDLNet_GetError());
 }
 
 // HOST
@@ -184,6 +222,11 @@ void NetcpHost::connect() {
 	cncproc = &NetcpHost::cprocDiscard;
 }
 
+void NetcpHost::disconnect() {
+	Netcp::disconnect();
+	closeSocket(server);
+}
+
 void NetcpHost::tick() {
 	if (SDLNet_CheckSockets(socks, 0) <= 0)
 		return;
@@ -193,35 +236,14 @@ void NetcpHost::tick() {
 			sendRejection(server);
 		else try {
 			if (!(socket = SDLNet_TCP_Accept(server)))
-				throw NetcpException(SDLNet_GetError());
+				throw SDLNet_GetError();
 			if (SDLNet_TCP_AddSocket(socks, socket) < 0)
-				throw NetcpException(SDLNet_GetError());
+				throw SDLNet_GetError();
 			cncproc = &NetcpHost::cprocValidate;
-		} catch (const NetcpException& err) {
+		} catch (const char* err) {
 			closeSocket(socket);
-			std::cerr << "failed to connect guest: " << err.message << std::endl;
+			std::cerr << "failed to connect guest: " << err << std::endl;
 		}
 	}
-	checkSocket();
-}
-
-void NetcpHost::cprocValidate(uint8* data) {
-	static_cast<NetcpHost*>(World::netcp())->validate(data);
-}
-
-void NetcpHost::validate(uint8* data) {
-	if (Code(*data) == Code::version) {
-		if (string ver = readVersion(data); std::find(compatibleVersions.begin(), compatibleVersions.end(), ver) != compatibleVersions.end())
-			World::game()->sendStart();
-		else {
-			sendVersion();
-			closeSocket(socket);
-			cncproc = &NetcpHost::cprocDiscard;
-			std::cout << "failed to validate guest of version " << ver << std::endl;
-		}
-	} else {
-		cprocDiscard(data);
-		closeSocket(socket);
-		cncproc = &NetcpHost::cprocDiscard;
-	}
+	(this->*cncproc)();
 }

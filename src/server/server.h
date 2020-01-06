@@ -9,21 +9,15 @@
 #include <SDL2/SDL_net.h>
 #endif
 
-struct Date {
-	uint8 sec, min, hour;
-	uint8 day, month;
-	uint8 wday;
-	int16 year;
+struct NetError {
+	const string message;
 
-	Date(uint8 second, uint8 minute, uint8 hour, uint8 day, uint8 month, int16 year, uint8 weekDay);
-
-	static Date now();
-	string toString(char ts = ':', char sep = ' ', char ds = '.') const;
+	NetError(string&& msg);
 };
 
-inline string Date::toString(char ts, char sep, char ds) const {
-	return toStr(year) + ds + ntosPadded(month, 2) + ds + ntosPadded(day, 2) + sep + ntosPadded(hour, 2) + ts + ntosPadded(min, 2) + ts + ntosPadded(sec, 2);
-}
+inline NetError::NetError(string&& msg) :
+	message(std::move(msg))
+{}
 
 namespace Com {
 
@@ -31,6 +25,8 @@ constexpr uint16 defaultPort = 39741;
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
 constexpr uint8 roomNameLimit = 64;
 constexpr uint8 maxRooms = 64;
+constexpr uint wsHeadMin = 2;
+constexpr uint wsHeadMax = 2 + sizeof(uint64) + sizeof(uint32);
 
 enum class Tile : uint8 {
 	plains,
@@ -97,7 +93,8 @@ enum class Code : uint8 {
 	move,		// piece move (piece + position info)
 	kill,		// piece die (piece info)
 	breach,		// fortress state change (breached or not info)
-	record		// turn record data (piece + has attacked or switched info)
+	record,		// turn record data (piece + has attacked or switched info)
+	wsconn = 'G'	// first letter of websocket handshake
 };
 
 const array<string, 1> compatibleVersions = {
@@ -156,7 +153,7 @@ private:
 	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
 };
 
-inline uint16 Com::Config::countTilesNonFort() const {
+inline uint16 Config::countTilesNonFort() const {
 	return std::accumulate(tileAmounts.begin(), tileAmounts.end() - 1, uint16(0));
 }
 
@@ -180,9 +177,22 @@ inline uint16 Config::countFreePieces() const {
 	return homeSize.x * homeSize.y - countPieces();
 }
 
-int sendRejection(TCPsocket server);
-string readName(const uint8* data);
+string digestSHA1(string str);
+string encodeBase64(const string& str);
+void sendWaitClose(TCPsocket socket);
+void sendRejection(TCPsocket server);
+void sendVersion(TCPsocket socket, bool webs);
+void sendData(TCPsocket socket, const uint8* data, uint len, bool webs);
 string readVersion(uint8* data);
+string readName(const uint8* data);
+
+inline uint64 read64(const void* data) {
+	return SDL_SwapBE64(*reinterpret_cast<const uint64*>(data));
+}
+
+inline void write64(uint64 val, void* data) {
+	*reinterpret_cast<uint64*>(data) = SDL_SwapBE64(val);
+}
 
 const umap<Code, uint16> codeSizes = {
 	pair(Code::full, dataHeadSize),
@@ -198,13 +208,21 @@ const umap<Code, uint16> codeSizes = {
 	pair(Code::record, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16)))
 };
 
-}
-
 // for sending/receiving network data (mustn't be used for both simultaneously)
 class Buffer {
+public:
+	enum class Init : uint8 {
+		wait,
+		connect,
+		version,
+		error
+	};
+
 private:
 	vector<uint8> data;
-	uint dpos;
+	uint dlim;
+
+	static constexpr uint expectedRequestSize = 512;
 
 public:
 	Buffer();
@@ -219,27 +237,36 @@ public:
 	void push(const uint8* vec, uint len);
 	void push(uint8 val);
 	void push(uint16 val);
-	uint preallocate(Com::Code code);			// set head and preallocate space (returns end pos of head)
-	uint preallocate(Com::Code code, uint dlen);
-	uint pushHead(Com::Code code);				// should only be used for codes with fixed length (returns end pos of head)
-	uint pushHead(Com::Code code, uint dlen);	// should only be used for codes with variable length (returns end pos of head)
+	uint preallocate(Code code);			// set head and preallocate space (returns end pos of head)
+	uint preallocate(Code code, uint dlen);
+	uint pushHead(Code code);				// should only be used for codes with fixed length (returns end pos of head)
+	uint pushHead(Code code, uint dlen);	// should only be used for codes with variable length (returns end pos of head)
 	uint write(uint8 val, uint pos);
 	uint write(uint16 val, uint pos);
 
-	const char* send(TCPsocket socket);				// sends all data and clears
-	const char* send(TCPsocket socket, uint cnt);	// returns error code or nullptr on success (doesn't clear data)
-	template <class F> const char* recv(TCPsocket socket, F proc);
-
+	void redirect(TCPsocket socket, uint8* pos, bool sendWebs);	// doesn't clear data
+	void send(TCPsocket socket, bool webs, bool clr = true);	// sends all data
+	uint8* recv(TCPsocket socket, bool webs);	// returns begin of data or nullptr if nothing to process yet
+	Init recvInit(TCPsocket socket, bool& webs);
 private:
+	bool recvHead(TCPsocket socket, uint& hsize, uint& ofs, uint8*& mask, bool webs);
+	uint8* recvLoad(TCPsocket socket, uint hsize, uint ofs, uint8* mask);
+	void resendWs(TCPsocket socket, uint hsize, uint plen, const uint8* mask);
+	void recvDat(TCPsocket socket, uint size);
 	uint checkEnd(uint end);
+	void unmask(const uint8* mask, uint i, uint ofs);
 };
+
+inline Buffer::Buffer() :
+	dlim(0)
+{}
 
 inline uint8& Buffer::operator[](uint i) {
 	return data[i];
 }
 
 inline uint Buffer::size() const {
-	return dpos;
+	return dlim;
 }
 
 inline void Buffer::push(const vector<uint8>& vec) {
@@ -250,45 +277,12 @@ inline void Buffer::push(const string& str) {
 	push(reinterpret_cast<const uint8*>(str.c_str()), uint(str.length()));
 }
 
-inline uint Buffer::preallocate(Com::Code code) {
-	return preallocate(code, Com::codeSizes.at(code));
+inline uint Buffer::preallocate(Code code) {
+	return preallocate(code, codeSizes.at(code));
 }
 
-inline uint Buffer::pushHead(Com::Code code) {
-	return pushHead(code, Com::codeSizes.at(code));
+inline uint Buffer::pushHead(Code code) {
+	return pushHead(code, codeSizes.at(code));
 }
 
-inline const char* Buffer::send(TCPsocket socket, uint cnt) {
-	return SDLNet_TCP_Send(socket, data.data(), int(cnt)) != int(cnt) ? SDLNet_GetError() : nullptr;
-}
-
-template <class F>
-inline const char* Buffer::recv(TCPsocket socket, F proc) {
-	if (!SDLNet_SocketReady(socket))
-		return nullptr;
-	if (dpos < Com::dataHeadSize) {
-		checkEnd(Com::dataHeadSize);
-		int len = SDLNet_TCP_Recv(socket, data.data() + dpos, int(Com::dataHeadSize - dpos));
-		if (len <= 0)
-			return SDLNet_GetError();
-		if (dpos += uint(len); dpos < Com::dataHeadSize)
-			return nullptr;
-	}
-
-	uint16 end = SDLNet_Read16(data.data() + 1);
-	if (end > dpos) {
-		if (!SDLNet_SocketReady(socket))
-			return nullptr;
-		checkEnd(end);
-		int len = SDLNet_TCP_Recv(socket, data.data() + dpos, int(end - dpos));
-		if (len <= 0)
-			return SDLNet_GetError();
-		dpos += uint(len);
-	}
-	if (dpos >= end) {
-		proc(data.data());
-		data.clear();
-		dpos = 0;
-	}
-	return nullptr;
 }

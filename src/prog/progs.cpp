@@ -475,10 +475,12 @@ RootLayout* ProgRoom::createLayout() {
 		Text setup("Setup", lineHeight);
 		Text port("Port:", lineHeight);
 		top0.insert(top0.begin() + 1, new Label(setup.length, std::move(setup.text), &Program::eventOpenSetup));
+#ifndef EMSCRIPTEN
 		top0.insert(top0.end(), {
 			new Label(port.length, std::move(port.text)),
 			new LabelEdit(Text::strLen("00000", lineHeight) + LabelEdit::caretWidth, toStr(World::sets()->port), &Program::eventUpdatePort)
 		});
+#endif
 	} else if (World::program()->info & Program::INF_HOST) {
 		Text kick("Kick", lineHeight);
 		top0.push_back(kickButton = new Label(kick.length, std::move(kick.text), nullptr, nullptr, Texture(), defaultDim));
@@ -526,8 +528,10 @@ RootLayout* ProgRoom::createLayout() {
 
 void ProgRoom::updateStartButton() {
 	if (World::program()->info & Program::INF_UNIQ) {
+#ifndef EMSCRIPTEN
 		startButton->setText("Open");
 		startButton->lcall = &Program::eventHostServer;
+#endif
 	} else if (World::program()->info & Program::INF_HOST) {
 		bool on = World::program()->info & Program::INF_GUEST_WAITING;
 		startButton->setText(on ? "Start" : "Waiting for player...");

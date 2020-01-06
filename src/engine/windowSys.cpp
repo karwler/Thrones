@@ -275,7 +275,7 @@ void WindowSys::exec() {
 	try {
 		if (program->getNetcp())
 			program->getNetcp()->tick();
-	} catch (const NetcpException& err) {
+	} catch (const NetError& err) {
 		program->disconnect();
 		scene->setPopup(program->getState()->createPopupMessage(err.message, &Program::eventPostDisconnectGame));
 	}

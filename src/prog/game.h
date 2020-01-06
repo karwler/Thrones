@@ -58,7 +58,7 @@ private:
 
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
-	Buffer sendb;
+	Com::Buffer sendb;
 
 	Mesh gridat;
 	Object ground, board, bgrid, screen, ffpad;

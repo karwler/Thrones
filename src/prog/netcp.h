@@ -2,55 +2,50 @@
 
 #include "server/server.h"
 
-class NetcpHost;
-
-struct NetcpException {
-	const string message;
-
-	NetcpException(string&& msg);
-};
-
-inline NetcpException::NetcpException(string&& msg) :
-	message(std::move(msg))
-{}
-
 // handles networking (for joining/hosting rooms on a remote sever)
 class Netcp {
 protected:
 	SDLNet_SocketSet socks;
 	TCPsocket socket;
-	Buffer recvb;
-	void (*cncproc)(uint8*);
+	Com::Buffer recvb;
+	void (Netcp::*cncproc)();
+	bool webs;
+#ifdef EMSCRIPTEN
+	bool waitSend;
+#endif
 
 public:
 	Netcp(uint8 maxSockets = 1);	// maxSockets shall only be altered by NetcpHost
 	virtual ~Netcp();
 
 	virtual void connect();
+	virtual void disconnect();
 	virtual void tick();
-	void sendData(Buffer& sendb);
+	void sendData(Com::Buffer& sendb);
 	void sendData(Com::Code code);
-	template <class T> void sendData(const vector<T>& vec);
+	void sendData(const vector<uint8>& vec);
 
-	static void cprocWait(uint8* data);
-	static void cprocLobby(uint8* data);
-	static void cprocGame(uint8* data);
-	void setCncproc(void (*proc)(uint8*));
-
+	void setCncproc(void (Netcp::*proc)());
+	void cprocWait();
+	void cprocLobby();
+	void cprocGame();
 protected:
+	void cprocValidate();
+	void cprocDiscard();
+
 	void openSockets(const char* host, TCPsocket& sock);
 	void closeSocket(TCPsocket& sock);
-	void checkSocket();
-	void sendVersion();
 };
 
-template <class T>
-void Netcp::sendData(const vector<T>& vec) {
-	if (int len = int(vec.size() * sizeof(T)); SDLNet_TCP_Send(socket, vec.data(), len) != len)
-		throw NetcpException(SDLNet_GetError());
+inline void Netcp::sendData(Com::Buffer& sendb) {
+	sendb.send(socket, webs);
 }
 
-inline void Netcp::setCncproc(void (*proc)(uint8*)) {
+inline void Netcp::sendData(const vector<uint8>& vec) {
+	Com::sendData(socket, vec.data(), uint(vec.size()), webs);
+}
+
+inline void Netcp::setCncproc(void (Netcp::*proc)()) {
 	cncproc = proc;
 }
 
@@ -64,13 +59,6 @@ public:
 	virtual ~NetcpHost() override;
 
 	virtual void connect() override;
+	virtual void disconnect() override;
 	virtual void tick() override;
-
-	static void cprocDiscard(uint8* data);
-	static void cprocValidate(uint8* data);
-	void validate(uint8* data);
 };
-
-inline void NetcpHost::cprocDiscard(uint8* data) {
-	std::cerr << "unexprected data with code " << uint(data[0]) << std::endl;
-}

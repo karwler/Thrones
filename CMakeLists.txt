@@ -17,6 +17,7 @@ set(ASSET_WAV
 
 set(ASSET_DAT
 	"rsc/data/cursor.png"
+	"rsc/data/merriweather.otf"
 	"rsc/data/romanesque.ttf"
 	"rsc/data/thrones.png")
 
@@ -184,11 +185,11 @@ function(renameLibdir SRC DST)
 	endif()
 endfunction()
 
+file(MAKE_DIRECTORY "${DIR_LIB}")
+downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
+include_directories("${CMAKE_SOURCE_DIR}/src" "${DIR_LIB}/glm")
 if(EMSCRIPTEN)
 	file(COPY "${DIR_RSC}/thrones.html" DESTINATION "${CMAKE_BINARY_DIR}")
-	file(MAKE_DIRECTORY "${DIR_LIB}")
-	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
-	include_directories("${DIR_LIB}/glm")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 		set(DIR_SDL "${DIR_LIB}/SDL2-${VER_SDL}")
@@ -261,32 +262,26 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 			set(URL_GLEW "http://www.grhmedia.com/glew/glew-${VER_GLEW}-mingw.zip")
 		endif()
 	endif()
-	file(MAKE_DIRECTORY "${DIR_LIB}")
 	downloadLib("${URL_SDL}" "${DIR_LIB}")
 	downloadLib("${URL_IMG}" "${DIR_LIB}")
 	downloadLib("${URL_NET}" "${DIR_LIB}")
 	downloadLib("${URL_TTF}" "${DIR_LIB}")
 	downloadLib("${URL_GLEW}" "${DIR_LIB}")
-	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
 
 	link_directories("${LIB_SDL}" "${LIB_IMG}" "${LIB_NET}" "${LIB_TTF}" "${LIB_GLEW}")
-	include_directories("${INC_SDL}" "${INC_IMG}" "${INC_NET}" "${INC_TTF}" "${DIR_GLEW}/include" "${DIR_LIB}/glm")
+	include_directories("${INC_SDL}" "${INC_IMG}" "${INC_NET}" "${INC_TTF}" "${DIR_GLEW}/include")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	file(MAKE_DIRECTORY "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.dmg" "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/projects/SDL_image/release/SDL2_image-${VER_IMG}.dmg" "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/projects/SDL_net/release/SDL2_net-${VER_NET}.dmg" "${DIR_LIB}")
 	downloadLib("https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-${VER_TTF}.dmg" "${DIR_LIB}")
-	downloadLib("https://github.com/g-truc/glm/releases/download/${VER_GLM}/glm-${VER_GLM}.zip" "${DIR_LIB}")
 
 	find_library(LIB_SDL "SDL2" HINTS "${DIR_LIB}")
 	find_library(LIB_NET "SDL2_image" HINTS "${DIR_LIB}")
 	find_library(LIB_NET "SDL2_net" HINTS "${DIR_LIB}")
 	find_library(LIB_TTF "SDL2_ttf" HINTS "${DIR_LIB}")
 	find_library(LIB_OPENGL "OpenGL")
-	include_directories("${DIR_LIB}/glm")
 endif()
-include_directories("${CMAKE_SOURCE_DIR}/src")
 
 set(DIR_PAND "${CMAKE_SOURCE_DIR}/android")
 if(LIBDROID)
@@ -327,7 +322,7 @@ else()
 	add_definitions(-DNDEBUG)
 endif()
 
-set(CXX_COMMON_WARNINGS "-Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-shadow-field -Wno-switch -Wno-switch-enum -Wno-unused-result")
+set(CXX_COMMON_WARNINGS "-Wno-implicit-fallthrough -Wno-float-equal -Wno-parentheses -Wno-shadow -Wno-shadow-field -Wno-switch -Wno-switch-enum -Wno-unused-private-field -Wno-unused-result")
 if(EMSCRIPTEN)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --preload-file ${CMAKE_BINARY_DIR}/data@/ -s TOTAL_MEMORY=536870912 -s WASM=1 -s USE_WEBGL2=1 -s DISABLE_EXCEPTION_CATCHING=0 -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='[\"jpg\",\"png\"]' -s USE_SDL_NET=2 -s USE_SDL_TTF=2 -Wall -Wextra -Wpedantic -Wno-unused-parameter ${CXX_COMMON_WARNINGS}")
 	if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -393,11 +388,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	set(FRAM_IMG "SDL2_image.framework")
 	set(FRAM_NET "SDL2_net.framework")
 	set(FRAM_TTF "SDL2_ttf.framework")
+	set(LICN_DIR "${DATA_DIR}/licenses")
 
 	target_link_libraries(${PROJECT_NAME} "${LIB_SDL}" "${LIB_IMG}" "${LIB_NET}" "${LIB_TTF}" "${LIB_OPENGL}")
 	setCommonTargetProperties(${PROJECT_NAME} "${APP_DIR}/MacOS" "")
 else()
 	set(DATA_DIR "${EXE_DIR}/data")
+	set(LICN_DIR "${EXE_DIR}/licenses")
 
 	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_image SDL2_net SDL2_ttf)
 	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -430,7 +427,7 @@ if(OPENGLES)
 else()
 	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t" "${ASSET_DAT}")
 endif()
-addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf")
+addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf;rsc/data/merriweather.otf")
 
 # server program target
 
@@ -456,8 +453,21 @@ else()
 endif()
 setCommonTargetProperties(${OVEN_NAME} "${EXE_DIR}")
 
+add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${LICN_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/LICENSE.Merriweather.txt" "${LICN_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_LIB}/glm/copying.txt" "${LICN_DIR}/COPYING.glm.txt")
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_NET}/SDL2_net.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libjpeg-9.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}")
+	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_NET}/SDL2_net.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libjpeg-9.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_SDL}/COPYING.txt" "${LICN_DIR}/COPYING.SDL.txt"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_IMG}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_image.txt"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_NET}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_net.txt"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_TTF}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_ttf.txt"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_GLEW}/LICENSE.txt" "${LICN_DIR}/LICENSE.glew.txt"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_IMG}/LICENSE.png.txt" "${LICN_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_TTF}/LICENSE.freetype.txt" "${LICN_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_TTF}/LICENSE.zlib.txt" "${LICN_DIR}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
 						COMMAND "${CMAKE_COMMAND}" -E make_directory "${FRAM_DIR}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_NET}" "${FRAM_DIR}/${FRAM_TTF}"
@@ -468,7 +478,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/Info.plist" "${APP_DIR}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.icns" "${DATA_DIR}")
 else()
-	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
+	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
 endif()
 
 # prettyfiers

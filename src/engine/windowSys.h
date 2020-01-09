@@ -17,12 +17,13 @@
 class FontSet {
 private:
 	static constexpr char fileFont[] = "romanesque.ttf";
+	static constexpr char fileFontAlt[] = "merriweather.otf";
 	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
 	static constexpr int fontTestHeight = 100;
 	static constexpr int logSize = 18;
 	static constexpr float fallbackScale = 0.9f;
 #ifdef OPENGLES
-	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// R and B need to be flipped
+	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// R and B need to be switched
 #else
 	static constexpr SDL_Color textColor = { 255, 193, 37, 255 };
 #endif
@@ -37,7 +38,7 @@ private:
 	vector<string> logLines;
 
 public:
-	FontSet();
+	FontSet(bool regular);
 	~FontSet();
 
 	void clear();
@@ -190,6 +191,7 @@ public:
 	void setGamma(float gamma);
 	void resetSettings();
 	void reloadGeom();
+	void reloadFont(bool regular);
 
 	AudioSys* getAudio();
 	FontSet* getFonts();
@@ -268,4 +270,8 @@ inline int WindowSys::displayID() const {
 
 inline uint32 WindowSys::windowID() const {
 	return SDL_GetWindowID(window);
+}
+
+inline void WindowSys::reloadFont(bool regular) {
+	fonts.reset(new FontSet(sets->fontRegular = regular));
 }

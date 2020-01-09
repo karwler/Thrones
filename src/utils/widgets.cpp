@@ -1,5 +1,88 @@
 #include "engine/world.h"
 
+// SCROLL
+
+ScrollBar::ScrollBar() :
+	listPos(0),
+	motion(0.f),
+	diffSliderMouse(0),
+	draggingSlider(false)
+{}
+
+void ScrollBar::draw(const Rect& frame, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const {
+	Widget::drawRect(barRect(listSize, pos, size, vert), frame, Widget::colorDark, World::scene()->blank());		// bar
+	Widget::drawRect(sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, World::scene()->blank());	// slider
+}
+
+void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
+	if (motion != vec2(0.f)) {
+		moveListPos(motion, listSize, size);
+		throttleMotion(motion.x, dSec);
+		throttleMotion(motion.y, dSec);
+		World::scene()->updateSelect();
+	}
+}
+
+void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Widget* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+	motion = vec2(0.f);	// get rid of scroll motion
+	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
+		World::scene()->capture = wgt;
+		if ((draggingSlider = barRect(listSize, pos, size, vert).contain(mPos))) {
+			if (int sp = sliderPos(listSize, pos, size, vert), ss = sliderSize(listSize, size, vert); outRange(mPos[vert], sp, sp + ss))	// if mouse outside of slider but inside bar
+				setSlider(mPos[vert] - ss / 2, listSize, pos, size, vert);
+			diffSliderMouse = mPos.y - sliderPos(listSize, pos, size, vert);	// get difference between mouse y and slider y
+		}
+	}
+}
+
+void ScrollBar::drag(const ivec2& mPos, const ivec2& mMov, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+	if (draggingSlider)
+		setSlider(mPos.y - diffSliderMouse, listSize, pos, size, vert);
+	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)
+		moveListPos(-mMov, listSize, size);
+	else
+		moveListPos(mMov * swap(0, -1, !vert), listSize, size);
+}
+
+void ScrollBar::undrag(uint8 mBut, bool vert) {
+	if (mBut == SDL_BUTTON_LEFT) {
+		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
+			motion = World::scene()->getMouseMove() * swap(0, -1, !vert);
+		draggingSlider = false;
+		World::scene()->capture = nullptr;
+	}
+}
+
+void ScrollBar::scroll(const ivec2& wMov, const ivec2& listSize, const ivec2& size, bool vert) {
+	moveListPos(swap(wMov.x, -wMov.y, !vert), listSize, size);
+	motion = vec2(0.f);
+}
+
+void ScrollBar::throttleMotion(float& mov, float dSec) {
+	if (mov > 0.f) {
+		if (mov -= throttle * dSec; mov < 0.f)
+			mov = 0.f;
+	} else if (mov += throttle * dSec; mov > 0.f)
+		mov = 0.f;
+}
+
+void ScrollBar::setSlider(int spos, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+	int lim = listLim(listSize, size)[vert];
+	listPos[vert] = std::clamp((spos - pos[vert]) * lim / sliderLim(listSize, size, vert), 0, lim);
+}
+
+Rect ScrollBar::barRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+	int bs = barSize(listSize, size, vert);
+	return vert ? Rect(pos.x + size.x - bs, pos.y, bs, size.y) : Rect(pos.x, pos.y + size.y - bs, size.x, bs);
+}
+
+Rect ScrollBar::sliderRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const {
+	int bs = barSize(listSize, size, vert);
+	int sp = sliderPos(listSize, pos, size, vert);
+	int ss = sliderSize(listSize, size, vert);
+	return vert ? Rect(pos.x + size.x - bs, sp, bs, ss) : Rect(sp, pos.y + size.y - bs, ss, bs);
+}
+
 // QUAD
 
 const float Quad::vertices[] = {
@@ -34,14 +117,15 @@ Quad::~Quad() {
 // WIDGET
 
 const vec4 Widget::colorNormal(0.5f, 0.1f, 0.f, 1.f);
-const vec4 Widget::colorDark(0.298f, 0.f, 0.f, 1.f);
+const vec4 Widget::colorDimmed(0.4f, 0.05f, 0.f, 1.f);
+const vec4 Widget::colorDark(0.3f, 0.f, 0.f, 1.f);
 const vec4 Widget::colorLight(1.f, 0.757f, 0.145f, 1.f);
-const vec4 Widget::colorTooltip(0.298f, 0.f, 0.f, 0.7f);
+const vec4 Widget::colorTooltip(0.3f, 0.f, 0.f, 0.7f);
 
 Widget::Widget(Size relSize, Layout* parent, sizet id) :
+	relSize(relSize),
 	parent(parent),
-	pcID(id),
-	relSize(relSize)
+	pcID(id)
 {}
 
 ivec2 Widget::position() const {
@@ -167,9 +251,9 @@ Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall finishCa
 
 void Slider::draw() const {
 	Rect frm = frame();
-	drawRect(rect(), frm, color * dimFactor, bgTex);					// draw background
-	drawRect(barRect(), frm, colorDark, World::scene()->blank());		// draw bar
-	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// draw slider
+	drawRect(rect(), frm, color * dimFactor, bgTex);					// background
+	drawRect(barRect(), frm, colorDark, World::scene()->blank());		// bar
+	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// slider
 }
 
 void Slider::onHold(const ivec2& mPos, uint8 mBut) {
@@ -226,10 +310,10 @@ int Slider::sliderLim() const {
 
 // LABEL
 
-Label::Label(Size relSize, string text, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+Label::Label(Size relSize, string text, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment halign, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
 	Button(relSize, leftCall, rightCall, tooltip, dim, bgTex, color, parent, id),
 	text(std::move(text)),
-	align(alignment),
+	halign(halign),
 	showBG(showBG)
 {}
 
@@ -264,25 +348,131 @@ void Label::setText(const string& str) {
 	updateTextTex();
 }
 
-ivec2 Label::textPos(const Texture& text, Label::Alignment alignment, ivec2 pos, ivec2 siz, int margin) {
-	switch (alignment) {
+ivec2 Label::textOfs(const ivec2& res, Alignment align, const ivec2& pos, const ivec2& siz, int margin) {
+	switch (align) {
 	case Alignment::left:
 		return ivec2(pos.x + margin, pos.y);
-	case Alignment::center: {
-		return ivec2(pos.x + (siz.x - text.getRes().x) / 2, pos.y); }
+	case Alignment::center:
+		return ivec2(pos.x + (siz.x - res.x) / 2, pos.y);
 	case Alignment::right:
-		return ivec2(pos.x + siz.x - text.getRes().x - margin, pos.y);
+		return ivec2(pos.x + siz.x - res.x - margin, pos.y);
 	}
-	return ivec2(0);
+	return pos;
 }
 
 ivec2 Label::textPos() const {
-	return textPos(textTex, align, position(), size(), textMargin);
+	return textOfs(textTex.getRes(), halign, position(), size(), textMargin);
 }
 
 void Label::updateTextTex() {
 	textTex.close();
 	textTex = World::fonts()->render(text, size().y);
+}
+
+// TEXT BOX
+
+TextBox::TextBox(Size relSize, int lineHeight, string lines, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, uint lineLim, bool alignTop, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Label(relSize, std::move(lines), leftCall, rightCall, tooltip, dim, Alignment::left, showBG, bgTex, color, parent, id),
+	alignTop(alignTop),
+	lineHeight(lineHeight),
+	lineLim(lineLim)
+{
+	cutLines();
+}
+
+void TextBox::draw() const {
+	Rect rbg = rect();
+	Rect frm = frame();
+	if (showBG)
+		drawRect(rbg, frm, color * dimFactor, bgTex);
+	if (textTex.valid())
+		drawRect(textRect(), rbg, dimFactor, textTex.getID());
+	scroll.draw(rect(), textTex.getRes(), position(), size(), true);
+}
+
+void TextBox::tick(float dSec) {
+	scroll.tick(dSec, textTex.getRes(), size());
+}
+
+void TextBox::postInit() {
+	Label::postInit();
+	updateListPos();
+}
+
+void TextBox::onHold(const ivec2& mPos, uint8 mBut) {
+	scroll.hold(mPos, mBut, this, textTex.getRes(), position(), size(), true);
+}
+
+void TextBox::onDrag(const ivec2& mPos, const ivec2& mMov) {
+	scroll.drag(mPos, mMov, textTex.getRes(), position(), size(), true);
+}
+
+void TextBox::onUndrag(uint8 mBut) {
+	scroll.undrag(mBut, true);
+}
+
+void TextBox::onScroll(const ivec2& wMov) {
+	scroll.scroll(wMov, textTex.getRes(), size(), true);
+}
+
+bool TextBox::selectable() const {
+	return true;
+}
+
+ivec2 TextBox::textPos() const {
+	return textOfs(textTex.getRes(), halign, position(), size(), textMargin) - scroll.listPos;
+}
+
+void TextBox::updateTextTex() {
+	textTex.close();
+	textTex = World::fonts()->render(text, lineHeight, uint(size().x - textMargin * 2 - ScrollBar::width));
+}
+
+void TextBox::setText(string&& str) {
+	text = std::move(str);
+	cutLines();
+	updateTextTex();
+	resetListPos();
+}
+
+void TextBox::setText(const string& str) {
+	text = str;
+	cutLines();
+	updateTextTex();
+	resetListPos();
+}
+
+void TextBox::addLine(const string& line) {
+	if (lineCnt == lineLim) {
+		sizet n = text.find('\n');
+		text.erase(0, n < text.length() ? n + 1 : n);
+	} else
+		lineCnt++;
+	if (!text.empty())
+		text += '\n';
+	text += line;
+	updateTextTex();
+	updateListPos();
+}
+
+string TextBox::moveText() {
+	string str = std::move(text);
+	updateTextTex();
+	return str;
+}
+
+void TextBox::updateListPos() {
+	if (!alignTop)
+		scroll.listPos = scroll.listLim(textTex.getRes(), size());
+}
+
+void TextBox::cutLines() {
+	if (lineCnt = uint(std::count(text.begin(), text.end(), '\n')); lineCnt > lineLim)
+		for (sizet i = 0; i < text.length(); i++)
+			if (text[i] == '\n' && --lineCnt <= lineLim) {
+				text.erase(0, i + 1);
+				break;
+			}
 }
 
 // DRAGLET
@@ -313,8 +503,10 @@ void Draglet::draw() const {
 void Draglet::drawTop() const {
 	if (showingTop) {
 		ivec2 siz = size() / 2, pos = mousePos() - siz / 2;
-		if (drawRect(Rect(pos, siz), color * dimFactor, bgTex, -1.f);  textTex.valid())
-			drawRect(Rect(textPos(textTex, align, pos, siz, textMargin / 2), textTex.getRes() / 2), dimFactor, textTex.getID(), -1.f);
+		if (drawRect(Rect(pos, siz), color * dimFactor, bgTex, -1.f);  textTex.valid()) {
+			ivec2 res = textTex.getRes() / 2;
+			drawRect(Rect(textOfs(res, halign, pos, siz, textMargin / 2), res), dimFactor, textTex.getID(), -1.f);
+		}
 	}
 }
 
@@ -388,14 +580,18 @@ void SwitchBox::shiftOption(int mov) {
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, const Texture& tooltip, float dim, uint limit, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, const Texture& tooltip, float dim, uint limit, bool chatMode, Label::Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
 	Label(relSize, std::move(line), leftCall, rightCall, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
 	oldText(text),
 	ecall(retCall),
+	ccall(cancCall),
 	limit(limit),
 	cpos(0),
-	textOfs(0)
-{}
+	textOfs(0),
+	chatMode(chatMode)
+{
+	cutText();
+}
 
 void LabelEdit::drawTop() const {
 	ivec2 ps = position();
@@ -414,46 +610,47 @@ void LabelEdit::onClick(const ivec2&, uint8 mBut) {
 void LabelEdit::onKeypress(const SDL_Keysym& key) {
 	switch (key.scancode) {
 	case SDL_SCANCODE_LEFT:	// move caret left
-		if (key.mod & KMOD_LALT)	// if holding alt skip word
+		if (kmodAlt(key.mod))	// if holding alt skip word
 			setCPos(findWordStart());
-		else if (key.mod & KMOD_CTRL)	// if holding ctrl move to beginning
+		else if (kmodCtrl(key.mod))	// if holding ctrl move to beginning
 			setCPos(0);
-		else if (cpos > 0)	// otherwise go left by one
-			setCPos(cpos - 1);
+		else if (cpos)	// otherwise go left by one
+			setCPos(jumpCharB(cpos));
 		break;
 	case SDL_SCANCODE_RIGHT:	// move caret right
-		if (key.mod & KMOD_LALT)	// if holding alt skip word
+		if (kmodAlt(key.mod))	// if holding alt skip word
 			setCPos(findWordEnd());
-		else if (key.mod & KMOD_CTRL)	// if holding ctrl go to end
+		else if (kmodCtrl(key.mod))	// if holding ctrl go to end
 			setCPos(uint(text.length()));
 		else if (cpos < text.length())	// otherwise go right by one
-			setCPos(cpos + 1);
+			setCPos(jumpCharF(cpos));
 		break;
 	case SDL_SCANCODE_BACKSPACE:	// delete left
-		if (key.mod & KMOD_LALT) {	// if holding alt delete left word
+		if (kmodAlt(key.mod)) {	// if holding alt delete left word
 			uint id = findWordStart();
 			text.erase(id, cpos - id);
 			updateTextTex();
 			setCPos(id);
-		} else if (key.mod & KMOD_CTRL) {	// if holding ctrl delete line to left
+		} else if (kmodCtrl(key.mod)) {	// if holding ctrl delete line to left
 			text.erase(0, cpos);
 			updateTextTex();
 			setCPos(0);
-		} else if (cpos > 0) {	// otherwise delete left character
-			text.erase(cpos - 1, 1);
+		} else if (cpos) {	// otherwise delete left character
+			uint id = jumpCharB(cpos);
+			text.erase(id, cpos - id);
 			updateTextTex();
-			setCPos(cpos - 1);
+			setCPos(id);
 		}
 		break;
 	case SDL_SCANCODE_DELETE:	// delete right character
-		if (key.mod & KMOD_LALT) {	// if holding alt delete right word
+		if (kmodAlt(key.mod)) {	// if holding alt delete right word
 			text.erase(cpos, findWordEnd() - cpos);
 			updateTextTex();
-		} else if (key.mod & KMOD_CTRL) {	// if holding ctrl delete line to right
+		} else if (kmodCtrl(key.mod)) {	// if holding ctrl delete line to right
 			text.erase(cpos, text.length() - cpos);
 			updateTextTex();
 		} else if (cpos < text.length()) {	// otherwise delete right character
-			text.erase(cpos, 1);
+			text.erase(cpos, jumpCharF(cpos) - cpos);
 			updateTextTex();
 		}
 		break;
@@ -464,39 +661,40 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 		setCPos(uint(text.length()));
 		break;
 	case SDL_SCANCODE_V:	// paste text
-		if (key.mod & KMOD_CTRL)
+		if (kmodCtrl(key.mod))
 			if (char* str = SDL_GetClipboardText()) {
 				onText(str);
 				SDL_free(str);
 			}
 		break;
 	case SDL_SCANCODE_C:	// copy text
-		if (key.mod & KMOD_CTRL)
+		if (kmodCtrl(key.mod))
 			SDL_SetClipboardText(text.c_str());
 		break;
 	case SDL_SCANCODE_X:	// cut text
-		if (key.mod & KMOD_CTRL) {
+		if (kmodCtrl(key.mod)) {
 			SDL_SetClipboardText(text.c_str());
 			setText(string());
 		}
 		break;
 	case SDL_SCANCODE_Z:	// set text to old text
-		if (key.mod & KMOD_CTRL)
+		if (kmodCtrl(key.mod))
 			setText(std::move(oldText));
 		break;
-	case SDL_SCANCODE_RETURN:
+	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
 		confirm();
 		World::prun(ecall, this);
 		break;
-	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
+	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
 		cancel();
+		World::prun(ccall, this);
 	}
 }
 
 void LabelEdit::onText(const char* str) {
 	sizet slen = strlen(str);
-	if (sizet availible = limit - text.length(); slen > availible)
-		slen = availible;
+	if (sizet avail = limit - text.length(); slen > avail)
+		slen = cutLength(str, avail);
 	text.insert(cpos, str, slen);
 	updateTextTex();
 	setCPos(cpos + uint(slen));
@@ -504,16 +702,14 @@ void LabelEdit::onText(const char* str) {
 
 void LabelEdit::setText(string&& str) {
 	oldText = std::move(text);
-	if (str.length() > limit)
-		str.erase(limit);
 	text = std::move(str);
+	cutText();
 	onTextReset();
 }
 
 void LabelEdit::setText(const string& str) {
 	oldText = std::move(text);
-	if (text = str; text.length() > limit)
-		text.erase(limit);
+	text = str.length() <= limit ? str : str.substr(0, cutLength(str.c_str(), limit));
 	onTextReset();
 }
 
@@ -521,6 +717,21 @@ void LabelEdit::onTextReset() {
 	updateTextTex();
 	cpos = uint(text.length());
 	textOfs = 0;
+}
+
+sizet LabelEdit::cutLength(const char* str, sizet lim) {
+	sizet i = lim - 1;
+	if (str[i] >= 0)
+		return lim;
+
+	for (; i && str[i-1] < 0; i--);	// cut possible u8 char
+	sizet end = i + u8clen(str[i]);
+	return end <= lim ? end : i;
+}
+
+void LabelEdit::cutText() {
+	if (text.length() > limit)
+		text.erase(cutLength(text.c_str(), limit));
 }
 
 void LabelEdit::setCPos(uint cp) {
@@ -540,28 +751,46 @@ int LabelEdit::caretPos() const {
 }
 
 void LabelEdit::confirm() {
+	if (chatMode)
+		setText("");
+	else {
+		World::scene()->capture = nullptr;
+		SDL_StopTextInput();
+	}
 	textOfs = 0;
-	World::scene()->capture = nullptr;
-	SDL_StopTextInput();
 	World::prun(lcall, this);
 }
 
 void LabelEdit::cancel() {
+	if (!chatMode) {
+		text = oldText;
+		updateTextTex();
+	}
 	textOfs = 0;
-	text = oldText;
-	updateTextTex();
-
 	World::scene()->capture = nullptr;
 	SDL_StopTextInput();
 }
 
+uint LabelEdit::jumpCharB(uint i) {
+	while (--i && (text[i] & 0xC0) == 0x80);
+	return i;
+}
+
+uint LabelEdit::jumpCharF(uint i) {
+	while (++i < text.length() && (text[i] & 0xC0) == 0x80);
+	return i;
+}
+
 uint LabelEdit::findWordStart() {
 	uint i = cpos;
-	if (notSpace(text[i]) && i > 0 && isSpace(text[i-1]))	// skip if first letter of word
+	if (i == text.length())
 		i--;
-	for (; isSpace(text[i]) && i > 0; i--);		// skip first spaces
-	for (; notSpace(text[i]) && i > 0; i--);	// skip word
-	return i == 0 ? i : i + 1;			// correct position if necessary
+	else if (notSpace(text[i]) && i)
+		if (uint n = jumpCharB(i); isSpace(text[n]))	// skip if first letter of word
+			i = n;
+	for (; isSpace(text[i]) && i; i--);		// skip first spaces
+	for (; notSpace(text[i]) && i; i--);	// skip word
+	return i ? i + 1 : i;			// correct position if necessary
 }
 
 uint LabelEdit::findWordEnd() {

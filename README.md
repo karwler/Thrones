@@ -3,7 +3,7 @@ Based on the board game by Chad Anthony Randell.
 See [RULES](doc/rules.html) or [DOCS](doc/docs.html) for details.  
 
 ## Build  
-Used libraries are GLEW, GLM, SDL2, SDL2_image, SDL2_net, SDL2_ttf and by extension FreeType, libjpeg, libpng and zlib. The included font is Romanesque Serif Regular.  
+Used libraries are GLEW, GLM, SDL2, SDL2_image, SDL2_net, SDL2_ttf and by extension FreeType, libjpeg, libpng and zlib. The included fonts are Romanesque Serif Regular and Merriweather Regular.  
 The CMakeLists.txt is written for CMake 3.10.2 with Clang, GCC or MSVC which need to support C++17.  
 
 CMake variables:  
@@ -37,7 +37,6 @@ Next the CMake target "assets_android" needs to be built separately, which will 
 If you're on Windows, make sure that your Git supports symbolic links or check that "android/app/jni/src" contains the files of "src".  
 
 ### Emscripten  
-There's currently no server program compatible with the web application.  
 A makefile with a target for the game client can be created with the CMake file, which requires emsdk to be installed. Additional libraries will be downloaded.  
 Before building the program, the assets for OpenGL ES need to be built, using the method below and the created "data" directory has to be copied to the directory of the makefile for the Emscripten build.  
 

@@ -31,12 +31,19 @@ int ProgState::Text::maxLen(const vector<vector<string>*>& lists, int height) {
 
 // PROGRAM STATE
 
+ProgState::ProgState() :
+	chatBox(nullptr)
+{
+	eventResize();
+}
+
 void ProgState::eventCameraReset() {
 	World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
 }
 
 void ProgState::eventResize() {
-	lineHeight = World::window()->getView().y / 24;		// 30p	(following pixel values are in relation to 720p height)
+	smallHeight = World::window()->getView().y / 36;	// 20p	(values are in relation to 720p height)
+	lineHeight = World::window()->getView().y / 24;		// 30p
 	superHeight = World::window()->getView().y / 18;	// 40p
 	tooltipHeight = World::window()->getView().y / 45;	// 16p
 	lineSpacing = World::window()->getView().y / 144;	// 5p
@@ -45,11 +52,11 @@ void ProgState::eventResize() {
 	tooltipLimit = World::window()->getView().x / 2;
 }
 
-RootLayout* ProgState::createLayout() {
-	return new RootLayout;
+Overlay* ProgState::createOverlay() {
+	return nullptr;
 }
 
-Popup* ProgState::createPopupMessage(string msg, BCall ccal, string ctxt) {
+Popup* ProgState::createPopupMessage(string msg, BCall ccal, string ctxt) const {
 	Text ok(std::move(ctxt), superHeight);
 	Text ms(std::move(msg), superHeight);
 	vector<Widget*> bot = {
@@ -64,7 +71,7 @@ Popup* ProgState::createPopupMessage(string msg, BCall ccal, string ctxt) {
 	return new Popup(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), ccal, ccal, true, lineSpacing);
 }
 
-Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
+Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) const {
 	Text ms(std::move(msg), superHeight);
 	vector<Widget*> bot = {
 		new Label(1.f, "Yes", kcal, nullptr, Texture(), 1.f, Label::Alignment::center),
@@ -77,8 +84,8 @@ Popup* ProgState::createPopupChoice(string msg, BCall kcal, BCall ccal) {
 	return new Popup(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), kcal, ccal, true, lineSpacing);
 }
 
-pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal, uint limit) {
-	LabelEdit* ledit = new LabelEdit(1.f, string(), kcal, &Program::eventClosePopup, nullptr, Texture(), 1.f, limit);
+pair<Popup*, Widget*> ProgState::createPopupInput(string msg, BCall kcal, uint limit) const {
+	LabelEdit* ledit = new LabelEdit(1.f, string(), kcal, &Program::eventClosePopup, nullptr, nullptr, Texture(), 1.f, limit);
 	vector<Widget*> bot = {
 		new Label(1.f, "Ok", kcal, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Label(1.f, "Cancel", &Program::eventClosePopup, nullptr, Texture(), 1.f, Label::Alignment::center)
@@ -105,11 +112,11 @@ Popup* ProgState::createPopupConfig(const Com::Config& cfg) {
 	return new Popup(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup, true, lineSpacing);
 }
 
-Texture ProgState::makeTooltip(const string& text) {
+Texture ProgState::makeTooltip(const string& text) const {
 	return World::fonts()->render(text, tooltipHeight, uint(tooltipLimit));
 }
 
-Texture ProgState::makeTooltipL(const vector<string>& lines) {
+Texture ProgState::makeTooltipL(const vector<string>& lines) const {
 	int width = 0;
 	for (const string& str : lines)
 		if (int len = Text::strLen(str, tooltipHeight); len > width) {
@@ -124,6 +131,29 @@ Texture ProgState::makeTooltipL(const vector<string>& lines) {
 	for (sizet i = 1; i < lines.size(); i++)
 		text += linend + lines[i];
 	return World::fonts()->render(text, tooltipHeight, uint(width));
+}
+
+vector<Widget*> ProgState::createChat(bool overlay) {
+	return {
+		chatBox = new TextBox(1.f, smallHeight, "", nullptr, nullptr, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
+		new LabelEdit(smallHeight, "", nullptr, nullptr, &Program::eventSendMessage, overlay ? &Program::eventCloseOverlay : &Program::eventHideChat, Texture(), 1.f, UINT16_MAX - Com::dataHeadSize, true)
+	};
+}
+
+void ProgState::toggleChatEmbedShow() {
+	if (chatBox->getParent()->relSize.usePix) {
+		chatBox->getParent()->relSize = chatEmbedSize;
+		chatBox->getParent()->getParent()->setSpacing(chatBox->getParent()->relSize.usePix ? 0 : lineSpacing);
+		static_cast<LabelEdit*>(chatBox->getParent()->getWidget(chatBox->getID() + 1))->onClick(ivec2(0), SDL_BUTTON_LEFT);
+	} else {
+		static_cast<LabelEdit*>(chatBox->getParent()->getWidget(chatBox->getID() + 1))->cancel();
+		hideChatEmbed();
+	}
+}
+
+void ProgState::hideChatEmbed() {
+	chatBox->getParent()->relSize = 0;
+	chatBox->getParent()->getParent()->setSpacing(chatBox->getParent()->relSize.usePix ? 0 : lineSpacing);
 }
 
 vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active) {
@@ -187,12 +217,12 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	vector<vector<Widget*>> lines0 = { {
 		new Label(descLength, popBack(txs)),
 		new Label(width.length, std::move(width.text)),
-		wio.width = new LabelEdit(1.f, toStr(cfg.homeSize.x), update, nullptr, nullptr, makeTooltip(popBack(tips))),
+		wio.width = new LabelEdit(1.f, toStr(cfg.homeSize.x), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips))),
 		new Label(height.length, std::move(height.text)),
-		wio.height = new LabelEdit(1.f, toStr(cfg.homeSize.y), update, nullptr, nullptr, makeTooltip(popBack(tips)))
+		wio.height = new LabelEdit(1.f, toStr(cfg.homeSize.y), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.survivalLE = new LabelEdit(amtWidth, toStr(cfg.survivalPass) + '%', update, nullptr, nullptr, makeTooltip(scTip))
+		wio.survivalLE = new LabelEdit(amtWidth, toStr(cfg.survivalPass) + '%', update, nullptr, nullptr, nullptr, makeTooltip(scTip))
 	}, {
 		new Label(descLength, popBack(txs)),
 		wio.survivalMode = new SwitchBox(active ? Size(smWidth) : Size(1.f), active ? vector<string>(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end()) : vector<string>({ Com::Config::survivalNames[uint8(cfg.survivalMode)] }), Com::Config::survivalNames[uint8(cfg.survivalMode)], update, makeTooltipL(survivalTip), 1.f, active ? Label::Alignment::center : Label::Alignment::left)
@@ -201,10 +231,10 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		wio.favorLimit = new CheckBox(lineHeight, cfg.favorLimit, update, update, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.favorMax = new LabelEdit(1.f, toStr(cfg.favorMax), update, nullptr, nullptr, makeTooltip(popBack(tips)))
+		wio.favorMax = new LabelEdit(1.f, toStr(cfg.favorMax), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.dragonDist = new LabelEdit(1.f, toStr(cfg.dragonDist), update, nullptr, nullptr, makeTooltip(popBack(tips)))
+		wio.dragonDist = new LabelEdit(1.f, toStr(cfg.dragonDist), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		wio.dragonSingle = new CheckBox(lineHeight, cfg.dragonSingle, update, update, makeTooltip(popBack(tips)))
@@ -222,7 +252,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines1[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
-			wio.tiles[i] = new LabelEdit(amtWidth, toStr(cfg.tileAmounts[i]), update, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(tileTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
+			wio.tiles[i] = new LabelEdit(amtWidth, toStr(cfg.tileAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(tileTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
 		};
 	lines1.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
@@ -238,7 +268,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	for (uint8 i = 0; i < Com::tileMax - 1; i++)
 		lines2[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
-			wio.middles[i] = new LabelEdit(amtWidth, toStr(cfg.middleAmounts[i]), update, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(middleTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
+			wio.middles[i] = new LabelEdit(amtWidth, toStr(cfg.middleAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(middleTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
 	};
 	lines2.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
@@ -254,7 +284,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	for (uint8 i = 0; i < Com::pieceMax; i++)
 		lines3[i] = {
 			new Label(descLength, firstUpper(Com::pieceNames[i])),
-			wio.pieces[i] = new LabelEdit(amtWidth, toStr(cfg.pieceAmounts[i]), update, nullptr, nullptr, makeTooltip(pieceTips[i]))
+			wio.pieces[i] = new LabelEdit(amtWidth, toStr(cfg.pieceAmounts[i]), update, nullptr, nullptr, nullptr, makeTooltip(pieceTips[i]))
 		};
 	lines3.back() = {
 		new Label(descLength, "Total"),
@@ -268,13 +298,13 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 
 	vector<vector<Widget*>> lines4 = { {
 		new Label(descLength, popBack(txs)),
-		wio.winFortress = new LabelEdit(amtWidth, toStr(cfg.winFortress), update, nullptr, nullptr, makeTooltip(fortTip))
+		wio.winFortress = new LabelEdit(amtWidth, toStr(cfg.winFortress), update, nullptr, nullptr, nullptr, makeTooltip(fortTip))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.winThrone = new LabelEdit(amtWidth, toStr(cfg.winThrone), update, nullptr, nullptr, makeTooltip(throneTip))
+		wio.winThrone = new LabelEdit(amtWidth, toStr(cfg.winThrone), update, nullptr, nullptr, nullptr, makeTooltip(throneTip))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.capturers = new LabelEdit(1.f, cfg.capturersString(), update, nullptr, nullptr, makeTooltip(popBack(tips)))
+		wio.capturers = new LabelEdit(1.f, cfg.capturersString(), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	} };
 	if (active) {
 		lines4[0].insert(lines4[0].begin() + 1, new Slider(1.f, cfg.winFortress, 0, cfg.tileAmounts[uint8(Com::Tile::fortress)], update, &Program::eventSLUpdateLE, makeTooltip(fortTip)));
@@ -342,7 +372,7 @@ RootLayout* ProgMenu::createLayout() {
 	// port input and connect button
 	vector<Widget*> prt = {
 		new Label(srvt.length, "Port:"),
-		new LabelEdit(1.f, toStr(World::sets()->port), &Program::eventUpdatePort, &Program::eventResetPort, &Program::eventConnectServer, Texture())
+		new LabelEdit(1.f, toStr(World::sets()->port), &Program::eventUpdatePort, &Program::eventResetPort, &Program::eventConnectServer, nullptr, Texture())
 	};
 
 	// net buttons
@@ -382,7 +412,7 @@ RootLayout* ProgMenu::createLayout() {
 	};
 	vector<Widget*> cont = {
 		new Layout(1.f, std::move(menu), false, 0),
-		new Label(lineHeight, commonVersion, nullptr, nullptr, Texture(), 1.f, Label::Alignment::right, false)
+		new Label(lineHeight, commonVersion, nullptr, nullptr, Texture(), 1.f, Label::Alignment::right, false),
 	};
 	return new RootLayout(1.f, std::move(cont), true, 0);
 }
@@ -521,7 +551,12 @@ RootLayout* ProgRoom::createLayout() {
 		new Layout(topHeight, std::move(topb), true, lineSpacing),
 		new ScrollArea(1.f, std::move(menu), true, lineSpacing)
 	};
-	RootLayout* root = new RootLayout(1.f, std::move(cont), true, superSpacing, RootLayout::uniformBgColor);
+	vector<Widget*> rwgt = {
+		new Layout(1.f, std::move(cont), true, superSpacing)
+	};
+	if (!(World::program()->info & Program::INF_UNIQ))
+		rwgt.push_back(new Layout(chatEmbedSize, createChat(false)));
+	RootLayout* root = new RootLayout(1.f, std::move(rwgt), false, lineSpacing, RootLayout::uniformBgColor);
 	updateStartButton();
 	return root;
 }
@@ -660,7 +695,9 @@ bool ProgSetup::setStage(ProgSetup::Stage stg) {
 		counters.clear();
 		return true;
 	}
-	World::scene()->resetLayouts();
+	string txt = chatBox ? chatBox->moveText() : "";
+	if (World::scene()->resetLayouts(); chatBox)
+		chatBox->setText(std::move(txt));
 
 	selected = 0;	// like setSelected but without crashing
 	static_cast<Draglet*>(icons->getWidget(selected + 1))->selected = true;
@@ -721,7 +758,8 @@ RootLayout* ProgSetup::createLayout() {
 		"Back",
 		stage < Stage::pieces || !World::netcp() ? "Next" : "Finish"
 	};
-	std::reverse(sidt.begin(), sidt.end());
+	if (std::reverse(sidt.begin(), sidt.end()); World::netcp())
+		sidt.insert(sidt.begin(), "Chat");
 	int sideLength = Text::maxLen(sidt.begin(), sidt.end(), lineHeight);
 	bool cnext = stage < Stage::pieces || World::netcp(), cback = stage > Stage::tiles;
 
@@ -734,6 +772,8 @@ RootLayout* ProgSetup::createLayout() {
 		new Label(lineHeight, popBack(sidt), cback ? &Program::eventSetupBack : nullptr, nullptr, Texture(), cback ? 1.f : defaultDim),
 		new Label(lineHeight, popBack(sidt), cnext ? &Program::eventSetupNext : nullptr, nullptr, Texture(), cnext ? 1.f : defaultDim),
 	};
+	if (World::netcp())
+		wgts.insert(wgts.begin() + 4, new Label(lineHeight, popBack(sidt), &Program::eventToggleChat));
 
 	// center piece
 	vector<Widget*> midl = {
@@ -750,6 +790,10 @@ RootLayout* ProgSetup::createLayout() {
 		new Widget(sideLength)
 	};
 	return new RootLayout(1.f, std::move(cont), false, 0);
+}
+
+Overlay* ProgSetup::createOverlay() {
+	return World::netcp() ? new Overlay(pair(0.7f, 0.f), pair(0.3f, 1.f), createChat(), &Program::eventChatOpen, &Program::eventChatClose) : nullptr;
 }
 
 Layout* ProgSetup::makeTicons() {
@@ -899,17 +943,19 @@ RootLayout* ProgMatch::createLayout() {
 	// sidebar
 	bool fon = World::game()->getConfig().favorMax && World::game()->getConfig().pieceAmounts[uint8(Com::Piece::throne)];
 	vector<string> sidt = {
-		"Finish",
+		"Exit",
 		"Config",
-		"Exit"
+		"Chat",
+		"Finish"
 	};
-	if (fon)
+	if (std::reverse(sidt.begin(), sidt.end()); fon)
 		sidt.insert(sidt.begin(), { "FF: /" + string(numDigits(World::game()->getConfig().favorMax) * 2, '0'), "FF now" });
 	int sideLength = Text::maxLen(sidt.begin(), sidt.end(), lineHeight);
 
 	vector<Widget*> left = {
 		new Label(lineHeight, popBack(sidt), &Program::eventAbortGame),
 		new Label(lineHeight, popBack(sidt), &Program::eventShowConfig),
+		new Label(lineHeight, popBack(sidt), &Program::eventToggleChat),
 		turnIcon = new Label(lineHeight, popBack(sidt))
 	};
 	if (fon) {
@@ -945,6 +991,10 @@ RootLayout* ProgMatch::createLayout() {
 	updateFavorIcon(World::game()->getMyTurn(), World::game()->getFavorCount(), World::game()->getFavorTotal());
 	updateFnowIcon(World::game()->getMyTurn(), World::game()->getFavorCount());
 	return root;
+}
+
+Overlay* ProgMatch::createOverlay() {
+	return new Overlay(pair(0.7f, 0.f), pair(0.3f, 1.f), createChat(), &Program::eventChatOpen, &Program::eventChatClose);
 }
 
 // PROG SETTINGS
@@ -1005,7 +1055,9 @@ RootLayout* ProgSettings::createLayout() {
 		"Gamma",
 		"Volume",
 		"Scale tiles",
-		"Scale pieces"
+		"Scale pieces",
+		"Chat line limit",
+		"Regular font"
 	};
 	vector<string> tips = {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
@@ -1024,6 +1076,8 @@ RootLayout* ProgSettings::createLayout() {
 		"Audio volume",
 		"Scale tile amounts when resizing board",
 		"Scale piece amounts when resizing board",
+		"Line break limit of a chat box",
+		"Use the standard Romanesque or Merriweather to support more characters",
 		"Apply \"Display\", \"Screen\", \"Size\" and \"Mode\""
 	};
 	vector<string> vsyncTip = { "Immediate: off", "Synchronized: on", "Adaptive: on and smooth (works on fewer computers)" };
@@ -1036,7 +1090,7 @@ RootLayout* ProgSettings::createLayout() {
 	vector<Widget*> lx[] = { {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		new Label(descLength, popBack(txs)),
-		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventDummy, makeTooltip(popBack(tips)))
+		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventDummy, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
@@ -1062,7 +1116,7 @@ RootLayout* ProgSettings::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, 15, nullptr, &Program::eventSetShadowResSL, makeTooltip(tips.back())),
-		new LabelEdit(slleLength, toStr(World::sets()->shadowRes), &Program::eventSetShadowResLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+		new LabelEdit(slleLength, toStr(World::sets()->shadowRes), &Program::eventSetShadowResLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new CheckBox(lineHeight, World::sets()->softShadows, &Program::eventSetSoftShadows, &Program::eventSetSoftShadows, makeTooltip(popBack(tips)))
@@ -1070,7 +1124,7 @@ RootLayout* ProgSettings::createLayout() {
 #endif
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, World::sets()->texScale, 1, 100, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, makeTooltip(tips.back())),
-		new LabelEdit(slleLength, toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+		new LabelEdit(slleLength, toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltipL(vsyncTip)),
@@ -1079,11 +1133,11 @@ RootLayout* ProgSettings::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), &Program::eventSaveSettings, &Program::eventSetGammaSL, makeTooltip(tips.back())),
-		new LabelEdit(slleLength, toStr(World::sets()->gamma), &Program::eventSetGammaLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+		new LabelEdit(slleLength, toStr(World::sets()->gamma), &Program::eventSetGammaLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, World::audio() ? vector<Widget*>{
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, World::sets()->avolume, 0, SDL_MIX_MAXVOLUME, &Program::eventSaveSettings, &Program::eventSetVolumeSL, makeTooltip(tips.back())),
-		new LabelEdit(slleLength, toStr(World::sets()->avolume), &Program::eventSetVolumeLE, nullptr, nullptr, makeTooltip(popBack(tips)))
+		new LabelEdit(slleLength, toStr(World::sets()->avolume), &Program::eventSetVolumeLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	} : vector<Widget*>{
 		new Label(descLength, popBack(txs)),
 		new Label(1.f, "missing audio device")
@@ -1093,6 +1147,13 @@ RootLayout* ProgSettings::createLayout() {
 	}, {
 		new Label(descLength, popBack(txs)),
 		new CheckBox(lineHeight, World::sets()->scalePieces, &Program::eventSetScalePieces, &Program::eventSetScalePieces, makeTooltip(popBack(tips)))
+	}, {
+		new Label(descLength, popBack(txs)),
+		new Slider(1.f, World::sets()->chatLines, 0, Settings::chatLinesMax, &Program::eventSetChatLineLimitSL, &Program::eventSLUpdateLE, makeTooltip(tips.back())),
+		new LabelEdit(slleLength, toStr(World::sets()->chatLines), &Program::eventSetChatLineLimitLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
+	}, {
+		new Label(descLength, popBack(txs)),
+		new CheckBox(lineHeight, World::sets()->fontRegular, &Program::eventSetFontRegular, &Program::eventSetFontRegular, makeTooltip(popBack(tips)))
 	}, };
 #if defined(__ANDROID__) || defined(EMSCRIPTEN)
 	vector<Widget*> lns(lnc);

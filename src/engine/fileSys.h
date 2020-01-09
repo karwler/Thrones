@@ -9,6 +9,7 @@ struct Settings {
 	static constexpr char loopback[] = "127.0.0.1";
 	static constexpr uint16 shadowResMax = 1 << 15;
 	static constexpr float gammaMax = 2.f;
+	static constexpr uint16 chatLinesMax = 8191;
 
 	enum class Screen : uint8 {
 		window,
@@ -38,6 +39,8 @@ struct Settings {
 	ivec2 size;
 	SDL_DisplayMode mode;
 	bool scaleTiles, scalePieces;
+	uint16 chatLines;
+	bool fontRegular;
 	string address;
 	uint16 port;
 
@@ -76,9 +79,11 @@ private:
 	static constexpr char iniKeywordShadowRes[] = "shadow_resolution";
 	static constexpr char iniKeywordSoftShadows[] = "soft_shadows";
 	static constexpr char iniKeywordGamma[] = "gamma";
+	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
 	static constexpr char iniKeywordScalePieces[] = "scale_pieces";
-	static constexpr char iniKeywordAVolume[] = "volume";
+	static constexpr char iniKeywordChatLines[] = "chat_lines";
+	static constexpr char iniKeywordFontRegular[] = "font_regular";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 

@@ -236,6 +236,8 @@ void Scene::draw() {
 	glUseProgram(*World::gui());
 	glBindVertexArray(World::gui()->wrect.getVao());
 	layout->draw();
+	if (overlay && overlay->getOn())
+		overlay->draw();
 	if (popup)
 		popup->draw();
 	if (Widget* wgt = dynamic_cast<Widget*>(capture))
@@ -260,6 +262,8 @@ void Scene::tick(float dSec) {
 	layout->tick(dSec);
 	if (popup)
 		popup->tick(dSec);
+	if (overlay)
+		overlay->tick(dSec);
 
 	for (sizet i = 0; i < animations.size();) {
 		if (animations[i].tick(dSec))
@@ -273,8 +277,11 @@ void Scene::onResize() {
 	World::state()->eventResize();
 	camera.updateProjection();
 	camera.updateView();
-	if (layout->onResize(); popup)
+	layout->onResize();
+	if (popup)
 		popup->onResize();
+	if (overlay)
+		overlay->onResize();
 }
 
 void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
@@ -300,7 +307,10 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 		case SDL_SCANCODE_C:
 			World::state()->eventCameraReset();
 			break;
-		case SDL_SCANCODE_RETURN:
+		case SDL_SCANCODE_TAB:
+			World::program()->eventToggleChat();
+			break;
+		case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
 			if (popup)
 				World::prun(popup->kcall, nullptr);
 			else
@@ -393,7 +403,8 @@ void Scene::onMouseUp(const SDL_MouseButtonEvent& but, bool mouse) {
 }
 
 void Scene::onMouseWheel(const SDL_MouseWheelEvent& whe) {
-	if (mouseLast = true; ScrollArea* box = getSelectedScrollArea())
+	mouseLast = true;
+	if (Widget* box = getSelectedScrollArea(); box = box ? box : dynamic_cast<TextBox*>(select))
 		box->onScroll(ivec2(whe.x, whe.y) * scrollFactorWheel);
 	else if (whe.y)
 		World::state()->eventWheel(whe.y);
@@ -456,7 +467,10 @@ void Scene::resetLayouts() {
 
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
+	overlay.reset(World::state()->createOverlay());
 	layout->postInit();
+	if (overlay)
+		overlay->postInit();
 	simulateMouseMove();
 }
 
@@ -504,7 +518,7 @@ Interactable* Scene::getSelected(const ivec2& mPos) {
 	if (outRange(mPos, ivec2(0), World::window()->getView() - ivec2(1)))
 		return nullptr;
 
-	for (Layout* box = !popup ? layout.get() : popup.get();;) {
+	for (Layout* box = popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))

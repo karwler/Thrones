@@ -76,7 +76,7 @@ void Netcp::cprocWait() {
 	case Code::full:
 		throw NetError("Server full");
 	case Code::version:
-		throw NetError("Server expected version " + readVersion(data));
+		throw NetError("Server expected version " + readText(data));
 	case Code::rlist:
 		World::program()->info &= ~Program::INF_UNIQ;
 		World::program()->eventOpenLobby(data + dataHeadSize);
@@ -133,6 +133,9 @@ void Netcp::cprocLobby() {
 	case Code::start:
 		World::game()->recvStart(data + dataHeadSize);
 		break;
+	case Code::message:
+		World::program()->eventRecvMessage(data);
+		break;
 	default:
 		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in lobby" << std::endl;
 	}
@@ -172,6 +175,9 @@ void Netcp::cprocGame() {
 		break;
 	case Code::record:
 		World::game()->recvRecord(data + dataHeadSize);
+		break;
+	case Code::message:
+		World::program()->eventRecvMessage(data);
 		break;
 	default:
 		std::cerr << "invalid net code '" << uint(data[0]) << "' of size '" << SDLNet_Read16(data + 1) << "' while in game" << std::endl;

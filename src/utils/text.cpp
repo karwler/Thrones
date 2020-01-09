@@ -72,6 +72,18 @@ int strnatcmp(const char* a, const char* b) {
 	}
 }
 
+uint8 u8clen(char c) {
+	if (!(c & 0x80))
+		return 1;
+	if ((c & 0xE0) == 0xC0)
+		return 2;
+	if ((c & 0xF0) == 0xE0)
+		return 3;
+	if ((c & 0xF8) == 0xF0)
+		return 4;
+	return 0;
+}
+
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);

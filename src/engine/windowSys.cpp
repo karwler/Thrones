@@ -5,8 +5,8 @@
 
 // FONT SET
 
-FontSet::FontSet() :
-	fontData(readFile<vector<uint8>>(FileSys::dataPath(fileFont)))
+FontSet::FontSet(bool regular) :
+	fontData(readFile<vector<uint8>>(FileSys::dataPath(regular ? fileFont : fileFontAlt)))
 {
 	if (!(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight)))
 		throw std::runtime_error(TTF_GetError());
@@ -248,7 +248,7 @@ void WindowSys::init() {
 
 	FileSys::init();
 	sets.reset(FileSys::loadSettings());
-	fonts.reset(new FontSet);
+	fonts.reset(new FontSet(sets->fontRegular));
 	createWindow();
 	try {
 		audio.reset(new AudioSys);

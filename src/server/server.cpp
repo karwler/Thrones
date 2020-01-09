@@ -310,7 +310,7 @@ void sendData(TCPsocket socket, const uint8* data, uint len, bool webs) {
 		throw NetError(SDLNet_GetError());
 }
 
-string readVersion(uint8* data) {
+string readText(uint8* data) {
 	string ver;
 	ver.resize(SDLNet_Read16(data + 1) - dataHeadSize);
 	std::copy_n(data + dataHeadSize, ver.length(), ver.data());
@@ -418,7 +418,7 @@ Buffer::Init Buffer::recvInit(TCPsocket socket, bool& webs) {
 		if (!dat)
 			return Init::wait;
 
-		string ver = readVersion(dat);
+		string ver = readText(dat);
 		decltype(compatibleVersions)::const_iterator it = std::find(compatibleVersions.begin(), compatibleVersions.end(), ver);
 		if (clear(); it == compatibleVersions.end()) {
 			std::cout << "failed to validate player of version " << ver << std::endl;

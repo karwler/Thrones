@@ -113,6 +113,7 @@ constexpr char commonVersion[] = "0.4.2";
 string filename(const string& path);
 string readWordM(const char*& pos);
 int strnatcmp(const char* a, const char* b);	// natural string compare
+uint8 u8clen(char c);
 
 inline string readWord(const char* pos) {
 	return readWordM(pos);

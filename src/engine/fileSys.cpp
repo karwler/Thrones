@@ -38,6 +38,8 @@ Settings::Settings() :
 	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
 	scaleTiles(true),
 	scalePieces(false),
+	chatLines(511),
+	fontRegular(true),
 	address(loopback),
 	port(Com::defaultPort)
 {}
@@ -116,7 +118,7 @@ Settings* FileSys::loadSettings() {
 #endif
 #ifndef OPENGLES
 		if (il.first == iniKeywordMsamples)
-			sets->msamples = uint8(sstoul(il.second));
+			sets->msamples = uint8(std::clamp(sstoul(il.second), 0ul, 8ul));
 		else if (il.first == iniKeywordShadowRes)
 			sets->shadowRes = uint16(std::clamp(sstoul(il.second), 0ul, ulong(Settings::shadowResMax)));
 		else if (il.first == iniKeywordSoftShadows)
@@ -135,6 +137,10 @@ Settings* FileSys::loadSettings() {
 			sets->scaleTiles = stob(il.second);
 		else if (il.first == iniKeywordScalePieces)
 			sets->scalePieces = stob(il.second);
+		else if (il.first == iniKeywordChatLines)
+			sets->chatLines = uint16(std::clamp(stoul(il.second), 0ul, ulong(Settings::chatLinesMax)));
+		else if (il.first == iniKeywordFontRegular)
+			sets->fontRegular = stob(il.second);
 		else if (il.first == iniKeywordAddress)
 			sets->address = il.second;
 		else if (il.first == iniKeywordPort)
@@ -167,6 +173,8 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordAVolume, toStr(sets->avolume));
 	text += makeIniLine(iniKeywordScaleTiles, btos(sets->scaleTiles));
 	text += makeIniLine(iniKeywordScalePieces, btos(sets->scalePieces));
+	text += makeIniLine(iniKeywordChatLines, toStr(sets->chatLines));
+	text += makeIniLine(iniKeywordFontRegular, btos(sets->fontRegular));
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, toStr(sets->port));
 	return writeFile(configPath(fileSettings), text);

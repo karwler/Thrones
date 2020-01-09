@@ -61,6 +61,8 @@ struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
 	constexpr Rect(int x, int y, int w, int h);
+	constexpr Rect(int x, int y, const ivec2& size);
+	constexpr Rect(const ivec2& pos, int w, int h);
 	constexpr Rect(const ivec2& pos, const ivec2& size);
 
 	ivec2& pos();
@@ -79,6 +81,14 @@ inline constexpr Rect::Rect(int n) :
 
 inline constexpr Rect::Rect(int x, int y, int w, int h) :
 	SDL_Rect({ x, y, w, h })
+{}
+
+inline constexpr Rect::Rect(int x, int y, const ivec2& size) :
+	SDL_Rect({ x, y, size.x, size.y })
+{}
+
+inline constexpr Rect::Rect(const ivec2& pos, int w, int h) :
+	SDL_Rect({ pos.x, pos.y, w, h })
 {}
 
 inline constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :

@@ -64,10 +64,7 @@
 	<h3>Switchbox</h3>
 	<p>Can by cycled forwards with the "&gt;" button or by left clicking the text field and cycling backwards works by pressing the "&lt;" button or right clicking the text field.</p>
 	<h3>Text edit</h3>
-	<p>
-		Currently doesn't fully support editing multibyte characters.<br>
-		Possible editing actions are:
-	</p>
+	<p>Possible editing actions are:</p>
 	<table class="listing">
 		<tr>
 			<td>Left</td>
@@ -142,11 +139,11 @@
 			<td>set text to the original text</td>
 		</tr>
 		<tr>
-			<td>Return</td>
+			<td>Return or Enter</td>
 			<td>confirm new text and stop editing</td>
 		</tr>
 		<tr>
-			<td>Escape or Back</td>
+			<td>Escape or Tab or Back</td>
 			<td>set text to the original text and stop editing</td>
 		</tr>
 	</table>
@@ -251,6 +248,10 @@
 	<p>When enabled, the amounts of home and middle tiles will be adjusted accordingly when changing the homeland size. "New_amount_of_each_tile = old_amount * new_area / old_area", the area values referring to either the homeland area for homeland tiles or the width of the board for middle row tiles.</p>
 	<h3>Scale pieces</h3>
 	<p>When enabled, the amounts of a player's pieces will be adjusted accordingly when changing the homeland size. "New_amount_of_each_piece = old_amount * new_area / old_area" floored, the area values referring to the homeland area.</p>
+	<h3>Chat line limit</h3>
+	<p>Maximum number of line breaks in a chat widget.</p>
+	<h3>Regular font</h3>
+	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
 
 	<h2>2.2 Configurations</h2>
 	<p>
@@ -392,6 +393,10 @@
 			<td>Load a setup.</td>
 		</tr>
 		<tr>
+			<td>Chat</td>
+			<td>Toggle the chat overlay.</td>
+		</tr>
+		<tr>
 			<td>Delete</td>
 			<td>When selected, the left mouse button will remove tiles/pieces instead of placing them.</td>
 		</tr>
@@ -415,7 +420,8 @@
 		Firing pieces can fire by dragging them with the right mouse button. A warhorse can only attack when being dragged with the right mouse button.<br>
 		Holding the left Alt key or the X1 mouse button on the first action of a turn initializes a Fate's Favor for the piece that will be or is currently being dragged. When holding down left Shift or X2 instead, the Fate's Favor will be used on the current action.<br>
 		A turn ends by pressing the Space bar or middle mouse button or when the limit of actions has been reached.<br>
-		The camera can be rotated by holding down the left Ctrl key, zoomed with the mouse wheel and reset by pressing the C key.
+		The camera can be rotated by holding down the left Ctrl key, zoomed with the mouse wheel and reset by pressing the C key.<br>
+		The chat overlay can be toggled with the Tab key.
 	</p>
 	<h3>Buttons</h3>
 	<table class="listing">
@@ -426,6 +432,10 @@
 		<tr>
 			<td>Config</td>
 			<td>View the current game configuration.</td>
+		</tr>
+		<tr>
+			<td>Chat</td>
+			<td>Toggle the chat overlay.</td>
 		</tr>
 		<tr>
 			<td>FF: N/L</td>

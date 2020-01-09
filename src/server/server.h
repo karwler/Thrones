@@ -94,6 +94,7 @@ enum class Code : uint8 {
 	kill,		// piece die (piece info)
 	breach,		// fortress state change (breached or not info)
 	record,		// turn record data (piece + has attacked or switched info)
+	message,	// text
 	wsconn = 'G'	// first letter of websocket handshake
 };
 
@@ -183,7 +184,7 @@ void sendWaitClose(TCPsocket socket);
 void sendRejection(TCPsocket server);
 void sendVersion(TCPsocket socket, bool webs);
 void sendData(TCPsocket socket, const uint8* data, uint len, bool webs);
-string readVersion(uint8* data);
+string readText(uint8* data);
 string readName(const uint8* data);
 
 inline uint64 read64(const void* data) {

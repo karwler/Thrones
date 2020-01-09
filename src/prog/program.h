@@ -2,7 +2,6 @@
 
 #include "game.h"
 #include "progs.h"
-#include "engine/fileSys.h"
 
 // handles the frontend
 class Program {
@@ -61,6 +60,12 @@ public:
 	void eventKickPlayer(Button* but = nullptr);
 	void eventPlayerHello(bool onJoin);
 	void eventExitRoom(Button* but = nullptr);
+	void eventSendMessage(Button* but);
+	void eventRecvMessage(uint8* data);
+	void eventChatOpen(Button* but = nullptr);
+	void eventChatClose(Button* but = nullptr);
+	void eventToggleChat(Button* but = nullptr);
+	void eventHideChat(Button* but = nullptr);
 
 	// game setup
 	void eventOpenSetup();
@@ -119,12 +124,16 @@ public:
 	void eventSetVolumeLE(Button* but);
 	void eventSetScaleTiles(Button* but);
 	void eventSetScalePieces(Button* but);
+	void eventSetChatLineLimitSL(Button* but);
+	void eventSetChatLineLimitLE(Button* but);
+	void eventSetFontRegular(Button* but);
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
 	void eventOpenInfo(Button* but = nullptr);
 
 	// other
 	void eventClosePopup(Button* but = nullptr);
+	void eventCloseOverlay(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
 	void eventSBNext(Button* but);
 	void eventSBPrev(Button* but);

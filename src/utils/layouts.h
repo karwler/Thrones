@@ -7,8 +7,8 @@ class Layout : public Widget {
 protected:
 	vector<Widget*> widgets;
 	vector<ivec2> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
-	const int spacing;				// space between widgets
-	const bool vertical;				// how to arrange widgets
+	int spacing;		// space between widgets
+	bool vertical;		// how to arrange widgets
 
 public:
 	Layout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
@@ -24,6 +24,7 @@ public:
 	void setWidgets(vector<Widget*>&& wgts);
 	void insertWidget(sizet id, Widget* wgt);
 	void deleteWidget(sizet id);
+	void setSpacing(int space);
 	bool getVertical() const;
 	virtual ivec2 wgtPosition(sizet id) const;
 	virtual ivec2 wgtSize(sizet id) const;
@@ -68,7 +69,7 @@ public:
 class Popup : public RootLayout {
 public:
 	BCall kcall, ccall;	// gets called on enter/escape press
-private:
+protected:
 	Size sizeY;			// use Widget's relSize as sizeX
 
 	static constexpr int margin = 5;
@@ -83,17 +84,31 @@ public:
 	virtual ivec2 size() const override;
 };
 
+// popup that can be enabled or disabled
+class Overlay : public Popup {
+private:
+	pair<Size, Size> relPos;
+	bool on;
+
+public:
+	Overlay(const pair<Size, Size>& relPos = pair(0.f, 0.f), const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = 0, const vec4& bgColor = defaultBgColor);
+	virtual ~Overlay() override = default;
+
+	virtual void draw() const override;
+	virtual ivec2 position() const override;
+
+	bool getOn() const;
+	void setOn(bool yes);
+};
+
+inline bool Overlay::getOn() const {
+	return on;
+}
+
 // places widgets vertically through which the user can scroll (DON"T PUT SCROLL AREAS INTO OTHER SCROLL AREAS)
 class ScrollArea : public Layout {
-protected:
-	bool draggingSlider;
-	ivec2 listPos;
 private:
-	vec2 motion;			// how much the list scrolls over time
-	int diffSliderMouse;	// space between slider and mouse position
-
-	static constexpr int barWidth = 10;
-	static constexpr float scrollThrottle = 10.f;
+	ScrollBar scroll;
 
 public:
 	ScrollArea(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
@@ -110,24 +125,11 @@ public:
 
 	virtual ivec2 wgtPosition(sizet id) const override;
 	virtual ivec2 wgtSize(sizet id) const override;
-	Rect barRect() const;
-	Rect sliderRect() const;
 	mvec2 visibleWidgets() const;
-	void moveListPos(const ivec2& mov);
-
-protected:
-	virtual ivec2 listLim() const;	// max list position
-	int wgtRPos(sizet id) const;
-	int wgtREnd(sizet id) const;
 
 private:
-	void setSlider(int spos);
-	int barSize() const;	// returns 0 if slider isn't needed
-	int sliderSize() const;
-	int sliderPos() const;
-	int sliderLim() const;	// max slider position
-
-	static void throttleMotion(float& mov, float dSec);
+	int wgtRPos(sizet id) const;
+	int wgtREnd(sizet id) const;
 };
 
 inline int ScrollArea::wgtRPos(sizet id) const {
@@ -136,16 +138,4 @@ inline int ScrollArea::wgtRPos(sizet id) const {
 
 inline int ScrollArea::wgtREnd(sizet id) const {
 	return positions[id+1][vertical] - spacing;
-}
-
-inline int ScrollArea::barSize() const {
-	return listSize()[vertical] > size()[vertical] ? barWidth : 0;
-}
-
-inline int ScrollArea::sliderPos() const {
-	return listSize()[vertical] > size()[vertical] ? position()[vertical] + listPos[vertical] * sliderLim() / listLim()[vertical] : position()[vertical];
-}
-
-inline int ScrollArea::sliderLim() const {
-	return size()[vertical] - sliderSize();
 }

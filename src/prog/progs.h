@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/fileSys.h"
 #include "utils/layouts.h"
 #include "utils/objects.h"
 
@@ -44,10 +45,12 @@ protected:
 	static constexpr char arrowLeft[] = "<";
 	static constexpr char arrowRight[] = ">";
 	static constexpr float defaultDim = 0.5f;
+	static constexpr float chatEmbedSize = 0.5f;
 
-	int lineHeight, superHeight, tooltipHeight;
+	int smallHeight, lineHeight, superHeight, tooltipHeight;
 	int lineSpacing, superSpacing, iconSize;
 	int tooltipLimit;
+	TextBox* chatBox;
 
 public:
 	ProgState();
@@ -64,27 +67,32 @@ public:
 	virtual void eventCameraReset();
 	void eventResize();
 
-	virtual RootLayout* createLayout();
-	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok");
-	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal);
-	pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX);
+	virtual RootLayout* createLayout() = 0;
+	virtual Overlay* createOverlay();
+	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok") const;
+	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal) const;
+	pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX) const;
 	Popup* createPopupConfig(const Com::Config& cfg);
+	TextBox* getChat();
+	void toggleChatEmbedShow();
+	void hideChatEmbed();
 
 	static string tileFortressString(const Com::Config& cfg);
 	static string middleFortressString(const Com::Config& cfg);
 	static string pieceTotalString(const Com::Config& cfg);
 protected:
-	Texture makeTooltip(const string& text);
-	Texture makeTooltipL(const vector<string>& lines);
+	Texture makeTooltip(const string& text) const;
+	Texture makeTooltipL(const vector<string>& lines) const;
 
+	vector<Widget*> createChat(bool overlay = true);
 	vector<Widget*> createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active);
 private:
 	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
 	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
 };
 
-inline ProgState::ProgState() {
-	eventResize();
+inline TextBox* ProgState::getChat() {
+	return chatBox;
 }
 
 inline string ProgState::tileFortressString(const Com::Config& cfg) {
@@ -151,6 +159,7 @@ public:
 private:
 	Label* startButton;
 	Label* kickButton;
+	TextBox* chatBox;
 
 public:
 	ProgRoom();
@@ -160,7 +169,6 @@ public:
 	virtual void eventEnter() override;
 
 	virtual RootLayout* createLayout() override;
-
 	void updateStartButton();	// canStart only applies to State::host
 	void updateConfigWidgets(const Com::Config& cfg);
 	static void updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt, uint16 min, uint16 rest);
@@ -212,6 +220,7 @@ public:
 	void setDeleteLock(bool on);
 
 	virtual RootLayout* createLayout() override;
+	virtual Overlay* createOverlay() override;
 	Popup* createPopupSaveLoad(bool save);
 
 	void setSelected(uint8 sel);
@@ -281,6 +290,7 @@ public:
 	void decreaseDragonIcon();
 
 	virtual RootLayout* createLayout() override;
+	virtual Overlay* createOverlay() override;
 };
 
 inline bool ProgMatch::favorIconOn() const {

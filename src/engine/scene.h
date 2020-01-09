@@ -146,6 +146,7 @@ private:
 	vector<Object*> objects;
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
+	uptr<Overlay> overlay;
 	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
 	Light light;
@@ -191,6 +192,7 @@ public:
 	void resetLayouts();
 	Layout* getLayout();
 	Popup* getPopup();
+	Overlay* getOverlay();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	void addAnimation(Animation&& anim);
@@ -209,6 +211,7 @@ private:
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	BoardObject* findBoardObject(const ivec2& mPos) const;
 	void simulateMouseMove();
+	Layout* topLayout(const ivec2& mPos);
 
 	void renderShadows();
 	void renderDummy() {}
@@ -228,6 +231,10 @@ inline Layout* Scene::getLayout() {
 
 inline Popup* Scene::getPopup() {
 	return popup.get();
+}
+
+inline Overlay* Scene::getOverlay() {
+	return overlay.get();
 }
 
 inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
@@ -276,4 +283,8 @@ inline GLuint Scene::blank() const {
 
 inline void Scene::reloadTextures() {
 	FileSys::reloadTextures(texes);
+}
+
+inline Layout* Scene::topLayout(const ivec2& mPos) {
+	return popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();
 }

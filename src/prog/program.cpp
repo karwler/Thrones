@@ -3,8 +3,7 @@
 // PROGRAM
 
 Program::Program() :
-	info(INF_NONE),
-	state(new ProgState)	// necessary as a placeholder to prevent nullptr exceptions
+	info(INF_NONE)
 {
 	World::window()->writeLog("starting");
 }
@@ -300,6 +299,44 @@ void Program::eventExitRoom(Button*) {
 	}
 }
 
+void Program::eventSendMessage(Button* but) {
+	const string& msg = static_cast<LabelEdit*>(but)->getOldText();
+	static_cast<TextBox*>(but->getParent()->getWidget(but->getID() - 1))->addLine("< " + msg);
+	vector<uint8> data(Com::dataHeadSize + msg.length());
+	data[0] = uint8(Com::Code::message);
+	SDLNet_Write16(uint16(data.size()), data.data() + 1);
+	std::copy(msg.begin(), msg.end(), data.data() + Com::dataHeadSize);
+	netcp->sendData(data);
+}
+
+void Program::eventRecvMessage(uint8* data) {
+	if (string msg = Com::readText(data); state->getChat())
+		state->getChat()->addLine("> " + msg);
+	else
+		std::cout << "net message: " << msg << std::endl;
+}
+
+void Program::eventChatOpen(Button*) {
+	static_cast<LabelEdit*>(World::scene()->getOverlay()->getWidget(1))->onClick(ivec2(0), SDL_BUTTON_LEFT);
+}
+
+void Program::eventChatClose(Button*) {
+	static_cast<LabelEdit*>(World::scene()->getOverlay()->getWidget(1))->cancel();
+}
+
+void Program::eventToggleChat(Button*) {
+	if (state->getChat()) {
+		if (World::scene()->getOverlay())
+			World::scene()->getOverlay()->setOn(!World::scene()->getOverlay()->getOn());
+		else
+			state->toggleChatEmbedShow();
+	}
+}
+
+void Program::eventHideChat(Button*) {
+	state->hideChatEmbed();
+}
+
 // GAME SETUP
 
 void Program::eventOpenSetup() {
@@ -311,7 +348,10 @@ void Program::eventOpenSetup() {
 #endif
 	netcp->setCncproc(&Netcp::cprocGame);
 	info &= ~INF_GUEST_WAITING;
+
+	string txt = state->getChat() ? state->getChat()->moveText() : "";
 	setState(new ProgSetup);
+	state->getChat()->setText(std::move(txt));
 
 	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 	ps->setStage(ProgSetup::Stage::tiles);
@@ -559,7 +599,9 @@ void Program::eventSwitchSetupButtons(Button*) {
 
 void Program::eventOpenMatch() {
 	game.prepareMatch();
+	string txt = state->getChat()->moveText();
 	setState(new ProgMatch);
+	state->getChat()->setText(std::move(txt));
 	game.prepareTurn();
 	World::scene()->addAnimation(Animation(game.getScreen(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS, vec3(game.getScreen()->getPos().x, Game::screenYDown, game.getScreen()->getPos().z)), Keyframe(0.f, Keyframe::CHG_SCL, vec3(), quat(), vec3(0.f)) })));
 	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(0.5f, Keyframe::CHG_POS | Keyframe::CHG_LAT, Camera::posMatch, quat(), Camera::latMatch) })));
@@ -659,7 +701,10 @@ void Program::eventPostFinishMatch(Button*) {
 	else try {
 		if (!(info & INF_HOST))
 			netcp->sendData(Com::Code::hello);
-		if (eventOpenRoom(); info & INF_GUEST_WAITING)
+		string txt = state->getChat()->moveText();
+		eventOpenRoom();
+		state->getChat()->setText(std::move(txt));
+		if (info & INF_GUEST_WAITING)
 			eventPlayerHello(false);
 	} catch (const NetError& err) {
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
@@ -756,6 +801,7 @@ void Program::eventSetSoftShadows(Button* but) {
 void Program::eventSetGammaSL(Button* but) {
 	World::window()->setGamma(float(static_cast<Slider*>(but)->getVal()) / ProgSettings::gammaStepFactor);
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->gamma));
+	eventSaveSettings();
 }
 
 void Program::eventSetGammaLE(Button* but) {
@@ -769,6 +815,7 @@ void Program::eventSetGammaLE(Button* but) {
 void Program::eventSetVolumeSL(Button* but) {
 	World::sets()->avolume = uint8(static_cast<Slider*>(but)->getVal());
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->avolume));
+	eventSaveSettings();
 }
 
 void Program::eventSetVolumeLE(Button* but) {
@@ -787,6 +834,26 @@ void Program::eventSetScalePieces(Button* but) {
 	World::sets()->scalePieces = static_cast<CheckBox*>(but)->on;
 }
 
+void Program::eventSetChatLineLimitSL(Button* but) {
+	World::sets()->chatLines = uint16(static_cast<Slider*>(but)->getVal());
+	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(World::sets()->chatLines));
+	eventSaveSettings();
+}
+
+void Program::eventSetChatLineLimitLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	World::sets()->chatLines = uint16(std::clamp(sstoul(le->getText()), 0ul, ulong(Settings::chatLinesMax)));
+	le->setText(toStr(World::sets()->chatLines));
+	static_cast<Slider*>(but->getParent()->getWidget(but->getID() - 1))->setVal(World::sets()->chatLines);
+	eventSaveSettings();
+}
+
+void Program::eventSetFontRegular(Button* but) {
+	World::window()->reloadFont(static_cast<CheckBox*>(but)->on);
+	World::scene()->resetLayouts();
+	eventSaveSettings();
+}
+
 void Program::eventResetSettings(Button*) {
 	World::window()->resetSettings();
 }
@@ -803,6 +870,10 @@ void Program::eventOpenInfo(Button*) {
 
 void Program::eventClosePopup(Button*) {
 	World::scene()->setPopup(nullptr);
+}
+
+void Program::eventCloseOverlay(Button*) {
+	World::scene()->getOverlay()->setOn(false);
 }
 
 void Program::eventExit(Button*) {
@@ -838,8 +909,10 @@ void Program::connect(bool client, const char* msg) {
 }
 
 void Program::disconnect() {
-	netcp->disconnect();
-	netcp.reset();
+	if (netcp) {
+		netcp->disconnect();
+		netcp.reset();
+	}
 }
 
 void Program::setState(ProgState* newState) {

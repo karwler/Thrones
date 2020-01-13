@@ -449,5 +449,6 @@ android/app/jni/SDL_ttf*/
 android/app/jni/glm*/
 android/app/src/main/assets/
 android/app/src/main/java/org/libsdl/
+android/app/licenses/
 build*/
 lib/

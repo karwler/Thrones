@@ -19,7 +19,7 @@ CMake variables:
   - use OpenGL ES  
 - VER_GLEW : string = 2.1.0  
   - GLEW version to download  
-- VER_GLM : string = 0.9.9.6  
+- VER_GLM : string = 0.9.9.7  
   - GLM version to download  
 - VER_SDL : string = 2.0.10  
   - SDL version to download  

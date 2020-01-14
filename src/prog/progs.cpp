@@ -42,14 +42,18 @@ void ProgState::eventCameraReset() {
 }
 
 void ProgState::eventResize() {
-	smallHeight = World::window()->getView().y / 36;	// 20p	(values are in relation to 720p height)
-	lineHeight = World::window()->getView().y / 24;		// 30p
-	superHeight = World::window()->getView().y / 18;	// 40p
-	tooltipHeight = World::window()->getView().y / 45;	// 16p
-	lineSpacing = World::window()->getView().y / 144;	// 5p
-	superSpacing = World::window()->getView().y / 72;	// 10p
-	iconSize = World::window()->getView().y / 11;		// 64p
-	tooltipLimit = World::window()->getView().x / 2;
+	smallHeight = World::window()->screenView().y / 36;	// 20p	(values are in relation to 720p height)
+	lineHeight = World::window()->screenView().y / 24;		// 30p
+	superHeight = World::window()->screenView().y / 18;	// 40p
+	tooltipHeight = World::window()->screenView().y / 45;	// 16p
+	lineSpacing = World::window()->screenView().y / 144;	// 5p
+	superSpacing = World::window()->screenView().y / 72;	// 10p
+	iconSize = World::window()->screenView().y / 11;		// 64p
+	tooltipLimit = World::window()->screenView().x / 2;
+}
+
+uint8 ProgState::switchButtons(uint8 but) {
+	return but;
 }
 
 Overlay* ProgState::createOverlay() {
@@ -135,7 +139,7 @@ Texture ProgState::makeTooltipL(const vector<string>& lines) const {
 
 vector<Widget*> ProgState::createChat(bool overlay) {
 	return {
-		chatBox = new TextBox(1.f, smallHeight, "", nullptr, nullptr, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
+		chatBox = new TextBox(1.f, smallHeight, "", nullptr, &Program::eventClearLabel, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
 		new LabelEdit(smallHeight, "", nullptr, nullptr, &Program::eventSendMessage, overlay ? &Program::eventCloseOverlay : &Program::eventHideChat, Texture(), 1.f, UINT16_MAX - Com::dataHeadSize, true)
 	};
 }
@@ -195,12 +199,12 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		"- FINISH turn",
 		"- KILL the acting piece"
 	};
-	string tileTips[Com::tileMax-1];
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	string tileTips[Com::tileLim];
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		tileTips[i] = "Number of " + Com::tileNames[i] + " tiles per homeland";
 	string fortressTip = "(calculated automatically to fill remaining free tiles)";
-	string middleTips[Com::tileMax-1];
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	string middleTips[Com::tileLim];
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		middleTips[i] = "Number of " + Com::tileNames[i] + " tiles in middle row per player";
 	string pieceTips[Com::pieceMax];
 	for (uint8 i = 0; i < Com::pieceMax; i++)
@@ -225,7 +229,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		wio.survivalLE = new LabelEdit(amtWidth, toStr(cfg.survivalPass) + '%', update, nullptr, nullptr, nullptr, makeTooltip(scTip))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.survivalMode = new SwitchBox(active ? Size(smWidth) : Size(1.f), active ? vector<string>(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end()) : vector<string>({ Com::Config::survivalNames[uint8(cfg.survivalMode)] }), Com::Config::survivalNames[uint8(cfg.survivalMode)], update, makeTooltipL(survivalTip), 1.f, active ? Label::Alignment::center : Label::Alignment::left)
+		wio.survivalMode = new SwitchBox(active ? Size(smWidth) : Size(1.f), active ? vector<string>(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end()) : vector<string>{ Com::Config::survivalNames[uint8(cfg.survivalMode)] }, Com::Config::survivalNames[uint8(cfg.survivalMode)], update, makeTooltipL(survivalTip), 1.f, active ? Label::Alignment::center : Label::Alignment::left)
 	}, {
 		new Label(descLength, popBack(txs)),
 		wio.favorLimit = new CheckBox(lineHeight, cfg.favorLimit, update, update, makeTooltip(popBack(tips)))
@@ -249,7 +253,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	}
 
 	vector<vector<Widget*>> lines1(Com::tileMax);
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		lines1[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
 			wio.tiles[i] = new LabelEdit(amtWidth, toStr(cfg.tileAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(tileTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
@@ -260,12 +264,12 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	};
 	if (active) {
 		uint16 rest = cfg.countFreeTiles();
-		for (uint8 i = 0; i < Com::tileMax - 1; i++)
+		for (uint8 i = 0; i < Com::tileLim; i++)
 			lines1[i].insert(lines1[i].begin() + 1, new Slider(1.f, cfg.tileAmounts[i], cfg.homeSize.y, cfg.tileAmounts[i] + rest, update, &Program::eventTileSliderUpdate, makeTooltip(tileTips[i])));
 	}
 
 	vector<vector<Widget*>> lines2(Com::tileMax);
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		lines2[i] = {
 			new Label(descLength, firstUpper(Com::tileNames[i])),
 			wio.middles[i] = new LabelEdit(amtWidth, toStr(cfg.middleAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(middleTips[i]) : makeTooltipL({ tileTips[i], fortressTip }))
@@ -307,7 +311,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		wio.capturers = new LabelEdit(1.f, cfg.capturersString(), update, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	} };
 	if (active) {
-		lines4[0].insert(lines4[0].begin() + 1, new Slider(1.f, cfg.winFortress, 0, cfg.tileAmounts[uint8(Com::Tile::fortress)], update, &Program::eventSLUpdateLE, makeTooltip(fortTip)));
+		lines4[0].insert(lines4[0].begin() + 1, new Slider(1.f, cfg.winFortress, 0, cfg.countFreeTiles(), update, &Program::eventSLUpdateLE, makeTooltip(fortTip)));
 		lines4[1].insert(lines4[1].begin() + 1, new Slider(1.f, cfg.winThrone, 0, cfg.pieceAmounts[uint8(Com::Piece::throne)], update, &Program::eventSLUpdateLE, makeTooltip(throneTip)));
 	}
 
@@ -593,21 +597,21 @@ void ProgRoom::updateConfigWidgets(const Com::Config& cfg) {
 	wio.dragonSingle->on = cfg.dragonSingle;
 	wio.dragonDiag->on = cfg.dragonDiag;
 
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		wio.tiles[i]->setText(toStr(cfg.tileAmounts[i]));
 	wio.tileFortress->setText(tileFortressString(cfg));
-	updateAmtSliders(cfg.tileAmounts.data(), wio.tiles.data(), Com::tileMax - 1, cfg.homeSize.y, cfg.countFreeTiles());
-	for (uint8 i = 0; i < Com::tileMax - 1; i++)
+	updateAmtSliders(cfg.tileAmounts.data(), wio.tiles.data(), Com::tileLim, cfg.homeSize.y, cfg.countFreeTiles());
+	for (uint8 i = 0; i < Com::tileLim; i++)
 		wio.middles[i]->setText(toStr(cfg.middleAmounts[i]));
 	wio.middleFortress->setText(middleFortressString(cfg));
-	updateAmtSliders(cfg.middleAmounts.data(), wio.middles.data(), Com::tileMax - 1, 0, cfg.countFreeMiddles());
+	updateAmtSliders(cfg.middleAmounts.data(), wio.middles.data(), Com::tileLim, 0, cfg.countFreeMiddles());
 	for (uint8 i = 0; i < Com::pieceMax; i++)
 		wio.pieces[i]->setText(toStr(cfg.pieceAmounts[i]));
 	wio.pieceTotal->setText(pieceTotalString(cfg));
 	updateAmtSliders(cfg.pieceAmounts.data(), wio.pieces.data(), Com::pieceMax, 0, cfg.countFreePieces());
 
 	wio.winFortress->setText(toStr(cfg.winFortress));
-	updateWinSlider(wio.winFortress, cfg.winFortress, cfg.tileAmounts[uint8(Com::Tile::fortress)]);
+	updateWinSlider(wio.winFortress, cfg.winFortress, cfg.countFreeTiles());
 	wio.winThrone->setText(toStr(cfg.winThrone));
 	updateWinSlider(wio.winThrone, cfg.winThrone, cfg.pieceAmounts[uint8(Com::Piece::throne)]);
 	wio.capturers->setText(cfg.capturersString());
@@ -628,10 +632,26 @@ void ProgRoom::updateWinSlider(Label* amt, uint16 val, uint16 max) {
 		static_cast<Slider*>(amt->getParent()->getWidget(amt->getID() - 1))->set(val, 0, max);
 }
 
+// PROG GAME
+
+uint8 ProgGame::switchButtons(uint8 but) {
+	if (bswapIcon->selected) {
+		if (but == SDL_BUTTON_LEFT)
+			return SDL_BUTTON_RIGHT;
+		if (but ==SDL_BUTTON_RIGHT)
+			return SDL_BUTTON_LEFT;
+	}
+	return but;
+}
+
+Overlay* ProgGame::createOverlay() {
+	return World::netcp() ? new Overlay(pair(0.7f, 0.f), pair(0.3f, 1.f), createChat(), &Program::eventChatOpen, &Program::eventChatClose) : nullptr;
+}
+
 // PROG SETUP
 
 ProgSetup::ProgSetup() :
-	ProgState(),
+	ProgGame(),
 	enemyReady(false),
 	selected(0),
 	lastButton(0),
@@ -657,7 +677,7 @@ void ProgSetup::eventWheel(int ymov) {
 }
 
 void ProgSetup::eventDrag(uint32 mStat) {
-	if (getDeleteLock())
+	if (bswapIcon->selected)
 		mStat = swapBits(mStat, SDL_BUTTON_LEFT - 1, SDL_BUTTON_RIGHT - 1);
 
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
@@ -706,22 +726,22 @@ bool ProgSetup::setStage(ProgSetup::Stage stg) {
 	return false;
 }
 
-void ProgSetup::setInteractivity(bool dlock) {
+void ProgSetup::setInteractivity() {
 	switch (stage) {
 	case Stage::tiles:
-		World::game()->setOwnTilesInteract(dlock ? Tile::Interact::recognize : Tile::Interact::interact);
+		World::game()->setOwnTilesInteract(Tile::Interact::interact);
 		World::game()->setMidTilesInteract(Tile::Interact::ignore, true);
 		World::game()->setOwnPiecesVisible(false);
 		break;
 	case Stage::middles:
 		World::game()->setOwnTilesInteract(Tile::Interact::ignore, true);
-		World::game()->setMidTilesInteract(dlock ? Tile::Interact::recognize : Tile::Interact::interact);
+		World::game()->setMidTilesInteract(Tile::Interact::interact);
 		World::game()->setOwnPiecesVisible(false);
 		break;
 	case Stage::pieces:
 		World::game()->setOwnTilesInteract(Tile::Interact::recognize);
 		World::game()->setMidTilesInteract(Tile::Interact::ignore, true);
-		World::game()->setOwnPiecesVisible(true, !dlock);
+		World::game()->setOwnPiecesVisible(true);
 		break;
 	case Stage::ready:
 		World::game()->setOwnTilesInteract(Tile::Interact::ignore);
@@ -768,7 +788,7 @@ RootLayout* ProgSetup::createLayout() {
 		new Label(lineHeight, popBack(sidt), &Program::eventShowConfig),
 		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupSave),
 		new Label(lineHeight, popBack(sidt), &Program::eventOpenSetupLoad),
-		deleteIcon = new Draglet(lineHeight, &Program::eventSwitchSetupButtons, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), popBack(sidt), Label::Alignment::left, false),
+		bswapIcon = new Draglet(lineHeight, &Program::eventSwitchGameButtons, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), popBack(sidt), Label::Alignment::left, false),
 		new Label(lineHeight, popBack(sidt), cback ? &Program::eventSetupBack : nullptr, nullptr, Texture(), cback ? 1.f : defaultDim),
 		new Label(lineHeight, popBack(sidt), cnext ? &Program::eventSetupNext : nullptr, nullptr, Texture(), cnext ? 1.f : defaultDim),
 	};
@@ -790,10 +810,6 @@ RootLayout* ProgSetup::createLayout() {
 		new Widget(sideLength)
 	};
 	return new RootLayout(1.f, std::move(cont), false, 0);
-}
-
-Overlay* ProgSetup::createOverlay() {
-	return World::netcp() ? new Overlay(pair(0.7f, 0.f), pair(0.3f, 1.f), createChat(), &Program::eventChatOpen, &Program::eventChatClose) : nullptr;
 }
 
 Layout* ProgSetup::makeTicons() {
@@ -906,7 +922,7 @@ void ProgMatch::updateFavorIcon(bool on, uint8 cnt, uint8 tot) {
 	if (favorIcon) {
 		on = on && cnt;
 		favorIcon->lcall = on ? &Program::eventSwitchFavor : nullptr;
-		favorIcon->setDim(on && cnt ? 1.f : defaultDim);
+		favorIcon->setDim(on ? 1.f : defaultDim);
 		favorIcon->setText("FF: " + toStr(cnt) + '/' + toStr(tot));
 	}
 }
@@ -946,16 +962,18 @@ RootLayout* ProgMatch::createLayout() {
 		"Exit",
 		"Config",
 		"Chat",
+		"Fire",
 		"Finish"
 	};
 	if (std::reverse(sidt.begin(), sidt.end()); fon)
-		sidt.insert(sidt.begin(), { "FF: /" + string(numDigits(World::game()->getConfig().favorMax) * 2, '0'), "FF now" });
+		sidt.insert(sidt.begin(), { "FF: /" + string(numDigits10(World::game()->getConfig().favorMax) * 2, '0'), "FF now" });
 	int sideLength = Text::maxLen(sidt.begin(), sidt.end(), lineHeight);
 
 	vector<Widget*> left = {
 		new Label(lineHeight, popBack(sidt), &Program::eventAbortGame),
 		new Label(lineHeight, popBack(sidt), &Program::eventShowConfig),
 		new Label(lineHeight, popBack(sidt), &Program::eventToggleChat),
+		bswapIcon = new Draglet(lineHeight, &Program::eventSwitchGameButtons, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), popBack(sidt), Label::Alignment::left, false),
 		turnIcon = new Label(lineHeight, popBack(sidt))
 	};
 	if (fon) {
@@ -991,10 +1009,6 @@ RootLayout* ProgMatch::createLayout() {
 	updateFavorIcon(World::game()->getMyTurn(), World::game()->getFavorCount(), World::game()->getFavorTotal());
 	updateFnowIcon(World::game()->getMyTurn(), World::game()->getFavorCount());
 	return root;
-}
-
-Overlay* ProgMatch::createOverlay() {
-	return new Overlay(pair(0.7f, 0.f), pair(0.3f, 1.f), createChat(), &Program::eventChatOpen, &Program::eventChatClose);
 }
 
 // PROG SETTINGS

@@ -129,14 +129,14 @@ static void sendRoomList(uint8 pid, Code code = Code::rlist) {
 	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
 	sendb.push(uint8(rooms.size()));
 	for (const pair<const string, bool>& it : rooms) {
-		sendb.push(vector<uint8>{ uint8(it.second), uint8(it.first.length()) });
+		sendb.push({ uint8(it.second), uint8(it.first.length()) });
 		sendb.push(it.first);
 	}
 	sendb.write(uint16(sendb.size()), ofs);
 	sendb.send(players[pid].sock, players[pid].webs);
 }
 
-static void sendRoomData(Code code, const string& name, const vector<uint8>& extra, uset<uint8>& errPids) {
+static void sendRoomData(Code code, const string& name, const std::initializer_list<uint8>& extra, uset<uint8>& errPids) {
 	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
 	sendb.push(extra);
 	sendb.push(uint8(name.length()));
@@ -154,7 +154,7 @@ static void sendRoomData(Code code, const string& name, const vector<uint8>& ext
 	sendb.clear();
 }
 
-static void sendRoomData(Code code, const string& name, const vector<uint8>& extra = {}) {
+static void sendRoomData(Code code, const string& name, const std::initializer_list<uint8>& extra = {}) {
 	uset<uint8> errPids;
 	if (sendRoomData(code, name, extra, errPids); !errPids.empty())
 		throw PlayerError(std::move(errPids));

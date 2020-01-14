@@ -342,20 +342,13 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool 
 		}
 	}
 
-	constexpr char verstr[] = "#version ";
-#ifdef __APPLE__
-	if (sizet p = text.find(verstr); p < text.length()) {
-		p += strlen(verstr);
-		text.replace(p, text.find('\n', p) - p, "150");
-	}
-#else
 	if (gles) {
+		constexpr char verstr[] = "#version ";
 		if (sizet p = text.find(verstr); p < text.length()) {
 			p += strlen(verstr);
 			text.replace(p, text.find('\n', p) - p + 1, "300 es\nprecision highp float;");
 		}
 	}
-#endif
 	if (!text.empty())
 		srcs.emplace_back(filename(file), std::move(text));
 }

@@ -5,7 +5,7 @@
 #ifdef OPENGLES
 #include <OpenGLES/ES3/gl.h>
 #else
-#include <OpenGL/gl.h>
+#include <OpenGL/gl3.h>
 #endif
 #elif defined(OPENGLES)
 #include <GLES3/gl3.h>
@@ -66,17 +66,3 @@ struct Vertex {
 };
 
 SDL_Surface* scaleSurface(SDL_Surface* img, int div);
-
-#ifdef __APPLE__
-inline void glBindVertexArray(GLuint arr) {
-	glBindVertexArrayAPPLE(arr);
-}
-
-inline void glGenVertexArrays(GLsizei n, GLuint* arrs) {
-	glGenVertexArraysAPPLE(n, arrs);
-}
-
-inline void glDeleteVertexArrays(GLsizei n, const GLuint* arrs) {
-	glDeleteVertexArraysAPPLE(n, arrs);
-}
-#endif

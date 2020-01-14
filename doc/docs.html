@@ -4,20 +4,40 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Thrones - Documentation</title>
-	<link rel="icon" type="image/bmp" href="../rsc/data/thrones.bmp">
+	<link rel="icon" type="image/png" href="../rsc/data/thrones.png">
 	<link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
 	<nav>
-		<img src="../rsc/textures/title.bmp">
+		<img src="../rsc/textures/title.png">
 		<a href="rules.html">Rules</a>
 		<a href="docs.html">Docs</a>
 		<div class="flim"></div>
 	</nav>
 
-	<h1>1 Miscellaneous</h1>
+	<h1>Index</h1>
+	<a href="#h1_0">1 Miscellaneous</a><br>
+	<a href="#h1_1" class='sindent'>1.1 Dependencies</a><br>
+	<a href="#h1_2" class='sindent'>1.2 UI</a><br>
+	<a href="#h2_0">2 Preferences</a><br>
+	<a href="#h2_1" class='sindent'>2.1 Settings</a><br>
+	<a href="#h2_2" class='sindent'>2.2 Configurations</a><br>
+	<a href="#h2_3">2.3 Setups</a><br>
+	<a href="#h3_0" class='sindent'>3 Networking</a><br>
+	<a href="#h3_1" class='sindent'>3.1 Client</a><br>
+	<a href="#h3_2" class='sindent'>3.2 Server</a><br>
+	<a href="#h0_0">4 Game</a><br>
+	<a href="#h4_1" class='sindent'>4.1 Setup</a><br>
+	<a href="#h4_2" class='sindent'>4.2 Match</a><br>
+	<a href="#h4_3" class='sindent'>4.3 Move</a><br>
+	<a href="#h4_4" class='sindent'>4.4 Switch</a><br>
+	<a href="#h4_5" class='sindent'>4.5 Attack</a><br>
+	<a href="#h4_6" class='sindent'>4.6 Fire</a><br>
+	<a href="#h4_7" class='sindent'>4.7 Survival Check</a><br>
 
-	<h2>1.1 Dependencies</h2>
+	<h1 id="h1_0">1 Miscellaneous</h1>
+
+	<h2 id="h1_1">1.1 Dependencies</h2>
 	<p>This list refers to the provided binaries, not strictly the source code.</p>
 	<h3>Android</h3>
 	<ul>
@@ -53,7 +73,7 @@
 		<li>MS Visual C++ Redistribute 2017 (32-bit) or 2019 (64-bit)</li>
 	</ul>
 
-	<h2>1.2 UI</h2>
+	<h2 id="h1_2">1.2 UI</h2>
 	<p>Widgets that can be interacted with or have tooltips are highlighted when the user hovers the mouse cursor over them. The "Escape" or "Back" key always perform a given menu's "exit" action, while "Return" performs a popup's "confirm" action.</p>
 	<h3>Checkbox</h3>
 	<p>Can be toggled with either the left or the right mouse button.</p>
@@ -148,7 +168,7 @@
 		</tr>
 	</table>
 
-	<h1>2 Preferences</h1>
+	<h1 id="h2_0">2 Preferences</h1>
 	<p>
 		All preferences are stored in INI files.<br>
 		If the game was built for Android or with the "EXTERNAL" define, it'll default to saving preferences outside of the game's directory.<br>
@@ -195,7 +215,7 @@
 		</tr>
 	</table>
 
-	<h2>2.1 Settings</h2>
+	<h2 id="h2_1">2.1 Settings</h2>
 	<p>Game client settings are stored in "settings.ini" and can be edited in the main menu and in the "Settings" menu.</p>
 	<h3>Address</h3>
 	<p>The server's address to connect to when clicking "Connect".</p>
@@ -253,7 +273,7 @@
 	<h3>Regular font</h3>
 	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
 
-	<h2>2.2 Configurations</h2>
+	<h2 id="h2_2">2.2 Configurations</h2>
 	<p>
 		Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.
 	</p>
@@ -275,7 +295,7 @@
 	<table class="listing">
 		<tr>
 			<td>disable</td>
-			<td>If the player hasn't taken any other action that turn, the acting piece will be disabled and the turn continues. If the player has taken an action previously, the turn ends.</td>
+			<td>If the player hasn't taken any other action that turn and there are more active pieces, the acting piece will be disabled and the turn continues. If the player has taken an action previously or there are no more availible pieces, the turn ends.</td>
 		</tr>
 		<tr>
 			<td>finish</td>
@@ -313,22 +333,22 @@
 	<h3>Shift near</h3>
 	<p>If enabled, start searching for free spaces for conflicting middle row tiles from the position of the conflicting tile. Otherwise start searching from one of the ends of the row.</p>
 
-	<h2>2.3 Setups</h2>
+	<h2 id="h2_3">2.3 Setups</h2>
 	<p>
 		Game setups are stored in "setup.ini" and can be edited, saved and loaded in the "Host -&gt; Setup" menu or during the in-game setup phase. The offline editor works the same as setting up a game online, except any checks for proper tile placement and such will be ignored.<br>
 		When loading a setup, it only overwrites the current tiles/pieces of each stage when the loaded setup's corresponding stages' tile/piece data is present.<br>
 		The same setup can be loaded for different configurations, but some tiles and pieces may not get placed due to exceeding limits.
 	</p>
 
-	<h1>3 Networking</h1>
+	<h1 id="h3_0">3 Networking</h1>
 
-	<h2>3.1 Client</h2>
+	<h2 id="h3_1">3.1 Client</h2>
 	<p>
 		A game client can be used as a server by going into the "Host" menu, optionally setting an appropriate port and the configuration that'll be used for the game rules, and clicking "Open". Once another client successfully connects to the server, a game will start immediately.<br>
 		A client can set an address and port of a server and connect by clicking the "Connect" button in the main menu. When connecting to a regular server program, a list of open rooms will be displayed. A room can be joined by left clicking its name or a new one can be created by clicking "Host". Only a room's host can edit the configuration and start the game.<br>
 	</p>
 
-	<h2>3.2 Server</h2>
+	<h2 id="h3_2">3.2 Server</h2>
 	<p>
 		The server program can be used to host multiple players and is currently limited to a maximum of 128 players and 64 rooms.<br>
 		When running it in the foreground, the following keys can be used:
@@ -364,10 +384,10 @@
 		</tr>
 	</table>
 
-	<h1>4 Game</h1>
+	<h1 id="h4_0">4 Game</h1>
 	<p>Every game starts with the setup stage where players place their tiles and pieces. Once both players confirm their setups, the actual match starts.</p>
 
-	<h2>4.1 Setup</h2>
+	<h2 id="h4_1">4.1 Setup</h2>
 	<p>
 		The setup stage is a sequence of three phases of placing homeland tiles, middle row tiles and pieces.<br>
 		Tiles/pieces can be placed by dragging them with the left mouse button from the bottom icons or by selecting an icon in the bottom panel and left click holding on a free tile and optionally dragging the cursor across other occupied tiles to replace them. A type can be selected by pressing the icon, using the mouse wheel or pressing a number key. It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and possibly dragging the cursor onto other ones.<br>
@@ -414,11 +434,10 @@
 		</tr>
 	</table>
 
-	<h2>4.2 Match</h2>
+	<h2 id="h4_2">4.2 Match</h2>
 	<p>
-		Normally pieces can be moved by dragging them with the left or right mouse button and whether they'll move, switch or attack depends on the destination.
-		Firing pieces can fire by dragging them with the right mouse button. A warhorse can only attack when being dragged with the right mouse button.<br>
-		Holding the left Alt key or the X1 mouse button on the first action of a turn initializes a Fate's Favor for the piece that will be or is currently being dragged. When holding down left Shift or X2 instead, the Fate's Favor will be used on the current action.<br>
+		Normally pieces can be moved by dragging them with the left or right mouse button and whether they'll move, switch or attack depends on the destination. Firing pieces can fire by dragging them with the right mouse button or using the "Fire" button. A warhorse can only attack when being dragged with the right mouse button or using the "Fire" button.<br>
+		Holding the left Alt key or the X1 mouse button on the first action of a turn initializes a Fate's Favor for the piece that will be or is currently being dragged. When holding down left Shift or X2 instead, the Fate's Favor will be used on the current action. A mountain Fate's Favor is automatically used, when using any Fate's Favor on a piece that couldn't normally move onto a mountain, while it's being moved onto a mountain.<br>
 		A turn ends by pressing the Space bar or middle mouse button or when the limit of actions has been reached.<br>
 		The camera can be rotated by holding down the left Ctrl key, zoomed with the mouse wheel and reset by pressing the C key.<br>
 		The chat overlay can be toggled with the Tab key.
@@ -438,6 +457,10 @@
 			<td>Toggle the chat overlay.</td>
 		</tr>
 		<tr>
+			<td>Fire</td>
+			<td>When selected, the left mouse button will perform what the right mouse button would do.</td>
+		</tr>
+		<tr>
 			<td>FF: N/L</td>
 			<td>Displays the number of Fate's Favors in the player's possession out of the set limit. Can be selected to initialize a Fate's Favor.</td>
 		</tr>
@@ -450,5 +473,78 @@
 			<td>End the turn. Disabled for the first action of a turn.</td>
 		</tr>
 	</table>
+
+	<h2 id="h4_3">4.3 Move</h2>
+	<ol>
+		<li>Fail if the start position is the destination position.</li>
+		<li>Fail when using a non-move Fate's Favor.</li>
+		<li>Fail if using a dragon and the destination tile is a forest.</li>
+		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
+		<li>When using a plains Fate's Favor or moving an enemy piece, check moving to an adjacent tile.</li>
+		<li>Fail if an action other than switch has been recorded during this turn.</li>
+		<li>If using a spearman and the start and destination tiles are water, check moving to a connected water tile or an adjacent tile.</li>
+		<li>If using a lancer and the start and destination tiles are plains, check moving to a connected plains tile or an adjacent tile.</li>
+		<li>If using a dragon, check moving horizontally, vertically or diagonally if enabled.</li>
+		<li>Otherwise check moving to an adjacent tile.</li>
+	</ol>
+
+	<h2 id="h4_4">4.4 Switch</h2>
+	<ol>
+		<li>Fail if the start position is the destination position.</li>
+		<li>Fail if using an enemy piece.</li>
+		<li>Fail when using a non-switch Fate's Favor.</li>
+		<li>Fail when using a forest Fate's Favor and the start or destination tile is not a forest or the occupying piece is an enemy.</li>
+		<li>Fail when using a water Fate's Favor and the start or destination tile is a mountain.</li>
+		<li>Fail if using a dragon and the destination tile is a forest.</li>
+		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
+		<li>Fail if not using a warhorse and an action other than move has been recorded during this turn and not using a forest or water Fate's Favor.</li>
+		<li>Fail if the destination tile is a mountain.</li>
+		<li>Fail if the occupying piece has the same type as the acting piece.</li>
+		<li>Fail if using a warhorse and the occupying piece is an enemy spearman.</li>
+		<li>Fail if using a warhorse and the destination tile is an unbreached fortress.</li>
+		<li>When not using a forest Fate's Favor, check moving to an adjacent tile.</li>
+	</ol>
+
+	<h2 id="h4_5">4.5 Attack</h2>
+	<ol>
+		<li>Fail if the start position is the destination position.</li>
+		<li>Fail if using an enemy piece.</li>
+		<li>Fail when using any Fate's Favor.</li>
+		<li>Fail if using a dragon and the destination tile is a forest.</li>
+		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
+		<li>Fail if it's the first turn.</li>
+		<li>Fail if an action has been recorded during this turn.</li>
+		<li>Fail if the destination tile is a mountain.</li>
+		<li>If using a throne, skip the next two checks.</li>
+		<li>Fail if the victim is a warhorse that has attacked during the previous turn.</li>
+		<li>Fail if the victim is an elephant and the destination tile is plains and not using a dragon.</li>
+		<li>Check moving to an adjacent tile.</li>
+	</ol>
+
+	<h2 id="h4_6">4.6 Fire</h2>
+	<ol>
+		<li>Fail if the start position is the destination position.</li>
+		<li>Fail if using an enemy piece.</li>
+		<li>Fail if it's the first turn.</li>
+		<li>Fail if an action has been recorded during this turn.</li>
+		<li>Fail if there's no victim.</li>
+		<li>Fail if the victim is an ally.</li>
+		<li>Fail if using any Fate's Favor.</li>
+		<li>Fail if the victim is a warhorse that has attacked during the previous turn.</li>
+		<li>Fail if the victim is an elephant and the destination tile is plains and not using a dragon.</li>
+		<li>Fail if the destination tile is a forest.</li>
+		<li>Fail if mountain tiles are between the start and destination positions.</li>
+		<li>Check if the destination position matches the acting piece's firing distance.</li>
+	</ol>
+
+	<h2 id="h4_7">4.7 Survival Check</h2>
+	<ol>
+		<li>Succeed if using a throne.</li>
+		<li>Succeed if switching and using a water Fate's Favor.</li>
+		<li>Run the check if not using a spearman and the start or destination tile is water.</li>
+		<li>Run the check if attacking or firing and the destination tile is an unbreached fortress.</li>
+		<li>Run the check if attacking and the victim is a dragon and not using a dragon.</li>
+		<li>Otherwise succeed.</li>
+	</ol>
 </body>
 </html>

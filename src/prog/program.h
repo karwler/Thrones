@@ -89,7 +89,7 @@ public:
 	void eventSetupLoad(Button* but);
 	void eventSetupDelete(Button* but);
 	void eventShowConfig(Button* but = nullptr);
-	void eventSwitchSetupButtons(Button* but = nullptr);
+	void eventSwitchGameButtons(Button* but = nullptr);
 
 	// game match
 	void eventOpenMatch();
@@ -139,6 +139,7 @@ public:
 	void eventSBPrev(Button* but);
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
+	void eventClearLabel(Button* but);
 	void eventDummy(Button* = nullptr) {}
 	void disconnect();
 

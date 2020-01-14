@@ -19,12 +19,12 @@ Config::Config() :
 	dragonDist(4),
 	dragonSingle(true),
 	dragonDiag(true),
-	tileAmounts({ 11, 10, 7, 7, 1 }),
-	middleAmounts({ 1, 1, 1, 1 }),
-	pieceAmounts({ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 }),
+	tileAmounts{ 13, 10, 5, 7 },
+	middleAmounts{ 1, 1, 1, 1 },
+	pieceAmounts{ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 },
 	winFortress(1),
 	winThrone(1),
-	capturers({ false, false, false, false, false, false, false, false, false, true }),
+	capturers{ false, false, false, false, false, false, false, false, false, true },
 	shiftLeft(true),
 	shiftNear(true)
 {}
@@ -33,15 +33,15 @@ Config& Config::checkValues() {
 	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
 	survivalPass = std::clamp(survivalPass, uint8(0), randomLimit);
 
+	for (uint16& it : tileAmounts)
+		if (it < homeSize.y)
+			it = homeSize.y;
 	uint16 hsize = homeSize.x * homeSize.y;
-	for (uint8 i = 0; i < tileAmounts.size() - 2; i++)
-		if (tileAmounts[i] && tileAmounts[i] < homeSize.y)
-			tileAmounts[i] = homeSize.y;
-	uint16 tamt = floorAmounts(countTilesNonFort(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 2), homeSize.y);
-	tileAmounts[uint8(Tile::fortress)] = hsize - ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 2));
-	for (uint8 i = 0; tileAmounts[uint8(Tile::fortress)] > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 2 ? i + 1 : 0) {
+	uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), homeSize.y);
+	uint16 fort = hsize - ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
+	for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
 		tileAmounts[i]++;
-		tileAmounts[uint8(Tile::fortress)]--;
+		fort--;
 	}
 	floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
 
@@ -49,7 +49,7 @@ Config& Config::checkValues() {
 	if (!psize)
 		psize = pieceAmounts[uint8(Piece::throne)] = 1;
 
-	winFortress = std::clamp(winFortress, uint16(0), tileAmounts[uint8(Tile::fortress)]);
+	winFortress = std::clamp(winFortress, uint16(0), fort);
 	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
 	if (!winFortress && !winThrone)
 		if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
@@ -331,15 +331,23 @@ void Buffer::clear() {
 	dlim = 0;
 }
 
-void Buffer::push(const vector<uint16>& vec) {
-	checkEnd(dlim + uint(vec.size()) * sizeof(*vec.data()));
-	for (uint16 i = 0; i < vec.size(); i++, dlim += sizeof(*vec.data()))
-		SDLNet_Write16(vec[i], data.data() + dlim);
+void Buffer::push(const initlist<uint8>& lst) {
+	uint end = checkEnd(dlim + uint(lst.size()));
+	std::copy(lst.begin(), lst.end(), data.data() + dlim);
+	dlim = end;
 }
 
-void Buffer::push(const uint8* vec, uint len) {
-	uint end = checkEnd(dlim + len);
-	std::copy_n(vec, len, data.data() + dlim);
+void Buffer::push(const initlist<uint16>& vec) {
+	checkEnd(dlim + uint(vec.size()) * sizeof(uint16));
+	for (uint16 n : vec) {
+		SDLNet_Write16(n, data.data() + dlim);
+		dlim += sizeof(uint16);
+	}
+}
+
+void Buffer::push(const string& str) {
+	uint end = checkEnd(dlim + uint(str.length()));
+	std::copy(str.begin(), str.end(), data.data() + dlim);
 	dlim = end;
 }
 

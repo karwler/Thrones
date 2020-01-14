@@ -10,8 +10,10 @@ enum Action : uint8 {
 	ACT_SWAP  = 0x02,	// actor switching with swapper
 	ACT_ATCK  = 0x04,	// movement attack
 	ACT_FIRE  = 0x08,	// firing attack
-	ACT_WIN   = 0x10,	// actor won
-	ACT_LOOSE = 0x20,	// actor lost
+	ACT_AFAIL = 0x10,	// survival check failed during an attack
+	ACT_FCONT = 0x20,	// continue original turn after a failed attack
+	ACT_WIN   = 0x40,	// actor won
+	ACT_LOOSE = 0x80,	// actor lost
 	ACT_MS    = ACT_MOVE | ACT_SWAP,
 	ACT_AF    = ACT_ATCK | ACT_FIRE
 };
@@ -20,25 +22,14 @@ ENUM_OPERATIONS(Action, uint8)
 class Record {
 public:
 	Piece* actor;	// the moved piece/the killer
-	Action action;
+	Piece* protect;	// protected piece
+	Action action;	// action taken by actor
 
-public:
-	Record(Piece* actor = nullptr, Action action = ACT_NONE);
+	Record(Piece* actor = nullptr, Piece* protect = nullptr, Action action = ACT_NONE);
 
 	void update(Piece* doActor, Action didActions);
-	void updateProtectionColors(bool on) const;
-	bool isProtectedMember(Piece* pce) const;
-private:
-	bool actorProtected() const;		// actor mustn't be nullptr
+	void setProtectionDim() const;
 };
-
-inline bool Record::isProtectedMember(Piece* pce) const {
-	return actor == pce && actorProtected();
-}
-
-inline bool Record::actorProtected() const {
-	return actor->getType() == Com::Piece::warhorse && (action & ACT_ATCK);
-}
 
 // handles game logic
 class Game {
@@ -86,7 +77,8 @@ public:
 	bool pieceOnHome(const Piece* piece) const;
 	Object* getScreen();
 	void setFfpadPos(bool force = false, svec2 pos = svec2(UINT16_MAX));
-	Com::Tile checkFavor();	// unlike pollFavor it just returns the type
+	Com::Tile checkFavor();
+	Com::Tile checkFavor(Piece* piece, Tile* dtil, Action action);	// checkFavor with possible change to mountain FF
 	bool getMyTurn() const;
 	uint8 getFavorCount() const;
 	uint8 getFavorTotal() const;
@@ -113,7 +105,7 @@ public:
 	void prepareMatch();
 	void setOwnTilesInteract(Tile::Interact lvl, bool dim = false);
 	void setMidTilesInteract(Tile::Interact lvl, bool dim = false);
-	void setOwnPiecesVisible(bool on, bool event = true);
+	void setOwnPiecesVisible(bool on);
 	void disableOwnPiecesInteract(bool rigid, bool dim = false);
 	void checkOwnTiles() const;		// throws error string on failure
 	void checkMidTiles() const;		// ^
@@ -155,18 +147,21 @@ private:
 	void collectTilesBySingle(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
 	void collectTilesByArea(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
-	void collectTilesByType(uset<uint16>& tcol, uint16 pos);
-	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type);
+	void collectTilesByType(uset<uint16>& tcol, uint16 pos, bool (*stepable)(uint16));
+	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type, bool (*stepable)(uint16));
 	static bool spaceAvailibleAny(uint16 pos);
-	bool spaceAvailibleAlly(uint16 pos);
+	static bool spaceAvailibleSpearman(uint16 pos);
+	static bool spaceAvailibleLancer(uint16 pos);
 	static bool spaceAvailibleDragon(uint16 pos);
 	void checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst, FavorAct fact, Com::Tile favor);
 	uset<uint16> collectTilesByDistance(svec2 pos, uint16 dist);
+	bool checkFireLine(svec2& pos, svec2 mov, uint16 dist);
 	static bool canForestFF(FavorAct fact, Com::Tile favor, Tile* src);
 	bool canForestFF(FavorAct fact, Com::Tile favor, Tile* src, Tile* dst, Piece* occ) const;
 	void checkFavorAction(Tile* src, Tile* dst, Piece* occupant, Action action, FavorAct fact, Com::Tile favor);
 	void checkAttack(Piece* killer, Piece* victim, Tile* dtil) const;
 	bool survivalCheck(Piece* piece, Piece* occupant, Tile* stil, Tile* dtil, Action action, FavorAct fact, Com::Tile favor);
+	bool runSurvivalCheck();
 	void failSurvivalCheck(Piece* piece, Action action);
 	bool checkWin();
 	bool checkThroneWin(Piece* thrones);
@@ -226,11 +221,11 @@ inline bool Game::isEnemyPiece(const Piece* pce) const {
 }
 
 inline bool Game::pieceOnBoard(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), svec2(0), svec2(config.homeSize.x - 1, boardHeight - 1));
+	return inRange(ptog(piece->getPos()), svec2(0), svec2(config.homeSize.x, boardHeight));
 }
 
 inline bool Game::pieceOnHome(const Piece* piece) const {
-	return inRange(ptog(piece->getPos()), svec2(0, config.homeSize.y + 1), svec2(config.homeSize.x - 1, boardHeight - 1));
+	return inRange(ptog(piece->getPos()), svec2(0, config.homeSize.y + 1), svec2(config.homeSize.x, boardHeight));
 }
 
 inline Object* Game::getScreen() {
@@ -262,7 +257,7 @@ inline void Game::setMidTilesInteract(Tile::Interact lvl, bool dim) {
 }
 
 inline vector<uint16> Game::countOwnTiles() const {
-	return countTiles(tiles.own(), tiles.getHome(), vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end() - 1));
+	return countTiles(tiles.own(), tiles.getHome(), vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end()));
 }
 
 inline vector<uint16> Game::countMidTiles() const {
@@ -297,8 +292,12 @@ inline bool Game::canForestFF(FavorAct fact, Com::Tile favor, Tile* src, Tile* d
 	return canForestFF(fact, favor, src) && dst->getType() == Com::Tile::forest && isOwnPiece(occ);
 }
 
+inline bool Game::runSurvivalCheck() {
+	return randDist(randGen) < config.survivalPass;
+}
+
 inline void Game::recvMove(uint8* data) {
-	pieces[SDLNet_Read16(data)].updatePos(idToPos(SDLNet_Read16(data + 2)), true);
+	pieces[SDLNet_Read16(data)].updatePos(idToPos(SDLNet_Read16(data + sizeof(uint16))), true);
 }
 
 inline void Game::recvKill(uint8* data) {

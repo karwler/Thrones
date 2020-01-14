@@ -62,6 +62,7 @@ using std::string;
 using std::wstring;
 using std::vector;
 
+template <class T> using initlist = std::initializer_list<T>;
 template <class... T> using umap = std::unordered_map<T...>;
 template <class... T> using uset = std::unordered_set<T...>;
 using pairStr = pair<string, string>;

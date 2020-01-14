@@ -190,7 +190,7 @@ public:
 	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
-	Layout* getLayout();
+	RootLayout* getLayout();
 	Popup* getPopup();
 	Overlay* getOverlay();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
@@ -225,7 +225,7 @@ inline void Scene::setObjects(vector<Object*>&& objs) {
 	objects = std::move(objs);
 }
 
-inline Layout* Scene::getLayout() {
+inline RootLayout* Scene::getLayout() {
 	return layout.get();
 }
 

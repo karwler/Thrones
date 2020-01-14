@@ -38,8 +38,6 @@ void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Widget* wgt, const ivec2& li
 void ScrollBar::drag(const ivec2& mPos, const ivec2& mMov, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
 	if (draggingSlider)
 		setSlider(mPos.y - diffSliderMouse, listSize, pos, size, vert);
-	else if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)
-		moveListPos(-mMov, listSize, size);
 	else
 		moveListPos(mMov * swap(0, -1, !vert), listSize, size);
 }
@@ -205,9 +203,9 @@ void Button::drawTooltip() const {
 	int ofs = World::window()->getCursorHeight() + cursorMargin;
 	ivec2 pos = mousePos() + ivec2(0, ofs);
 	ivec2 siz = tipTex.getRes() + tooltipMargin * 2;
-	if (pos.x + siz.x > World::window()->getView().x)
-		pos.x = World::window()->getView().x - siz.x;
-	if (pos.y + siz.y > World::window()->getView().y)
+	if (pos.x + siz.x > World::window()->guiView().x)
+		pos.x = World::window()->guiView().x - siz.x;
+	if (pos.y + siz.y > World::window()->guiView().y)
 		pos.y = pos.y - ofs - siz.y;
 
 	drawRect(Rect(pos, siz), colorTooltip, World::scene()->blank(), -1.f);
@@ -603,6 +601,7 @@ void LabelEdit::onClick(const ivec2&, uint8 mBut) {
 		World::scene()->capture = this;
 		SDL_StartTextInput();
 		setCPos(uint(text.length()));
+		World::scene()->onResize();
 	} else if (mBut == SDL_BUTTON_RIGHT)
 		World::prun(rcall, this);
 }
@@ -756,6 +755,7 @@ void LabelEdit::confirm() {
 	else {
 		World::scene()->capture = nullptr;
 		SDL_StopTextInput();
+		World::scene()->onResize();
 	}
 	textOfs = 0;
 	World::prun(lcall, this);
@@ -769,6 +769,7 @@ void LabelEdit::cancel() {
 	textOfs = 0;
 	World::scene()->capture = nullptr;
 	SDL_StopTextInput();
+	World::scene()->onResize();
 }
 
 uint LabelEdit::jumpCharB(uint i) {

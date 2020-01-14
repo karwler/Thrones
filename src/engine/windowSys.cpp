@@ -42,7 +42,7 @@ int FontSet::length(const string& text, int height) {
 	return len;
 }
 
-void FontSet::writeLog(string&& text, const ShaderGUI* gui, const ivec2& res) {
+void FontSet::writeLog(string&& text, const ShaderGui* gui, const ivec2& res) {
 	logLines.push_back(std::move(text));
 	if (uint maxl = uint(res.y / int(float(logSize) / heightScale)); logLines.size() > maxl)
 		logLines.erase(logLines.begin(), logLines.begin() + pdift(logLines.size() - maxl));
@@ -169,7 +169,7 @@ ShaderDepth::ShaderDepth(const string& srcVert, const string& srcGeom, const str
 {}
 #endif
 
-ShaderGUI::ShaderGUI(const string& srcVert, const string& srcFrag) :
+ShaderGui::ShaderGui(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag),
 	pview(glGetUniformLocation(program, "pview")),
 	rect(glGetUniformLocation(program, "rect")),
@@ -370,7 +370,7 @@ void WindowSys::createWindow() {
 	glewExperimental = GL_TRUE;
 	glewInit();
 #endif
-	updateViewport();
+	updateView();
 
 	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClearDepth(1.0);
@@ -390,7 +390,7 @@ void WindowSys::createWindow() {
 #ifndef OPENGLES
 	depth.reset(new ShaderDepth(sources.at(fileDepthVert), sources.at(fileDepthGeom), sources.at(fileDepthFrag)));
 #endif
-	gui.reset(new ShaderGUI(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
+	gui.reset(new ShaderGui(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
 
 	// init startup log
 	glViewport(0, 0, curView.x, curView.y);
@@ -529,11 +529,11 @@ void WindowSys::setWindowMode() {
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
-	updateViewport();
+	updateView();
 #endif
 }
 
-void WindowSys::updateViewport() {
+void WindowSys::updateView() {
 #ifdef __ANDROID__
 	SDL_Rect rect;
 	SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window), &rect);	// SDL_GL_GetDrawableSize don't work properly

@@ -35,7 +35,7 @@ Settings::Settings() :
 	softShadows(true),
 	gamma(1.f),
 	size(1280, 720),
-	mode({ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr }),
+	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
 	scaleTiles(true),
 	scalePieces(false),
 	chatLines(511),

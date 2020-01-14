@@ -194,8 +194,8 @@ void Program::eventUpdateConfig(Button*) {
 	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
 	Com::Config& cfg = ph->confs[curConfig];
 	svec2 newHome = glm::clamp(svec2(uint16(sstol(ph->wio.width->getText())), uint16(sstol(ph->wio.height->getText()))), Com::Config::minHomeSize, Com::Config::maxHomeSize);
-	setConfigAmounts(cfg.tileAmounts.data(), ph->wio.tiles.data(), Com::tileMax - 1, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scaleTiles);
-	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), Com::tileMax - 1, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
+	setConfigAmounts(cfg.tileAmounts.data(), ph->wio.tiles.data(), Com::tileLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scaleTiles);
+	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), Com::tileLim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
 	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), Com::pieceMax, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
 	cfg.homeSize = newHome;
 
@@ -250,16 +250,16 @@ void Program::setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint1
 void Program::eventTileSliderUpdate(Button* but) {
 	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
 	Com::Config& cfg = pr->confs[curConfig];
-	updateAmtSlider(cfg.tileAmounts.data(), pr->wio.tiles.data(), Com::pieceMax, static_cast<Slider*>(but));
-	pr->updateAmtSliders(cfg.tileAmounts.data(), pr->wio.tiles.data(), Com::tileMax - 1, cfg.homeSize.y, cfg.countFreeTiles());
+	updateAmtSlider(cfg.tileAmounts.data(), pr->wio.tiles.data(), Com::tileLim, static_cast<Slider*>(but));
+	pr->updateAmtSliders(cfg.tileAmounts.data(), pr->wio.tiles.data(), Com::tileLim, cfg.homeSize.y, cfg.countFreeTiles());
 	pr->wio.tileFortress->setText(ProgState::tileFortressString(cfg));
 }
 
 void Program::eventMiddleSliderUpdate(Button* but) {
 	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
 	Com::Config& cfg = pr->confs[curConfig];
-	updateAmtSlider(cfg.middleAmounts.data(), pr->wio.middles.data(), Com::pieceMax, static_cast<Slider*>(but));
-	pr->updateAmtSliders(cfg.middleAmounts.data(), pr->wio.middles.data(), Com::tileMax - 1, 0, cfg.countFreeMiddles());
+	updateAmtSlider(cfg.middleAmounts.data(), pr->wio.middles.data(), Com::tileLim, static_cast<Slider*>(but));
+	pr->updateAmtSliders(cfg.middleAmounts.data(), pr->wio.middles.data(), Com::tileLim, 0, cfg.countFreeMiddles());
 	pr->wio.middleFortress->setText(ProgState::middleFortressString(cfg));
 }
 
@@ -546,7 +546,7 @@ void Program::eventSetupLoad(Button* but) {
 		for (Tile* it = game.getTiles().own(); it != game.getTiles().end(); it++)
 			it->setType(Com::Tile::empty);
 
-		vector<uint16> cnt(game.getConfig().tileAmounts.begin(), game.getConfig().tileAmounts.end() - 1);
+		vector<uint16> cnt(game.getConfig().tileAmounts.begin(), game.getConfig().tileAmounts.end());
 		for (const pair<svec2, Com::Tile>& it : stp.tiles)
 			if (it.first.x < game.getConfig().homeSize.x && it.first.y < game.getConfig().homeSize.y && cnt[uint8(it.second)]) {
 				cnt[uint8(it.second)]--;
@@ -590,9 +590,9 @@ void Program::eventShowConfig(Button*) {
 	World::scene()->setPopup(state->createPopupConfig(game.getConfig()));
 }
 
-void Program::eventSwitchSetupButtons(Button*) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	ps->setDeleteLock(!ps->getDeleteLock());
+void Program::eventSwitchGameButtons(Button*) {
+	ProgGame* pg = static_cast<ProgGame*>(state.get());
+	pg->bswapIcon->selected = !pg->bswapIcon->selected;
 }
 
 // GAME MATCH
@@ -894,6 +894,10 @@ void Program::eventSLUpdateLE(Button* but) {
 
 void Program::eventPrcSliderUpdate(Button* but) {
 	static_cast<LabelEdit*>(but->getParent()->getWidget(but->getID() + 1))->setText(toStr(static_cast<Slider*>(but)->getVal()) + '%');
+}
+
+void Program::eventClearLabel(Button* but) {
+	static_cast<Label*>(but)->setText("");
 }
 
 void Program::connect(bool client, const char* msg) {

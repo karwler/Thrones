@@ -4,12 +4,12 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Thrones - Rules</title>
-	<link rel="icon" type="image/bmp" href="../rsc/data/thrones.bmp">
+	<link rel="icon" type="image/png" href="../rsc/data/thrones.png">
 	<link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
 	<nav>
-		<img src="../rsc/textures/title.bmp">
+		<img src="../rsc/textures/title.png">
 		<a href="rules.html">Rules</a>
 		<a href="docs.html">Docs</a>
 		<div class="flim"></div>
@@ -30,123 +30,138 @@
 
 	<h1>Tiles</h1>
 	<div class="tiles">
-		<h3><img src="../rsc/textures/plains.bmp" alt="(yellow)">Plains</h3>
-		<h3><img src="../rsc/textures/forest.bmp" alt="(green)">Forest</h3>
-		<h3><img src="../rsc/textures/mountain.bmp" alt="(gray)">Mountain</h3>
-		<h3><img src="../rsc/textures/water.bmp" alt="(blue)">Water</h3>
-		<h3><img src="../rsc/textures/fortress.bmp" alt="(brown)">Fortress</h3>
+		<h3><img src="../rsc/textures/plains.png" alt="(yellow)">Plains</h3>
+		<h3><img src="../rsc/textures/forest.png" alt="(green)">Forest</h3>
+		<h3><img src="../rsc/textures/mountain.png" alt="(gray)">Mountain</h3>
+		<h3><img src="../rsc/textures/water.png" alt="(blue)">Water</h3>
+		<h3><img src="../rsc/textures/fortress.png" alt="(brown)">Fortress</h3>
 	</div>
 
 	<h1>Pieces</h1>
 	<div class="pieces">
-		<h3>Ranger (mountain raider)<img src="../rsc/textures/ranger.bmp"></h3>
+		<h3>Ranger<img src="../rsc/textures/ranger.png"> (mountain raider)</h3>
 		<ul>
-			<li>Always passes Mountain survival check.</li>
-			<li>While on Mountain, cannot be fired upon by any piece.</li>
+			<li>Can occupy Mountains.</li>
 		</ul>
-		<h3>Spearman (marine infantry)<img src="../rsc/textures/spearman.bmp"></h3>
+		<h3>Spearman<img src="../rsc/textures/spearman.png"> (marine infantry)</h3>
 		<ul>
-			<li>Always passes Water survival check.</li>
 			<li>While on Water, may move over any connected Water if only moving that turn.</li>
+			<li>Always passes Water survival check.</li>
 		</ul>
-		<h3>Crossbowman (short ranged)<img src="../rsc/textures/crossbowman.bmp"></h3>
+		<h3>Crossbowman<img src="../rsc/textures/crossbowman.png"> (short ranged)</h3>
 		<ul>
-			<li>Fires on an adjacent tile except Forest.</li>
+			<li>Fires on an adjacent tile except Forests.</li>
 		</ul>
-		<h3>Catapult (mid-ranged)<img src="../rsc/textures/catapult.bmp"></h3>
+		<h3>Catapult<img src="../rsc/textures/catapult.png"> (mid-ranged)</h3>
 		<ul>
-			<li>Fires on a tile that is two tiles away in a single direction except Forest.</li>
+			<li>Fires on a tile two tiles away in a single direction except Forests.</li>
 		</ul>
-		<h3>Trebuchet (long ranged)<img src="../rsc/textures/trebuchet.bmp"></h3>
+		<h3>Trebuchet<img src="../rsc/textures/trebuchet.png"> (long ranged)</h3>
 		<ul>
-			<li>Fires on a tile that is three tiles away in a single direction.</li>
+			<li>Fires on a tile three tiles away in a single direction except Forests</li>
 		</ul>
-		<h3>Lancer (light cavalry)<img src="../rsc/textures/lancer.bmp"></h3>
+		<h3>Lancer<img src="../rsc/textures/lancer.png"> (light cavalry)</h3>
 		<ul>
-			<li>While on Plains, may move over any number of connected Plains if only moving that turn.</li>
+			<li>While on Plains, may move over any number of connected Plains and over enemy pieces except enemy Spearmen.</li>
 		</ul>
-		<h3>Warhorse (armored cavalry) <img src="../rsc/textures/warhorse.bmp"></h3>
+		<h3>Warhorse<img src="../rsc/textures/warhorse.png"> (armored cavalry)</h3>
 		<ul>
 			<li>Cannot be attacked if it removed a piece during the previous turn.</li>
-			<li>May switch positions with any number of allied and enemy pieces if not attacking that turn.</li>
+			<li>May switch positions with any number of allied and/or enemy pieces except enemy Spearmen.</li>
 		</ul>
-		<h3>Elephant (heavy cavalry)<img src="../rsc/textures/elephant.bmp"></h3>
+		<h3>Elephant<img src="../rsc/textures/elephant.png"> (heavy cavalry)</h3>
 		<ul>
 			<li>Cannot be engaged if occupying a Plains except by a Dragon.</li>
 		</ul>
-		<h3>Dragon (wild beast)<img src="../rsc/textures/dragon.bmp"></h3>
+		<h3>Dragon<img src="../rsc/textures/dragon.png"> (wild beast)</h3>
 		<ul>
 			<li>May move up to four tiles and attack in any single direction.</li>
-			<li>Only an enemy Dragon &amp; firing pieces can block it’s movement.</li>
-			<li>Always passes both survival checks but cannot attack Forest.</li>
+			<li>Can occupy Mountains but cannot attack/occupy Forests.</li>
+			<li>Requires a Survival Check to be engaged; only Dragon &amp; firing pieces always pass.</li>
+			<li>Enemy Dragon & firing pieces block it’s movement.</li>
 		</ul>
-		<h3>Throne (royal guard)<img src="../rsc/textures/throne.bmp"></h3>
+		<h3>Throne<img src="../rsc/textures/throne.png"> (royal guard)</h3>
 		<ul>
-			<li>Always passes Survival Checks while attacking any piece/tile including Elephants, Warhorse and unbreached Fortress tiles.</li>
+			<li>Always passes all Survival Checks and can attack any piece including Elephant, Warhorse, and Dragon.</li>
 		</ul>
 	</div>
 
 	<h1>Playing The Game</h1>
-	<h2>Your Turn</h2>
-	<p>Each player must choose to either move/switch pieces, attack, or fire each turn.</p>
+	<h2>Actions</h2>
+	<p>Players choose to Move and/or Switch pieces, or Attack, or Fire during their turn. Pieces can move over allied pieces if able. Use your actions to keep your frontline adaptable and aggressive.</p>
 	<ul>
-		<li>Move and/or Switch pieces in any order</li>
-		<ul>
-			<li>Move a piece one tile in any direction, unless otherwise specified.</li>
+		<li>Move and/or Switch pieces:</li>
+		<ol>
+			<li>Move a piece one tile in any direction.</li>
 			<li>Switch positions with an adjacent, allied piece of a different type.</li>
-		</ul>
-		<li>Engage another piece or occupied Fortress either by</li>
-		<ul>
+		</ol>
+		<li>Engage another piece by Attacking or Firing</li>
+		<ol>
 			<li>Attacking: Occupying a tile and removing it's piece.</li>
 			<li>Firing: Removing a piece on a different tile without moving.</li>
-		</ul>
+		</ol>
 	</ul>
+	<p>Dragons and Lancers are the only pieces that can move over (certain) enemy pieces.</p>
 
-	<h2>Survival</h2>
-	<p>
-		If a piece is move/switching from, attacking onto/from, or firing onto/from a  Mountain or Water tile, a Survival Check is made to see if fate impeded its efforts.<br>
-		This is done by flipping a coin, rolling an even-numbered die, or using the #2 method in Standard Gameplay.<br>
-		Remember, if a piece is only moving onto a Mountain or Water tile, no check occurs!
-	</p>
+	<h2>Terrain</h2>
+	<p>Each tile affects how a piece interacts with the battlefield and it’s opponents.</p>
+	<table class="listing">
+		<tr>
+			<td>Mountains</td>
+			<td>
+				Cannot be attacked, switched onto by any piece, or be fired over.<br>
+				They can only be occupied by Dragons and Rangers.<br>
+				Pieces on a Mountain can move onto any adjacent Mountain.
+			</td>
+		</tr>
+		<tr>
+			<td>Forests</td>
+			<td>Cannot be fired on or attacked by Dragons.</td>
+		</tr>
+		<tr>
+			<td>Water</td>
+			<td>Must succeed a Survival Check to take action against or off of the tile. Spearmen always pass this check, and if they switch with another piece, that piece also always passes for that turn.</td>
+		</tr>
+	</table>
+
+	<h2>Survival Check</h2>
+	<p>Flip a coin, roll a die, or use the #2 method from “Gameplay” to make a Survival Check! Only one per piece is necessary.</p>
 	<ul>
-		<li>Survive the check with an even number; the piece may move, attack, or fire that turn.</li>
-		<li>Fail the check with an odd number; the move/firing does not occur, and the player ends their turn. If the check failed during an attack, the piece is removed from the game.</li>
+		<li>Succeed the check with an even number: the piece may move, switch, attack, or fire at will.</li>
+		<li>Fail the check with an odd number: that piece doesn’t move, switch, or fire for that turn. If a check fails during an attack, your opponent may move that piece to any adjacent tile for that turn. In either failure, that player’s turn continues.</li>
 	</ul>
-	<p>If Rangers switch positions with a piece occupying a Mountain, or if Spearmen switch positions with a piece occupying Water, both pieces always pass the Survival Check that their switching piece always passes that turn.</p>
 
-	<h2>Then a Dragon Showed Up</h2>
-	<p>
-		If they did not place it at the beginning of the game, a player may choose to use their turn to place their Dragon on any unoccupied, homeland Mountain.<br>
-		Alternately, they can choose to place it in their homeland Fortress and restart that turn, removing any piece (opponent or allied) occupying that Fortress from the game.
-	</p>
-
-	<h2>Breaching Fortresses</h2>
-	<p>
-		A piece occupying a Fortress cannot be engaged until the Fortress is breached. A successful attack or firing (determined by a Survival Check) breaches the Fortress tile.<br>
-		A breached Fortress is flipped upside-down, and its occupant now vulnerable to attack next turn. The Fortress does not restore itself until it is unoccupied at a turn’s end.<br>
-		A Throne’s attack will breach the Fortress AND remove it’s occupier in one move.<br>
-		A Warhorse can switch positions with a piece occupying a Fortress but it cannot switch positions with an enemy Warhorse in any circumstances.
-	</p>
+	<h2>Fortresses</h2>
+	<p>A piece occupying a Fortress tile has high walls and battlements keeping it safe- it cannot be engaged (attacked or fired on) until the Fortress is breached.</p>
+	<ul>
+		<li>A successful attack or firing (determined by a Survival Check) breaches the Fortress tile.</li>
+		<li>A breached Fortress is flipped upside-down, and its occupant now engageable next turn.</li>
+		<li>The Fortress does not restore (unbreach) itself until it is unoccupied at a turn’s end.</li>
+	</ul>
+	<p>Warhorses can only switch positions with any piece occupying a Fortress (except Spearmen) if it is breached.</p>
 
 	<h2>Fate’s Favor</h2>
-	<p>When the game starts with a Throne occupying a Fortress, and/or when the Throne occupies a Fortress different from the one it did previously, it’s controller gains a special, single-use Fate’s Favor tile (indicated by taking one of the extra tiles the game has)</p>
+	<p>
+		When the Throne occupies a Fortress different from the one it did previously, it’s controller gains a special, single-use Fate’s Favor tile, indicated by taking one of the extra tiles the game has.<br>
+		A player can use one of the below tile effects to add to a Move/Switch Action:
+	</p>
 	<ul>
-		<li><b>Haste (Plains): </b>Adds 1 tile of movement to an allied piece that player controls.</li>
+		<li><b>Cunning (Mountain): </b>Allows any allied piece to move onto a nearby Mountain.</li>
+		<li><b>Haste (Plains): </b>Adds 1 tile of movement to any allied piece that player controls.</li>
 		<li><b>Ambush (Forest): </b>Switches positions of two allied pieces on Forests that player controls.</li>
-		<li><b>Cunning (Mountain): </b>Automatically pass a Survival Check that player controls.</li>
-		<li><b>Deception (Water): </b>Switches positions of any two adjacent pieces without Survival Check.</li>
+		<li><b>Daring (Water): </b>Switches positions of any two adjacent pieces without Survival Check.</li>
 	</ul>
-	<p>There is a max of any 4 total per player. Only one FF tile may be spent by each player per turn. A player only needs to reveal what FF tile they have when they use that particular tile. They can use one at any time.</p>
+	<p>There is a max of any 4 total FF tiles per player. Each turn, only one FF tile may be spent by the player. A player needs to reveal what FF tile they have only when they use that particular tile. Don’t let your opponent see it!</p>
 
 	<h1>Gameplay</h1>
 	<ol>
-		<li>Each player gets 15 Pieces: 11 Plains, 10 Forest, 7 Water, 7 Mountain, and 1 Fortress.</li>
-		<li>Players choose even or odd, and hold numbers on their hands behind their backs and reveal them simultaneously; the sum of the numbers decides who goes first. Survival Checks can also be resolved this way.</li>
+		<li>Each player gets 13 Pieces, 13 Plains, 10 Forest, 7 Water, 5 Mountain, and 1 Fortress.</li>
+		<li>Players choose even or odd, and hold numbers on their hands behind their backs and reveal them simultaneously; the sum of the numbers decides who goes first. A sum of 10 requires a redo. Survival Checks can also be resolved this way.</li>
 		<li>Set rule board as a screen so players cannot see opponent's homeland, and then lay pieces and home tiles; at least one of each tile type must be in each of the 4 rows and Fortresses cannot border game board boundaries.</li>
-		<li>Each player is given 4 tiles (one of each type) and puts them between their front tile row and the screen, intended as where they want them placed in the middle row.</li>
+		<li>Each player is given 4 tiles (one of each type) and puts them between their front tile row and the screen, intended as where they want them placed in the middle row</li>
 		<li>Remove screen. If both players have set middle row tiles for the same contested place, first place all uncontested tiles down in the middle row; then move both contested tiles to the leftmost open space of the player that is moving first, starting from their left.</li> 
 		<li>The middle row Fortress occupies wherever no tile was set, after all 8 tiles are set.</li>
-		<li>Whichever player goes first cannot attack/fire that turn. Winning requires the removal of your opponent's Throne or occupying the opponent's homeland Fortress with your Throne.</li>
+		<li>The game starts! Whichever player goes first cannot attack/fire that turn. Winning requires the removal of your opponent's Throne or occupying the opponent's homeland Fortress with your Throne.</li>
 	</ol>
 </body>
 </html>

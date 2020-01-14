@@ -26,7 +26,7 @@ void Camera::updateView() const {
 }
 
 void Camera::updateProjection() {
-	vec2 res = World::window()->getView();
+	vec2 res = World::window()->screenView();
 	proj = glm::perspective(glm::radians(fov), res.x / res.y, znear, zfar);
 
 	res /= 2.f;
@@ -68,7 +68,7 @@ void Camera::zoom(int mov) {
 }
 
 vec3 Camera::direction(const ivec2& mPos) const {
-	vec2 res = World::window()->getView();
+	vec2 res = World::window()->screenView();
 	vec3 dir = glm::normalize(lat - pos);
 
 	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
@@ -226,7 +226,7 @@ Scene::~Scene() {
 void Scene::draw() {
 	(this->*shadowFunc)();
 	glUseProgram(*World::geom());
-	glViewport(0, 0, World::window()->getView().x, World::window()->getView().y);
+	glViewport(0, 0, World::window()->screenView().x, World::window()->screenView().y);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	for (Object* it : objects)
 		it->draw();
@@ -337,7 +337,7 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 }
 
 void Scene::onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse) {
-	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LCTRL] && !camera.moving) {
+	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LCTRL] && !capture && !camera.moving) {
 		vec2 rot(glm::radians(float(mot.yrel) / 2.f), glm::radians(float(-mot.xrel) / 2.f));
 		camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 		return;
@@ -363,12 +363,13 @@ void Scene::onMouseDown(const SDL_MouseButtonEvent& but, bool mouse) {
 			World::state()->eventFavorize(FavorAct::on);
 		else
 			World::state()->eventEscape();
-		break;
+		return;
 	case SDL_BUTTON_X2:
 		if (dynamic_cast<ProgMatch*>(World::state()))
 			World::state()->eventFavorize(FavorAct::now);
 		else
 			World::state()->eventEnter();
+		return;
 	}
 
 	if (cstamp.but)
@@ -418,23 +419,23 @@ void Scene::onMouseLeave() {
 }
 
 void Scene::onFingerMove(const SDL_TouchFingerEvent& fin) {
-	vec2 size = World::window()->getView();
+	vec2 size = World::window()->screenView();
 	onMouseMove({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, false);
 }
 
 void Scene::onFingerGesture(const SDL_MultiGestureEvent& ges) {
 	if (dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
-		camera.zoom(int(ges.dDist * float(World::window()->getView().y)));
+		camera.zoom(int(ges.dDist * float(World::window()->screenView().y)));
 }
 
 void Scene::onFingerDown(const SDL_TouchFingerEvent& fin) {
-	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getView());
+	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->screenView());
 	updateSelect(pos);
 	onMouseDown({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, false);
 }
 
 void Scene::onFingerUp(const SDL_TouchFingerEvent& fin) {
-	vec2 size = World::window()->getView();
+	vec2 size = World::window()->screenView();
 	onMouseUp({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, int(fin.x * size.x), int(fin.y * size.y) }, false);
 	updateSelect(ivec2(-1));
 }
@@ -515,7 +516,7 @@ void Scene::updateSelect(const ivec2& mPos) {
 }
 
 Interactable* Scene::getSelected(const ivec2& mPos) {
-	if (outRange(mPos, ivec2(0), World::window()->getView() - ivec2(1)))
+	if (outRange(mPos, ivec2(0), World::window()->screenView()))
 		return nullptr;
 
 	for (Layout* box = popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();;) {

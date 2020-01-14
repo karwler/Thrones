@@ -46,7 +46,7 @@ public:
 	Texture render(const string& text, int height);
 	Texture render(const string& text, int height, uint length);
 
-	void writeLog(string&& text, const ShaderGUI* gui, const ivec2& res);
+	void writeLog(string&& text, const ShaderGui* gui, const ivec2& res);
 	void closeLog();	// doesn't get called in destructor
 
 private:
@@ -72,7 +72,6 @@ public:
 
 	GLuint program;
 
-public:
 	Shader(const string& srcVert, const string& srcFrag);
 #ifndef OPENGLES
 	Shader(const string& srcVert, const string& srcGeom, const string& srcFrag);
@@ -101,7 +100,6 @@ public:
 	GLint materialDiffuse, materialSpecular, materialShininess;
 	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
-public:
 	ShaderGeometry(const string& srcVert, const string& srcFrag, const Settings* sets);
 
 private:
@@ -114,20 +112,18 @@ public:
 	GLint shadowMats;
 	GLint lightPos, farPlane;
 
-public:
 #ifndef OPENGLES
 	ShaderDepth(const string& srcVert, const string& srcGeom, const string& srcFrag);
 #endif
 };
 
-class ShaderGUI : public Shader {
+class ShaderGui : public Shader {
 public:
 	GLint pview, rect, uvrc, zloc;
 	GLint color, texsamp;
 	Quad wrect;
 
-public:
-	ShaderGUI(const string& srcVert, const string& srcFrag);
+	ShaderGui(const string& srcVert, const string& srcFrag);
 };
 
 // handles window events and contains video settings
@@ -164,7 +160,7 @@ private:
 	SDL_GLContext context;
 	uptr<ShaderGeometry> geom;
 	uptr<ShaderDepth> depth;
-	uptr<ShaderGUI> gui;
+	uptr<ShaderGui> gui;
 	uptr<FontSet> fonts;
 	ivec2 curView;
 	uint32 oldTime;
@@ -179,7 +175,8 @@ public:
 	void start();
 	void close();
 
-	ivec2 getView() const;
+	ivec2 screenView() const;
+	ivec2 guiView() const;
 	uint8 getCursorHeight() const;
 	vector<ivec2> displaySizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
@@ -200,7 +197,7 @@ public:
 	Settings* getSets();
 	const ShaderGeometry* getGeom() const;
 	const ShaderDepth* getDepth() const;
-	const ShaderGUI* getGUI() const;
+	const ShaderGui* getGUI() const;
 
 private:
 	void init();
@@ -215,7 +212,7 @@ private:
 	bool trySetSwapInterval();
 	void setWindowMode();
 
-	void updateViewport();
+	void updateView();
 	bool checkCurDisplay();
 	template <class T> static bool checkResolution(T& val, const vector<T>& modes);
 };
@@ -224,8 +221,12 @@ inline void WindowSys::close() {
 	run = false;
 }
 
-inline ivec2 WindowSys::getView() const {
+inline ivec2 WindowSys::screenView() const {
 	return curView;
+}
+
+inline ivec2 WindowSys::guiView() const {
+	return SDL_IsScreenKeyboardShown(window) && dynamic_cast<LabelEdit*>(scene->capture) ? ivec2(curView.x, curView.y / 2) : curView;
 }
 
 inline uint8 WindowSys::getCursorHeight() const {
@@ -260,7 +261,7 @@ inline const ShaderDepth* WindowSys::getDepth() const {
 	return depth.get();
 }
 
-inline const ShaderGUI* WindowSys::getGUI() const {
+inline const ShaderGui* WindowSys::getGUI() const {
 	return gui.get();
 }
 

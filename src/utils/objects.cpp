@@ -156,7 +156,7 @@ void Tile::drawTop() const {
 }
 
 void Tile::onHold(const ivec2&, uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT && ulcall) {
+	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT && ulcall) {
 		show = false;
 		World::scene()->capture = this;
 		World::prun(hgcall, this, mBut);
@@ -164,7 +164,7 @@ void Tile::onHold(const ivec2&, uint8 mBut) {
 }
 
 void Tile::onUndrag(uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT) {
+	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT) {
 		show = true;
 		World::scene()->capture = nullptr;
 		World::prun(ulcall, this, mBut);
@@ -247,7 +247,7 @@ void Piece::drawTop() const {
 }
 
 void Piece::onHold(const ivec2&, uint8 mBut) {
-	if ((mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
+	if (mBut = World::state()->switchButtons(mBut); (mBut == SDL_BUTTON_LEFT && ulcall) || (mBut == SDL_BUTTON_RIGHT && urcall)) {
 		if (drawTopSelf = mBut == SDL_BUTTON_LEFT || !firingDistance())
 			show = false;
 		else
@@ -258,7 +258,7 @@ void Piece::onHold(const ivec2&, uint8 mBut) {
 }
 
 void Piece::onUndrag(uint8 mBut) {
-	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
+	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
 		show = true;
 		SDL_ShowCursor(SDL_ENABLE);
 		World::scene()->capture = nullptr;

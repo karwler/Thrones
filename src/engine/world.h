@@ -30,7 +30,7 @@ public:
 	static Scene* scene();
 	static const ShaderGeometry* geom();
 	static const ShaderDepth* depth();
-	static const ShaderGUI* gui();
+	static const ShaderGui* gui();
 
 #ifdef _WIN32
 	static void setArgs(PWSTR pCmdLine);
@@ -90,7 +90,7 @@ inline const ShaderDepth* World::depth() {
 	return windowSys.getDepth();
 }
 
-inline const ShaderGUI* World::gui() {
+inline const ShaderGui* World::gui() {
 	return windowSys.getGUI();
 }
 #ifdef _WIN32

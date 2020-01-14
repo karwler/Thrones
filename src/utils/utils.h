@@ -13,7 +13,7 @@ class Button;
 class Layout;
 class Program;
 class ProgState;
-class ShaderGUI;
+class ShaderGui;
 
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using sset = std::set<T...>;
@@ -76,23 +76,23 @@ struct Rect : SDL_Rect {
 };
 
 inline constexpr Rect::Rect(int n) :
-	SDL_Rect({ n, n, n, n })
+	SDL_Rect{ n, n, n, n }
 {}
 
 inline constexpr Rect::Rect(int x, int y, int w, int h) :
-	SDL_Rect({ x, y, w, h })
+	SDL_Rect{ x, y, w, h }
 {}
 
 inline constexpr Rect::Rect(int x, int y, const ivec2& size) :
-	SDL_Rect({ x, y, size.x, size.y })
+	SDL_Rect{ x, y, size.x, size.y }
 {}
 
 inline constexpr Rect::Rect(const ivec2& pos, int w, int h) :
-	SDL_Rect({ pos.x, pos.y, w, h })
+	SDL_Rect{ pos.x, pos.y, w, h }
 {}
 
 inline constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
-	SDL_Rect({ pos.x, pos.y, size.x, size.y })
+	SDL_Rect{ pos.x, pos.y, size.x, size.y }
 {}
 
 inline ivec2& Rect::pos() {
@@ -236,23 +236,23 @@ inline bool Dijkstra::Comp::operator()(Node a, Node b) {
 // geometry?
 
 template <class T>
-bool inRange(const T& val, const T& min, const T& max) {
-	return val >= min && val <= max;
+bool inRange(const T& val, const T& min, const T& lim) {
+	return val >= min && val < lim;
 }
 
 template <class T, glm::qualifier Q>
-bool inRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& max) {
-	return inRange(val.x, min.x, max.x) && inRange(val.y, min.y, max.y);
+bool inRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& lim) {
+	return inRange(val.x, min.x, lim.x) && inRange(val.y, min.y, lim.y);
 }
 
 template <class T>
-bool outRange(const T& val, const T& min, const T& max) {
-	return val < min || val > max;
+bool outRange(const T& val, const T& min, const T& lim) {
+	return val < min || val >= lim;
 }
 
 template <class T, glm::qualifier Q>
-bool outRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& max) {
-	return outRange(val.x, min.x, max.x) || outRange(val.y, min.y, max.y);
+bool outRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& lim) {
+	return outRange(val.x, min.x, lim.x) || outRange(val.y, min.y, lim.y);
 }
 
 template <class T, glm::qualifier Q = glm::defaultp>
@@ -267,8 +267,8 @@ T swapBits(T n, uint8 i, uint8 j) {
 }
 
 template <class T>
-uint8 numDigits(T num) {
-	return num ? uint8(std::log10(float(num > 0 ? num : -num))) + 1 : 1;
+uint8 numDigits10(T num) {
+	return num ? uint8(std::log10(num > 0 ? num : -num)) + 1 : 1;
 }
 
 // container stuff

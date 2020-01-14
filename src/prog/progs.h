@@ -29,8 +29,8 @@ protected:
 		LabelEdit* dragonDist;
 		CheckBox* dragonSingle;
 		CheckBox* dragonDiag;
-		array<LabelEdit*, Com::tileMax-1> tiles;
-		array<LabelEdit*, Com::tileMax-1> middles;
+		array<LabelEdit*, Com::tileLim> tiles;
+		array<LabelEdit*, Com::tileLim> middles;
 		array<LabelEdit*, Com::pieceMax> pieces;
 		Label* tileFortress;
 		Label* middleFortress;
@@ -67,6 +67,7 @@ public:
 	virtual void eventCameraReset();
 	void eventResize();
 
+	virtual uint8 switchButtons(uint8 but);
 	virtual RootLayout* createLayout() = 0;
 	virtual Overlay* createOverlay();
 	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok") const;
@@ -176,7 +177,16 @@ private:
 	static void updateWinSlider(Label* amt, uint16 val, uint16 max);
 };
 
-class ProgSetup : public ProgState {
+class ProgGame : public ProgState {
+public:
+	Label* message;
+	Draglet* bswapIcon;
+
+	virtual uint8 switchButtons(uint8 but) override;
+	virtual Overlay* createOverlay() override;
+};
+
+class ProgSetup : public ProgGame {
 public:
 	enum class Stage : uint8 {
 		tiles,
@@ -187,7 +197,6 @@ public:
 
 	umap<string, Setup> setups;
 	vector<Com::Tile> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
-	Label* message;
 	bool enemyReady;
 private:
 	uint8 selected;
@@ -196,7 +205,6 @@ private:
 	svec2 lastHold;		// position of last object that the cursor was dragged over
 	vector<uint16> counters;
 	Layout* icons;
-	Draglet* deleteIcon;
 
 public:
 	ProgSetup();
@@ -216,16 +224,13 @@ public:
 	uint16 getCount(uint8 type) const;
 	uint8 getSelected() const;
 	void selectNext(bool fwd);
-	bool getDeleteLock() const;
-	void setDeleteLock(bool on);
 
 	virtual RootLayout* createLayout() override;
-	virtual Overlay* createOverlay() override;
 	Popup* createPopupSaveLoad(bool save);
 
 	void setSelected(uint8 sel);
 private:
-	void setInteractivity(bool dlock = false);
+	void setInteractivity();
 	Layout* makeTicons();
 	Layout* makePicons();
 	uint8 findNextSelect(bool fwd);
@@ -252,17 +257,7 @@ inline void ProgSetup::selectNext(bool fwd) {
 	setSelected(findNextSelect(fwd));
 }
 
-inline bool ProgSetup::getDeleteLock() const {
-	return deleteIcon->selected;
-}
-
-inline void ProgSetup::setDeleteLock(bool on) {
-	setInteractivity(deleteIcon->selected = on);
-}
-
-class ProgMatch : public ProgState {
-public:
-	Label* message;
+class ProgMatch : public ProgGame {
 private:
 	Draglet* favorIcon;
 	Draglet* fnowIcon;
@@ -279,6 +274,7 @@ public:
 	virtual void eventFavorize(FavorAct act) override;
 	virtual void eventEndTurn() override;
 	virtual void eventCameraReset() override;
+
 	bool favorIconOn() const;
 	bool fnowIconOn() const;
 	FavorAct favorIconSelect() const;
@@ -290,7 +286,6 @@ public:
 	void decreaseDragonIcon();
 
 	virtual RootLayout* createLayout() override;
-	virtual Overlay* createOverlay() override;
 };
 
 inline bool ProgMatch::favorIconOn() const {

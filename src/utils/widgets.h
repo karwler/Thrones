@@ -206,7 +206,6 @@ class CheckBox : public Button {
 public:
 	bool on;
 
-public:
 	CheckBox(Size relSize = 1.f, bool on = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint bgTex = 0, const vec4& color = colorNormal, Layout* parent = nullptr, sizet id = SIZE_MAX);
 	virtual ~CheckBox() override = default;
 
@@ -230,6 +229,7 @@ inline bool CheckBox::toggle() {
 class Slider : public Button {
 public:
 	static constexpr int barSize = 10;
+
 private:
 	int val, vmin, vmax;
 	int diffSliderMouse;

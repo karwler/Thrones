@@ -115,7 +115,7 @@ RootLayout::RootLayout(Size relSize, vector<Widget*>&& children, bool vertical, 
 {}
 
 void RootLayout::draw() const {
-	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());	// dim other widgets
+	drawRect(Rect(ivec2(0), World::window()->screenView()), bgColor, World::scene()->blank());	// dim other widgets
 	Layout::draw();
 }
 
@@ -124,11 +124,11 @@ ivec2 RootLayout::position() const {
 }
 
 ivec2 RootLayout::size() const {
-	return World::window()->getView();
+	return World::window()->guiView();
 }
 
 Rect RootLayout::frame() const {
-	return Rect(ivec2(0), World::window()->getView());
+	return Rect(ivec2(0), World::window()->guiView());
 }
 
 // POPUP
@@ -144,17 +144,17 @@ Popup::Popup(const pair<Size, Size>& relSize, vector<Widget*>&& children, BCall 
 
 void Popup::draw() const {
 	Rect rct = rect();
-	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());					// dim other widgets
-	drawRect(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->blank());	// draw background
+	drawRect(Rect(ivec2(0), World::window()->screenView()), bgColor, World::scene()->blank());					// dim other widgets
+	drawRect(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->blank());		// draw background
 	Layout::draw();
 }
 
 ivec2 Popup::position() const {
-	return (World::window()->getView() - size()) / 2;
+	return (World::window()->guiView() - size()) / 2;
 }
 
 ivec2 Popup::size() const {
-	vec2 res = World::window()->getView();
+	vec2 res = World::window()->guiView();
 	return ivec2(relSize.usePix ? relSize.pix : relSize.prc * res.x, sizeY.usePix ? sizeY.pix : sizeY.prc * res.y);
 }
 
@@ -167,13 +167,13 @@ Overlay::Overlay(const pair<Size, Size>& relPos, const pair<Size, Size>& relSize
 {}
 
 void Overlay::draw() const {
-	drawRect(Rect(ivec2(0), World::window()->getView()), bgColor, World::scene()->blank());	// dim other widgets
-	drawRect(rect(), colorBackground, World::scene()->blank());								// draw background
+	drawRect(Rect(ivec2(0), World::window()->screenView()), bgColor, World::scene()->blank());	// dim other widgets
+	drawRect(rect(), colorBackground, World::scene()->blank());									// draw background
 	Layout::draw();
 }
 
 ivec2 Overlay::position() const {
-	vec2 res = World::window()->getView();
+	vec2 res = World::window()->guiView();
 	return ivec2(relPos.first.usePix ? relPos.first.pix : relPos.first.prc * res.x, relPos.second.usePix ? relPos.second.pix : relPos.second.prc * res.y);
 }
 

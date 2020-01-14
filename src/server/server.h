@@ -36,6 +36,7 @@ enum class Tile : uint8 {
 	fortress,
 	empty
 };
+constexpr uint8 tileLim = uint8(Tile::fortress);
 constexpr uint8 tileMax = uint8(Tile::empty);
 
 const array<string, tileMax> tileNames = {
@@ -93,7 +94,7 @@ enum class Code : uint8 {
 	move,		// piece move (piece + position info)
 	kill,		// piece die (piece info)
 	breach,		// fortress state change (breached or not info)
-	record,		// turn record data (piece + has attacked or switched info)
+	record,		// turn record data (acting piece + protected piece + action info)
 	message,	// text
 	wsconn = 'G'	// first letter of websocket handshake
 };
@@ -120,21 +121,20 @@ public:
 	uint8 dragonDist;
 	bool dragonSingle;
 	bool dragonDiag;
-	array<uint16, tileMax> tileAmounts;
-	array<uint16, tileMax-1> middleAmounts;
+	array<uint16, tileLim> tileAmounts;
+	array<uint16, tileLim> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
 	uint16 winFortress, winThrone;
 	array<bool, pieceMax> capturers;
 	bool shiftLeft, shiftNear;
 	
 	static constexpr char defaultName[] = "default";
-	static constexpr uint16 dataSize = sizeof(uint8) * 2 + sizeof(survivalPass) + sizeof(survivalMode) + sizeof(uint8) + sizeof(favorMax) + sizeof(dragonDist) + sizeof(uint8) + sizeof(uint8) + tileMax * sizeof(uint16) + (tileMax - 1) * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8) + sizeof(uint8) + sizeof(uint8);
+	static constexpr uint16 dataSize = sizeof(uint8) * 2 + sizeof(survivalPass) + sizeof(survivalMode) + sizeof(uint8) + sizeof(favorMax) + sizeof(dragonDist) + sizeof(uint8) + sizeof(uint8) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8) + sizeof(uint8) + sizeof(uint8);
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
 	static constexpr svec2 minHomeSize = { 5, 2 };
 	static constexpr svec2 maxHomeSize = { 101, 50 };
 
-public:
 	Config();
 
 	Config& checkValues();
@@ -142,7 +142,7 @@ public:
 	void fromComData(uint8* data);
 	string capturersString() const;
 	void readCapturers(const string& line);
-	uint16 countTilesNonFort() const;
+	uint16 countTiles() const;
 	uint16 countMiddles() const;
 	uint16 countPieces() const;
 	uint16 countFreeTiles() const;
@@ -154,8 +154,8 @@ private:
 	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
 };
 
-inline uint16 Config::countTilesNonFort() const {
-	return std::accumulate(tileAmounts.begin(), tileAmounts.end() - 1, uint16(0));
+inline uint16 Config::countTiles() const {
+	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), uint16(0));
 }
 
 inline uint16 Config::countMiddles() const {
@@ -167,7 +167,7 @@ inline uint16 Config::countPieces() const {
 }
 
 inline uint16 Config::countFreeTiles() const {
-	return homeSize.x * homeSize.y - countTilesNonFort();
+	return homeSize.x * homeSize.y - countTiles();
 }
 
 inline uint16 Config::countFreeMiddles() const {
@@ -206,7 +206,7 @@ const umap<Code, uint16> codeSizes = {
 	pair(Code::move, dataHeadSize + uint16(sizeof(uint16) * 2)),
 	pair(Code::kill, dataHeadSize + uint16(sizeof(uint16))),
 	pair(Code::breach, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16))),
-	pair(Code::record, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16)))
+	pair(Code::record, dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16) * 2))
 };
 
 // for sending/receiving network data (mustn't be used for both simultaneously)
@@ -232,10 +232,9 @@ public:
 	uint size() const;
 	void clear();
 
-	void push(const vector<uint8>& vec);
-	void push(const vector<uint16>& vec);
+	void push(const initlist<uint8>& lst);
+	void push(const initlist<uint16>& vec);
 	void push(const string& str);
-	void push(const uint8* vec, uint len);
 	void push(uint8 val);
 	void push(uint16 val);
 	uint preallocate(Code code);			// set head and preallocate space (returns end pos of head)
@@ -268,14 +267,6 @@ inline uint8& Buffer::operator[](uint i) {
 
 inline uint Buffer::size() const {
 	return dlim;
-}
-
-inline void Buffer::push(const vector<uint8>& vec) {
-	push(vec.data(), uint(vec.size()));
-}
-
-inline void Buffer::push(const string& str) {
-	push(reinterpret_cast<const uint8*>(str.c_str()), uint(str.length()));
 }
 
 inline uint Buffer::preallocate(Code code) {

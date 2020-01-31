@@ -8,6 +8,7 @@ import zipfile;
 lnxDir = 'build_lnx'
 glesDir = 'build_gles'
 webDir = 'build_web'
+macDir = 'build'
 win32Dir = 'build_win32'
 win64Dir = 'bulid_win64'
 
@@ -25,13 +26,14 @@ def writeTar(odir):
 	with tarfile.open(odir + '.tar.gz', 'w:gz') as th:
 		th.add(odir)
 
-def expCommon(odir, pdir, copyData = True, message = ''):
+def expCommon(odir, pdir, regGL = True, copyLicn = True, message = ''):
 	if not os.path.isdir(odir):
 		os.mkdir(odir)
 	os.chdir(odir)
-	if copyData:
+	if regGL:
 		shutil.copytree(os.path.join('..', pdir, 'data'), 'data')
-	shutil.copytree(os.path.join('..', pdir, 'licenses'), 'licenses')
+	if copyLicn:
+		shutil.copytree(os.path.join('..', pdir, 'licenses'), 'licenses')
 	shutil.copytree(os.path.join('..', 'doc'), 'doc')
 	os.chdir('..')
 
@@ -39,12 +41,24 @@ def expCommon(odir, pdir, copyData = True, message = ''):
 		txt = fh.read()
 	txt = re.sub(r'##\sBuild\s*', message, txt, flags = re.M | re.S)
 	txt = re.sub(r'The\sCMakeLists\.txt.*', '', txt, flags = re.M | re.S)
+	if regGL:
+		txt = re.sub(r',\slibjpeg', '', txt, flags = re.M | re.S))
 	with open(os.path.join(odir, 'README.md'), 'w') as fh:
 		fh.write(txt)
 
 def expAndroid(odir):
 	expCommon(odir, os.path.join('android', 'app'), False)
 	shutil.copy(os.path.join('android', 'app', 'release', 'app-release.apk'), os.path.join(odir, 'Thrones.apk'))
+	writeZip(odir)
+
+def expMac(odir, pdir):
+	expCommon(odir, pdir, copyLicn = False)
+	shutil.copy(os.path.join(pdir, 'Thrones.app'), odir)
+	shutil.copy(os.path.join(pdir, 'server'), odir)
+	for root, dirs, files in os.walk(odir):
+		for ft in files:
+			if ft == '.DS_Store':
+				os.remove(os.path.join(root, ft))
 	writeZip(odir)
 
 def expLinux(odir, pdir):
@@ -100,6 +114,8 @@ if __name__ == '__main__':
 		expLinux('Thrones_' + getVersion() + '_gles64', os.path.join(glesDir, 'bin'))
 	elif sys.argv[1] == 'web':
 		expWeb('Thrones_' + getVersion() + '_web', webDir)
+	elif sys.argv[1] == 'mac':
+		exprMac('Thrones_' + getVersion() + '_mac64', macDir)
 	elif sys.argv[1] == 'win':
 		expWin('Thrones_' + getVersion() + '_win32', os.path.join(win32Dir, 'bin'), 'To run the program you need to have the vc_redist 2017 32-bit installed.  \n')
 		expWin('Thrones_' + getVersion() + '_win64', os.path.join(win64Dir, 'bin'), 'To run the program you need to have the vc_redist 2019 64-bit installed.  \n')

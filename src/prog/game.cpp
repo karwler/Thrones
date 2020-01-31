@@ -215,7 +215,7 @@ void Game::takeOutFortress() {
 void Game::setFfpadPos(bool force, svec2 pos) {
 	if (ProgMatch* pm = World::state<ProgMatch>(); pm->favorIconOn() || force) {
 		ffpad.setPos(gtop(pos, ffpad.getPos().y));
-		ffpad.show = pm->favorIconSelect() != FavorAct::off && inRange(pos, svec2(0), svec2(config.homeSize.x, boardHeight)) && getTile(pos)->getType() < Com::Tile::fortress;
+		ffpad.show = pm->favorIconSelect() != FavorAct::off && inRange(pos, svec2(0), svec2(config.homeSize.x, boardHeight)) && getTile(pos)->getType() != Com::Tile::empty;
 	}
 }
 
@@ -225,7 +225,7 @@ Com::Tile Game::checkFavor() {
 
 Com::Tile Game::checkFavor(Piece* piece, Tile* dtil, Action action) {
 	Com::Tile favor = checkFavor();
-	return favor < Com::Tile::fortress && dtil->getType() == Com::Tile::mountain && piece->getType() != Com::Piece::ranger && piece->getType() != Com::Piece::dragon && action == ACT_MOVE && !(ownRec.action & ACT_MOVE) ? Com::Tile::mountain : favor;
+	return favor != Com::Tile::empty && dtil->getType() == Com::Tile::mountain && piece->getType() != Com::Piece::ranger && piece->getType() != Com::Piece::dragon && action == ACT_MOVE && !(ownRec.action & ACT_MOVE) ? Com::Tile::mountain : favor;
 }
 
 void Game::pieceMove(Piece* piece, svec2 pos, Piece* occupant, bool forceSwitch) {
@@ -292,7 +292,7 @@ void Game::concludeAction(Action last, FavorAct fact, Com::Tile favor) {
 
 	bool turnOver = ((ownRec.action & ACT_MS) == ACT_MS && !(ownRec.actor->getType() == Com::Piece::warhorse && last == ACT_SWAP)) || (ownRec.action & ACT_AF) || (eneRec.action & ACT_AFAIL);
 	bool extend = fact == FavorAct::on && (favor == Com::Tile::plains || favor == Com::Tile::forest || favor == Com::Tile::water);
-	if (fact == FavorAct::now) {
+	if (fact == FavorAct::now && favor < Com::Tile::fortress) {
 		if (ownRec.action && favor != Com::Tile::mountain)
 			turnOver = true;
 		if (favorCount--; config.favorLimit)
@@ -623,8 +623,6 @@ void Game::checkAttack(Piece* killer, Piece* victim, Tile* dtil) const {
 }
 
 bool Game::survivalCheck(Piece* piece, Piece* occupant, Tile* stil, Tile* dtil, Action action, FavorAct fact, Com::Tile favor) {
-	if (eneRec.action & ACT_AFAIL)	// I really don't wanna deal with SC on the extra turn
-		return true;
 	if (piece->getType() == Com::Piece::throne)
 		return true;
 	if (action == ACT_SWAP && fact == FavorAct::now && favor == Com::Tile::water)
@@ -645,7 +643,9 @@ void Game::failSurvivalCheck(Piece* piece, Action action) {
 	pm->updateFnowIcon();
 	setFfpadPos(true);
 
-	if (config.survivalMode == Com::Config::Survival::kill && piece->getType() != Com::Piece::throne) {
+	if (eneRec.action & ACT_AFAIL)
+		endTurn();
+	else if (config.survivalMode == Com::Config::Survival::kill && piece->getType() != Com::Piece::throne) {
 		removePiece(piece);
 		World::netcp()->sendData(sendb);
 	} else if (action == ACT_ATCK) {

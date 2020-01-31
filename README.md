@@ -55,4 +55,3 @@ The only supported compilers are MSVC and MinGW. All necessary libraries are dow
 
 ## TODO  
 - shadows aren't working properly on some systems  
-- check if macOS builds  

@@ -99,8 +99,9 @@ enum class Code : uint8 {
 	wsconn = 'G'	// first letter of websocket handshake
 };
 
-const array<string, 1> compatibleVersions = {
-	commonVersion
+const array<string, 2> compatibleVersions = {
+	commonVersion,
+	"0.4.2"
 };
 
 // variable game properties (shall never be changed after loading)

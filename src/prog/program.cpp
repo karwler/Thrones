@@ -634,8 +634,6 @@ void Program::eventFavorStart(BoardObject* obj, uint8) {
 }
 
 void Program::eventMove(BoardObject* obj, uint8 mBut) {
-	if (game.checkFavor() == Com::Tile::fortress)
-		static_cast<ProgMatch*>(state.get())->selectFavorIcon(FavorAct::off);
 	game.highlightMoveTiles(nullptr);
 	try {
 		svec2 pos;
@@ -650,8 +648,6 @@ void Program::eventMove(BoardObject* obj, uint8 mBut) {
 }
 
 void Program::eventFire(BoardObject* obj, uint8) {
-	if (game.checkFavor() != Com::Tile::empty)
-		static_cast<ProgMatch*>(state.get())->selectFavorIcon(FavorAct::off);
 	game.highlightFireTiles(nullptr);
 	try {
 		svec2 pos;

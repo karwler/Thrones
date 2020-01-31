@@ -84,7 +84,7 @@ constexpr char linend[] = "\n";
 #endif
 constexpr char defaultReadMode[] = "rb";
 constexpr char defaultWriteMode[] = "wb";
-constexpr char commonVersion[] = "0.4.2";
+constexpr char commonVersion[] = "0.4.3";
 
 // utility
 

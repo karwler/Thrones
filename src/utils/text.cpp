@@ -1,4 +1,7 @@
 #include "text.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 string filename(const string& path) {
 	if (path[0] == '\0' || (isDsep(path[0]) && path[1] == '\0'))
@@ -84,6 +87,15 @@ uint8 u8clen(char c) {
 	return 0;
 }
 
+SDL_DisplayMode strToDisp(const string& str) {
+	const char* pos = str.c_str();
+	int w = readNumber<int>(pos, strtoul, 0);
+	int h = readNumber<int>(pos, strtoul, 0);
+	int r = readNumber<int>(pos, strtoul, 0);
+	uint32 f = readNumber<uint32>(pos, strtoul, 0);
+	return { f, w, h, r, nullptr };
+}
+
 #ifdef _WIN32
 string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
@@ -107,51 +119,8 @@ wstring stow(const string& src) {
 	MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
 	return dst;
 }
-#endif
 
-SDL_DisplayMode strToDisp(const string& str) {
-	const char* pos = str.c_str();
-	int w = readNumber<int>(pos, strtoul, 0);
-	int h = readNumber<int>(pos, strtoul, 0);
-	int r = readNumber<int>(pos, strtoul, 0);
-	uint32 f = readNumber<uint32>(pos, strtoul, 0);
-	return { f, w, h, r, nullptr };
-}
-
-vector<string> readFileLines(const string& file) {
-	vector<string> lines(1);
-	for (char c : readFile(file)) {
-		if (c != '\n' && c != '\r')
-			lines.back() += c;
-		else if (!lines.back().empty())
-			lines.emplace_back();
-	}
-	if (lines.back().empty())
-		lines.pop_back();
-	return lines;
-}
-
-bool writeFile(const string& file, const string& text) {
-	if (SDL_RWops* ofh = SDL_RWFromFile(file.c_str(), defaultWriteMode)) {
-		SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
-		return !SDL_RWclose(ofh);
-	}
-	return false;
-}
-
-string readIniTitle(const string& line) {
-	sizet li = line.find_first_of('[');
-	sizet ri = line.find_last_of(']');
-	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : string();
-}
-
-pairStr readIniLine(const string& line) {
-	sizet id = line.find_first_of('=');
-	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
-}
-
-#ifdef _WIN32
-void Arguments::setArgs(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
+void Arguments::setArgs(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
 		setArgs(argc, argv, wtos, flg, opt);
 		LocalFree(argv);

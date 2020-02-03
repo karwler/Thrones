@@ -65,4 +65,33 @@ struct Vertex {
 	Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv);
 };
 
+// other functions
 SDL_Surface* scaleSurface(SDL_Surface* img, int div);
+vector<string> readFileLines(const string& file);
+string readIniTitle(const string& line);
+pairStr readIniLine(const string& line);
+
+inline string makeIniLine(const string& title) {
+	return '[' + title + ']' + linend;
+}
+
+inline string makeIniLine(const string& key, const string& val) {
+	return key + '=' + val + linend;
+}
+
+template <class T = string>
+T readFile(const string& file) {
+	T data;
+	SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
+	if (!ifh)
+		return data;
+	int64 len = SDL_RWsize(ifh);
+	if (len <= 0)
+		return data;
+
+	data.resize(sizet(len));
+	if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read != data.size())
+		data.resize(read);
+	SDL_RWclose(ifh);
+	return data;
+}

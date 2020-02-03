@@ -13,9 +13,9 @@ public:
 	static constexpr char envLocale[] = "";
 #endif
 
-	static Arguments args;
+	inline static Arguments args;
 private:
-	static WindowSys windowSys;		// the thing ontop of which everything runs
+	inline static WindowSys windowSys;		// the thing ontop of which everything runs
 
 public:
 	static WindowSys* window();
@@ -33,7 +33,7 @@ public:
 	static const ShaderGui* gui();
 
 #ifdef _WIN32
-	static void setArgs(PWSTR pCmdLine);
+	static void setArgs(wchar* pCmdLine);
 #endif
 	static void setArgs(int argc, char** argv);
 
@@ -93,11 +93,13 @@ inline const ShaderDepth* World::depth() {
 inline const ShaderGui* World::gui() {
 	return windowSys.getGUI();
 }
+
 #ifdef _WIN32
-inline void World::setArgs(PWSTR pCmdLine) {
+inline void World::setArgs(wchar* pCmdLine) {
 	args.setArgs(pCmdLine, { argSetup }, {});
 }
 #endif
+
 inline void World::setArgs(int argc, char** argv) {
 	args.setArgs(argc, argv, stos, { argSetup }, {});
 }

@@ -1,5 +1,12 @@
 #include "oven.h"
 
+#ifndef GL_BGR
+#define GL_BGR 0x80E0
+#endif
+#ifndef GL_BGRA
+#define GL_BGRA 0x80E1
+#endif
+
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
 constexpr char argMaterial = 'm';
@@ -378,18 +385,14 @@ static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
 // TEXTURES
 
 static bool checkFormat(uint32 format, bool regular) {
-#ifndef OPENGLES
 	if (regular && (format == SDL_PIXELFORMAT_BGR24 || format == SDL_PIXELFORMAT_BGRA32))
 		return true;
-#endif
 	return format == SDL_PIXELFORMAT_RGB24 || format == SDL_PIXELFORMAT_RGBA32;
 }
 
 static uint32 getFormat(uint8 bpp, bool regular) {
-#ifndef OPENGLES
 	if (regular)
 		return bpp == 3 ? SDL_PIXELFORMAT_BGR24 : bpp == 4 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_UNKNOWN;
-#endif
 	return bpp == 3 ? SDL_PIXELFORMAT_RGB24 : bpp == 4 ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_UNKNOWN;
 }
 
@@ -409,12 +412,10 @@ static uint16 getIformat(uint8 bpp) {
 
 static uint16 getPformat(uint32 format) {
 	switch (format) {
-#ifndef OPENGLES
 	case SDL_PIXELFORMAT_BGR24:
 		return GL_BGR;
 	case SDL_PIXELFORMAT_BGRA32:
 		return GL_BGRA;
-#endif
 	case SDL_PIXELFORMAT_RGB24:
 		return GL_RGB;
 	case SDL_PIXELFORMAT_RGBA32:

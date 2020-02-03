@@ -92,7 +92,12 @@ public:
 	static constexpr uint corners = 4;
 private:
 	static constexpr uint stride = 2;
-	static const float vertices[corners * stride];
+	static constexpr float vertices[corners * stride] = {
+		0.f, 0.f,
+		1.f, 0.f,
+		0.f, 1.f,
+		1.f, 1.f
+	};
 
 	GLuint vao, vbo;
 

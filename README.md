@@ -3,7 +3,7 @@ Based on the board game by Chad Anthony Randell.
 See [RULES](doc/rules.html) or [DOCS](doc/docs.html) for details.  
 
 ## Build  
-Used libraries are GLEW, GLM, SDL2, SDL2_image, SDL2_net, SDL2_ttf and by extension FreeType, libjpeg, libpng and zlib. The included fonts are Romanesque Serif Regular and Merriweather Regular.  
+Used libraries are GLEW, GLM, SDL2, SDL2_image, SDL2_ttf and by extension FreeType, libjpeg, libpng and zlib. The included fonts are Romanesque Serif Regular and Merriweather Regular.  
 The CMakeLists.txt is written for CMake 3.10.2 with Clang, GCC or MSVC which need to support C++17.  
 
 CMake variables:  
@@ -17,6 +17,8 @@ CMake variables:
   - download libraries for Android Studio  
 - OPENGLES : bool = 0  
   - use OpenGL ES  
+- SERVICE : bool = 0  
+  - server program won't check keyboard input  
 - VER_GLEW : string = 2.1.0  
   - GLEW version to download  
 - VER_GLM : string = 0.9.9.7  
@@ -25,8 +27,6 @@ CMake variables:
   - SDL version to download  
 - VER_IMG : string = 2.0.5  
   - SDL_image version to download  
-- VER_NET : string = 2.0.1  
-  - SDL_net version to download  
 - VER_TTF : string = 2.0.15  
   - SDL_ttf version to download  
 

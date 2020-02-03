@@ -17,23 +17,23 @@
 
 	<h1>Index</h1>
 	<a href="#h1_0">1 Miscellaneous</a><br>
-	<a href="#h1_1" class='sindent'>1.1 Dependencies</a><br>
-	<a href="#h1_2" class='sindent'>1.2 UI</a><br>
+	<a href="#h1_1" class="sindent">1.1 Dependencies</a><br>
+	<a href="#h1_2" class="sindent">1.2 UI</a><br>
 	<a href="#h2_0">2 Preferences</a><br>
-	<a href="#h2_1" class='sindent'>2.1 Settings</a><br>
-	<a href="#h2_2" class='sindent'>2.2 Configurations</a><br>
-	<a href="#h2_3">2.3 Setups</a><br>
-	<a href="#h3_0" class='sindent'>3 Networking</a><br>
-	<a href="#h3_1" class='sindent'>3.1 Client</a><br>
-	<a href="#h3_2" class='sindent'>3.2 Server</a><br>
+	<a href="#h2_1" class="sindent">2.1 Settings</a><br>
+	<a href="#h2_2" class="sindent">2.2 Configurations</a><br>
+	<a href="#h2_3" class="sindent">2.3 Setups</a><br>
+	<a href="#h3_0">3 Networking</a><br>
+	<a href="#h3_1" class="sindent">3.1 Client</a><br>
+	<a href="#h3_2" class="sindent">3.2 Server</a><br>
 	<a href="#h0_0">4 Game</a><br>
-	<a href="#h4_1" class='sindent'>4.1 Setup</a><br>
-	<a href="#h4_2" class='sindent'>4.2 Match</a><br>
-	<a href="#h4_3" class='sindent'>4.3 Move</a><br>
-	<a href="#h4_4" class='sindent'>4.4 Switch</a><br>
-	<a href="#h4_5" class='sindent'>4.5 Attack</a><br>
-	<a href="#h4_6" class='sindent'>4.6 Fire</a><br>
-	<a href="#h4_7" class='sindent'>4.7 Survival Check</a><br>
+	<a href="#h4_1" class="sindent">4.1 Setup</a><br>
+	<a href="#h4_2" class="sindent">4.2 Match</a><br>
+	<a href="#h4_3" class="sindent">4.3 Move</a><br>
+	<a href="#h4_4" class="sindent">4.4 Switch</a><br>
+	<a href="#h4_5" class="sindent">4.5 Attack</a><br>
+	<a href="#h4_6" class="sindent">4.6 Fire</a><br>
+	<a href="#h4_7" class="sindent">4.7 Survival Check</a><br>
 
 	<h1 id="h1_0">1 Miscellaneous</h1>
 
@@ -58,7 +58,6 @@
 		<li>libpng</li>
 		<li>SDL2 2.0.10</li>
 		<li>SDL2_image 2.0.5</li>
-		<li>SDL2_net 2.0.1</li>
 		<li>SDL2_ttf 2.0.15</li>
 		<li>zlib</li>
 	</ul>
@@ -68,9 +67,9 @@
 	</ul>
 	<h3>Windows</h3>
 	<ul>
-		<li>Windows XP (32-bit) or Windows 7 (64-bit)</li>
+		<li>Windows 7</li>
 		<li>OpenGL 3.3</li>
-		<li>MS Visual C++ Redistribute 2017 (32-bit) or 2019 (64-bit)</li>
+		<li>Microsoft Visual C++ Redistributable 2019</li>
 	</ul>
 
 	<h2 id="h1_2">1.2 UI</h2>
@@ -270,6 +269,21 @@
 	<p>When enabled, the amounts of a player's pieces will be adjusted accordingly when changing the homeland size. "New_amount_of_each_piece = old_amount * new_area / old_area" floored, the area values referring to the homeland area.</p>
 	<h3>Chat line limit</h3>
 	<p>Maximum number of line breaks in a chat widget.</p>
+	<h3>Resolve family</h3>
+	<table class="listing">
+		<tr>
+			<td>any</td>
+			<td>Use any family for resolving host addresses.</td>
+		</tr>
+		<tr>
+			<td>IPv4</td>
+			<td>Use only IPv4 for resolving host addresses.</td>
+		</tr>
+		<tr>
+			<td>IPv6</td>
+			<td>Use only IPv6 for resolving host addresses.</td>
+		</tr>
+	</table>
 	<h3>Regular font</h3>
 	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
 
@@ -373,6 +387,14 @@
 		<tr>
 			<td>-p &lt;port&gt;</td>
 			<td>port to use (default is 39741)</td>
+		</tr>
+		<tr>
+			<td>-4</td>
+			<td>resolve host only with IPv4 family (default is unspec)</td>
+		</tr>
+		<tr>
+			<td>-6</td>
+			<td>resolve host only with IPv6 family (default is unspec)</td>
 		</tr>
 		<tr>
 			<td>-v</td>

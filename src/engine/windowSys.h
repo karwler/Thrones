@@ -29,13 +29,12 @@ private:
 #endif
 	static constexpr SDL_Color logColor = { 230, 220, 220, 220 };
 
-	float heightScale;	// for scaling down font size to fit requested height
 	umap<int, TTF_Font*> fonts;
 	vector<uint8> fontData;
-
 	TTF_Font* logFont;
-	Texture logTex;
 	vector<string> logLines;
+	Texture logTex;
+	float heightScale;	// for scaling down font size to fit requested height
 
 public:
 	FontSet(bool regular);
@@ -151,6 +150,36 @@ private:
 #else
 	static constexpr int imgInitFlags = IMG_INIT_PNG;
 #endif
+	static constexpr array<ivec2, 28> resolutions = {
+		ivec2(256, 144),
+		ivec2(426, 240),
+		ivec2(640, 360),
+		ivec2(768, 432),
+		ivec2(800, 450),
+		ivec2(848, 480),
+		ivec2(854, 480),
+		ivec2(960, 540),
+		ivec2(1024, 576),
+		ivec2(1280, 720),
+		ivec2(1366, 768),
+		ivec2(1280, 800),
+		ivec2(1440, 900),
+		ivec2(1600, 900),
+		ivec2(1680, 1050),
+		ivec2(1920, 1080),
+		ivec2(2048, 1152),
+		ivec2(1920, 1200),
+		ivec2(2560, 1440),
+		ivec2(2560, 1600),
+		ivec2(2880, 1620),
+		ivec2(3200, 1800),
+		ivec2(3840, 2160),
+		ivec2(4096, 2304),
+		ivec2(3840, 2400),
+		ivec2(5120, 2880),
+		ivec2(7680, 4320),
+		ivec2(15360, 8640)
+	};
 
 	uptr<AudioSys> audio;
 	uptr<Program> program;
@@ -162,12 +191,16 @@ private:
 	uptr<ShaderDepth> depth;
 	uptr<ShaderGui> gui;
 	uptr<FontSet> fonts;
+	SDL_Cursor* cursor;
 	ivec2 curView;
 	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
-	SDL_Cursor* cursor;
 	uint8 cursorHeight;
+#ifdef EMSCRIPTEN
+	void (WindowSys::*loopFunc)();
+	uint loopState;
+#endif
 
 public:
 	WindowSys();
@@ -178,7 +211,7 @@ public:
 	ivec2 screenView() const;
 	ivec2 guiView() const;
 	uint8 getCursorHeight() const;
-	vector<ivec2> displaySizes() const;
+	vector<ivec2> windowSizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
 	uint32 windowID() const;
@@ -200,10 +233,10 @@ public:
 	const ShaderGui* getGUI() const;
 
 private:
-	void init();
+#ifdef EMSCRIPTEN
+	void lateInit();
+#endif
 	void exec();
-	void cleanup();
-
 	void createWindow();
 	void destroyWindow();
 	void handleEvent(const SDL_Event& event);	// pass events to their specific handlers

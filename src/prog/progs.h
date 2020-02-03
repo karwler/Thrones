@@ -163,7 +163,8 @@ private:
 	TextBox* chatBox;
 
 public:
-	ProgRoom();
+	ProgRoom() = default;
+	ProgRoom(umap<string, Com::Config>&& configs);
 	virtual ~ProgRoom() override = default;
 
 	virtual void eventEscape() override;
@@ -326,7 +327,13 @@ inline string ProgSettings::dispToFstr(const SDL_DisplayMode& mode) {
 
 class ProgInfo : public ProgState {
 private:
-	static const array<string, SDL_POWERSTATE_CHARGED+1> powerNames;
+	static constexpr array<const char*, SDL_POWERSTATE_CHARGED+1> powerNames = {
+		"UNKNOWN",
+		"ON_BATTERY",
+		"NO_BATTERY",
+		"CHARGING",
+		"CHARGED"
+	};
 
 public:
 	virtual ~ProgInfo() override = default;
@@ -338,9 +345,7 @@ public:
 
 private:
 	void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendCPU(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)());
+	void appendSystem(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
 	void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
 	void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
 	void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);

@@ -1,6 +1,6 @@
-import os;
-import re;
-import sys;
+import os
+import re
+import sys
 
 def readlin(fpath):
 	with open(fpath, 'r') as fh:
@@ -74,7 +74,7 @@ if __name__ == '__main__':
 	inc = 1 if len(sys.argv) < 3 else int(sys.argv[2])
 
 	try:
-		setVersion('src/utils/text.h')
+		setVersion('src/server/server.h')
 		setGradle('android/app/build.gradle', inc)
 		setAndroid('android/app/src/main/AndroidManifest.xml', inc)
 		setInfo('rsc/Info.plist')

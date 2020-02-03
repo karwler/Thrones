@@ -139,21 +139,21 @@ public:
 	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
-	ivec2 mouseMove;	// last recorded cursor position difference
-	uint32 moveTime;	// timestamp of last recorded mouseMove
-	bool mouseLast;		// last input was mouse or touch
-	Camera camera;
 	vector<Object*> objects;
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
 	uptr<Overlay> overlay;
-	ClickStamp cstamp;	// data about last mouse click
 	vector<Animation> animations;
-	Light light;
-	void (Scene::*shadowFunc)();
 	umap<string, Mesh> meshes;
 	umap<string, Material> materials;
 	umap<string, Texture> texes;
+	void (Scene::*shadowFunc)();
+	Camera camera;
+	Light light;
+	ivec2 mouseMove;	// last recorded cursor position difference
+	uint32 moveTime;	// timestamp of last recorded mouseMove
+	bool mouseLast;		// last input was mouse or touch
+	ClickStamp cstamp;	// data about last mouse click
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;

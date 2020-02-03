@@ -205,15 +205,15 @@ void Animation::append(Animation& ani) {
 Scene::Scene() :
 	select(nullptr),
 	capture(nullptr),
-	mouseMove(0),
-	moveTime(0),
-	mouseLast(false),
-	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
-	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f),
-	shadowFunc(World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
-	texes(FileSys::loadTextures())
+	texes(FileSys::loadTextures()),
+	shadowFunc(World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy),
+	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
+	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f),
+	mouseMove(0),
+	moveTime(0),
+	mouseLast(false)
 {}
 
 Scene::~Scene() {
@@ -301,9 +301,11 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 		case SDL_SCANCODE_SPACE:
 			World::state()->eventEndTurn();
 			break;
+#ifndef EMSCRIPTEN
 		case SDL_SCANCODE_LCTRL:
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			break;
+#endif
 		case SDL_SCANCODE_C:
 			World::state()->eventCameraReset();
 			break;
@@ -330,9 +332,11 @@ void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
 		case SDL_SCANCODE_LALT: case SDL_SCANCODE_LSHIFT:
 			World::state()->eventFavorize(FavorAct::off);
 			break;
+#ifndef EMSCRIPTEN
 		case SDL_SCANCODE_LCTRL:
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 			simulateMouseMove();
+#endif
 		}
 }
 

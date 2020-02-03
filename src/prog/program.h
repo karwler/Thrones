@@ -33,17 +33,16 @@ public:
 	void eventResetPort(Button* but);
 
 	// lobby menu
-	void eventOpenLobby(uint8* data);
+	void eventOpenLobby(const uint8* data);
 	void eventHostRoomInput(Button* but = nullptr);
 	void eventHostRoomRequest(Button* but = nullptr);
-	void eventHostRoomReceive(uint8* data);
+	void eventHostRoomReceive(const uint8* data);
 	void eventJoinRoomRequest(Button* but);
-	void eventJoinRoomReceive(uint8* data);
+	void eventJoinRoomReceive(const uint8* data);
 	void eventStartGame(Button* but = nullptr);
 	void eventExitLobby(Button* but = nullptr);
 
 	// room menu
-	void eventOpenRoom(Button* but = nullptr);
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
 	void eventSwitchConfig(Button* but);
@@ -61,7 +60,7 @@ public:
 	void eventPlayerHello(bool onJoin);
 	void eventExitRoom(Button* but = nullptr);
 	void eventSendMessage(Button* but);
-	void eventRecvMessage(uint8* data);
+	void eventRecvMessage(const uint8* data);
 	void eventChatOpen(Button* but = nullptr);
 	void eventChatClose(Button* but = nullptr);
 	void eventToggleChat(Button* but = nullptr);
@@ -105,7 +104,7 @@ public:
 	void finishMatch(bool win);
 	void eventPostFinishMatch(Button* but = nullptr);
 	void eventPostDisconnectGame(Button* but = nullptr);
-	void eventHostLeft(uint8* data);
+	void eventHostLeft(const uint8* data);
 	void eventPlayerLeft();
 
 	// settings
@@ -126,6 +125,7 @@ public:
 	void eventSetScalePieces(Button* but);
 	void eventSetChatLineLimitSL(Button* but);
 	void eventSetChatLineLimitLE(Button* but);
+	void eventSetResolveFamily(Button* but);
 	void eventSetFontRegular(Button* but);
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
@@ -140,6 +140,7 @@ public:
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
 	void eventClearLabel(Button* but);
+	void eventFocusChatLabel(Button* but);
 	void eventDummy(Button* = nullptr) {}
 	void disconnect();
 

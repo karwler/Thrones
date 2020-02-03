@@ -54,7 +54,7 @@ void Program::eventResetPort(Button* but) {
 
 // LOBBY MENU
 
-void Program::eventOpenLobby(uint8* data) {
+void Program::eventOpenLobby(const uint8* data) {
 	vector<pair<string, bool>> rooms(*data++);
 	for (pair<string, bool>& it : rooms) {
 		it.second = *data++;
@@ -72,6 +72,10 @@ void Program::eventHostRoomInput(Button*) {
 
 void Program::eventHostRoomRequest(Button*) {
 	try {
+#ifdef EMSCRIPTEN
+		if (!FileSys::canRead())
+			throw "Waiting for files to sync";
+#endif
 		ProgLobby* pl = static_cast<ProgLobby*>(state.get());
 		if (pl->roomsMaxed())
 			throw "Server full";
@@ -79,17 +83,17 @@ void Program::eventHostRoomRequest(Button*) {
 		if (pl->roomTaken(name))
 			throw "Name taken";
 		sendRoomName(Com::Code::rnew, name);
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(string("Failed to create room: ") + err.message, &Program::eventClosePopup));
 	} catch (const char* err) {
 		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 
-void Program::eventHostRoomReceive(uint8* data) {
+void Program::eventHostRoomReceive(const uint8* data) {
 	if (*data) {
 		info = (info | INF_HOST) & ~INF_GUEST_WAITING;
-		eventOpenRoom();
+		setState(new ProgRoom(FileSys::loadConfigs()));
 	} else
 		World::scene()->setPopup(state->createPopupMessage("Failed to host room", &Program::eventClosePopup));
 }
@@ -97,15 +101,15 @@ void Program::eventHostRoomReceive(uint8* data) {
 void Program::eventJoinRoomRequest(Button* but) {
 	try {
 		sendRoomName(Com::Code::join, static_cast<Label*>(but)->getText());
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(string("Failed to join room: ") + err.message, &Program::eventClosePopup));
 	}
 }
 
-void Program::eventJoinRoomReceive(uint8* data) {
+void Program::eventJoinRoomReceive(const uint8* data) {
 	if (*data) {
 		game.recvConfig(data + 1);
-		eventOpenRoom();
+		setState(new ProgRoom);
 	} else
 		World::scene()->setPopup(state->createPopupMessage("Failed to join room", &Program::eventClosePopup));
 }
@@ -113,7 +117,7 @@ void Program::eventJoinRoomReceive(uint8* data) {
 void Program::sendRoomName(Com::Code code, const string& name) {
 	vector<uint8> data(Com::dataHeadSize + 1 + name.length());
 	data[0] = uint8(code);
-	SDLNet_Write16(uint16(data.size()), data.data() + 1);
+	Com::write16(data.data() + 1, uint16(data.size()));
 	data[Com::dataHeadSize] = uint8(name.length());
 	std::copy(name.begin(), name.end(), data.data() + Com::dataHeadSize + 1);
 	netcp->sendData(data);
@@ -122,7 +126,7 @@ void Program::sendRoomName(Com::Code code, const string& name) {
 void Program::eventStartGame(Button*) {
 	try {
 		game.sendStart();
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(string("Failed to start game: ") + err.message, &Program::eventClosePopup));
 	}
 }
@@ -134,14 +138,15 @@ void Program::eventExitLobby(Button*) {
 
 // ROOM MENU
 
-void Program::eventOpenRoom(Button*) {
-	netcp->setCncproc(&Netcp::cprocLobby);
-	setState(new ProgRoom);
-}
-
 void Program::eventOpenHostMenu(Button*) {
+#ifdef EMSCRIPTEN
+	if (!FileSys::canRead()) {
+		World::scene()->setPopup(state->createPopupMessage("Waiting for files to sync", &Program::eventClosePopup));
+		return;
+	}
+#endif
 	info |= INF_HOST | INF_UNIQ;
-	setState(new ProgRoom);
+	setState(new ProgRoom(FileSys::loadConfigs()));
 }
 
 void Program::eventHostServer(Button*) {
@@ -229,7 +234,7 @@ void Program::postConfigUpdate() {
 	try {
 		if ((info & (INF_UNIQ | INF_GUEST_WAITING)) == INF_GUEST_WAITING)	// only send if is host on remote server with guest
 			game.sendConfig();
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(string("Failed to send config data: ") + err.message, &Program::eventClosePopup));
 	}
 	FileSys::saveConfigs(pr->confs);
@@ -274,7 +279,7 @@ void Program::eventPieceSliderUpdate(Button* but) {
 void Program::eventKickPlayer(Button*) {
 	try {
 		netcp->sendData(Com::Code::kick);
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventClosePopup));
 	}
 }
@@ -293,8 +298,8 @@ void Program::eventPlayerHello(bool onJoin) {
 void Program::eventExitRoom(Button*) {
 	try {
 		netcp->sendData(Com::Code::leave);
-	} catch (const NetError& err) {
-		disconnect();
+	} catch (const Com::Error& err) {
+		netcp.reset();
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventOpenMainMenu));
 	}
 }
@@ -304,12 +309,12 @@ void Program::eventSendMessage(Button* but) {
 	static_cast<TextBox*>(but->getParent()->getWidget(but->getID() - 1))->addLine("< " + msg);
 	vector<uint8> data(Com::dataHeadSize + msg.length());
 	data[0] = uint8(Com::Code::message);
-	SDLNet_Write16(uint16(data.size()), data.data() + 1);
+	Com::write16(data.data() + 1, uint16(data.size()));
 	std::copy(msg.begin(), msg.end(), data.data() + Com::dataHeadSize);
 	netcp->sendData(data);
 }
 
-void Program::eventRecvMessage(uint8* data) {
+void Program::eventRecvMessage(const uint8* data) {
 	if (string msg = Com::readText(data); state->getChat())
 		state->getChat()->addLine("> " + msg);
 	else
@@ -482,7 +487,7 @@ void Program::eventSetupNext(Button*) {
 		}
 	} catch (const string& err) {
 		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(string("Failed to send setup: ") + err.message, &Program::eventAbortGame));
 	}
 }
@@ -642,7 +647,7 @@ void Program::eventMove(BoardObject* obj, uint8 mBut) {
 	} catch (const string& err) {
 		if (game.setFfpadPos(); !err.empty())
 			static_cast<ProgMatch*>(state.get())->message->setText(err);
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
 	}
 }
@@ -656,7 +661,7 @@ void Program::eventFire(BoardObject* obj, uint8) {
 	} catch (const string& err) {
 		if (game.setFfpadPos(); !err.empty())
 			static_cast<ProgMatch*>(state.get())->message->setText(err);
-	} catch (const NetError& err) {
+	} catch (const Com::Error& err) {
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
 	}
 }
@@ -665,12 +670,8 @@ void Program::eventAbortGame(Button*) {
 	if (uninitGame(); info & INF_UNIQ) {
 		disconnect();
 		info & INF_HOST ? eventOpenHostMenu() : eventOpenMainMenu();
-	} else try {
-		netcp->sendData(Com::Code::leave);
-	} catch (const NetError& err) {
-		disconnect();
-		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventOpenMainMenu));
-	}
+	} else
+		eventExitRoom();
 }
 
 void Program::uninitGame() {
@@ -695,15 +696,24 @@ void Program::eventPostFinishMatch(Button*) {
 	if (uninitGame(); info & INF_UNIQ)
 		info & INF_HOST ? eventOpenHostMenu() : eventOpenMainMenu();
 	else try {
-		if (!(info & INF_HOST))
-			netcp->sendData(Com::Code::hello);
 		string txt = state->getChat()->moveText();
-		eventOpenRoom();
+		if (netcp->setCncproc(&Netcp::cprocLobby); info & INF_HOST) {
+#ifdef EMSCRIPTEN
+			if (!FileSys::canRead()) {
+				eventExitRoom();
+				return;
+			}
+#endif
+			setState(new ProgRoom(FileSys::loadConfigs()));
+		} else {
+			netcp->sendData(Com::Code::hello);
+			setState(new ProgRoom);
+		}
 		state->getChat()->setText(std::move(txt));
 		if (info & INF_GUEST_WAITING)
 			eventPlayerHello(false);
-	} catch (const NetError& err) {
-		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventAbortGame));
+	} catch (const Com::Error& err) {
+		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventExitRoom));
 	}
 }
 
@@ -712,16 +722,23 @@ void Program::eventPostDisconnectGame(Button*) {
 	(info & (INF_HOST | INF_UNIQ)) == (INF_HOST | INF_UNIQ) ? eventOpenHostMenu() : eventOpenMainMenu();
 }
 
-void Program::eventHostLeft(uint8* data) {
+void Program::eventHostLeft(const uint8* data) {
 	uninitGame();
 	eventOpenLobby(data);
 	World::scene()->setPopup(World::state()->createPopupMessage("Host left", &Program::eventClosePopup));
 }
 
 void Program::eventPlayerLeft() {
+#ifdef EMSCRIPTEN
+	if (!FileSys::canRead()) {
+		World::scene()->setPopup(state->createPopupMessage("Player left", &Program::eventAbortGame));
+		return;
+	}
+#endif
 	uninitGame();
 	info &= ~INF_GUEST_WAITING;
-	eventOpenRoom();
+	netcp->setCncproc(&Netcp::cprocLobby);
+	setState(new ProgRoom(FileSys::loadConfigs()));
 	World::scene()->setPopup(state->createPopupMessage("Player left", &Program::eventClosePopup));
 }
 
@@ -748,6 +765,7 @@ void Program::eventSetVsync(Button* but) {
 
 void Program::eventSetSamples(Button* but) {
 	World::sets()->msamples = uint8(sstoul(static_cast<SwitchBox*>(but)->getText()));
+	eventSaveSettings();
 }
 
 void Program::eventSetTexturesScaleSL(Button* but) {
@@ -844,6 +862,11 @@ void Program::eventSetChatLineLimitLE(Button* but) {
 	eventSaveSettings();
 }
 
+void Program::eventSetResolveFamily(Button* but) {
+	World::sets()->resolveFamily = Com::Family(static_cast<SwitchBox*>(but)->getCurOpt());
+	eventSaveSettings();
+}
+
 void Program::eventSetFontRegular(Button* but) {
 	World::window()->reloadFont(static_cast<CheckBox*>(but)->on);
 	World::scene()->resetLayouts();
@@ -852,6 +875,7 @@ void Program::eventSetFontRegular(Button* but) {
 
 void Program::eventResetSettings(Button*) {
 	World::window()->resetSettings();
+	eventSaveSettings();
 }
 
 void Program::eventSaveSettings(Button*) {
@@ -896,14 +920,17 @@ void Program::eventClearLabel(Button* but) {
 	static_cast<Label*>(but)->setText("");
 }
 
+void Program::eventFocusChatLabel(Button* but) {
+	static_cast<Label*>(but->getParent()->getWidget(but->getID() + 1))->onClick(ivec2(0), SDL_BUTTON_LEFT);
+}
+
 void Program::connect(bool client, const char* msg) {
 	try {
 		netcp.reset(client ? new Netcp : new NetcpHost);
 		netcp->connect();
 		World::scene()->setPopup(state->createPopupMessage(msg, &Program::eventConnectCancel, "Cancel"));
-	} catch (const NetError& err) {
-		if (netcp)
-			disconnect();
+	} catch (const Com::Error& err) {
+		netcp.reset();
 		World::scene()->setPopup(state->createPopupMessage(err.message, &Program::eventClosePopup));
 	}
 }

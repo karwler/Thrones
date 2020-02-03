@@ -63,3 +63,27 @@ SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
 	}
 	return img;
 }
+
+vector<string> readFileLines(const string& file) {
+	vector<string> lines(1);
+	for (char c : readFile(file)) {
+		if (c != '\n' && c != '\r')
+			lines.back() += c;
+		else if (!lines.back().empty())
+			lines.emplace_back();
+	}
+	if (lines.back().empty())
+		lines.pop_back();
+	return lines;
+}
+
+string readIniTitle(const string& line) {
+	sizet li = line.find_first_of('[');
+	sizet ri = line.find_last_of(']');
+	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : string();
+}
+
+pairStr readIniLine(const string& line) {
+	sizet id = line.find_first_of('=');
+	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
+}

@@ -205,7 +205,9 @@ void Tile::setInteractivity(Interact lvl, bool dim) {
 
 TileCol::TileCol() :
 	tl(nullptr),
-	home(0)
+	home(0),
+	extra(0),
+	size(0)
 {}
 
 void TileCol::update(const Com::Config& conf) {
@@ -280,9 +282,12 @@ void Piece::onUnhover() {
 	}
 }
 
-void Piece::updatePos(svec2 bpos, bool active) {
+void Piece::updatePos(svec2 bpos, bool forceRigid) {
 	setPos(World::game()->gtop(bpos));
-	setActive(active);
+	if (!World::game()->pieceOnBoard(this))
+		setActive(false);
+	else if (show = true; forceRigid)
+		rigid = true;
 	World::scene()->updateSelect();
 }
 
@@ -290,7 +295,8 @@ void Piece::updatePos(svec2 bpos, bool active) {
 
 PieceCol::PieceCol() :
 	pc(nullptr),
-	num(0)
+	num(0),
+	size(0)
 {}
 
 void PieceCol::update(const Com::Config& conf) {

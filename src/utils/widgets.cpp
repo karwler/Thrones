@@ -83,13 +83,6 @@ Rect ScrollBar::sliderRect(const ivec2& listSize, const ivec2& pos, const ivec2&
 
 // QUAD
 
-const float Quad::vertices[] = {
-	0.f, 0.f,
-	1.f, 0.f,
-	0.f, 1.f,
-	1.f, 1.f
-};
-
 Quad::Quad() {
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
@@ -784,7 +777,7 @@ uint LabelEdit::jumpCharF(uint i) {
 
 uint LabelEdit::findWordStart() {
 	uint i = cpos;
-	if (i == text.length())
+	if (i == text.length() && i)
 		i--;
 	else if (notSpace(text[i]) && i)
 		if (uint n = jumpCharB(i); isSpace(text[n]))	// skip if first letter of word

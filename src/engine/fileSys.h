@@ -1,13 +1,10 @@
 #pragma once
 
 #include "utils/objects.h"
-#ifndef _WIN32
-#include <sys/stat.h>
-#endif
 
 struct Settings {
-	static constexpr char loopback[] = "127.0.0.1";
-	static constexpr uint16 shadowResMax = 1 << 15;
+	static constexpr char loopback[] = "localhost";
+	static constexpr uint16 shadowResMax = 1 << 14;
 	static constexpr float gammaMax = 2.f;
 	static constexpr uint16 chatLinesMax = 8191;
 
@@ -17,32 +14,41 @@ struct Settings {
 		fullscreen,
 		desktop
 	};
-	static const array<string, sizet(Screen::desktop)+1> screenNames;
+	static constexpr array<const char*, sizet(Screen::desktop)+1> screenNames = {
+		"window",
+		"borderless",
+		"fullscreen",
+		"desktop"
+	};
 
 	enum class VSync : int8 {
 		adaptive = -1,
 		immediate,
 		synchronized
 	};
-	static const array<string, 3> vsyncNames;	// add 1 to vsync value to get name
+	static constexpr array<const char*, sizet(VSync::synchronized)+2> vsyncNames = {	// add 1 to vsync value to get name
+	   "adaptive",
+	   "immediate",
+	   "synchronized"
+   };
 
-	bool maximized;
-	uint8 avolume;
+	string address;
+	SDL_DisplayMode mode;
+	ivec2 size;
+	float gamma;
+	uint16 port;
+	uint16 shadowRes;
+	uint16 chatLines;
 	uint8 display;
 	Screen screen;
 	VSync vsync;
 	uint8 msamples;
 	uint8 texScale;
-	uint16 shadowRes;
 	bool softShadows;
-	float gamma;
-	ivec2 size;
-	SDL_DisplayMode mode;
+	uint8 avolume;
 	bool scaleTiles, scalePieces;
-	uint16 chatLines;
+	Com::Family resolveFamily;
 	bool fontRegular;
-	string address;
-	uint16 port;
 
 	Settings();
 };
@@ -58,7 +64,8 @@ struct Setup {
 // handles all filesystem interactions
 class FileSys {
 private:
-	static string dirData, dirConfig;
+	inline static string dirData, dirConfig;
+
 	static constexpr char fileAudios[] = "audio.dat";
 	static constexpr char fileMaterials[] = "materials.dat";
 	static constexpr char fileObjects[] = "objects.dat";
@@ -68,7 +75,6 @@ private:
 	static constexpr char fileSettings[] = "settings.ini";
 	static constexpr char fileSetups[] = "setup.ini";
 
-	static constexpr char iniKeywordMaximized[] = "maximized";
 	static constexpr char iniKeywordDisplay[] = "display";
 	static constexpr char iniKeywordScreen[] = "screen";
 	static constexpr char iniKeywordSize[] = "size";
@@ -83,6 +89,7 @@ private:
 	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
 	static constexpr char iniKeywordScalePieces[] = "scale_pieces";
 	static constexpr char iniKeywordChatLines[] = "chat_lines";
+	static constexpr char iniKeywordResolveFamily[] = "resolve_family";
 	static constexpr char iniKeywordFontRegular[] = "font_regular";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
@@ -111,11 +118,11 @@ public:
 	static void init();
 
 	static Settings* loadSettings();
-	static bool saveSettings(const Settings* sets);
-	static umap<string, Com::Config> loadConfigs(const char* file = fileConfigs);
-	static bool saveConfigs(const umap<string, Com::Config>& confs, const char* file = fileConfigs);
+	static void saveSettings(const Settings* sets);
+	static umap<string, Com::Config> loadConfigs();
+	static void saveConfigs(const umap<string, Com::Config>& confs);
 	static umap<string, Setup> loadSetups();
-	static bool saveSetups(const umap<string, Setup>& sets);
+	static void saveSetups(const umap<string, Setup>& sets);
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
 	static umap<string, Mesh> loadObjects();
@@ -123,15 +130,18 @@ public:
 	static umap<string, Texture> loadTextures();
 	static void reloadTextures(umap<string, Texture>& texs);
 
+#ifdef EMSCRIPTEN
+	static bool canRead();
+#endif
 	static string dataPath(const char* file);
-	static string configPath(const char* file);
 private:
-	static bool createDir(const string& path);
+	static string configPath(const char* file);
 
-	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts);
-	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts);
+	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<const char*, N>& names, array<uint16, S>& amts);
+	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<const char*, N>& names, const array<uint16, S>& amts);
 	static void readShift(const string& line, Com::Config& conf);
 	static void loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum));
+	static void writeFile(const char* file, const string& text);
 };
 
 inline string FileSys::dataPath(const char* file) {
@@ -140,14 +150,6 @@ inline string FileSys::dataPath(const char* file) {
 
 inline string FileSys::configPath(const char* file) {
 	return dirConfig + file;
-}
-
-inline bool FileSys::createDir(const string& path) {
-#ifdef _WIN32
-	return CreateDirectoryW(stow(path).c_str(), 0);
-#else
-	return !mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-#endif
 }
 
 inline void FileSys::reloadTextures(umap<string, Texture>& texs) {

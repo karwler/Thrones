@@ -1,9 +1,9 @@
 #include "world.h"
 #include <clocale>
 #include <locale>
-
-Arguments World::args;
-WindowSys World::windowSys;
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #ifdef _WIN32
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {

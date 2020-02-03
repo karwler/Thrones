@@ -4,11 +4,11 @@
 
 class AudioSys {
 private:
-	SDL_AudioDeviceID device;
-	SDL_AudioSpec aspec;
 	umap<string, Sound> sounds;
+	SDL_AudioSpec aspec;
 	uint8* apos;
 	uint32 alen;
+	SDL_AudioDeviceID device;
 
 public:
 	AudioSys();

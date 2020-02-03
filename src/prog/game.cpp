@@ -23,24 +23,6 @@ void Record::setProtectionDim() const {
 
 // GAME
 
-const array<uint16 (*)(uint16, svec2), Game::adjacentStraight.size()> Game::adjacentStraight = {
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },				// up
-	[](uint16 id, svec2 lim) -> uint16 { return id % lim.x ? id - 1 : UINT16_MAX; },					// left
-	[](uint16 id, svec2 lim) -> uint16 { return id % lim.x != lim.x - 1 ? id + 1 : UINT16_MAX; },		// right
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 ? id + lim.x : UINT16_MAX; }	// down
-};
-
-const array<uint16 (*)(uint16, svec2), Game::adjacentFull.size()> Game::adjacentFull = {
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x ? id - lim.x - 1 : UINT16_MAX; },							// left up
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },											// up
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x != lim.x - 1  ? id - lim.x + 1 : UINT16_MAX; },			// right up
-	[](uint16 id, svec2 lim) -> uint16 { return id % lim.x ? id - 1 : UINT16_MAX; },												// left
-	[](uint16 id, svec2 lim) -> uint16 { return id % lim.x != lim.x - 1 ? id + 1 : UINT16_MAX; },									// right
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x ? id + lim.x - 1 : UINT16_MAX; },				// left down
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 ? id + lim.x : UINT16_MAX; },								// down
-	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x != lim.x - 1 ? id + lim.x + 1 : UINT16_MAX; }	// right down
-};
-
 Game::Game() :
 	randGen(createRandomEngine()),
 	randDist(0, Com::Config::randomLimit - 1),
@@ -256,7 +238,7 @@ void Game::pieceMove(Piece* piece, svec2 pos, Piece* occupant, bool forceSwitch)
 		break;
 	case ACT_ATCK: {
 		if (dtil->isUnbreachedFortress())
-			updateFortress(dtil, true);
+			breachFortress(dtil);
 		else {
 			removePiece(occupant);
 			placePiece(piece, pos);
@@ -277,9 +259,9 @@ void Game::pieceFire(Piece* killer, svec2 pos, Piece* piece) {
 		return;
 	}
 
-	if (dtil->isUnbreachedFortress())	// breach fortress
-		updateFortress(dtil, true);
-	else								// regular fire
+	if (dtil->isUnbreachedFortress())
+		breachFortress(dtil);
+	else
 		removePiece(piece);
 	ownRec.update(killer, ACT_FIRE);
 	World::play("ammo");
@@ -301,7 +283,6 @@ void Game::concludeAction(Action last, FavorAct fact, Com::Tile favor) {
 	if (turnOver && !extend)
 		endTurn();
 	else {
-		World::netcp()->sendData(sendb);
 		disableOwnPiecesInteract(true, true);
 		setPieceInteract(ownRec.actor, true, false, &Program::eventFavorStart, &Program::eventMove, ownRec.actor->firingDistance() ? &Program::eventFire : &Program::eventMove);
 
@@ -418,7 +399,7 @@ void Game::checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action
 	if (dtil->getType() == Com::Tile::forest && piece->getType() == Com::Piece::dragon)
 		throw firstUpper(Com::pieceNames[uint8(piece->getType())]) + " can't occupy a " + Com::tileNames[uint8(dtil->getType())];
 	if (stil->getType() != Com::Tile::mountain && dtil->getType() == Com::Tile::mountain && piece->getType() != Com::Piece::ranger && piece->getType() != Com::Piece::dragon && !(fact == FavorAct::now && favor == Com::Tile::mountain))
-		throw firstUpper(Com::pieceNames[uint8(piece->getType())] + " can't occupy a " + Com::tileNames[uint8(dtil->getType())]);
+		throw firstUpper(Com::pieceNames[uint8(piece->getType())]) + " can't occupy a " + Com::tileNames[uint8(dtil->getType())];
 
 	switch (action) {
 	case ACT_MOVE:
@@ -442,7 +423,7 @@ void Game::checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action
 		if (piece->getType() != Com::Piece::warhorse && (ownRec.action & ~ACT_MOVE) && !(fact == FavorAct::now && (favor == Com::Tile::forest || favor == Com::Tile::water)))
 			throw string("You've already switched");
 		if (dtil->getType() == Com::Tile::mountain)
-			throw "Can't switch onto a " + Com::tileNames[uint8(dtil->getType())];
+			throw string("Can't switch onto a ") + Com::tileNames[uint8(dtil->getType())];
 		if (piece->getType() == occupant->getType())
 			throw string("Can't switch with a piece of the same type");
 		if (piece->getType() == Com::Piece::warhorse) {
@@ -461,7 +442,7 @@ void Game::checkMove(Piece* piece, svec2 pos, Piece* occupant, svec2 dst, Action
 		if (ownRec.action)
 			throw pastRecordAction();
 		if (dtil->getType() == Com::Tile::mountain)
-			throw "Can't attack a " + Com::tileNames[uint8(dtil->getType())];
+			throw string("Can't attack a ") + Com::tileNames[uint8(dtil->getType())];
 
 		if (piece->getType() != Com::Piece::throne)
 			checkAttack(piece, occupant, dtil);
@@ -572,7 +553,7 @@ void Game::checkFire(Piece* killer, svec2 pos, Piece* victim, svec2 dst, FavorAc
 	checkFavorAction(getTile(pos), dtil, victim, ACT_FIRE, fact, favor);
 	checkAttack(killer, victim, dtil);
 	if (dtil->getType() == Com::Tile::forest)
-		throw "Can't fire at a " + Com::tileNames[uint8(dtil->getType())];
+		throw string("Can't fire at a ") + Com::tileNames[uint8(dtil->getType())];
 	if (uint8 dist = killer->firingDistance(); !collectTilesByDistance(pos, dist).count(posToId(dst)))
 		throw firstUpper(Com::pieceNames[uint8(killer->getType())]) + " can only fire at a distance of " + toStr(dist);
 }
@@ -698,14 +679,17 @@ void Game::doWin(bool win) {
 }
 
 void Game::prepareTurn() {
-	bool xmov = eneRec.action & ACT_AFAIL;
+	bool xmov = eneRec.action & ACT_AFAIL, cont = eneRec.action & ACT_FCONT;
+	if (!(xmov || cont))
+		restoreFortresses();
+
 	setTilesInteract(tiles.begin(), tiles.getSize(), Tile::Interact(myTurn));
 	if (myTurn && xmov) {
 		for (Piece& it : pieces)
 			setPieceInteract(&it, pieceOnBoard(&it), true, nullptr, nullptr, nullptr);
 		setPieceInteract(eneRec.actor, true, false, &Program::eventFavorStart, &Program::eventMove, &Program::eventMove);
 	} else {
-		bool keepDim = (ownRec.action & ACT_AFAIL) || (eneRec.action & ACT_FCONT);
+		bool keepDim = (ownRec.action & ACT_AFAIL) || cont;
 		for (Piece* it = pieces.own(); it != pieces.ene(); it++) {
 			bool off = keepDim && (it->getEmission() & BoardObject::EMI_DIM);
 			setPieceInteract(it, myTurn && pieceOnBoard(it), off, !off ? &Program::eventFavorStart : nullptr, !off ? &Program::eventMove : nullptr, !off ? it->firingDistance() ? &Program::eventFire : &Program::eventMove : nullptr);
@@ -726,12 +710,6 @@ void Game::prepareTurn() {
 }
 
 void Game::endTurn() {
-	if (!(ownRec.action & ACT_AFAIL))
-		for (Tile& til : tiles)
-			if (til.getType() == Com::Tile::fortress)
-				if (!findPiece(pieces.begin(), pieces.end(), ptog(til.getPos())))
-					updateFortress(&til, false);
-
 	sendb.pushHead(Com::Code::record);
 	sendb.push(uint8(ownRec.action));
 	sendb.push({ inversePieceId(ownRec.actor), inversePieceId(ownRec.protect) });
@@ -741,9 +719,9 @@ void Game::endTurn() {
 	prepareTurn();
 }
 
-void Game::recvRecord(uint8* data) {
-	uint16 ai = SDLNet_Read16(data + 1);
-	uint16 pi = SDLNet_Read16(data + 1 + sizeof(uint16));
+void Game::recvRecord(const uint8* data) {
+	uint16 ai = Com::read16(data + 1);
+	uint16 pi = Com::read16(data + 1 + sizeof(uint16));
 	eneRec = Record(ai < pieces.getSize() ? &pieces[ai] : nullptr, pi < pieces.getSize() ? &pieces[pi] : nullptr, Action(data[0]));
 	ownRec = Record(nullptr, eneRec.action & ACT_AFAIL ? ownRec.protect : nullptr, eneRec.action & ACT_AFAIL ? ACT_FCONT : ACT_NONE);
 	if (eneRec.action & ACT_MOVE)
@@ -764,10 +742,10 @@ void Game::recvRecord(uint8* data) {
 void Game::sendConfig(bool onJoin) {
 	uint ofs;
 	if (onJoin) {
-		ofs = sendb.preallocate(Com::Code::cnjoin, Com::dataHeadSize + 1 + Com::Config::dataSize);
+		ofs = sendb.allocate(Com::Code::cnjoin, Com::dataHeadSize + 1 + Com::Config::dataSize);
 		ofs = sendb.write(uint8(true), ofs);
 	} else
-		ofs = sendb.preallocate(Com::Code::config);
+		ofs = sendb.allocate(Com::Code::config);
 	World::state<ProgRoom>()->confs[World::program()->curConfig].toComData(&sendb[ofs]);
 	World::netcp()->sendData(sendb);
 }
@@ -776,7 +754,7 @@ void Game::sendStart() {
 	std::default_random_engine randGen = createRandomEngine();
 	uint8 first = uint8(std::uniform_int_distribution<uint>(0, 1)(randGen));
 
-	uint ofs = sendb.preallocate(Com::Code::start);
+	uint ofs = sendb.allocate(Com::Code::start);
 	ofs = sendb.write(first, ofs);
 	World::state<ProgRoom>()->confs[World::program()->curConfig].toComData(&sendb[ofs]);
 	World::netcp()->sendData(sendb);
@@ -785,7 +763,7 @@ void Game::sendStart() {
 	World::program()->eventOpenSetup();
 }
 
-void Game::recvStart(uint8* data) {
+void Game::recvStart(const uint8* data) {
 	firstTurn = myTurn = data[0];
 	recvConfig(data + 1);
 	World::program()->eventOpenSetup();
@@ -794,7 +772,7 @@ void Game::recvStart(uint8* data) {
 void Game::sendSetup() {
 	uint tcnt = tileCompressionSize();
 	uint pcnt = pieces.getNum() * sizeof(uint16);
-	uint ofs = sendb.preallocate(Com::Code::setup, Com::dataHeadSize + tcnt + pcnt);
+	uint ofs = sendb.allocate(Com::Code::setup, uint16(Com::dataHeadSize + tcnt + pcnt));
 
 	std::fill_n(&sendb[ofs], tcnt, 0);
 	for (uint16 i = 0; i < tiles.getExtra(); i++)
@@ -802,22 +780,22 @@ void Game::sendSetup() {
 	ofs += tcnt;
 
 	for (uint16 i = 0; i < pieces.getNum(); i++)
-		SDLNet_Write16(pieceOnBoard(pieces.own(i)) ? invertId(posToId(ptog(pieces.own(i)->getPos()))) : UINT16_MAX, &sendb[i*sizeof(uint16)+ofs]);
+		Com::write16(&sendb[i*sizeof(uint16)+ofs], pieceOnBoard(pieces.own(i)) ? invertId(posToId(ptog(pieces.own(i)->getPos()))) : UINT16_MAX);
 	World::netcp()->sendData(sendb);
 }
 
-void Game::recvConfig(uint8* data) {
+void Game::recvConfig(const uint8* data) {
 	config.fromComData(data);
 	updateConfigValues();
 }
 
-void Game::recvSetup(uint8* data) {
+void Game::recvSetup(const uint8* data) {
 	for (uint16 i = 0; i < tiles.getHome(); i++)
 		tiles[i].setTypeSilent(decompressTile(data, i));
 	for (uint16 i = 0; i < config.homeSize.x; i++)
 		World::state<ProgSetup>()->rcvMidBuffer[i] = decompressTile(data, tiles.getHome() + i);
 	for (uint16 ofs = tileCompressionSize(), i = 0; i < pieces.getNum(); i++) {
-		uint16 id = SDLNet_Read16(data + i * sizeof(uint16) + ofs);
+		uint16 id = Com::read16(data + i * sizeof(uint16) + ofs);
 		pieces.ene(i)->setPos(gtop(id < tiles.getHome() ? idToPos(id) : svec2(UINT16_MAX)));
 	}
 
@@ -838,19 +816,28 @@ void Game::placePiece(Piece* piece, svec2 pos) {
 	piece->updatePos(pos, true);
 	sendb.pushHead(Com::Code::move);
 	sendb.push({ inversePieceId(piece), invertId(posToId(pos)) });
+	World::netcp()->sendData(sendb);
 }
 
 void Game::removePiece(Piece* piece) {
 	piece->updatePos();
 	sendb.pushHead(Com::Code::kill);
 	sendb.push(inversePieceId(piece));
+	World::netcp()->sendData(sendb);
 }
 
-void Game::updateFortress(Tile* fort, bool breached) {
-	fort->setBreached(breached);
+void Game::breachFortress(Tile* fort) {
+	fort->setBreached(true);
 	sendb.pushHead(Com::Code::breach);
-	sendb.push(uint8(breached));
 	sendb.push(inverseTileId(fort));
+	World::netcp()->sendData(sendb);
+}
+
+void Game::restoreFortresses() {
+	for (Tile& til : tiles)
+		if (til.isBreachedFortress())
+			if (!findPiece(pieces.begin(), pieces.end(), ptog(til.getPos())))
+				til.setBreached(false);
 }
 
 string Game::pastRecordAction() const {
@@ -904,19 +891,8 @@ vector<Object*> Game::initDummyObjects(const Com::Config& cfg) {
 		}
 	}
 
-	t = tiles.getExtra();
-	for (uint16 i = 0; i < pieces.getNum();) {
-		if (pieceOnHome(pieces.own(i)))
-			i++;
-		else {
-			if (tiles[t].getType() != Com::Tile::mountain || pieces.own(i)->getType() == Com::Piece::ranger || pieces.own(i)->getType() == Com::Piece::dragon) {
-				pieces.own(i)->setPos(gtop(svec2(t % config.homeSize.x, t / config.homeSize.x)));
-				i++;
-			} else if (Piece* pc = std::find_if(pieces.own() + i, pieces.ene(), [this](Piece& it) -> bool { return !pieceOnHome(&it) && (it.getType() == Com::Piece::ranger || it.getType() == Com::Piece::dragon); }); pc != pieces.ene())
-				pc->setPos(gtop(svec2(t % config.homeSize.x, t / config.homeSize.x)));
-			t++;
-		}
-	}
+	for (uint16 i = 0; i < pieces.getNum(); i++)
+		pieces.own(i)->setPos(gtop(svec2(i % config.homeSize.x, config.homeSize.y + 1 + i / config.homeSize.x)));
 	return objs;
 }
 #endif

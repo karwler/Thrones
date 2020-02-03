@@ -1,20 +1,26 @@
-import os;
-import re;
-import shutil;
-import sys;
-import tarfile;
-import zipfile;
+import os
+import psutil
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import zipfile
 
-lnxDir = 'build_lnx'
-glesDir = 'build_gles'
-webDir = 'build_web'
-macDir = 'build'
-win32Dir = 'build_win32'
-win64Dir = 'bulid_win64'
+def mkdir(path):
+	if not os.path.isdir(path):
+		os.makedirs(path)
+
+def prun(*cmd):
+	subprocess.check_call(filter(lambda s: s and not s.isspace(), cmd))
 
 def getVersion():
-	with open('src/utils/text.h', 'r') as fh:
+	with open('src/server/server.h', 'r') as fh:
 		return re.search(r'char\s*commonVersion\[.*\]\s*=\s*"(.*)"', fh.read()).group(1)
+
+def getThreads():
+	cnt = sys.argv[2] if len(sys.argv) > 2 else str(psutil.cpu_count(False))
+	return str(cnt) if cnt else '1'
 
 def writeZip(odir):
 	with zipfile.ZipFile(odir + '.zip', 'w', zipfile.ZIP_DEFLATED) as zh:
@@ -27,8 +33,7 @@ def writeTar(odir):
 		th.add(odir)
 
 def expCommon(odir, pdir, regGL = True, copyLicn = True, message = ''):
-	if not os.path.isdir(odir):
-		os.mkdir(odir)
+	mkdir(odir)
 	os.chdir(odir)
 	if regGL:
 		shutil.copytree(os.path.join('..', pdir, 'data'), 'data')
@@ -42,7 +47,7 @@ def expCommon(odir, pdir, regGL = True, copyLicn = True, message = ''):
 	txt = re.sub(r'##\sBuild\s*', message, txt, flags = re.M | re.S)
 	txt = re.sub(r'The\sCMakeLists\.txt.*', '', txt, flags = re.M | re.S)
 	if regGL:
-		txt = re.sub(r',\slibjpeg', '', txt, flags = re.M | re.S))
+		txt = re.sub(r',\slibjpeg', '', txt, flags = re.M | re.S)
 	with open(os.path.join(odir, 'README.md'), 'w') as fh:
 		fh.write(txt)
 
@@ -81,31 +86,41 @@ def expWin(odir, pdir, msg):
 	expCommon(odir, pdir, message = msg)
 	shutil.copy(os.path.join(pdir, 'Thrones.exe'), odir)
 	shutil.copy(os.path.join(pdir, 'Server.exe'), odir)
-	for ft in ['SDL2', 'SDL2_image', 'SDL2_net', 'SDL2_ttf', 'libpng16-16', 'libfreetype-6', 'zlib1']:
+	for ft in ['SDL2', 'SDL2_image', 'SDL2_ttf', 'libpng16-16', 'libfreetype-6', 'zlib1']:
 		shutil.copy(os.path.join(pdir, ft + '.dll'), odir)
 	writeZip(odir)
 
 def genProject(pdir, gopt = '', pref = ''):
-	if not os.path.isdir(pdir):
-		os.mkdir(pdir)
+	mkdir(pdir)
 	os.chdir(pdir)
-	os.system(pref + 'cmake .. ' + gopt)
-	os.chdir('..')
+	prun(pref, 'cmake', '..', gopt)
 
-def genWeb():
-	genProject(webDir, '', 'emcmake ')
-	esRel = os.path.join('..', glesDir, 'bin')
-	os.chdir(webDir)
-	shutil.copytree(os.path.join(esRel, 'data'), 'data')
-	shutil.copytree(os.path.join(esRel, 'licenses'), 'licenses')
-	os.rename(os.path.join('data', 'thrones.png'), 'thrones.png')
+def genLinux(pdir, gopt = '', target = ''):
+	genProject(pdir, gopt)
+	prun('make', '-j', getThreads(), target)
+
+def genWeb(pdir):
+	wglDir = 'build_wgl'
+	genLinux(wglDir, '-DOPENGLES=1', 'assets')
 	os.chdir('..')
+	genProject(pdir, '', 'emcmake')
+
+	wglRel = os.path.join('..', wglDir, 'bin')
+	os.rename(os.path.join(wglRel, 'data'), 'data')
+	os.rename(os.path.join(wglRel, 'licenses'), 'licenses')
+	os.rename(os.path.join('data', 'thrones.png'), 'thrones.png')
+	prun('emmake', 'make', '-j', getThreads())
 
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
 		print("usage: " + os.path.basename(__file__) + " <action>")
 		quit()
 
+	lnxDir = 'build_lnx'
+	glesDir = 'build_gles'
+	webDir = 'build_web'
+	win32Dir = 'build_win32'
+	win64Dir = 'build_win64'
 	if sys.argv[1] == 'android':
 		expAndroid('Thrones_' + getVersion() + '_android')
 	elif sys.argv[1] == 'linux':
@@ -115,18 +130,18 @@ if __name__ == '__main__':
 	elif sys.argv[1] == 'web':
 		expWeb('Thrones_' + getVersion() + '_web', webDir)
 	elif sys.argv[1] == 'mac':
-		exprMac('Thrones_' + getVersion() + '_mac64', macDir)
+		exprMac('Thrones_' + getVersion() + '_mac64', 'build')
 	elif sys.argv[1] == 'win':
-		expWin('Thrones_' + getVersion() + '_win32', os.path.join(win32Dir, 'bin'), 'To run the program you need to have the vc_redist 2017 32-bit installed.  \n')
-		expWin('Thrones_' + getVersion() + '_win64', os.path.join(win64Dir, 'bin'), 'To run the program you need to have the vc_redist 2019 64-bit installed.  \n')
+		expWin('Thrones_' + getVersion() + '_win32', os.path.join(win32Dir, 'bin'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 32-bit installed.  \n')
+		expWin('Thrones_' + getVersion() + '_win64', os.path.join(win64Dir, 'bin'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 64-bit installed.  \n')
 	elif sys.argv[1] == 'glinux':
-		genProject(lnxDir)
+		genLinux(lnxDir)
 	elif sys.argv[1] == 'ggles':
-		genProject(glesDir, '-DOPENGLES=1')
+		genLinux(glesDir, '-DOPENGLES=1')
 	elif sys.argv[1] == 'gweb':
-		genWeb()
+		genWeb(webDir)
 	elif sys.argv[1] == 'gwin':
-		genProject(win32Dir, '-G "Visual Studio 15" -A "Win32"')
-		genProject(win64Dir, '-G "Visual Studio 15" -A "x64"')
+		genProject(win32Dir, '-G "Visual Studio 16" -A "Win32"')
+		genProject(win64Dir, '-G "Visual Studio 16" -A "x64"')
 	else:
 		print('unknown action')

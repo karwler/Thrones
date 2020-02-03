@@ -40,26 +40,6 @@ inline uint8 Mesh::getShape() const {
 	return shape;
 }
 
-#define DCLASS_CONSTRUCT(Class, Base) \
-	Class() = default; \
-	Class(const Class& o) : \
-		Base() \
-	{ \
-		std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)); \
-	} \
-	Class(Class&& o) : \
-		Base() \
-	{ \
-		std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)); \
-	} \
-	Class& operator=(const Class& o) { \
-		return reinterpret_cast<Class*>(std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)))[-1]; \
-	} \
-	Class& operator=(Class&& o) { \
-		return reinterpret_cast<Class*>(std::copy_n(reinterpret_cast<const uint8*>(&o), sizeof(Class), reinterpret_cast<uint8*>(this)))[-1]; \
-	} \
-	virtual ~Class() override = default;
-
 // 3D object with triangles
 class Object : public Interactable {
 public:
@@ -75,8 +55,14 @@ private:
 	mat3 normat;
 
 public:
-	DCLASS_CONSTRUCT(Object, Interactable)
+	Object() = default;
+	Object(const Object&) = default;
+	Object(Object&&) = default;
 	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = false, bool show = true);
+	virtual ~Object() override = default;
+
+	Object& operator=(const Object&) = default;
+	Object& operator=(Object&&) = default;
 
 	void drawDepth() const;
 	virtual void draw() const;
@@ -154,8 +140,14 @@ private:
 	Emission emission;
 
 public:
-	DCLASS_CONSTRUCT(BoardObject, Object)
+	BoardObject() = default;
+	BoardObject(const BoardObject&) = default;
+	BoardObject(BoardObject&&) = default;
 	BoardObject(const vec3& pos, float rot = 0.f, const vec3& scl = vec3(1.f), GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = true, bool show = true);
+	virtual ~BoardObject() override = default;
+
+	BoardObject& operator=(const BoardObject&) = default;
+	BoardObject& operator=(BoardObject&&) = default;
 
 	virtual void draw() const override;
 
@@ -188,8 +180,14 @@ private:
 	bool breached;	// only for fortress
 
 public:
-	DCLASS_CONSTRUCT(Tile, BoardObject)
+	Tile() = default;
+	Tile(const Tile&) = default;
+	Tile(Tile&&) = default;
 	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
+	virtual ~Tile() override = default;
+
+	Tile& operator=(const Tile&) = default;
+	Tile& operator=(Tile&&) = default;
 
 	virtual void drawTopDepth() const override;
 	virtual void drawTop() const override;
@@ -238,6 +236,8 @@ private:
 
 public:
 	TileCol();
+	TileCol(const TileCol&) = delete;
+	TileCol(TileCol&&) = delete;
 	~TileCol();
 
 	void update(const Com::Config& conf);
@@ -245,6 +245,8 @@ public:
 	uint16 getExtra() const;
 	uint16 getSize() const;
 
+	TileCol& operator=(const TileCol&) = delete;
+	TileCol& operator=(TileCol&&) = delete;
 	Tile& operator[](uint16 i);
 	const Tile& operator[](uint16 i) const;
 	Tile* begin();
@@ -334,8 +336,14 @@ private:
 	static const vec4 moveIconColor, attackHorseColor, fireIconColor;
 
 public:
-	DCLASS_CONSTRUCT(Piece, BoardObject)
+	Piece() = default;
+	Piece(const Piece&) = default;
+	Piece(Piece&&) = default;
 	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
+	virtual ~Piece() override = default;
+
+	Piece& operator=(const Piece&) = default;
+	Piece& operator=(Piece&&) = default;
 
 	virtual void drawTopDepth() const override;
 	virtual void drawTop() const override;
@@ -347,7 +355,7 @@ public:
 	Com::Piece getType() const;
 	uint8 firingDistance() const;	// 0 if non-firing piece
 	void setActive(bool on);
-	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool active = false);
+	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool forceRigid = false);
 	bool getDrawTopSelf() const;
 private:
 	float selfTopYpos(const Interactable* occupant) const;
@@ -381,12 +389,16 @@ private:
 
 public:
 	PieceCol();
+	PieceCol(const PieceCol&) = delete;
+	PieceCol(PieceCol&&) = delete;
 	~PieceCol();
 
 	void update(const Com::Config& conf);
 	uint16 getNum() const;
 	uint16 getSize() const;
 
+	PieceCol& operator=(const PieceCol&) = delete;
+	PieceCol& operator=(PieceCol&&) = delete;
 	Piece& operator[](uint16 i);
 	const Piece& operator[](uint16 i) const;
 	Piece* begin();

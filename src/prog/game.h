@@ -37,8 +37,22 @@ public:
 	static constexpr float screenYUp = 0.f;
 	static constexpr float screenYDown = -4.2f;
 private:
-	static const array<uint16 (*)(uint16, svec2), 4> adjacentStraight;
-	static const array<uint16 (*)(uint16, svec2), 8> adjacentFull;
+	static constexpr array<uint16 (*)(uint16, svec2), 4> adjacentStraight = {
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },				// up
+		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x ? id - 1 : UINT16_MAX; },					// left
+		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x != lim.x - 1 ? id + 1 : UINT16_MAX; },		// right
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 ? id + lim.x : UINT16_MAX; }	// down
+	};
+	static constexpr array<uint16 (*)(uint16, svec2), 8> adjacentFull = {
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x ? id - lim.x - 1 : UINT16_MAX; },							// left up
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },											// up
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x != lim.x - 1  ? id - lim.x + 1 : UINT16_MAX; },			// right up
+		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x ? id - 1 : UINT16_MAX; },												// left
+		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x != lim.x - 1 ? id + 1 : UINT16_MAX; },									// right
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x ? id + lim.x - 1 : UINT16_MAX; },				// left down
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 ? id + lim.x : UINT16_MAX; },								// down
+		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x != lim.x - 1 ? id + lim.x + 1 : UINT16_MAX; }	// right down
+	};
 
 	Com::Config config;
 	uint16 boardHeight;	// total number of rows
@@ -90,13 +104,13 @@ public:
 	void sendStart();
 	void sendConfig(bool onJoin = false);
 	void sendSetup();
-	void recvConfig(uint8* data);
-	void recvStart(uint8* data);
-	void recvSetup(uint8* data);
-	void recvMove(uint8* data);
-	void recvKill(uint8* data);
-	void recvBreach(uint8* data);
-	void recvRecord(uint8* data);
+	void recvConfig(const uint8* data);
+	void recvStart(const uint8* data);
+	void recvSetup(const uint8* data);
+	void recvMove(const uint8* data);
+	void recvKill(const uint8* data);
+	void recvBreach(const uint8* data);
+	void recvRecord(const uint8* data);
 	vector<Object*> initObjects(const Com::Config& cfg);
 #ifdef DEBUG
 	vector<Object*> initDummyObjects(const Com::Config& cfg);
@@ -169,7 +183,8 @@ private:
 	void doWin(bool win);
 	void placePiece(Piece* piece, svec2 pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
-	void updateFortress(Tile* fort, bool breached);
+	void breachFortress(Tile* fort);
+	void restoreFortresses();
 
 	svec2 idToPos(uint16 i) const;
 	uint16 invertId(uint16 i) const;
@@ -296,16 +311,16 @@ inline bool Game::runSurvivalCheck() {
 	return randDist(randGen) < config.survivalPass;
 }
 
-inline void Game::recvMove(uint8* data) {
-	pieces[SDLNet_Read16(data)].updatePos(idToPos(SDLNet_Read16(data + sizeof(uint16))), true);
+inline void Game::recvMove(const uint8* data) {
+	pieces[Com::read16(data)].updatePos(idToPos(Com::read16(data + sizeof(uint16))));
 }
 
-inline void Game::recvKill(uint8* data) {
-	pieces[SDLNet_Read16(data)].updatePos();
+inline void Game::recvKill(const uint8* data) {
+	pieces[Com::read16(data)].updatePos();
 }
 
-inline void Game::recvBreach(uint8* data) {
-	tiles[SDLNet_Read16(data + 1)].setBreached(data[0]);
+inline void Game::recvBreach(const uint8* data) {
+	tiles[Com::read16(data)].setBreached(true);
 }
 
 inline svec2 Game::ptog(const vec3& p) const {

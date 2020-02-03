@@ -1,23 +1,26 @@
 #include "world.h"
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(EMSCRIPTEN)
+#include <emscripten.h>
+#else
+#include <sys/stat.h>
+#endif
 
 // SETTINGS
 
-const array<string, Settings::screenNames.size()> Settings::screenNames = {
-	"window",
-	"borderless",
-	"fullscreen",
-	"desktop"
-};
-
-const array<string, Settings::vsyncNames.size()> Settings::vsyncNames = {
-	"adaptive",
-	"immediate",
-	"synchronized"
-};
-
 Settings::Settings() :
-	maximized(false),
-	avolume(0),
+	address(loopback),
+	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
+	size(1280, 720),
+	gamma(1.f),
+	port(Com::defaultPort),
+#ifdef OPENGLES
+	shadowRes(0),
+#else
+	shadowRes(1024),
+#endif
+	chatLines(511),
 	display(0),
 #ifdef __ANDROID__
 	screen(Screen::desktop),
@@ -27,21 +30,12 @@ Settings::Settings() :
 	vsync(VSync::synchronized),
 	msamples(4),
 	texScale(100),
-#ifdef OPENGLES
-	shadowRes(0),
-#else
-	shadowRes(1024),
-#endif
 	softShadows(true),
-	gamma(1.f),
-	size(1280, 720),
-	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
+	avolume(0),
 	scaleTiles(true),
 	scalePieces(false),
-	chatLines(511),
-	fontRegular(true),
-	address(loopback),
-	port(Com::defaultPort)
+	resolveFamily(Com::Family::any),
+	fontRegular(true)
 {}
 
 // SETUP
@@ -54,14 +48,21 @@ void Setup::clear() {
 
 // FILE SYS
 
-string FileSys::dirData, FileSys::dirConfig;
-
 void FileSys::init() {
 #if defined(__ANDROID__)
 	if (const char* path = SDL_AndroidGetExternalStoragePath())
 		dirConfig = path + string("/");
 #elif defined(EMSCRIPTEN)
 	dirData = "/";
+	dirConfig = "/data/";
+	EM_ASM(
+		FS.mkdir('/data');
+		FS.mount(IDBFS, {}, '/data');
+		Module.syncdone = 0;
+		FS.syncfs(true, function (err) {
+			Module.syncdone = 1;
+		});
+	);
 #else
 	const char* eopt = World::args.getOpt(World::argExternal);
 #ifdef EXTERNAL
@@ -82,17 +83,17 @@ void FileSys::init() {
 	if (const char* path = SDL_getenv("AppData"); external && path) {
 		dirConfig = path + string("/Thrones/");
 		std::replace(dirConfig.begin(), dirConfig.end(), '\\', '/');
-		createDir(dirConfig);
+		CreateDirectoryW(stow(dirConfig).c_str(), 0);
 	}
 #elif defined(__APPLE__)
 	if (const char* path = SDL_getenv("HOME"); external && path) {
 		dirConfig = path + string("/Library/Preferences/Thrones/");
-		createDir(dirConfig);
+		mkdir(dirConfig.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	}
-#elif !defined(EMSCRIPTEN)
+#else
 	if (const char* path = SDL_getenv("HOME"); external && path) {
 		dirConfig = path + string("/.config/thrones/");
-		createDir(dirConfig);
+		mkdir(dirConfig.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	}
 #endif
 #endif
@@ -100,15 +101,15 @@ void FileSys::init() {
 
 Settings* FileSys::loadSettings() {
 	Settings* sets = new Settings();
-#ifndef EMSCRIPTEN
 	for (const string& line : readFileLines(configPath(fileSettings))) {
 		pairStr il = readIniLine(line);
-#ifndef __ANDROID__
-		if (il.first == iniKeywordMaximized)
-			sets->maximized = stob(il.second);
-		else if (il.first == iniKeywordDisplay)
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+		if (il.first == iniKeywordDisplay)
 			sets->display = uint8(std::clamp(sstoul(il.second), 0ul, ulong(SDL_GetNumVideoDisplays())));
-		else if (il.first == iniKeywordScreen)
+		else
+#endif
+#ifndef __ANDROID__
+		if (il.first == iniKeywordScreen)
 			sets->screen = strToEnum<Settings::Screen>(Settings::screenNames, il.second);
 		else if (il.first == iniKeywordSize)
 			sets->size = stoiv<ivec2>(il.second.c_str(), strtoul);
@@ -139,6 +140,8 @@ Settings* FileSys::loadSettings() {
 			sets->scalePieces = stob(il.second);
 		else if (il.first == iniKeywordChatLines)
 			sets->chatLines = uint16(std::clamp(stoul(il.second), 0ul, ulong(Settings::chatLinesMax)));
+		else if (il.first == iniKeywordResolveFamily)
+			sets->resolveFamily = Com::Family(strToEnum<uint8>(Com::familyNames, il.second));
 		else if (il.first == iniKeywordFontRegular)
 			sets->fontRegular = stob(il.second);
 		else if (il.first == iniKeywordAddress)
@@ -146,18 +149,15 @@ Settings* FileSys::loadSettings() {
 		else if (il.first == iniKeywordPort)
 			sets->port = uint16(sstoul(il.second));
 	}
-#endif
 	return sets;
 }
 
-bool FileSys::saveSettings(const Settings* sets) {
-#ifdef EMSCRIPTEN
-	return true;
-#else
+void FileSys::saveSettings(const Settings* sets) {
 	string text;
-#ifndef __ANDROID__
-	text += makeIniLine(iniKeywordMaximized, btos(sets->maximized));
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	text += makeIniLine(iniKeywordDisplay, toStr(sets->display));
+#endif
+#ifndef __ANDROID__
 	text += makeIniLine(iniKeywordScreen, Settings::screenNames[uint8(sets->screen)]);
 	text += makeIniLine(iniKeywordSize, toStr(sets->size));
 	text += makeIniLine(iniKeywordMode, dispToStr(sets->mode));
@@ -174,18 +174,17 @@ bool FileSys::saveSettings(const Settings* sets) {
 	text += makeIniLine(iniKeywordScaleTiles, btos(sets->scaleTiles));
 	text += makeIniLine(iniKeywordScalePieces, btos(sets->scalePieces));
 	text += makeIniLine(iniKeywordChatLines, toStr(sets->chatLines));
+	text += makeIniLine(iniKeywordResolveFamily, Com::familyNames[uint8(sets->resolveFamily)]);
 	text += makeIniLine(iniKeywordFontRegular, btos(sets->fontRegular));
 	text += makeIniLine(iniKeywordAddress, sets->address);
 	text += makeIniLine(iniKeywordPort, toStr(sets->port));
-	return writeFile(configPath(fileSettings), text);
-#endif
+	writeFile(fileSettings, text);
 }
 
-umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
+umap<string, Com::Config> FileSys::loadConfigs() {
 	umap<string, Com::Config> confs;
-#ifndef EMSCRIPTEN
 	Com::Config* cit = nullptr;
-	for (const string& line : readFileLines(configPath(file))) {
+	for (const string& line : readFileLines(configPath(fileConfigs))) {
 		if (string title = readIniTitle(line); !title.empty())
 			cit = &confs.emplace(std::move(title), Com::Config()).first->second;
 		else if (cit) {
@@ -221,12 +220,11 @@ umap<string, Com::Config> FileSys::loadConfigs(const char* file) {
 				readShift(it.second, *cit);
 		}
 	}
-#endif
 	return !confs.empty() ? confs : umap<string, Com::Config>{ pair(Com::Config::defaultName, Com::Config()) };
 }
 
 template <sizet N, sizet S>
-void FileSys::readAmount(const pairStr& it, sizet wlen, const array<string, N>& names, array<uint16, S>& amts) {
+void FileSys::readAmount(const pairStr& it, sizet wlen, const array<const char*, N>& names, array<uint16, S>& amts) {
 	if (uint8 id = strToEnum<uint8>(names, it.first.substr(wlen)); id < amts.size())
 		amts[id] = uint16(sstol(it.second));
 }
@@ -244,10 +242,7 @@ void FileSys::readShift(const string& line, Com::Config& conf) {
 	}
 }
 
-bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* file) {
-#ifdef EMSCRIPTEN
-	return true;
-#else
+void FileSys::saveConfigs(const umap<string, Com::Config>& confs) {
 	string text;
 	for (const pair<const string, Com::Config>& it : confs) {
 		text += makeIniLine(it.first);
@@ -268,19 +263,17 @@ bool FileSys::saveConfigs(const umap<string, Com::Config>& confs, const char* fi
 		text += makeIniLine(iniKeywordShift, string(it.second.shiftLeft ? iniKeywordLeft : iniKeywordRight) + ' ' + (it.second.shiftNear ? iniKeywordNear : iniKeywordFar));
 		text += linend;
 	}
-	return writeFile(configPath(file), text);
-#endif
+	writeFile(fileConfigs, text);
 }
 
 template <sizet N, sizet S>
-void FileSys::writeAmounts(string& text, const string& word, const array<string, N>& names, const array<uint16, S>& amts) {
+void FileSys::writeAmounts(string& text, const string& word, const array<const char*, N>& names, const array<uint16, S>& amts) {
 	for (sizet i = 0; i < amts.size(); i++)
 		text += makeIniLine(word + names[i], toStr(amts[i]));
 }
 
 umap<string, Setup> FileSys::loadSetups() {
 	umap<string, Setup> sets;
-#ifndef EMSCRIPTEN
 	umap<string, Setup>::iterator sit;
 	for (const string& line : readFileLines(configPath(fileSetups))) {
 		if (string title = readIniTitle(line); !title.empty())
@@ -294,14 +287,10 @@ umap<string, Setup> FileSys::loadSetups() {
 				sit->second.pieces.emplace(stoiv<svec2>(it.first.c_str() + len, strtol), strToEnum<Com::Piece>(Com::pieceNames, it.second));
 		}
 	}
-#endif
 	return sets;
 }
 
-bool FileSys::saveSetups(const umap<string, Setup>& sets) {
-#ifdef EMSCRIPTEN
-	return true;
-#else
+void FileSys::saveSetups(const umap<string, Setup>& sets) {
 	string text;
 	for (const pair<const string, Setup>& it : sets) {
 		text += makeIniLine(it.first);
@@ -313,8 +302,7 @@ bool FileSys::saveSetups(const umap<string, Setup>& sets) {
 			text += makeIniLine(iniKeywordPiece + toStr(pi.first, "_"), Com::pieceNames[uint8(pi.second)]);
 		text += linend;
 	}
-	return writeFile(configPath(fileSetups), text);
-#endif
+	writeFile(fileSetups, text);
 }
 
 umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
@@ -477,3 +465,29 @@ void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<strin
 	}
 	SDL_RWclose(ifh);
 }
+
+void FileSys::writeFile(const char* file, const string& text) {
+	string path = configPath(file);
+	SDL_RWops* ofh = SDL_RWFromFile(path.c_str(), defaultWriteMode);
+	if (!ofh) {
+		std::cerr << "failed to write " << path << std::endl;
+		return;
+	}
+
+	SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
+	SDL_RWclose(ofh);
+#ifdef EMSCRIPTEN
+	EM_ASM(
+		Module.syncdone = 0;
+		FS.syncfs(function(err) {
+			Module.syncdone = 1;
+		});
+	);
+#endif
+}
+
+#ifdef EMSCRIPTEN
+bool FileSys::canRead() {
+	return emscripten_run_script_int("Module.syncdone");
+}
+#endif

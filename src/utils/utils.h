@@ -15,6 +15,7 @@ class Program;
 class ProgState;
 class ShaderGui;
 
+template <class... T> using sptr = std::shared_ptr<T...>;
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using sset = std::set<T...>;
 
@@ -187,7 +188,12 @@ inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
 class Interactable {
 public:
 	Interactable() = default;
+	Interactable(const Interactable&) = default;
+	Interactable(Interactable&&) = default;
 	virtual ~Interactable() = default;
+
+	Interactable& operator=(const Interactable&) = default;
+	Interactable& operator=(Interactable&&) = default;
 
 	virtual void onClick(const ivec2& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onHold(const ivec2&, uint8) {}
@@ -266,9 +272,9 @@ T swapBits(T n, uint8 i, uint8 j) {
 	return n ^ ((x << i) | (x << j));
 }
 
-template <class T>
+template <class T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
 uint8 numDigits10(T num) {
-	return num ? uint8(std::log10(num > 0 ? num : -num)) + 1 : 1;
+	return num > 0 ? uint8(std::log10(num)) + 1 : num ? uint8(std::log10(-num)) + 2 : 1;
 }
 
 // container stuff

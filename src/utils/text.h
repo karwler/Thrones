@@ -29,11 +29,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#ifdef _WIN32
-#include <windows.h>	// needs to be here to prevent conflicts with SDL_net
-#else
-#include <strings.h>
-#endif
 
 using uchar = unsigned char;
 using ushort = unsigned short;
@@ -59,6 +54,7 @@ using pdift = ptrdiff_t;
 using std::array;
 using std::pair;
 using std::string;
+using std::tuple;
 using std::wstring;
 using std::vector;
 
@@ -84,7 +80,6 @@ constexpr char linend[] = "\n";
 #endif
 constexpr char defaultReadMode[] = "rb";
 constexpr char defaultWriteMode[] = "wb";
-constexpr char commonVersion[] = "0.4.3";
 
 // utility
 
@@ -124,7 +119,7 @@ inline bool strnatless(const string& a, const string& b) {
 	return strnatcmp(a.c_str(), b.c_str()) < 0;
 }
 
-inline int strcicmp(const char* a, const char* b) {	// case insensitive check if strings are equal
+inline int strcicmp(const char* a, const char* b) {	// case insensitive string compare
 #ifdef _WIN32
 	return _stricmp(a, b);
 #else
@@ -136,7 +131,7 @@ inline int strcicmp(const string& a, const char* b) {
 	return strcicmp(a.c_str(), b);
 }
 
-inline int strncicmp(const char* a, const char* b, sizet n) {	// case insensitive check if strings are equal
+inline int strncicmp(const char* a, const char* b, sizet n) {	// case insensitive string compare
 #ifdef _WIN32
 	return _strnicmp(a, b, n);
 #else
@@ -231,8 +226,8 @@ inline string btos(bool b) {
 }
 
 template <class T, sizet N>
-T strToEnum(const array<string, N>& names, const string& str) {
-	return T(std::find_if(names.begin(), names.end(), [str](const string& it) -> bool { return !strcicmp(it, str.c_str()); }) - names.begin());
+T strToEnum(const array<const char*, N>& names, const string& str) {
+	return T(std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !strcicmp(it, str.c_str()); }) - names.begin());
 }
 
 inline long sstol(const char* str, int base = 0) {
@@ -349,36 +344,6 @@ vector<string> sortNames(const umap<string, T>& vmap) {
 
 // files
 
-vector<string> readFileLines(const string& file);
-bool writeFile(const string& file, const string& text);
-string readIniTitle(const string& line);
-pairStr readIniLine(const string& line);
-
-inline string makeIniLine(const string& title) {
-	return '[' + title + ']' + linend;
-}
-
-inline string makeIniLine(const string& key, const string& val) {
-	return key + '=' + val + linend;
-}
-
-template <class T = string>
-T readFile(const string& file) {
-	T data;
-	SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
-	if (!ifh)
-		return data;
-	int64 len = SDL_RWsize(ifh);
-	if (len <= 0)
-		return data;
-
-	data.resize(sizet(len));
-	if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read != data.size())
-		data.resize(read);
-	SDL_RWclose(ifh);
-	return data;
-}
-
 // command line arguments
 class Arguments {
 private:
@@ -389,13 +354,13 @@ private:
 public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	Arguments(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
 	Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt);
 #endif
 	Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt);
 
 #ifdef _WIN32
-	void setArgs(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	void setArgs(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
 #endif
 	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt);
 
@@ -405,7 +370,7 @@ public:
 };
 
 #ifdef _WIN32
-inline Arguments::Arguments(PWSTR pCmdLine, const uset<char>& flg, const uset<char>& opt) {
+inline Arguments::Arguments(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(pCmdLine, flg, opt);
 }
 
@@ -413,6 +378,7 @@ inline Arguments::Arguments(int argc, wchar** argv, const uset<char>& flg, const
 	setArgs(argc - 1, argv + 1, wtos, flg, opt);
 }
 #endif
+
 inline Arguments::Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(argc - 1, argv + 1, stos, flg, opt);
 }

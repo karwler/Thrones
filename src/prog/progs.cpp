@@ -139,7 +139,7 @@ Texture ProgState::makeTooltipL(const vector<string>& lines) const {
 
 vector<Widget*> ProgState::createChat(bool overlay) {
 	return {
-		chatBox = new TextBox(1.f, smallHeight, "", nullptr, &Program::eventClearLabel, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
+		chatBox = new TextBox(1.f, smallHeight, "", &Program::eventFocusChatLabel, &Program::eventClearLabel, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
 		new LabelEdit(smallHeight, "", nullptr, nullptr, &Program::eventSendMessage, overlay ? &Program::eventCloseOverlay : &Program::eventHideChat, Texture(), 1.f, UINT16_MAX - Com::dataHeadSize, true)
 	};
 }
@@ -201,14 +201,14 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	};
 	string tileTips[Com::tileLim];
 	for (uint8 i = 0; i < Com::tileLim; i++)
-		tileTips[i] = "Number of " + Com::tileNames[i] + " tiles per homeland";
+		tileTips[i] = "Number of " + string(Com::tileNames[i]) + " tiles per homeland";
 	string fortressTip = "(calculated automatically to fill remaining free tiles)";
 	string middleTips[Com::tileLim];
 	for (uint8 i = 0; i < Com::tileLim; i++)
-		middleTips[i] = "Number of " + Com::tileNames[i] + " tiles in middle row per player";
+		middleTips[i] = "Number of " + string(Com::tileNames[i]) + " tiles in middle row per player";
 	string pieceTips[Com::pieceMax];
 	for (uint8 i = 0; i < Com::pieceMax; i++)
-		pieceTips[i] = "Number of " + Com::pieceNames[i] + " pieces per player";
+		pieceTips[i] = "Number of " + string(Com::pieceNames[i]) + " pieces per player";
 	string fortTip = "Fortresses that need to be captured in order to win";
 	string throneTip = "Thrones that need to be killed in order to win";
 	Text width("width:", lineHeight);
@@ -260,7 +260,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		};
 	lines1.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
-		wio.tileFortress = new Label(1.f, tileFortressString(cfg), nullptr, nullptr, makeTooltipL({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles per homeland", fortressTip }))
+		wio.tileFortress = new Label(1.f, tileFortressString(cfg), nullptr, nullptr, makeTooltipL({ "Number of " + string(Com::tileNames[uint8(Com::Tile::fortress)]) + " tiles per homeland", fortressTip }))
 	};
 	if (active) {
 		uint16 rest = cfg.countFreeTiles();
@@ -276,7 +276,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	};
 	lines2.back() = {
 		new Label(descLength, firstUpper(Com::tileNames[uint8(Com::Tile::fortress)])),
-		wio.middleFortress = new Label(1.f, middleFortressString(cfg), nullptr, nullptr, makeTooltipL({ "Number of " + Com::tileNames[uint8(Com::Tile::fortress)] + " tiles in middle row", fortressTip }))
+		wio.middleFortress = new Label(1.f, middleFortressString(cfg), nullptr, nullptr, makeTooltipL({ "Number of " + string(Com::tileNames[uint8(Com::Tile::fortress)]) + " tiles in middle row", fortressTip }))
 	};
 	if (active) {
 		uint16 rest = cfg.countFreeMiddles();
@@ -416,7 +416,7 @@ RootLayout* ProgMenu::createLayout() {
 	};
 	vector<Widget*> cont = {
 		new Layout(1.f, std::move(menu), false, 0),
-		new Label(lineHeight, commonVersion, nullptr, nullptr, Texture(), 1.f, Label::Alignment::right, false),
+		new Label(lineHeight, Com::commonVersion, nullptr, nullptr, Texture(), 1.f, Label::Alignment::right, false),
 	};
 	return new RootLayout(1.f, std::move(cont), true, 0);
 }
@@ -479,15 +479,12 @@ void ProgLobby::openRoom(const string& name, bool open) {
 
 // PROG ROOM
 
-ProgRoom::ProgRoom() :
-	ProgState()
+ProgRoom::ProgRoom(umap<string, Com::Config>&& configs) :
+	confs(std::move(configs))
 {
-	if (World::program()->info & Program::INF_HOST) {
-		confs = FileSys::loadConfigs();
-		umap<string, Com::Config>::iterator it = confs.find(Com::Config::defaultName);
-		World::program()->curConfig = it != confs.end() ? it->first : sortNames(confs).front();
-		confs[World::program()->curConfig].checkValues();
-	}
+	umap<string, Com::Config>::iterator it = confs.find(Com::Config::defaultName);
+	World::program()->curConfig = it != confs.end() ? it->first : sortNames(confs).front();
+	confs[World::program()->curConfig].checkValues();
 }
 
 void ProgRoom::eventEscape() {
@@ -495,8 +492,7 @@ void ProgRoom::eventEscape() {
 }
 
 void ProgRoom::eventEnter() {
-	if (startButton->lcall)
-		World::program()->eventHostServer();
+	World::prun(startButton->lcall, startButton);
 }
 
 RootLayout* ProgRoom::createLayout() {
@@ -846,6 +842,10 @@ void ProgSetup::switchIcon(uint8 type, bool on, bool isTile) {
 }
 
 Popup* ProgSetup::createPopupSaveLoad(bool save) {
+#ifdef EMSCRIPTEN
+	if (!FileSys::canRead())
+		return createPopupMessage("Waiting for files to sync", &Program::eventClosePopup);
+#endif
 	Text back("Back", lineHeight);
 	Text tnew("New", lineHeight);
 	vector<Widget*> top = {
@@ -983,7 +983,7 @@ RootLayout* ProgMatch::createLayout() {
 		});
 	} else
 		fnowIcon = favorIcon = nullptr;
-	
+
 	unplacedDragons = 0;
 	for (Piece* pce = World::game()->getOwnPieces(Com::Piece::dragon); pce->getType() == Com::Piece::dragon; pce++)
 		if (!World::game()->pieceOnBoard(pce))
@@ -1018,7 +1018,7 @@ void ProgSettings::eventEscape() {
 }
 
 void ProgSettings::eventEnter() {
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#ifndef __ANDROID__
 	World::program()->eventApplySettings();
 #endif
 }
@@ -1039,7 +1039,7 @@ RootLayout* ProgSettings::createLayout() {
 	};
 
 	// resolution list
-	vector<ivec2> sizes = World::window()->displaySizes();
+	vector<ivec2> sizes = World::window()->windowSizes();
 	vector<SDL_DisplayMode> modes = World::window()->displayModes();
 	pixelformats.clear();
 	for (const SDL_DisplayMode& it : modes)
@@ -1055,6 +1055,8 @@ RootLayout* ProgSettings::createLayout() {
 	vector<string> txs = {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		"Display",
+#endif
+#ifndef __ANDROID__
 		"Screen",
 		"Size",
 		"Mode",
@@ -1071,11 +1073,14 @@ RootLayout* ProgSettings::createLayout() {
 		"Scale tiles",
 		"Scale pieces",
 		"Chat line limit",
+		"Resolve family",
 		"Regular font"
 	};
 	vector<string> tips = {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		"Keep 0 cause it doesn't really work",
+#endif
+#ifndef __ANDROID__
 		"Window or fullscreen (\"desktop\" is native resolution)",
 		"Window size",
 		"Fullscreen display properties",
@@ -1091,6 +1096,7 @@ RootLayout* ProgSettings::createLayout() {
 		"Scale tile amounts when resizing board",
 		"Scale piece amounts when resizing board",
 		"Line break limit of a chat box",
+		"What family to use for resolving a host address",
 		"Use the standard Romanesque or Merriweather to support more characters",
 		"Apply \"Display\", \"Screen\", \"Size\" and \"Mode\""
 	};
@@ -1106,6 +1112,8 @@ RootLayout* ProgSettings::createLayout() {
 		new Label(descLength, popBack(txs)),
 		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventDummy, nullptr, makeTooltip(popBack(tips)))
 	}, {
+#endif
+#ifndef __ANDROID__
 		new Label(descLength, popBack(txs)),
 		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
 		screen = new SwitchBox(1.f, vector<string>(Settings::screenNames.begin(), Settings::screenNames.end()), Settings::screenNames[uint8(World::sets()->screen)], &Program::eventDummy, makeTooltip(tips.back())),
@@ -1167,9 +1175,14 @@ RootLayout* ProgSettings::createLayout() {
 		new LabelEdit(slleLength, toStr(World::sets()->chatLines), &Program::eventSetChatLineLimitLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
+		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
+		new SwitchBox(1.f, vector<string>(Com::familyNames.begin(), Com::familyNames.end()), Com::familyNames[uint8(World::sets()->resolveFamily)], &Program::eventSetResolveFamily, makeTooltip(tips.back())),
+		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+	}, {
+		new Label(descLength, popBack(txs)),
 		new CheckBox(lineHeight, World::sets()->fontRegular, &Program::eventSetFontRegular, &Program::eventSetFontRegular, makeTooltip(popBack(tips)))
 	}, };
-#if defined(__ANDROID__) || defined(EMSCRIPTEN)
+#ifdef __ANDROID__
 	vector<Widget*> lns(lnc);
 #else
 	vector<Widget*> lns(lnc + 2);
@@ -1197,14 +1210,6 @@ SDL_DisplayMode ProgSettings::currentMode() const {
 
 // PROG INFO
 
-const array<string, ProgInfo::powerNames.size()> ProgInfo::powerNames = {
-	"UNKNOWN",
-	"ON_BATTERY",
-	"NO_BATTERY",
-	"CHARGING",
-	"CHARGED"
-};
-
 void ProgInfo::eventEscape() {
 	World::program()->eventOpenSettings();
 }
@@ -1228,10 +1233,7 @@ RootLayout* ProgInfo::createLayout() {
 	// information block
 	vector<string> titles = {
 		WindowSys::title,
-		"CPU",
-		"RAM",
-		"Audio",
-		"Video",
+		"System",
 		"Display",
 		"Power",
 		"Playback",
@@ -1267,14 +1269,14 @@ RootLayout* ProgInfo::createLayout() {
 #endif
 		"GLM",
 		"SDL",
-		"SDL_net",
+		"SDL_image",
 		"SDL_ttf",
-		"Logical cores",	// CPU
+		"Logical cores",	// system
 		"L1 line size",
-		"Features",
-		"Size",				// RAM
-		"Current",			// audio
-		"Current",			// video
+		"CPU features",
+		"RAM size",
+		"Current audio",
+		"Current video",
 		"State",			// power
 		"Time"
 	};
@@ -1301,10 +1303,7 @@ RootLayout* ProgInfo::createLayout() {
 
 	vector<Widget*> lines;
 	appendProgram(lines, argWidth, args, titles);
-	appendCPU(lines, argWidth, args, titles);
-	appendRAM(lines, argWidth, args, titles);
-	appendCurrent(lines, argWidth, args, titles, SDL_GetCurrentAudioDriver);
-	appendCurrent(lines, argWidth, args, titles, SDL_GetCurrentVideoDriver);
+	appendSystem(lines, argWidth, args, titles);
 	appendCurrentDisplay(lines, argWidth, dispArgs, titles);
 	appendPower(lines, argWidth, args, titles);
 	appendAudioDevices(lines, argWidth, titles, SDL_FALSE);
@@ -1325,7 +1324,7 @@ RootLayout* ProgInfo::createLayout() {
 void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
-		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, commonVersion) }, false, lineSpacing)
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, Com::commonVersion) }, false, lineSpacing)
 	});
 	if (char* basePath = SDL_GetBasePath()) {
 		lines.push_back(new Layout(lineHeight, { new Label(width, std::move(args.back())), new Label(1.f, basePath) }, false, lineSpacing));
@@ -1389,14 +1388,14 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 	else
 		sflags.pop_back();
 
-	SDL_version bver, ncver, tcver;
+	SDL_version bver, icver, tcver;
 	SDL_GetVersion(&bver);
 	Text slv(versionText(bver), lineHeight);
 	Text slr(toStr(SDL_GetRevisionNumber()), lineHeight);
 	SDL_VERSION(&bver)
 	Text scv(versionText(bver), lineHeight);
-	const SDL_version* nlver = SDLNet_Linked_Version();
-	SDL_NET_VERSION(&ncver)
+	const SDL_version* ilver = IMG_Linked_Version();
+	SDL_IMAGE_VERSION(&icver)
 	const SDL_version* tlver = TTF_Linked_Version();
 	SDL_TTF_VERSION(&tcver)
 	lines.insert(lines.end(), {
@@ -1424,13 +1423,13 @@ void ProgInfo::appendProgram(vector<Widget*>& lines, int width, vector<string>& 
 #endif
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(GLM_VERSION_MAJOR) + '.' + toStr(GLM_VERSION_MINOR) + '.' + toStr(GLM_VERSION_PATCH) + '.' + toStr(GLM_VERSION_REVISION)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(slv.length, std::move(slv.text)), new Label(slr.length, std::move(slr.text)), new Label(1.f, SDL_GetRevision()), new Label(scv.length, std::move(scv.text)) }, false, lineSpacing),
-		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, versionText(*nlver)), new Label(1.f, versionText(ncver)) }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, versionText(*ilver)), new Label(1.f, versionText(icver)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, versionText(*tlver)), new Label(1.f, versionText(tcver)) }, false, lineSpacing),
 		new Widget(lineHeight)
 	});
 }
 
-void ProgInfo::appendCPU(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
+void ProgInfo::appendSystem(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	vector<string> features;
 	if (SDL_Has3DNow())
 		features.emplace_back("3DNow");
@@ -1454,6 +1453,8 @@ void ProgInfo::appendCPU(vector<Widget*>& lines, int width, vector<string>& args
 		features.emplace_back("SSE41");
 	if (SDL_HasSSE42())
 		features.emplace_back("SSE42");
+	const char* audio = SDL_GetCurrentAudioDriver();
+	const char* video = SDL_GetCurrentVideoDriver();
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, popBack(titles)),
@@ -1467,24 +1468,12 @@ void ProgInfo::appendCPU(vector<Widget*>& lines, int width, vector<string>& args
 		features.clear();
 	} else
 		lines.push_back(new Layout(lineHeight, { new Label(width, popBack(args)), new Widget() }, false, lineSpacing));
-	lines.push_back(new Widget(lineHeight));
-}
-
-void ProgInfo::appendRAM(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles) {
 	lines.insert(lines.end(), {
-		new Label(superHeight, popBack(titles)),
 		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, toStr(SDL_GetSystemRAM()) + "MB") }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, audio ? audio : "") }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, video ? video : "") }, false, lineSpacing),
 		new Widget(lineHeight)
 	});
-}
-
-void ProgInfo::appendCurrent(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles, const char* (*value)()) {
-	lines.push_back(new Label(superHeight, popBack(titles)));
-	if (const char* name = value())
-		lines.push_back(new Layout(lineHeight, { new Label(width, popBack(args)), new Label(1.f, name) }, false, lineSpacing));
-	else
-		lines.push_back(new Layout(lineHeight, { new Label(width, popBack(args)), new Button() }, false, lineSpacing));
-	lines.push_back(new Widget(lineHeight));
 }
 
 void ProgInfo::appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles) {

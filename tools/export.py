@@ -90,20 +90,20 @@ def expWin(odir, pdir, msg):
 		shutil.copy(os.path.join(pdir, ft + '.dll'), odir)
 	writeZip(odir)
 
-def genProject(pdir, gopt = '', pref = ''):
+def genProject(pdir, pref = '', *gopt):
 	mkdir(pdir)
 	os.chdir(pdir)
-	prun(pref, 'cmake', '..', gopt)
+	prun(pref, 'cmake', '..', *gopt)
 
-def genLinux(pdir, gopt = '', target = ''):
-	genProject(pdir, gopt)
+def genLinux(pdir, target = '', *gopt):
+	genProject(pdir, '', *gopt)
 	prun('make', '-j', getThreads(), target)
 
 def genWeb(pdir):
 	wglDir = 'build_wgl'
-	genLinux(wglDir, '-DOPENGLES=1', 'assets')
+	genLinux(wglDir, 'assets', '-DOPENGLES=1')
 	os.chdir('..')
-	genProject(pdir, '', 'emcmake')
+	genProject(pdir, 'emcmake')
 
 	wglRel = os.path.join('..', wglDir, 'bin')
 	os.rename(os.path.join(wglRel, 'data'), 'data')
@@ -137,11 +137,11 @@ if __name__ == '__main__':
 	elif sys.argv[1] == 'glinux':
 		genLinux(lnxDir)
 	elif sys.argv[1] == 'ggles':
-		genLinux(glesDir, '-DOPENGLES=1')
+		genLinux(glesDir, '', '-DOPENGLES=1')
 	elif sys.argv[1] == 'gweb':
 		genWeb(webDir)
 	elif sys.argv[1] == 'gwin':
-		genProject(win32Dir, '-G "Visual Studio 16" -A "Win32"')
-		genProject(win64Dir, '-G "Visual Studio 16" -A "x64"')
+		genProject(win32Dir, '', '-G', '"Visual Studio 16"', '-A', '"Win32"')
+		genProject(win64Dir, '', '-G', '"Visual Studio 16"',  '-A', '"x64"')
 	else:
 		print('unknown action')

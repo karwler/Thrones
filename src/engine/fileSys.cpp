@@ -1,5 +1,5 @@
 #include "world.h"
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <windows.h>
 #elif defined(EMSCRIPTEN)
 #include <emscripten.h>
@@ -49,7 +49,7 @@ void Setup::clear() {
 // FILE SYS
 
 void FileSys::init() {
-#if defined(__ANDROID__)
+#ifdef __ANDROID__
 	if (const char* path = SDL_AndroidGetExternalStoragePath())
 		dirConfig = path + string("/");
 #elif defined(EMSCRIPTEN)
@@ -79,7 +79,7 @@ void FileSys::init() {
 		if (SDL_free(path); !external)
 			dirConfig = dirData;
 	}
-#if defined(_WIN32)
+#ifdef _WIN32
 	if (const char* path = SDL_getenv("AppData"); external && path) {
 		dirConfig = path + string("/Thrones/");
 		std::replace(dirConfig.begin(), dirConfig.end(), '\\', '/');

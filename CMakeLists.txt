@@ -98,8 +98,11 @@ set(THRONES_SRC
 	"src/prog/program.h"
 	"src/prog/progs.cpp"
 	"src/prog/progs.h"
+	"src/server/common.h"
 	"src/server/server.cpp"
 	"src/server/server.h"
+	"src/utils/context.cpp"
+	"src/utils/context.h"
 	"src/utils/layouts.cpp"
 	"src/utils/layouts.h"
 	"src/utils/objects.cpp"
@@ -116,6 +119,7 @@ endif()
 list(APPEND THRONES_SRC ${ASSET_SHD})
 
 set(SERVER_SRC
+	"src/server/common.h"
 	"src/server/server.cpp"
 	"src/server/server.h"
 	"src/server/serverProg.cpp"

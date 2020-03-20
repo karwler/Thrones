@@ -1,5 +1,5 @@
 #include "windowSys.h"
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <winsock2.h>
 #elif defined(EMSCRIPTEN)
 #include <emscripten.h>
@@ -544,12 +544,10 @@ bool WindowSys::trySetSwapInterval() {
 	return true;
 }
 
-void WindowSys::setScreen(uint8 display, Settings::Screen screen, const ivec2& size, const SDL_DisplayMode& mode) {
-	sets->display = std::clamp(display, uint8(0), uint8(SDL_GetNumVideoDisplays()));
-	sets->screen = screen;
-	sets->size = size;
+void WindowSys::setScreen() {
+	if (sets->display >= SDL_GetNumVideoDisplays())
+		sets->display = 0;
 	checkResolution(sets->size, windowSizes());
-	sets->mode = mode;
 	checkResolution(sets->mode, displayModes());
 	setWindowMode();
 	scene->onResize();
@@ -600,7 +598,7 @@ void WindowSys::resetSettings() {
 	checkCurDisplay();
 	setSwapInterval();
 	SDL_SetWindowBrightness(window, sets->gamma);
-	setScreen(sets->display, sets->screen, sets->size, sets->mode);
+	setScreen();
 }
 
 void WindowSys::reloadGeom() {

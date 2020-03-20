@@ -1,20 +1,13 @@
-#include "server.h"
+#include "common.h"
 #include <csignal>
 #include <ctime>
 #include <fstream>
 #ifdef _WIN32
 #include <conio.h>
-#include <winsock2.h>
 #else
-#include <poll.h>
 #include <termios.h>
-#include <unistd.h>
 #endif
 using namespace Com;
-
-#ifndef POLLRDHUP
-#define POLLRDHUP 0	// ignore if not present
-#endif
 
 static bool cprocValidate(uint pid);
 static bool cprocPlayer(uint pid);
@@ -473,7 +466,7 @@ int main(int argc, char** argv) {
 #endif
 		if (!rcp)
 			continue;
-		if (rcp < 0 || (pfds.back().revents & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL))) {
+		if (rcp < 0 || (pfds.back().revents & polleventsDisconnect)) {
 			print(std::cerr, "poll error");
 			break;
 		}
@@ -482,7 +475,7 @@ int main(int argc, char** argv) {
 			connectPlayer(pfds.back().fd);
 		for (uint i = 0; i < players.size(); i++) {
 			try {
-				if (pfds[i].revents & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL))
+				if (pfds[i].revents & polleventsDisconnect)
 					throw PlayerError({ i });
 				if (pfds[i].revents & POLLIN)
 					for (players[i].recvb.recvData(pfds[i].fd); players[i].cproc(i););

@@ -9,9 +9,16 @@ ScrollBar::ScrollBar() :
 	draggingSlider(false)
 {}
 
-void ScrollBar::draw(const Rect& frame, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const {
-	Widget::drawRect(barRect(listSize, pos, size, vert), frame, Widget::colorDark, World::scene()->blank());		// bar
-	Widget::drawRect(sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, World::scene()->blank());	// slider
+void ScrollBar::draw(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z) const {
+	GLuint tex = World::scene()->blank();
+	Quad::draw(barRect(listSize, pos, size, vert), Widget::colorDark, tex, z);		// bar
+	Quad::draw(sliderRect(listSize, pos, size, vert), Widget::colorLight, tex, z);	// slider
+}
+
+void ScrollBar::draw(const Rect& frame, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z) const {
+	GLuint tex = World::scene()->blank();
+	Quad::draw(barRect(listSize, pos, size, vert), frame, Widget::colorDark, tex, z);		// bar
+	Quad::draw(sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, tex, z);	// slider
 }
 
 void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
@@ -23,7 +30,7 @@ void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
 	}
 }
 
-void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Widget* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Interactable* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
 	motion = vec2(0.f);	// get rid of scroll motion
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
 		World::scene()->capture = wgt;
@@ -32,6 +39,7 @@ void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Widget* wgt, const ivec2& li
 				setSlider(mPos[vert] - ss / 2, listSize, pos, size, vert);
 			diffSliderMouse = mPos.y - sliderPos(listSize, pos, size, vert);	// get difference between mouse y and slider y
 		}
+		SDL_CaptureMouse(SDL_TRUE);
 	}
 }
 
@@ -46,6 +54,7 @@ void ScrollBar::undrag(uint8 mBut, bool vert) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
 			motion = World::scene()->getMouseMove() * swap(0, -1, !vert);
+		SDL_CaptureMouse(SDL_FALSE);
 		draggingSlider = false;
 		World::scene()->capture = nullptr;
 	}
@@ -105,6 +114,16 @@ Quad::~Quad() {
 	glDeleteVertexArrays(1, &vao);
 }
 
+void Quad::draw(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
+	float trans[4] = { float(rect.x), float(rect.y), float(rect.w), float(rect.h) };
+	glUniform4fv(World::gui()->rect, 1, trans);
+	glUniform4fv(World::gui()->uvrc, 1, glm::value_ptr(uvrect));
+	glUniform1f(World::gui()->zloc, z);
+	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
+}
+
 // WIDGET
 
 const vec4 Widget::colorNormal(0.5f, 0.1f, 0.f, 1.f);
@@ -140,16 +159,6 @@ void Widget::setParent(Layout* pnt, sizet id) {
 	pcID = id;
 }
 
-void Widget::drawRect(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
-	float trans[4] = { float(rect.x), float(rect.y), float(rect.w), float(rect.h) };
-	glUniform4fv(World::gui()->rect, 1, trans);
-	glUniform4fv(World::gui()->uvrc, 1, glm::value_ptr(uvrect));
-	glUniform1f(World::gui()->zloc, z);
-	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
-}
-
 // BUTTON
 
 Button::Button(Size relSize, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
@@ -167,7 +176,7 @@ Button::~Button() {
 }
 
 void Button::draw() const {
-	drawRect(rect(), frame(), color * dimFactor, bgTex);
+	Quad::draw(rect(), frame(), color * dimFactor, bgTex);
 }
 
 void Button::onClick(const ivec2&, uint8 mBut) {
@@ -201,8 +210,8 @@ void Button::drawTooltip() const {
 	if (pos.y + siz.y > World::window()->guiView().y)
 		pos.y = pos.y - ofs - siz.y;
 
-	drawRect(Rect(pos, siz), colorTooltip, World::scene()->blank(), -1.f);
-	drawRect(Rect(pos + tooltipMargin, tipTex.getRes()), vec4(1.f), tipTex.getID(), -1.f);
+	Quad::draw(Rect(pos, siz), colorTooltip, World::scene()->blank(), -1.f);
+	Quad::draw(Rect(pos + tooltipMargin, tipTex.getRes()), vec4(1.f), tipTex.getID(), -1.f);
 }
 
 // CHECK BOX
@@ -214,8 +223,8 @@ CheckBox::CheckBox(Size relSize, bool on, BCall leftCall, BCall rightCall, const
 
 void CheckBox::draw() const {
 	Rect frm = frame();
-	drawRect(rect(), frm, color * dimFactor, bgTex);							// draw background
-	drawRect(boxRect(), frm, boxColor() * dimFactor, World::scene()->blank());	// draw checkbox
+	Quad::draw(rect(), frm, color * dimFactor, bgTex);							// draw background
+	Quad::draw(boxRect(), frm, boxColor() * dimFactor, World::scene()->blank());	// draw checkbox
 }
 
 void CheckBox::onClick(const ivec2& mPos, uint8 mBut) {
@@ -242,9 +251,9 @@ Slider::Slider(Size relSize, int value, int minimum, int maximum, BCall finishCa
 
 void Slider::draw() const {
 	Rect frm = frame();
-	drawRect(rect(), frm, color * dimFactor, bgTex);					// background
-	drawRect(barRect(), frm, colorDark, World::scene()->blank());		// bar
-	drawRect(sliderRect(), frm, colorLight, World::scene()->blank());	// slider
+	Quad::draw(rect(), frm, color * dimFactor, bgTex);					// background
+	Quad::draw(barRect(), frm, colorDark, World::scene()->blank());		// bar
+	Quad::draw(sliderRect(), frm, colorLight, World::scene()->blank());	// slider
 }
 
 void Slider::onHold(const ivec2& mPos, uint8 mBut) {
@@ -316,9 +325,9 @@ void Label::draw() const {
 	Rect rbg = rect();
 	Rect frm = frame();
 	if (showBG)
-		drawRect(rbg, frm, color * dimFactor, bgTex);
+		Quad::draw(rbg, frm, color * dimFactor, bgTex);
 	if (textTex.valid())
-		drawRect(textRect(), Rect(rbg.x + textMargin, rbg.y, rbg.w - textMargin * 2, rbg.h).intersect(frm), dimFactor, textTex.getID());
+		Quad::draw(textRect(), Rect(rbg.x + textMargin, rbg.y, rbg.w - textMargin * 2, rbg.h).intersect(frm), dimFactor, textTex.getID());
 }
 
 void Label::onResize() {
@@ -375,9 +384,9 @@ void TextBox::draw() const {
 	Rect rbg = rect();
 	Rect frm = frame();
 	if (showBG)
-		drawRect(rbg, frm, color * dimFactor, bgTex);
+		Quad::draw(rbg, frm, color * dimFactor, bgTex);
 	if (textTex.valid())
-		drawRect(textRect(), rbg, dimFactor, textTex.getID());
+		Quad::draw(textRect(), rbg, dimFactor, textTex.getID());
 	scroll.draw(rect(), textTex.getRes(), position(), size(), true);
 }
 
@@ -478,25 +487,25 @@ Draglet::Draglet(Size relSize, BCall leftCall, BCall holdCall, BCall rightCall, 
 
 void Draglet::draw() const {
 	Rect frm = frame();
-	if (drawRect(rect(), frm, color * dimFactor, bgTex); textTex.valid())
-		drawRect(textRect(), frm, dimFactor, textTex.getID());
+	if (Quad::draw(rect(), frm, color * dimFactor, bgTex); textTex.valid())
+		Quad::draw(textRect(), frm, dimFactor, textTex.getID());
 
 	if (selected) {
 		Rect rbg = rect();
 		vec4 clr = colorLight * dimFactor;
-		drawRect(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
-		drawRect(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
+		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->blank(), -1.f);
+		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->blank(), -1.f);
+		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
+		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->blank(), -1.f);
 	}
 }
 
 void Draglet::drawTop() const {
 	if (showingTop) {
 		ivec2 siz = size() / 2, pos = mousePos() - siz / 2;
-		if (drawRect(Rect(pos, siz), color * dimFactor, bgTex, -1.f);  textTex.valid()) {
+		if (Quad::draw(Rect(pos, siz), color * dimFactor, bgTex, -1.f);  textTex.valid()) {
 			ivec2 res = textTex.getRes() / 2;
-			drawRect(Rect(textOfs(res, halign, pos, siz, textMargin / 2), res), dimFactor, textTex.getID(), -1.f);
+			Quad::draw(Rect(textOfs(res, halign, pos, siz, textMargin / 2), res), dimFactor, textTex.getID(), -1.f);
 		}
 	}
 }
@@ -525,48 +534,34 @@ void Draglet::onUndrag(uint8 mBut) {
 	}
 }
 
-// SWITCH BOX
+// COMBO BOX
 
-SwitchBox::SwitchBox(Size relSize, vector<string> opts, string curOption, BCall call, const Texture& tooltip, float dim, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
-	Label(relSize, std::move(curOption), call, call, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
+ComboBox::ComboBox(Size relSize, vector<string> opts, string curOption, CCall optCall, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment alignment, bool showBG, GLuint bgTex, const vec4& color, Layout* parent, sizet id) :
+	Label(relSize, std::move(curOption), leftCall, rightCall, tooltip, dim, alignment, showBG, bgTex, color, parent, id),
 	options(std::move(opts)),
-	curOpt(uint(std::find(options.begin(), options.end(), text) - options.begin()))
-{
-	if (curOpt >= options.size())
-		curOpt = 0;
+	ocall(optCall)
+{}
+
+void ComboBox::onClick(const ivec2& mPos, uint8 mBut) {
+	if (Button::onClick(mPos, mBut); mBut == SDL_BUTTON_LEFT && ocall)
+		World::scene()->setContext(new Context(mPos, options, ocall, position(), World::state()->lineHeight, this, size().x));
 }
 
-void SwitchBox::onClick(const ivec2& mPos, uint8 mBut) {
-	if (lcall || rcall) {
-		if (mBut == SDL_BUTTON_LEFT)
-			shiftOption(1);
-		else if (mBut == SDL_BUTTON_RIGHT)
-			shiftOption(-1);
-	}
-	Button::onClick(mPos, mBut);
-}
-
-bool SwitchBox::selectable() const {
+bool ComboBox::selectable() const {
 	return true;
 }
 
-void SwitchBox::setText(const string& str) {
+void ComboBox::setText(const string& str) {
 	setCurOpt(uint(std::find(options.begin(), options.end(), str) - options.begin()));
 }
 
-void SwitchBox::setCurOpt(uint id) {
-	curOpt = std::clamp(id, 0u, uint(options.size() - 1));
-	Label::setText(options[curOpt]);
+void ComboBox::setCurOpt(uint id) {
+	Label::setText(id < options.size() ? options[id] : "");
 }
 
-void SwitchBox::set(vector<string>&& opts, uint id) {
+void ComboBox::set(vector<string>&& opts, uint id) {
 	options = std::move(opts);
 	setCurOpt(id);
-}
-
-void SwitchBox::shiftOption(int mov) {
-	curOpt = cycle(curOpt, uint(options.size()), mov);
-	Label::setText(options[curOpt]);
 }
 
 // LABEL EDIT
@@ -586,7 +581,7 @@ LabelEdit::LabelEdit(Size relSize, string line, BCall leftCall, BCall rightCall,
 
 void LabelEdit::drawTop() const {
 	ivec2 ps = position();
-	drawRect(Rect(caretPos() + ps.x + textMargin, ps.y, caretWidth, size().y), frame(), colorLight, World::scene()->blank(), -1.f);
+	Quad::draw(Rect(caretPos() + ps.x + textMargin, ps.y, caretWidth, size().y), frame(), colorLight, World::scene()->blank(), -1.f);
 }
 
 void LabelEdit::onClick(const ivec2&, uint8 mBut) {

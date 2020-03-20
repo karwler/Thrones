@@ -58,21 +58,17 @@ Object::Object(const vec3& pos, const vec3& ert, const vec3& scl, const Mesh* me
 }
 
 void Object::drawDepth() const {
-	if (show) {
-		glBindVertexArray(mesh->getVao());
-		glUniformMatrix4fv(World::depth()->model, 1, GL_FALSE, glm::value_ptr(trans));
-		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
-	}
+	glBindVertexArray(mesh->getVao());
+	glUniformMatrix4fv(World::depth()->model, 1, GL_FALSE, glm::value_ptr(trans));
+	glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 }
 
 void Object::draw() const {
-	if (show) {
-		glBindVertexArray(mesh->getVao());
-		glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(trans));
-		glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(normat));
-		updateColor(matl->diffuse, matl->specular, matl->shininess, tex);
-		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
-	}
+	glBindVertexArray(mesh->getVao());
+	glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(trans));
+	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(normat));
+	updateColor(matl->diffuse, matl->specular, matl->shininess, tex);
+	glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 }
 
 void Object::updateColor(const vec4& diffuse, const vec3& specular, float shininess, GLuint texture) {
@@ -99,13 +95,11 @@ BoardObject::BoardObject(const vec3& pos, float rot, const vec3& scl, GCall hgca
 {}
 
 void BoardObject::draw() const {
-	if (show) {
-		glBindVertexArray(mesh->getVao());
-		glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(getTrans()));
-		glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(getNormat()));
-		updateColor(vec4(matl->diffuse.x * diffuseFactor, matl->diffuse.y * diffuseFactor, matl->diffuse.z * diffuseFactor, matl->diffuse.a), matl->specular, matl->shininess, tex);
-		glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
-	}
+	glBindVertexArray(mesh->getVao());
+	glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(getTrans()));
+	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(getNormat()));
+	updateColor(vec4(matl->diffuse.x * diffuseFactor, matl->diffuse.y * diffuseFactor, matl->diffuse.z * diffuseFactor, matl->diffuse.a), matl->specular, matl->shininess, tex);
+	glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 }
 
 void BoardObject::drawTopMeshDepth(float ypos, const Mesh* tmesh) const {

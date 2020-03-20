@@ -229,7 +229,8 @@ void Scene::draw() {
 	glViewport(0, 0, World::window()->screenView().x, World::window()->screenView().y);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	for (Object* it : objects)
-		it->draw();
+		if (it->show)
+			it->draw();
 	if (Object* obj = dynamic_cast<Object*>(capture))
 		obj->drawTop();
 
@@ -240,10 +241,14 @@ void Scene::draw() {
 		overlay->draw();
 	if (popup)
 		popup->draw();
-	if (Widget* wgt = dynamic_cast<Widget*>(capture))
-		wgt->drawTop();
-	if (Button* but = dynamic_cast<Button*>(select); but && mouseLast)
-		but->drawTooltip();
+	if (context)
+		context->draw();
+	else {
+		if (Widget* wgt = dynamic_cast<Widget*>(capture))
+			wgt->drawTop();
+		if (Button* but = dynamic_cast<Button*>(select); but && mouseLast)
+			but->drawTooltip();
+	}
 }
 
 void Scene::renderShadows() {
@@ -252,7 +257,8 @@ void Scene::renderShadows() {
 	glBindFramebuffer(GL_FRAMEBUFFER, light.depthFrame);
 	glClear(GL_DEPTH_BUFFER_BIT);
 	for (Object* it : objects)
-		it->drawDepth();
+		if (it->show)
+			it->drawDepth();
 	if (Object* obj = dynamic_cast<Object*>(capture))
 		obj->drawTopDepth();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -264,6 +270,8 @@ void Scene::tick(float dSec) {
 		popup->tick(dSec);
 	if (overlay)
 		overlay->tick(dSec);
+	if (context)
+		context->tick(dSec);
 
 	for (sizet i = 0; i < animations.size();) {
 		if (animations[i].tick(dSec))
@@ -287,6 +295,8 @@ void Scene::onResize() {
 void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 	if (dynamic_cast<LabelEdit*>(capture))
 		capture->onKeypress(key.keysym);
+	else if (context)
+		context->onKeypress(key.keysym);
 	else if (!key.repeat)
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_1: case SDL_SCANCODE_2: case SDL_SCANCODE_3: case SDL_SCANCODE_4: case SDL_SCANCODE_5: case SDL_SCANCODE_6: case SDL_SCANCODE_7: case SDL_SCANCODE_8: case SDL_SCANCODE_9: case SDL_SCANCODE_0:
@@ -327,7 +337,7 @@ void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
 }
 
 void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
-	if (!(dynamic_cast<LabelEdit*>(capture) || key.repeat))
+	if (!dynamic_cast<LabelEdit*>(capture) && !context && !key.repeat)
 		switch (key.keysym.scancode) {
 		case SDL_SCANCODE_LALT: case SDL_SCANCODE_LSHIFT:
 			World::state()->eventFavorize(FavorAct::off);
@@ -353,6 +363,8 @@ void Scene::onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse) {
 	updateSelect(ivec2(mot.x, mot.y));
 	if (capture)
 		capture->onDrag(ivec2(mot.x, mot.y), mouseMove);
+	else if (context)
+		context->onMouseMove(ivec2(mot.x, mot.y));
 	else if (mot.state)
 		World::state()->eventDrag(mot.state);
 }
@@ -381,6 +393,8 @@ void Scene::onMouseDown(const SDL_MouseButtonEvent& but, bool mouse) {
 	mouseLast = mouse;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
+	if (context && select != context.get())
+		setContext(nullptr);
 
 	cstamp = ClickStamp(select, getSelectedScrollArea(), ivec2(but.x, but.y), but.button);
 	if (cstamp.area)	// area goes first so widget can overwrite it's capture
@@ -409,7 +423,11 @@ void Scene::onMouseUp(const SDL_MouseButtonEvent& but, bool mouse) {
 
 void Scene::onMouseWheel(const SDL_MouseWheelEvent& whe) {
 	mouseLast = true;
-	if (Widget* box = getSelectedScrollArea(); box = box ? box : dynamic_cast<TextBox*>(select))
+	Interactable* box = getSelectedScrollArea();
+	if (!box)
+		if (box = dynamic_cast<Context*>(select); !box)
+			box = dynamic_cast<TextBox*>(select);
+	if (box)
 		box->onScroll(ivec2(whe.x, whe.y) * scrollFactorWheel);
 	else if (whe.y)
 		World::state()->eventWheel(whe.y);
@@ -469,6 +487,7 @@ void Scene::resetLayouts() {
 	onMouseLeave();	// reset stamps and select
 	capture = nullptr;
 	popup.reset();
+	context.reset();
 
 	// set up new widgets
 	layout.reset(World::state()->createLayout());
@@ -481,13 +500,16 @@ void Scene::resetLayouts() {
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 	unselect();	// preemptive to avoid dangling pointer
-	popup.reset(newPopup);
-	if (popup)
+	if (popup.reset(newPopup); popup)
 		popup->postInit();
-
-	capture = newCapture;
-	if (capture)
+	if (capture = newCapture)
 		capture->onClick(mousePos(), SDL_BUTTON_LEFT);
+	simulateMouseMove();
+}
+
+void Scene::setContext(Context* newContext) {
+	unselect();
+	context.reset(newContext);
 	simulateMouseMove();
 }
 
@@ -522,6 +544,8 @@ void Scene::updateSelect(const ivec2& mPos) {
 Interactable* Scene::getSelected(const ivec2& mPos) {
 	if (outRange(mPos, ivec2(0), World::window()->screenView()))
 		return nullptr;
+	if (context && context->rect().contain(mPos))
+		return context.get();
 
 	for (Layout* box = popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();;) {
 		Rect frame = box->frame();

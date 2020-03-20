@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/fileSys.h"
+#include "utils/context.h"
 #include "utils/layouts.h"
 
 // additional data for rendering objects
@@ -143,6 +144,7 @@ private:
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
 	uptr<Overlay> overlay;
+	uptr<Context> context;
 	vector<Animation> animations;
 	umap<string, Mesh> meshes;
 	umap<string, Material> materials;
@@ -195,6 +197,7 @@ public:
 	Overlay* getOverlay();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
+	void setContext(Context* newContext);
 	void addAnimation(Animation&& anim);
 	ivec2 getMouseMove() const;
 	bool cursorInClickRange(const ivec2& mPos) const;
@@ -211,7 +214,6 @@ private:
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	BoardObject* findBoardObject(const ivec2& mPos) const;
 	void simulateMouseMove();
-	Layout* topLayout(const ivec2& mPos);
 
 	void renderShadows();
 	void renderDummy() {}
@@ -283,8 +285,4 @@ inline GLuint Scene::blank() const {
 
 inline void Scene::reloadTextures() {
 	FileSys::reloadTextures(texes);
-}
-
-inline Layout* Scene::topLayout(const ivec2& mPos) {
-	return popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();
 }

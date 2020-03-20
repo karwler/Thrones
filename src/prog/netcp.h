@@ -5,13 +5,11 @@
 // handles networking (for joining/hosting rooms on a remote sever)
 class Netcp {
 protected:
-	nsint socket;
+	void (Netcp::*tickproc)();
 	Com::Buffer recvb;
-	bool (Netcp::*cncproc)();
+	uptr<Com::Connector> connector;
+	nsint socket;
 	bool webs;
-#ifdef EMSCRIPTEN
-	bool waitSend;
-#endif
 
 public:
 	Netcp();
@@ -24,13 +22,14 @@ public:
 	void sendData(Com::Code code);
 	void sendData(const vector<uint8>& vec);
 
-	void setCncproc(bool (Netcp::*proc)());
-	bool cprocWait();
-	bool cprocLobby();
-	bool cprocGame();
+	void setTickproc(void (Netcp::*func)());
+	void tickConnect();
+	void tickWait();
+	void tickLobby();
+	void tickGame();
 protected:
-	bool cprocValidate();
-	bool cprocDiscard();
+	void tickValidate();
+	void tickDiscard();
 };
 
 inline void Netcp::sendData(Com::Buffer& sendb) {
@@ -41,8 +40,8 @@ inline void Netcp::sendData(const vector<uint8>& vec) {
 	Com::sendData(socket, vec.data(), uint(vec.size()), webs);
 }
 
-inline void Netcp::setCncproc(bool (Netcp::*proc)()) {
-	cncproc = proc;
+inline void Netcp::setTickproc(void (Netcp::*func)()) {
+	tickproc = func;
 }
 
 // for running one room on self as server

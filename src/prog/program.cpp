@@ -62,7 +62,7 @@ void Program::eventOpenLobby(const uint8* data) {
 		data += it.first.length() + 1;
 	}
 	info &= ~INF_HOST;
-	netcp->setCncproc(&Netcp::cprocLobby);
+	netcp->setTickproc(&Netcp::tickLobby);
 	setState(new ProgLobby(std::move(rooms)));
 }
 
@@ -154,8 +154,8 @@ void Program::eventHostServer(Button*) {
 	connect(false, "Waiting for player...");
 }
 
-void Program::eventSwitchConfig(Button* but) {
-	setSaveConfig(static_cast<SwitchBox*>(but)->getText(), false);
+void Program::eventSwitchConfig(sizet, const string& str) {
+	setSaveConfig(str, false);
 	World::scene()->resetLayouts();
 }
 
@@ -220,6 +220,10 @@ void Program::eventUpdateConfig(Button*) {
 	cfg.checkValues();
 	ph->updateConfigWidgets(cfg);
 	postConfigUpdate();
+}
+
+void Program::eventUpdateConfigC(sizet, const string&) {
+	eventUpdateConfig();
 }
 
 void Program::eventUpdateReset(Button*) {
@@ -351,7 +355,7 @@ void Program::eventOpenSetup() {
 #else
 	World::scene()->setObjects(World::args.hasFlag(World::argSetup) ? game.initDummyObjects(cfg) : game.initObjects(cfg));
 #endif
-	netcp->setCncproc(&Netcp::cprocGame);
+	netcp->setTickproc(&Netcp::tickGame);
 	info &= ~INF_GUEST_WAITING;
 
 	string txt = state->getChat() ? state->getChat()->moveText() : "";
@@ -697,7 +701,7 @@ void Program::eventPostFinishMatch(Button*) {
 		info & INF_HOST ? eventOpenHostMenu() : eventOpenMainMenu();
 	else try {
 		string txt = state->getChat()->moveText();
-		if (netcp->setCncproc(&Netcp::cprocLobby); info & INF_HOST) {
+		if (netcp->setTickproc(&Netcp::tickLobby); info & INF_HOST) {
 #ifdef EMSCRIPTEN
 			if (!FileSys::canRead()) {
 				eventExitRoom();
@@ -737,7 +741,7 @@ void Program::eventPlayerLeft() {
 #endif
 	uninitGame();
 	info &= ~INF_GUEST_WAITING;
-	netcp->setCncproc(&Netcp::cprocLobby);
+	netcp->setTickproc(&Netcp::tickLobby);
 	setState(new ProgRoom(FileSys::loadConfigs()));
 	World::scene()->setPopup(state->createPopupMessage("Player left", &Program::eventClosePopup));
 }
@@ -748,23 +752,37 @@ void Program::eventOpenSettings(Button*) {
 	setState(new ProgSettings);
 }
 
-void Program::eventApplySettings(Button*) {
-	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
-	World::window()->setScreen(uint8(sstoul(ps->display->getText())), Settings::Screen(ps->screen->getCurOpt()), stoiv<ivec2>(ps->winSize->getText().c_str(), strtoul), ps->currentMode());
-	ps->display->setText(toStr(World::sets()->display));
-	ps->screen->setCurOpt(uint8(World::sets()->screen));
-	ps->winSize->setText(toStr(World::sets()->size, ProgSettings::rv2iSeparator));
-	ps->dspMode->setText(ProgSettings::dispToFstr(World::sets()->mode));
+void Program::eventSetDisplay(Button* but) {
+	World::sets()->display = uint8(sstoul(static_cast<LabelEdit*>(but)->getText()));
+	World::window()->setScreen();
 	eventSaveSettings();
 }
 
-void Program::eventSetVsync(Button* but) {
-	World::window()->setVsync(Settings::VSync(static_cast<SwitchBox*>(but)->getCurOpt() - 1));
+void Program::eventSetScreen(sizet id, const string&) {
+	World::sets()->screen = Settings::Screen(id);
+	World::window()->setScreen();
 	eventSaveSettings();
 }
 
-void Program::eventSetSamples(Button* but) {
-	World::sets()->msamples = uint8(sstoul(static_cast<SwitchBox*>(but)->getText()));
+void Program::eventSetWindowSize(sizet, const string& str) {
+	World::sets()->size = stoiv<ivec2>(str.c_str(), strtoul);
+	World::window()->setScreen();
+	eventSaveSettings();
+}
+
+void Program::eventSetWindowMode(sizet, const string& str) {
+	World::sets()->mode = static_cast<ProgSettings*>(state.get())->fstrToDisp(str);
+	World::window()->setScreen();
+	eventSaveSettings();
+}
+
+void Program::eventSetVsync(sizet id, const string&) {
+	World::window()->setVsync(Settings::VSync(id - 1));
+	eventSaveSettings();
+}
+
+void Program::eventSetSamples(sizet, const string& str) {
+	World::sets()->msamples = uint8(sstoul(str));
 	eventSaveSettings();
 }
 
@@ -862,8 +880,8 @@ void Program::eventSetChatLineLimitLE(Button* but) {
 	eventSaveSettings();
 }
 
-void Program::eventSetResolveFamily(Button* but) {
-	World::sets()->resolveFamily = Com::Family(static_cast<SwitchBox*>(but)->getCurOpt());
+void Program::eventSetResolveFamily(sizet id, const string&) {
+	World::sets()->resolveFamily = Com::Family(id);
 	eventSaveSettings();
 }
 
@@ -898,14 +916,6 @@ void Program::eventCloseOverlay(Button*) {
 
 void Program::eventExit(Button*) {
 	World::window()->close();
-}
-
-void Program::eventSBNext(Button* but) {
-	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() - 1))->onClick(ivec2(0), SDL_BUTTON_LEFT);
-}
-
-void Program::eventSBPrev(Button* but) {
-	static_cast<SwitchBox*>(but->getParent()->getWidget(but->getID() + 1))->onClick(ivec2(0), SDL_BUTTON_RIGHT);
 }
 
 void Program::eventSLUpdateLE(Button* but) {

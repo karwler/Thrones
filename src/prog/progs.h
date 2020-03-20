@@ -6,6 +6,11 @@
 
 // for handling program state specific things that occur in all states
 class ProgState {
+public:
+	int smallHeight, lineHeight, superHeight, tooltipHeight;
+	int lineSpacing, superSpacing, iconSize;
+	int tooltipLimit;
+
 protected:
 	struct Text {
 		string text;
@@ -23,7 +28,7 @@ protected:
 		LabelEdit* height;
 		Slider* survivalSL;
 		LabelEdit* survivalLE;
-		SwitchBox* survivalMode;
+		ComboBox* survivalMode;
 		CheckBox* favorLimit;
 		LabelEdit* favorMax;
 		LabelEdit* dragonDist;
@@ -42,14 +47,9 @@ protected:
 		CheckBox* shiftNear;
 	};
 
-	static constexpr char arrowLeft[] = "<";
-	static constexpr char arrowRight[] = ">";
 	static constexpr float defaultDim = 0.5f;
 	static constexpr float chatEmbedSize = 0.5f;
 
-	int smallHeight, lineHeight, superHeight, tooltipHeight;
-	int lineSpacing, superSpacing, iconSize;
-	int tooltipLimit;
 	TextBox* chatBox;
 
 public:
@@ -299,13 +299,9 @@ inline bool ProgMatch::fnowIconOn() const {
 
 class ProgSettings : public ProgState {
 public:
-	LabelEdit* display;
-	SwitchBox* screen;
-	SwitchBox* winSize;
-	SwitchBox* dspMode;
-
 	static constexpr float gammaStepFactor = 10.f;
 	static constexpr char rv2iSeparator[] = " x ";
+
 private:
 	umap<string, uint32> pixelformats;
 
@@ -317,7 +313,7 @@ public:
 	
 	virtual RootLayout* createLayout() override;
 
-	SDL_DisplayMode currentMode() const;
+	SDL_DisplayMode fstrToDisp(const string& str) const;
 	static string dispToFstr(const SDL_DisplayMode& mode);
 };
 

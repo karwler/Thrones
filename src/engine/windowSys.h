@@ -216,7 +216,7 @@ public:
 	int displayID() const;
 	uint32 windowID() const;
 	void writeLog(string&& text);
-	void setScreen(uint8 display, Settings::Screen screen, const ivec2& size, const SDL_DisplayMode& mode);
+	void setScreen();
 	void setVsync(Settings::VSync vsync);
 	void setGamma(float gamma);
 	void resetSettings();

@@ -21,6 +21,7 @@ template <class... T> using sset = std::set<T...>;
 
 using BCall = void (Program::*)(Button*);
 using GCall = void (Program::*)(BoardObject*, uint8);
+using CCall = void (Program::*)(sizet, const string&);
 
 // general wrappers
 
@@ -149,7 +150,7 @@ public:
 	void close();
 	void free();
 	GLuint getID() const;
-	ivec2 getRes() const;
+	const ivec2& getRes() const;
 	bool valid() const;
 	void reload(SDL_Surface* img, GLint iformat, GLenum pformat);
 private:
@@ -170,7 +171,7 @@ inline GLuint Texture::getID() const {
 	return id;
 }
 
-inline ivec2 Texture::getRes() const {
+inline const ivec2& Texture::getRes() const {
 	return res;
 }
 
@@ -195,12 +196,14 @@ public:
 	Interactable& operator=(const Interactable&) = default;
 	Interactable& operator=(Interactable&&) = default;
 
+	virtual void tick(float) {}
 	virtual void onClick(const ivec2& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
 	virtual void onHold(const ivec2&, uint8) {}
 	virtual void onDrag(const ivec2&, const ivec2&) {}		// mouse move while left button down
 	virtual void onUndrag(uint8) {}							// get's called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
+	virtual void onScroll(const ivec2&) {}
 	virtual void onKeypress(const SDL_Keysym&) {}
 	virtual void onText(const char*) {}
 };

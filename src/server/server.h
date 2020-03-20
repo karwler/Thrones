@@ -2,10 +2,10 @@
 
 #include "utils/text.h"
 
-#if defined(_WIN64)
+#ifdef _WIN64
 using nsint = uint64;	// should be the same as SOCKET
 #elif defined(_WIN32)
-using nsint = uint32;
+using nsint = uint;
 #else
 using nsint = int;
 #endif
@@ -237,7 +237,6 @@ inline string readName(const uint8* data) {
 }
 
 // socket functions
-nsint connectSocket(const char* addr, uint16 port, Family family);
 nsint bindSocket(uint16 port, Family family);
 nsint acceptSocket(nsint fd);
 bool pollSocket(nsint fd, int timeout = 0);
@@ -246,6 +245,21 @@ void sendNet(nsint fd, const void* data, uint size);
 uint recvNet(nsint fd, void* data, uint size);
 long recvNow(nsint fd, void* data, uint size);
 void closeSocket(nsint& fd);
+
+class Connector {
+private:
+	addrinfo* inf;
+	addrinfo* cur;
+	nsint fd;
+
+public:
+	Connector(const char* addr, uint16 port, Family family);
+	~Connector();
+
+	nsint pollReady();
+private:
+	void nextAddr(addrinfo* nxt);
+};
 
 const umap<Code, uint16> codeSizes = {
 	pair(Code::cnrnew, dataHeadSize + uint16(sizeof(uint8))),

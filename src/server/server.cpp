@@ -1,26 +1,4 @@
-#include "server.h"
-#ifdef _WIN32
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
-#include <poll.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#endif
-
-#ifdef _WIN32
-using sendlen = int;
-using socklent = int;
-#else
-using sendlen = ssize_t;
-using socklent = socklen_t;
-#endif
-#ifndef POLLRDHUP
-#define POLLRDHUP 0	// ignore if not present
-#endif
+#include "server/common.h"
 
 namespace Com {
 
@@ -333,7 +311,7 @@ static addrinfo* resolveAddress(const char* addr, uint16 port, Family family) {
 	addrinfo hints;
 	addrinfo* info;
 	memset(&hints, 0, sizeof(hints));
-#if defined(__ANDROID__)
+#ifdef __ANDROID__
 	hints.ai_flags = AI_NUMERICSERV | AI_ADDRCONFIG;
 #elif defined(EMSCRIPTEN)
 	hints.ai_flags = AI_V4MAPPED | AI_NUMERICSERV;
@@ -360,29 +338,16 @@ static nsint createSocket(int family, int reuseaddr, int nodelay = 1) {
 	return fd;
 }
 
-nsint connectSocket(const char* addr, uint16 port, Family family) {
-	addrinfo* inf = resolveAddress(addr, port, family);
-	if (!inf)
-		throw Error(msgConnectionFail);
-
-	nsint fd = -1;
-	for (addrinfo* it = inf; it; it = it->ai_next) {
-		if (fd = createSocket(it->ai_family, 0); fd == -1)
-			continue;
-
-#ifdef EMSCRIPTEN
-		if (::connect(fd, it->ai_addr, it->ai_addrlen) && errno != EINPROGRESS)
+static int doNoblockSocket(nsint fd, bool noblock) {
+#ifdef _WIN32
+	u_long on = noblock;
+	return ioctlsocket(fd, FIONBIO, &on);
+#elif !defined(EMSCRIPTEN)
+	int on = noblock;
+	return ioctl(fd, FIONBIO, &on);
 #else
-		if (::connect(fd, it->ai_addr, socklent(it->ai_addrlen)))
+	return 0;
 #endif
-			closeSocket(fd);
-		else
-			break;
-	}
-	freeaddrinfo(inf);
-	if (fd == -1)
-		throw Error(msgConnectionFail);
-	return fd;
 }
 
 nsint bindSocket(uint16 port, Family family) {
@@ -394,9 +359,7 @@ nsint bindSocket(uint16 port, Family family) {
 	for (addrinfo* it = inf; it; it = it->ai_next) {
 		if (fd = createSocket(it->ai_family, 1); fd == -1)
 			continue;
-		if (bind(fd, it->ai_addr, socklent(it->ai_addrlen)))
-			closeSocket(fd);
-		else if (listen(fd, 8))
+		if (bind(fd, it->ai_addr, socklent(it->ai_addrlen)) || listen(fd, 8))
 			closeSocket(fd);
 		else
 			break;
@@ -425,7 +388,7 @@ bool pollSocket(nsint fd, int timeout) {
 		return false;
 	if (rc < 0)
 		throw Error(msgPollFail);
-	if (pfd.revents & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL))
+	if (pfd.revents & polleventsDisconnect)
 		throw Error(msgConnectionLost);
 	if (pfd.revents & POLLIN)
 		return true;
@@ -433,13 +396,8 @@ bool pollSocket(nsint fd, int timeout) {
 }
 
 void noblockSocket(nsint fd, bool noblock) {
-#if defined(_WIN32)
-	if (u_long on = noblock; ioctlsocket(fd, FIONBIO, &on))
+	if (doNoblockSocket(fd, noblock))
 		throw Error(msgIoctlFail);
-#elif !defined(EMSCRIPTEN)
-	if (int on = noblock; ioctl(fd, FIONBIO, &on))
-		throw Error(msgIoctlFail);
-#endif
 }
 
 void sendNet(nsint fd, const void* data, uint size) {
@@ -459,7 +417,7 @@ uint recvNet(nsint fd, void* data, uint size) {
 }
 
 long recvNow(nsint fd, void* data, uint size) {
-#if defined(_WIN32)
+#ifdef _WIN32
 	int len = recv(fd, static_cast<char*>(data), size, 0);
 	if (!len || (len < 0 && WSAGetLastError() != WSAEWOULDBLOCK)) {
 		noblockSocket(fd, false);
@@ -486,6 +444,71 @@ void closeSocket(nsint& fd) {
 	close(fd);
 #endif
 	fd = -1;
+}
+
+// CONNECTOR
+
+Connector::Connector(const char* addr, uint16 port, Family family) :
+	inf(resolveAddress(addr, port, family)),
+	fd(-1)
+{
+	if (!inf)
+		throw Error(msgConnectionFail);
+	nextAddr(inf);
+}
+
+Connector::~Connector() {
+	if (fd != -1) {
+		doNoblockSocket(fd, false);
+		closeSocket(fd);
+	}
+	freeaddrinfo(inf);
+}
+
+nsint Connector::pollReady() {
+	pollfd pfd = { fd, POLLOUT | POLLRDHUP, 0 };
+#ifdef _WIN32
+	int rc = WSAPoll(&pfd, 1, 0);
+#else
+	int rc = poll(&pfd, 1, 0);
+#endif
+	if (!rc)
+		return -1;
+	if (rc < 0 || (pfd.revents & polleventsDisconnect)) {
+		doNoblockSocket(fd, false);
+		closeSocket(fd);
+		nextAddr(cur->ai_next);
+	} else if (pfd.revents & POLLOUT) {
+		if (!doNoblockSocket(fd, false)) {
+			nsint ret = fd;
+			fd = -1;
+			return ret;
+		}
+		closeSocket(fd);
+		nextAddr(cur->ai_next);
+	}
+	return -1;
+}
+
+void Connector::nextAddr(addrinfo* nxt) {
+	for (cur = nxt; cur; cur = cur->ai_next) {
+		if (fd = createSocket(cur->ai_family, 0); fd == -1)
+			continue;
+		if (doNoblockSocket(fd, true)) {
+			closeSocket(fd);
+			continue;
+		}
+
+#ifdef _WIN32
+		if (!connect(fd, cur->ai_addr, socklent(cur->ai_addrlen)) || WSAGetLastError() == WSAEWOULDBLOCK)
+#else
+		if (!connect(fd, cur->ai_addr, cur->ai_addrlen) || errno == EINPROGRESS)
+#endif
+			return;
+		doNoblockSocket(fd, false);
+		closeSocket(fd);
+	}
+	throw Error(msgConnectionFail);
 }
 
 // BUFFER
@@ -622,15 +645,13 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 		uint8* dat = recvLoad(ofs, mask);
 		if (!dat)
 			return Init::wait;
-
-		string ver = readText(dat);
-		array<const char*, compatibleVersions.size()>::const_iterator it = std::find(compatibleVersions.begin(), compatibleVersions.end(), ver);
-		if (clearCur(webs); it == compatibleVersions.end())
-			return Init::error;
+		if (std::find(compatibleVersions.begin(), compatibleVersions.end(), readText(dat)) == compatibleVersions.end())
+			break;
+		clearCur(webs);
 		return Init::connect; }
 	case Code::wsconn: {
 		if (webs)
-			return Init::error;
+			break;
 
 		string word = "\r\n\r\n";
 		uint8* rend = std::search(data, data + dlim, word.begin(), word.end());
@@ -641,7 +662,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 		word = "Sec-WebSocket-Key:";
 		uint8* pos = std::search(data, rend, word.begin(), word.end());
 		if (pos == rend)
-			return Init::error;
+			break;
 
 		pos += pdift(word.length());
 		word = "\r\n";
@@ -657,6 +678,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 	default:
 		std::cerr << "invalid init code '" << uint(dc) << '\'' << std::endl;
 	}
+	clear();
 	return Init::error;
 }
 

@@ -45,13 +45,14 @@ public:
 	// room menu
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
-	void eventSwitchConfig(Button* but);
+	void eventSwitchConfig(sizet id, const string& str);
 	void eventConfigDelete(Button* but = nullptr);
 	void eventConfigCopyInput(Button* but = nullptr);
 	void eventConfigCopy(Button* but = nullptr);
 	void eventConfigNewInput(Button* but = nullptr);
 	void eventConfigNew(Button* but = nullptr);
 	void eventUpdateConfig(Button* but = nullptr);
+	void eventUpdateConfigC(sizet id, const string& str);
 	void eventUpdateReset(Button* but);
 	void eventTileSliderUpdate(Button* but);
 	void eventMiddleSliderUpdate(Button* but);
@@ -109,9 +110,12 @@ public:
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
-	void eventApplySettings(Button* but = nullptr);
-	void eventSetVsync(Button* but);
-	void eventSetSamples(Button* but);
+	void eventSetDisplay(Button* but);
+	void eventSetScreen(sizet id, const string& str);
+	void eventSetWindowSize(sizet id, const string& str);
+	void eventSetWindowMode(sizet id, const string& str);
+	void eventSetVsync(sizet id, const string& str);
+	void eventSetSamples(sizet id, const string& str);
 	void eventSetTexturesScaleSL(Button* but);
 	void eventSetTextureScaleLE(Button* but);
 	void eventSetShadowResSL(Button* but);
@@ -125,7 +129,7 @@ public:
 	void eventSetScalePieces(Button* but);
 	void eventSetChatLineLimitSL(Button* but);
 	void eventSetChatLineLimitLE(Button* but);
-	void eventSetResolveFamily(Button* but);
+	void eventSetResolveFamily(sizet id, const string& str);
 	void eventSetFontRegular(Button* but);
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
@@ -135,13 +139,10 @@ public:
 	void eventClosePopup(Button* but = nullptr);
 	void eventCloseOverlay(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
-	void eventSBNext(Button* but);
-	void eventSBPrev(Button* but);
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
 	void eventClearLabel(Button* but);
 	void eventFocusChatLabel(Button* but);
-	void eventDummy(Button* = nullptr) {}
 	void disconnect();
 
 	ProgState* getState();

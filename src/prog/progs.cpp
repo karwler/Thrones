@@ -42,9 +42,9 @@ void ProgState::eventCameraReset() {
 }
 
 void ProgState::eventResize() {
-	smallHeight = World::window()->screenView().y / 36;	// 20p	(values are in relation to 720p height)
+	smallHeight = World::window()->screenView().y / 36;		// 20p	(values are in relation to 720p height)
 	lineHeight = World::window()->screenView().y / 24;		// 30p
-	superHeight = World::window()->screenView().y / 18;	// 40p
+	superHeight = World::window()->screenView().y / 18;		// 40p
 	tooltipHeight = World::window()->screenView().y / 45;	// 16p
 	lineSpacing = World::window()->screenView().y / 144;	// 5p
 	superSpacing = World::window()->screenView().y / 72;	// 10p
@@ -162,6 +162,7 @@ void ProgState::hideChatEmbed() {
 
 vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active) {
 	BCall update = active ? &Program::eventUpdateConfig : nullptr;
+	CCall cupdat = active ? &Program::eventUpdateConfigC : nullptr;
 	vector<string> txs = {
 		"Homeland size",
 		"Survival check pass",
@@ -213,9 +214,6 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 	string throneTip = "Thrones that need to be killed in order to win";
 	Text width("width:", lineHeight);
 	Text height("height:", lineHeight);
-	Text aleft(arrowLeft, lineHeight);
-	Text aright(arrowRight, lineHeight);
-	int smWidth = Text::maxLen(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end(), lineHeight);
 	Size amtWidth = update ? Size(Text::strLen(toStr(UINT16_MAX), lineHeight) + LabelEdit::caretWidth) : Size(1.f);
 
 	vector<vector<Widget*>> lines0 = { {
@@ -229,7 +227,7 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		wio.survivalLE = new LabelEdit(amtWidth, toStr(cfg.survivalPass) + '%', update, nullptr, nullptr, nullptr, makeTooltip(scTip))
 	}, {
 		new Label(descLength, popBack(txs)),
-		wio.survivalMode = new SwitchBox(active ? Size(smWidth) : Size(1.f), active ? vector<string>(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end()) : vector<string>{ Com::Config::survivalNames[uint8(cfg.survivalMode)] }, Com::Config::survivalNames[uint8(cfg.survivalMode)], update, makeTooltipL(survivalTip), 1.f, active ? Label::Alignment::center : Label::Alignment::left)
+		wio.survivalMode = new ComboBox(1.f, active ? vector<string>(Com::Config::survivalNames.begin(), Com::Config::survivalNames.end()) : vector<string>{ Com::Config::survivalNames[uint8(cfg.survivalMode)] }, Com::Config::survivalNames[uint8(cfg.survivalMode)], cupdat, nullptr, nullptr, makeTooltipL(survivalTip))
 	}, {
 		new Label(descLength, popBack(txs)),
 		wio.favorLimit = new CheckBox(lineHeight, cfg.favorLimit, update, update, makeTooltip(popBack(tips)))
@@ -246,11 +244,8 @@ vector<Widget*> ProgState::createConfigList(ConfigIO& wio, const Com::Config& cf
 		new Label(descLength, popBack(txs)),
 		wio.dragonDiag = new CheckBox(lineHeight, cfg.dragonDiag, update, update, makeTooltip(popBack(tips)))
 	} };
-	if (active) {
+	if (active)
 		lines0[1].insert(lines0[1].begin() + 1, wio.survivalSL = new Slider(1.f, cfg.survivalPass, 0, Com::Config::randomLimit, update, &Program::eventPrcSliderUpdate, makeTooltip(scTip)));
-		lines0[2].insert(lines0[2].begin() + 1, new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltipL(survivalTip)));
-		lines0[2].insert(lines0[2].begin() + 3, new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltipL(survivalTip)));
-	}
 
 	vector<vector<Widget*>> lines1(Com::tileMax);
 	for (uint8 i = 0; i < Com::tileLim; i++)
@@ -520,15 +515,11 @@ RootLayout* ProgRoom::createLayout() {
 	vector<Widget*> menu = createConfigList(wio, World::program()->info & Program::INF_HOST ? confs[World::program()->curConfig] : World::game()->getConfig(), World::program()->info & Program::INF_HOST);
 	if (World::program()->info & Program::INF_HOST) {
 		Text cfgt("Configuration:", lineHeight);
-		Text aleft(arrowLeft, lineHeight);
-		Text aright(arrowRight, lineHeight);
 		Text copy("Copy", lineHeight);
 		Text newc("New", lineHeight);
 		vector<Widget*> top1 = {
 			new Label(cfgt.length, cfgt.text),
-			new Label(aleft.length, aleft.text, &Program::eventSBPrev),
-			new SwitchBox(1.f, sortNames(confs), World::program()->curConfig, &Program::eventSwitchConfig, Texture(), 1.f, Label::Alignment::center),
-			new Label(aright.length, aright.text, &Program::eventSBNext),
+			new ComboBox(1.f, sortNames(confs), World::program()->curConfig, &Program::eventSwitchConfig),
 			new Label(copy.length, copy.text, &Program::eventConfigCopyInput),
 			new Label(newc.length, newc.text, &Program::eventConfigNewInput)
 		};
@@ -1018,9 +1009,7 @@ void ProgSettings::eventEscape() {
 }
 
 void ProgSettings::eventEnter() {
-#ifndef __ANDROID__
-	World::program()->eventApplySettings();
-#endif
+	World::program()->eventOpenInfo();
 }
 
 RootLayout* ProgSettings::createLayout() {
@@ -1049,8 +1038,6 @@ RootLayout* ProgSettings::createLayout() {
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
 
 	// setting buttons, labels and action fields for labels
-	Text aleft(arrowLeft, lineHeight);
-	Text aright(arrowRight, lineHeight);
 	Text aptx("Apply", lineHeight);
 	vector<string> txs = {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
@@ -1110,31 +1097,23 @@ RootLayout* ProgSettings::createLayout() {
 	vector<Widget*> lx[] = { {
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		new Label(descLength, popBack(txs)),
-		display = new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventDummy, nullptr, makeTooltip(popBack(tips)))
+		new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventSetDisplay, nullptr, makeTooltip(popBack(tips)))
 	}, {
 #endif
 #ifndef __ANDROID__
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		screen = new SwitchBox(1.f, vector<string>(Settings::screenNames.begin(), Settings::screenNames.end()), Settings::screenNames[uint8(World::sets()->screen)], &Program::eventDummy, makeTooltip(tips.back())),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+		new ComboBox(1.f, vector<string>(Settings::screenNames.begin(), Settings::screenNames.end()), Settings::screenNames[uint8(World::sets()->screen)], &Program::eventSetScreen, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		winSize = new SwitchBox(1.f, std::move(winsiz), toStr(World::sets()->size, rv2iSeparator), &Program::eventDummy, makeTooltip(tips.back())),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+		new ComboBox(1.f, std::move(winsiz), toStr(World::sets()->size, rv2iSeparator), &Program::eventSetWindowSize, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		dspMode = new SwitchBox(1.f, std::move(dmodes), dispToFstr(World::sets()->mode), &Program::eventDummy, makeTooltip(tips.back())),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+		new ComboBox(1.f, std::move(dmodes), dispToFstr(World::sets()->mode), &Program::eventSetWindowMode, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 #endif
 #ifndef OPENGLES
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		new SwitchBox(1.f, { "0", "1", "2", "4" }, toStr(World::sets()->msamples), &Program::eventSetSamples, makeTooltip(tips.back())),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+		new ComboBox(1.f, { "0", "1", "2", "4" }, toStr(World::sets()->msamples), &Program::eventSetSamples, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, 15, nullptr, &Program::eventSetShadowResSL, makeTooltip(tips.back())),
@@ -1149,9 +1128,7 @@ RootLayout* ProgSettings::createLayout() {
 		new LabelEdit(slleLength, toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltipL(vsyncTip)),
-		new SwitchBox(1.f, vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync, makeTooltipL(vsyncTip)),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltipL(vsyncTip))
+		new ComboBox(1.f, vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), Settings::vsyncNames[uint8(int8(World::sets()->vsync)+1)], &Program::eventSetVsync, nullptr, nullptr, makeTooltipL(vsyncTip))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), &Program::eventSaveSettings, &Program::eventSetGammaSL, makeTooltip(tips.back())),
@@ -1175,20 +1152,12 @@ RootLayout* ProgSettings::createLayout() {
 		new LabelEdit(slleLength, toStr(World::sets()->chatLines), &Program::eventSetChatLineLimitLE, nullptr, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
-		new Label(aleft.length, aleft.text, &Program::eventSBPrev, nullptr, makeTooltip(tips.back())),
-		new SwitchBox(1.f, vector<string>(Com::familyNames.begin(), Com::familyNames.end()), Com::familyNames[uint8(World::sets()->resolveFamily)], &Program::eventSetResolveFamily, makeTooltip(tips.back())),
-		new Label(aright.length, aright.text, &Program::eventSBNext, nullptr, makeTooltip(popBack(tips)))
+		new ComboBox(1.f, vector<string>(Com::familyNames.begin(), Com::familyNames.end()), Com::familyNames[uint8(World::sets()->resolveFamily)], &Program::eventSetResolveFamily, nullptr, nullptr, makeTooltip(popBack(tips)))
 	}, {
 		new Label(descLength, popBack(txs)),
 		new CheckBox(lineHeight, World::sets()->fontRegular, &Program::eventSetFontRegular, &Program::eventSetFontRegular, makeTooltip(popBack(tips)))
 	}, };
-#ifdef __ANDROID__
 	vector<Widget*> lns(lnc);
-#else
-	vector<Widget*> lns(lnc + 2);
-	lns[lnc] = new Widget(0);
-	lns[lnc+1] = new Layout(lineHeight, { new Label(aptx.length, aptx.text, &Program::eventApplySettings, nullptr, makeTooltip(popBack(tips))) }, false, lineSpacing);
-#endif
 	for (sizet i = 0; i < lnc; i++)
 		lns[i] = new Layout(lineHeight, std::move(lx[i]), false, lineSpacing);
 
@@ -1200,10 +1169,10 @@ RootLayout* ProgSettings::createLayout() {
 	return new RootLayout(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
 }
 
-SDL_DisplayMode ProgSettings::currentMode() const {
-	SDL_DisplayMode mode = strToDisp(dspMode->getText());
-	if (string::const_reverse_iterator sit = std::find_if(dspMode->getText().rbegin(), dspMode->getText().rend(), [](char c) -> bool { return isSpace(c); }); sit != dspMode->getText().rend())
-		if (umap<string, uint32>::const_iterator pit = pixelformats.find(string(sit.base(), dspMode->getText().end())); pit != pixelformats.end())
+SDL_DisplayMode ProgSettings::fstrToDisp(const string& str) const {
+	SDL_DisplayMode mode = strToDisp(str);
+	if (string::const_reverse_iterator sit = std::find_if(str.rbegin(), str.rend(), [](char c) -> bool { return isSpace(c); }); sit != str.rend())
+		if (umap<string, uint32>::const_iterator pit = pixelformats.find(string(sit.base(), str.end())); pit != pixelformats.end())
 			mode.format = pit->second;
 	return mode;
 }

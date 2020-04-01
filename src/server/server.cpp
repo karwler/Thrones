@@ -1,4 +1,4 @@
-#include "server/common.h"
+#include "common.h"
 
 namespace Com {
 

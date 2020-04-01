@@ -18,6 +18,10 @@ public:
 	virtual void tick(float dSec) override;
 	virtual void onResize() override;
 	virtual void postInit() override;
+	virtual bool selectable() const override;
+	virtual void onNavSelect(Direction dir) override;
+	virtual void navSelectNext(sizet id, int mid, Direction dir);
+	virtual void navSelectFrom(int mid, Direction dir);
 
 	Widget* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
@@ -33,6 +37,12 @@ protected:
 	void initWidgets(vector<Widget*>&& wgts);
 	void reinitWidgets(sizet id);
 	virtual ivec2 listSize() const;
+
+	void navSelectWidget(sizet id, int mid, Direction dir);
+private:
+	Interactable* findFirstSelectable() const;
+	void scanSequential(sizet id, int mid, Direction dir);
+	void scanPerpendicular(int mid, Direction dir);
 };
 
 inline Widget* Layout::getWidget(sizet id) const {
@@ -121,16 +131,30 @@ public:
 	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onScroll(const ivec2& wMov) override;
-	virtual Rect frame() const override;
+	virtual void onNavSelect(Direction dir) override;
+	virtual void navSelectNext(sizet id, int mid, Direction dir) override;
+	virtual void navSelectFrom(int mid, Direction dir) override;
 
+	virtual Rect frame() const override;
 	virtual ivec2 wgtPosition(sizet id) const override;
 	virtual ivec2 wgtSize(sizet id) const override;
 	mvec2 visibleWidgets() const;
 
 private:
+	void scrollToSelected();
+	void scrollToWidgetPos(sizet id);
+	void scrollToWidgetEnd(sizet id);
 	int wgtRPos(sizet id) const;
 	int wgtREnd(sizet id) const;
 };
+
+inline void ScrollArea::scrollToWidgetPos(sizet id) {
+	scroll.setListPos(vertical ? ivec2(scroll.listPos.x, wgtRPos(id)) : ivec2(wgtRPos(id), scroll.listPos.y), listSize(), size());
+}
+
+inline void ScrollArea::scrollToWidgetEnd(sizet id) {
+	scroll.setListPos(vertical ? ivec2(scroll.listPos.x, wgtREnd(id) - size().y) : ivec2(wgtREnd(id) - size().x, scroll.listPos.y), listSize(), size());
+}
 
 inline int ScrollArea::wgtRPos(sizet id) const {
 	return positions[id][vertical];

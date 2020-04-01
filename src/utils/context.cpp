@@ -63,31 +63,23 @@ void Context::onScroll(const ivec2& wMov) {
 	scroll.scroll(wMov, listSize, size, true);
 }
 
-void Context::onKeypress(const SDL_Keysym& key) {
-	switch (key.scancode) {
-	case SDL_SCANCODE_UP: case SDL_SCANCODE_LEFT:
-		if (selected) {
-			selected--;
-			if (int y = itemPos(selected); y < 0)
-				scroll.moveListPos(ivec2(0, y), listSize, size);
-		}
-		break;
-	case SDL_SCANCODE_DOWN: case SDL_SCANCODE_RIGHT:
-		if (selected < items.size() - 1) {
-			selected++;
-			if (int y = itemPos(selected) + lineHeight; y > size.y)
-				scroll.moveListPos(ivec2(0, y - size.y), listSize, size);
-		}
-		break;
-	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
-		if (ivec2 mPos = mousePos(); rect().contain(mPos))
-			onClick(mPos, SDL_BUTTON_LEFT);
-		else
-			World::scene()->setContext(nullptr);
-		break;
-	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
-		World::scene()->setContext(nullptr);
+void Context::onNavSelect(Direction dir) {
+	if (dir.positive()) {
+		selected = selected < items.size() - 1 ? selected + 1 : 0;
+		if (int y = itemPos(selected) + lineHeight; y > size.y)
+			scroll.moveListPos(ivec2(0, y - size.y), listSize, size);
+	} else {
+		selected = selected ? selected - 1 : uint(items.size() - 1);
+		if (int y = itemPos(selected); y < 0)
+			scroll.moveListPos(ivec2(0, y), listSize, size);
 	}
+}
+
+void Context::confirm() {
+	if (selected < items.size())
+		onClick(ivec2(position.x, position.y + itemPos(selected)), SDL_BUTTON_LEFT);
+	else
+		World::scene()->setContext(nullptr);
 }
 
 int Context::calcPos(int pos, int& size, int limit) {

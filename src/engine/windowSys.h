@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audioSys.h"
+#include "inputSys.h"
 #include "scene.h"
 #include "prog/program.h"
 #ifdef __APPLE__
@@ -182,6 +183,7 @@ private:
 	};
 
 	uptr<AudioSys> audio;
+	uptr<InputSys> inputSys;
 	uptr<Program> program;
 	uptr<Scene> scene;
 	uptr<Settings> sets;
@@ -225,6 +227,7 @@ public:
 
 	AudioSys* getAudio();
 	FontSet* getFonts();
+	InputSys* getInput();
 	Program* getProgram();
 	Scene* getScene();
 	Settings* getSets();
@@ -272,6 +275,10 @@ inline AudioSys* WindowSys::getAudio() {
 
 inline FontSet* WindowSys::getFonts() {
 	return fonts.get();
+}
+
+inline InputSys* WindowSys::getInput() {
+	return inputSys.get();
 }
 
 inline Program* WindowSys::getProgram() {

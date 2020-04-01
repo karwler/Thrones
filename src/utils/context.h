@@ -27,8 +27,9 @@ public:
 	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onScroll(const ivec2& wMov) override;
-	virtual void onKeypress(const SDL_Keysym& key) override;
+	virtual void onNavSelect(Direction dir) override;
 
+	void confirm();
 	Rect rect() const;
 	Interactable* getParent() const;
 

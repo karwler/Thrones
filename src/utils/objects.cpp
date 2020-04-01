@@ -229,12 +229,12 @@ Piece::Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgca
 
 void Piece::drawTopDepth() const {
 	if (drawTopSelf)
-		drawTopMeshDepth(selfTopYpos(World::scene()->select), mesh);
+		drawTopMeshDepth(selfTopYpos(World::scene()->getSelect()), mesh);
 }
 
 void Piece::drawTop() const {
 	if (drawTopSelf)
-		drawTopMesh(selfTopYpos(World::scene()->select), mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
+		drawTopMesh(selfTopYpos(World::scene()->getSelect()), mesh, matl->diffuse * (type != Com::Piece::warhorse ? moveIconColor : attackHorseColor), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
 		drawTopMesh(topYpos, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));

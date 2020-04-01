@@ -55,6 +55,10 @@ void Layout::postInit() {
 		it->postInit();
 }
 
+bool Layout::selectable() const {
+	return !widgets.empty();
+}
+
 void Layout::initWidgets(vector<Widget*>&& wgts) {
 	clear(widgets);
 	widgets = std::move(wgts);
@@ -102,6 +106,62 @@ ivec2 Layout::wgtSize(sizet id) const {
 
 ivec2 Layout::listSize() const {
 	return positions.back() - spacing;
+}
+
+void Layout::onNavSelect(Direction) {
+	World::scene()->updateSelect(findFirstSelectable());
+}
+
+Interactable* Layout::findFirstSelectable() const {
+	for (Widget* it : widgets) {
+		if (Layout* box = dynamic_cast<Layout*>(it)) {
+			if (Interactable* wgt = box->findFirstSelectable())
+				return wgt;
+		} else if (it->selectable())
+			return it;
+	}
+	return World::scene()->getFirstSelect();
+}
+
+void Layout::navSelectNext(sizet id, int mid, Direction dir) {
+	if (dir.vertical() == vertical && (dir.positive() ? id < widgets.size() - 1 : id))
+		scanSequential(id, mid, dir);
+	else if (parent)
+		parent->navSelectNext(pcID, mid, dir);
+}
+
+void Layout::navSelectFrom(int mid, Direction dir) {
+	if (dir.vertical() == vertical)
+		scanSequential(dir.positive() ? SIZE_MAX : widgets.size(), mid, dir);
+	else
+		scanPerpendicular(mid, dir);
+}
+
+void Layout::scanSequential(sizet id, int mid, Direction dir) {
+	for (sizet mov = btom<sizet>(dir.positive()); (id += mov) < widgets.size() && !widgets[id]->selectable(););
+	if (id < widgets.size())
+		navSelectWidget(id, mid, dir);
+	else if (parent)
+		parent->navSelectNext(pcID, mid, dir);
+}
+
+void Layout::scanPerpendicular(int mid, Direction dir) {
+	sizet id = 0;
+	for (int hori = dir.horizontal(); id < widgets.size() && (!widgets[id]->selectable() || (wgtPosition(id)[hori] + wgtSize(id)[hori] < mid)); id++);
+	if (id == widgets.size())
+		while (--id < widgets.size() && !widgets[id]->selectable());
+
+	if (id < widgets.size())
+		navSelectWidget(id, mid, dir);
+	else if (parent)
+		parent->navSelectNext(pcID, mid, dir);
+}
+
+void Layout::navSelectWidget(sizet id, int mid, Direction dir) {
+	if (Layout* lay = dynamic_cast<Layout*>(widgets[id]))
+		lay->navSelectFrom(mid, dir);
+	else if (widgets[id]->selectable())
+		World::scene()->updateSelect(widgets[id]);
 }
 
 // ROOT LAYOUT
@@ -231,6 +291,32 @@ ivec2 ScrollArea::wgtPosition(sizet id) const {
 
 ivec2 ScrollArea::wgtSize(sizet id) const {
 	return Layout::wgtSize(id) - swap(scroll.barSize(listSize(), size(), vertical), 0, !vertical);
+}
+
+void ScrollArea::onNavSelect(Direction dir) {
+	Layout::onNavSelect(dir);
+	scrollToSelected();
+}
+
+void ScrollArea::navSelectNext(sizet id, int mid, Direction dir) {
+	Layout::navSelectNext(id, mid, dir);
+	scrollToSelected();
+}
+
+void ScrollArea::navSelectFrom(int mid, Direction dir) {
+	Layout::navSelectFrom(mid, dir);
+	scrollToSelected();
+}
+
+void ScrollArea::scrollToSelected() {
+	for (Widget* child = dynamic_cast<Widget*>(World::scene()->getSelect()); child; child = child->getParent())
+		if (child->getParent() == this) {
+			if (int cpos = child->position()[vertical], fpos = position()[vertical]; cpos < fpos)
+				scrollToWidgetPos(child->getID());
+			else if (cpos + child->size()[vertical] > fpos + size()[vertical])
+				scrollToWidgetEnd(child->getID());
+			break;
+		}
 }
 
 mvec2 ScrollArea::visibleWidgets() const {

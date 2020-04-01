@@ -22,6 +22,7 @@ public:
 	static AudioSys* audio();
 	static FontSet* fonts();
 	static Game* game();
+	static InputSys* input();
 	static Netcp* netcp();
 	static Program* program();
 	static ProgState* state();
@@ -55,6 +56,10 @@ inline FontSet* World::fonts() {
 
 inline Game* World::game() {
 	return windowSys.getProgram()->getGame();
+}
+
+inline InputSys* World::input() {
+	return windowSys.getInput();
 }
 
 inline Netcp* World::netcp() {

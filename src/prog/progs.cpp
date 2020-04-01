@@ -360,7 +360,7 @@ void ProgMenu::eventEnter() {
 	World::program()->eventConnectServer();
 }
 
-RootLayout* ProgMenu::createLayout() {
+RootLayout* ProgMenu::createLayout(Interactable*& selected) {
 	// server input
 	Text srvt("Server:", superHeight);
 	vector<Widget*> srv = {
@@ -379,6 +379,7 @@ RootLayout* ProgMenu::createLayout() {
 		new Label(srvt.length, "Host", &Program::eventOpenHostMenu, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Label(1.f, "Connect", &Program::eventConnectServer, nullptr, Texture(), 1.f, Label::Alignment::center)
 	};
+	selected = con.back();
 
 	// title
 	int width = World::fonts()->length(srvt.text + "000.000.000.000", superHeight) + lineSpacing + Label::textMargin * 4;
@@ -431,7 +432,7 @@ void ProgLobby::eventEnter() {
 	World::program()->eventHostRoomInput();
 }
 
-RootLayout* ProgLobby::createLayout() {
+RootLayout* ProgLobby::createLayout(Interactable*& selected) {
 	// side bar
 	vector<string> sidt = {
 		"Host",
@@ -442,6 +443,7 @@ RootLayout* ProgLobby::createLayout() {
 		new Label(lineHeight, popBack(sidt), &Program::eventExitLobby),
 		new Label(lineHeight, popBack(sidt), &Program::eventHostRoomInput)
 	};
+	selected = lft.back();
 
 	// room list
 	vector<Widget*> lns(rooms.size());
@@ -490,13 +492,13 @@ void ProgRoom::eventEnter() {
 	World::prun(startButton->lcall, startButton);
 }
 
-RootLayout* ProgRoom::createLayout() {
+RootLayout* ProgRoom::createLayout(Interactable*& selected) {
 	Text back("Back", lineHeight);
 	vector<Widget*> top0 = {
 		new Label(back.length, back.text, World::program()->info & Program::INF_UNIQ ? &Program::eventOpenMainMenu : &Program::eventExitRoom),
 		startButton = new Label(1.f, string(), nullptr, nullptr, Texture(), 1.f, Label::Alignment::center)
 	};
-	if (World::program()->info & Program::INF_UNIQ) {
+	if (selected = top0[0];  World::program()->info & Program::INF_UNIQ) {
 		Text setup("Setup", lineHeight);
 		Text port("Port:", lineHeight);
 		top0.insert(top0.begin() + 1, new Label(setup.length, std::move(setup.text), &Program::eventOpenSetup));
@@ -668,7 +670,7 @@ void ProgSetup::eventDrag(uint32 mStat) {
 		mStat = swapBits(mStat, SDL_BUTTON_LEFT - 1, SDL_BUTTON_RIGHT - 1);
 
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
-	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->select);
+	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->getSelect());
 	svec2 curHold = bo ? World::game()->ptog(bo->getPos()) : svec2(UINT16_MAX);
 	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
@@ -754,7 +756,7 @@ uint8 ProgSetup::findNextSelect(bool fwd) {
 	return selected;
 }
 
-RootLayout* ProgSetup::createLayout() {
+RootLayout* ProgSetup::createLayout(Interactable*& selected) {
 	// sidebar
 	vector<string> sidt = {
 		"Exit",
@@ -779,7 +781,7 @@ RootLayout* ProgSetup::createLayout() {
 		new Label(lineHeight, popBack(sidt), cback ? &Program::eventSetupBack : nullptr, nullptr, Texture(), cback ? 1.f : defaultDim),
 		new Label(lineHeight, popBack(sidt), cnext ? &Program::eventSetupNext : nullptr, nullptr, Texture(), cnext ? 1.f : defaultDim),
 	};
-	if (World::netcp())
+	if (selected = wgts.back(); World::netcp())
 		wgts.insert(wgts.begin() + 4, new Label(lineHeight, popBack(sidt), &Program::eventToggleChat));
 
 	// center piece
@@ -946,7 +948,7 @@ void ProgMatch::decreaseDragonIcon() {
 	}
 }
 
-RootLayout* ProgMatch::createLayout() {
+RootLayout* ProgMatch::createLayout(Interactable*& selected) {
 	// sidebar
 	bool fon = World::game()->getConfig().favorMax && World::game()->getConfig().pieceAmounts[uint8(Com::Piece::throne)];
 	vector<string> sidt = {
@@ -967,7 +969,7 @@ RootLayout* ProgMatch::createLayout() {
 		bswapIcon = new Draglet(lineHeight, &Program::eventSwitchGameButtons, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), popBack(sidt), Label::Alignment::left, false),
 		turnIcon = new Label(lineHeight, popBack(sidt))
 	};
-	if (fon) {
+	if (selected = turnIcon; fon) {
 		left.insert(left.end() - 1, {
 			favorIcon = new Draglet(lineHeight, nullptr, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), "", Label::Alignment::left, false),	// text is updated after the icon has a parent
 			fnowIcon = new Draglet(lineHeight, nullptr, nullptr, nullptr, World::scene()->blank(), Widget::colorNormal, 1.f, Texture(), popBack(sidt), Label::Alignment::left, false)
@@ -1012,7 +1014,7 @@ void ProgSettings::eventEnter() {
 	World::program()->eventOpenInfo();
 }
 
-RootLayout* ProgSettings::createLayout() {
+RootLayout* ProgSettings::createLayout(Interactable*& selected) {
 	// side bar
 	vector<string> tps = {
 		"Reset",
@@ -1026,6 +1028,7 @@ RootLayout* ProgSettings::createLayout() {
 		new Widget(0),
 		new Label(lineHeight, popBack(tps), &Program::eventResetSettings)
 	};
+	selected = lft[0];
 
 	// resolution list
 	vector<ivec2> sizes = World::window()->windowSizes();
@@ -1187,7 +1190,7 @@ void ProgInfo::eventEnter() {
 	World::program()->eventOpenSettings();
 }
 
-RootLayout* ProgInfo::createLayout() {
+RootLayout* ProgInfo::createLayout(Interactable*& selected) {
 	// side bar
 	vector<string> tps = {
 		"Back",
@@ -1198,6 +1201,7 @@ RootLayout* ProgInfo::createLayout() {
 		new Label(lineHeight, popBack(tps), &Program::eventOpenMainMenu),
 		new Label(lineHeight, popBack(tps), &Program::eventOpenSettings)
 	};
+	selected = lft.back();
 
 	// information block
 	vector<string> titles = {

@@ -13,7 +13,7 @@ struct addrinfo;
 
 namespace Com {
 
-constexpr char commonVersion[] = "0.4.3";
+constexpr char commonVersion[] = "0.5.0";
 constexpr uint16 defaultPort = 39741;
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
 constexpr uint8 roomNameLimit = 64;

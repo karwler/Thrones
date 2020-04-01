@@ -24,6 +24,8 @@ AudioSys::~AudioSys() {
 }
 
 void AudioSys::play(const string& name) {
+	if (!World::sets()->avolume)
+		return;
 	umap<string, Sound>::iterator it = sounds.find(name);
 	if (it == sounds.end())
 		return;

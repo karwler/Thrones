@@ -82,6 +82,8 @@ set(THRONES_SRC
 	"src/engine/audioSys.h"
 	"src/engine/fileSys.cpp"
 	"src/engine/fileSys.h"
+	"src/engine/inputSys.cpp"
+	"src/engine/inputSys.h"
 	"src/engine/scene.cpp"
 	"src/engine/scene.h"
 	"src/engine/windowSys.cpp"
@@ -493,17 +495,13 @@ endif()
 
 set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC})
 foreach(FSRC IN LISTS ALL_SRC)
-	if(QT_QMAKE_EXECUTABLE)
-		source_group("" FILES "${FSRC}")
+	get_filename_component(FGRP "${FSRC}" DIRECTORY)
+	string(REPLACE "/" ";" FGRP "${FGRP}")
+	list(REMOVE_AT FGRP 0)
+	if(MSVC)
+		string(REPLACE ";" "\\" FGRP "${FGRP}")
 	else()
-		get_filename_component(FGRP "${FSRC}" DIRECTORY)
-		string(REPLACE "/" ";" FGRP "${FGRP}")
-		list(REMOVE_AT FGRP 0)
-		if(MSVC)
-			string(REPLACE ";" "\\" FGRP "${FGRP}")
-		else()
-			string(REPLACE ";" "/" FGRP "${FGRP}")
-		endif()
-		source_group("${FGRP}" FILES "${FSRC}")
+		string(REPLACE ";" "/" FGRP "${FGRP}")
 	endif()
+	source_group("${FGRP}" FILES "${FSRC}")
 endforeach()

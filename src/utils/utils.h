@@ -186,6 +186,53 @@ inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
 
 // for Object and Widget
 
+class Direction {
+public:
+	enum Dir : uint8 {
+		up,
+		down,
+		left,
+		right
+	};
+
+private:
+	Dir dir;
+
+public:
+	constexpr Direction(Dir dir);
+
+	constexpr operator Dir() const;
+
+	constexpr bool vertical() const;
+	constexpr bool horizontal() const;
+	constexpr bool positive() const;
+	constexpr bool negative() const;
+};
+
+inline constexpr Direction::Direction(Dir dir) :
+	dir(dir)
+{}
+
+inline constexpr Direction::operator Dir() const {
+	return dir;
+}
+
+inline constexpr bool Direction::vertical() const {
+	return dir <= down;
+}
+
+inline constexpr bool Direction::horizontal() const {
+	return dir >= left;
+}
+
+inline constexpr bool Direction::positive() const {
+	return dir & 1;
+}
+
+inline constexpr bool Direction::negative() const {
+	return !positive();
+}
+
 class Interactable {
 public:
 	Interactable() = default;
@@ -197,15 +244,19 @@ public:
 	Interactable& operator=(Interactable&&) = default;
 
 	virtual void tick(float) {}
-	virtual void onClick(const ivec2& mPos, uint8 mBut);	// dummy function to have an out-of-line virtual function
+	virtual void onClick(const ivec2&, uint8) {}	// dummy function to have an out-of-line virtual function
 	virtual void onHold(const ivec2&, uint8) {}
-	virtual void onDrag(const ivec2&, const ivec2&) {}		// mouse move while left button down
-	virtual void onUndrag(uint8) {}							// get's called on mouse button up if instance is Scene's capture
+	virtual void onDrag(const ivec2&, const ivec2&) {}	// mouse move while left button down
+	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onScroll(const ivec2&) {}
 	virtual void onKeypress(const SDL_Keysym&) {}
 	virtual void onText(const char*) {}
+	virtual void onJButton(uint8) {}
+	virtual void onJHat(uint8) {}
+	virtual void onGButton(SDL_GameControllerButton) {}
+	virtual void onNavSelect(Direction dir);
 };
 
 // for travel distance on game board

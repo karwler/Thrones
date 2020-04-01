@@ -197,7 +197,7 @@ WindowSys::WindowSys() :
 
 void WindowSys::start() {
 	try {
-		if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO))
+		if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER))
 			throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
 		if (IMG_Init(imgInitFlags) != imgInitFlags)
 			throw std::runtime_error(string("failed to initialize textures:") + linend + SDL_GetError());
@@ -230,6 +230,8 @@ void WindowSys::start() {
 		SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
 		SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 		SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
+		SDL_EventState(SDL_JOYAXISMOTION, SDL_DISABLE);
+		SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_DISABLE);
 		SDL_StopTextInput();
 
 		FileSys::init();
@@ -252,6 +254,7 @@ void WindowSys::start() {
 			writeLog(err.what());
 			audio.reset();
 		}
+		inputSys.reset(new InputSys);
 		scene.reset(new Scene);
 		program.reset(new Program);
 		fonts->closeLog();
@@ -269,6 +272,7 @@ void WindowSys::start() {
 	}
 	program.reset();
 	scene.reset();
+	inputSys.reset();
 	destroyWindow();
 	audio.reset();
 	fonts.reset();
@@ -305,10 +309,14 @@ void WindowSys::lateInit() {
 		loopState++;
 		break;
 	case 2:
-		scene.reset(new Scene);
+		inputSys.reset(new InputSys);
 		loopState++;
 		break;
 	case 3:
+		scene.reset(new Scene);
+		loopState++;
+		break;
+	case 4:
 		program.reset(new Program);
 		loopState++;
 		break;
@@ -329,6 +337,7 @@ void WindowSys::exec() {
 	scene->draw();
 	SDL_GL_SwapWindow(window);
 
+	inputSys->tick(dSec);
 	scene->tick(dSec);
 	try {
 		if (program->getNetcp())
@@ -456,37 +465,46 @@ void WindowSys::destroyWindow() {
 void WindowSys::handleEvent(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_MOUSEMOTION:
-		scene->onMouseMove(event.motion);
+		inputSys->eventMouseMotion(event.motion);
 		break;
 	case SDL_MOUSEBUTTONDOWN:
-		scene->onMouseDown(event.button);
+		inputSys->eventMouseButtonDown(event.button);
 		break;
 	case SDL_MOUSEBUTTONUP:
-		scene->onMouseUp(event.button);
+		inputSys->eventMouseButtonUp(event.button);
 		break;
 	case SDL_MOUSEWHEEL:
-		scene->onMouseWheel(event.wheel);
+		inputSys->eventMouseWheel(event.wheel);
 		break;
 	case SDL_FINGERMOTION:
-		scene->onFingerMove(event.tfinger);
+		inputSys->eventFingerMove(event.tfinger);
 		break;
 	case SDL_MULTIGESTURE:
-		scene->onFingerGesture(event.mgesture);
+		inputSys->eventFingerGesture(event.mgesture);
 		break;
 	case SDL_FINGERDOWN:
-		scene->onFingerDown(event.tfinger);
+		inputSys->eventFingerDown(event.tfinger);
 		break;
 	case SDL_FINGERUP:
-		scene->onFingerUp(event.tfinger);
+		inputSys->eventFingerUp(event.tfinger);
 		break;
 	case SDL_KEYDOWN:
-		scene->onKeyDown(event.key);
+		inputSys->eventKeyDown(event.key);
 		break;
 	case SDL_KEYUP:
-		scene->onKeyUp(event.key);
+		inputSys->eventKeyUp(event.key);
 		break;
 	case SDL_TEXTINPUT:
 		scene->onText(event.text.text);
+		break;
+	case SDL_JOYBUTTONDOWN:
+		inputSys->eventJoystickButton(event.jbutton);
+		break;
+	case SDL_JOYHATMOTION:
+		inputSys->eventJoystickHat(event.jhat);
+		break;
+	case SDL_CONTROLLERBUTTONDOWN:
+		inputSys->eventGamepadButton(event.cbutton);
 		break;
 	case SDL_DROPTEXT:
 		scene->onText(event.drop.file);
@@ -494,6 +512,12 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		break;
 	case SDL_WINDOWEVENT:
 		eventWindow(event.window);
+		break;
+	case SDL_JOYDEVICEADDED:
+		inputSys->addController(event.jdevice.which);
+		break;
+	case SDL_JOYDEVICEREMOVED:
+		inputSys->removeController(event.jdevice.which);
 		break;
 	case SDL_QUIT:
 		close();

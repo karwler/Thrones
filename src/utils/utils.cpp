@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "engine/world.h"
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	if (a.h < b.h)
@@ -96,7 +96,9 @@ void Texture::upload(SDL_Surface* img, GLint iformat, GLenum pformat) {
 
 // INTERACTABLE
 
-void Interactable::onClick(const ivec2&, uint8) {}
+void Interactable::onNavSelect(Direction) {
+	World::scene()->updateSelect(World::scene()->getFirstSelect());
+}
 
 // DIJKSTRA
 

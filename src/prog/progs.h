@@ -68,7 +68,7 @@ public:
 	void eventResize();
 
 	virtual uint8 switchButtons(uint8 but);
-	virtual RootLayout* createLayout() = 0;
+	virtual RootLayout* createLayout(Interactable*& selected) = 0;
 	virtual Overlay* createOverlay();
 	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok") const;
 	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal) const;
@@ -115,7 +115,7 @@ public:
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 };
 
 class ProgLobby : public ProgState {
@@ -130,7 +130,7 @@ public:
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
@@ -170,7 +170,7 @@ public:
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 	void updateStartButton();	// canStart only applies to State::host
 	void updateConfigWidgets(const Com::Config& cfg);
 	static void updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt, uint16 min, uint16 rest);
@@ -226,7 +226,7 @@ public:
 	uint8 getSelected() const;
 	void selectNext(bool fwd);
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 	Popup* createPopupSaveLoad(bool save);
 
 	void setSelected(uint8 sel);
@@ -286,7 +286,7 @@ public:
 	void setDragonIcon(bool on);
 	void decreaseDragonIcon();
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 };
 
 inline bool ProgMatch::favorIconOn() const {
@@ -310,8 +310,8 @@ public:
 
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
-	
-	virtual RootLayout* createLayout() override;
+
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 
 	SDL_DisplayMode fstrToDisp(const string& str) const;
 	static string dispToFstr(const SDL_DisplayMode& mode);
@@ -337,7 +337,7 @@ public:
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
 
-	virtual RootLayout* createLayout() override;
+	virtual RootLayout* createLayout(Interactable*& selected) override;
 
 private:
 	void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);

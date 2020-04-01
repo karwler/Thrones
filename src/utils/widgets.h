@@ -51,6 +51,7 @@ public:
 	void scroll(const ivec2& wMov, const ivec2& listSize, const ivec2& size, bool vert);
 
 	static ivec2 listLim(const ivec2& listSize, const ivec2& size);	// max list position
+	void setListPos(const ivec2& pos, const ivec2& listSize, const ivec2& size);
 	void moveListPos(const ivec2& mov, const ivec2& listSize, const ivec2& size);
 	static int barSize(const ivec2& listSize, const ivec2& size, bool vert);	// returns 0 if slider isn't needed
 private:
@@ -65,6 +66,10 @@ private:
 
 inline ivec2 ScrollBar::listLim(const ivec2& listSize, const ivec2& size) {
 	return ivec2(size.x < listSize.x ? listSize.x - size.x : 0, size.y < listSize.y ? listSize.y - size.y : 0);
+}
+
+inline void ScrollBar::setListPos(const ivec2& pos, const ivec2& listSize, const ivec2& size) {
+	listPos = glm::clamp(pos, ivec2(0), listLim(listSize, size));
 }
 
 inline void ScrollBar::moveListPos(const ivec2& mov, const ivec2& listSize, const ivec2& size) {
@@ -156,6 +161,7 @@ public:
 	Layout* getParent() const;
 	void setParent(Layout* pnt, sizet id);
 	Rect rect() const;			// the rectangle that is the widget
+	ivec2 center() const;
 };
 
 inline sizet Widget::getID() const {
@@ -168,6 +174,10 @@ inline Layout* Widget::getParent() const {
 
 inline Rect Widget::rect() const {
 	return Rect(position(), size());
+}
+
+inline ivec2 Widget::center() const {
+	return position() + size() / 2;
 }
 
 // clickable widget with function calls for left and right click (it's rect is drawn so you can use it like a spacer with color)
@@ -193,7 +203,7 @@ public:
 	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
-
+	virtual void onNavSelect(Direction dir) override;
 	virtual bool selectable() const override;
 	void setDim(float factor);
 	void drawTooltip() const;
@@ -245,6 +255,10 @@ public:
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
 	virtual void onUndrag(uint8 mBut) override;
+	virtual void onKeypress(const SDL_Keysym& key) override;
+	virtual void onJButton(uint8 but) override;
+	virtual void onJHat(uint8 val) override;
+	virtual void onGButton(SDL_GameControllerButton but) override;
 
 	int getVal() const;
 	void setVal(int value);
@@ -394,6 +408,10 @@ inline sizet ComboBox::getCurOpt() const {
 	return sizet(std::find(options.begin(), options.end(), text) - options.begin());
 }
 
+inline void ComboBox::setCurOpt(uint id) {
+	Label::setText(id < options.size() ? options[id] : "");
+}
+
 // for editing a line of text (ignores Label's align), (calls Button's lcall on text confirm rather than on click and dcall when enter is pressed)
 class LabelEdit : public Label {
 public:
@@ -414,6 +432,9 @@ public:
 	virtual void drawTop() const override;
 	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onKeypress(const SDL_Keysym& key) override;
+	virtual void onJButton(uint8 but) override;
+	virtual void onJHat(uint8 val) override;
+	virtual void onGButton(SDL_GameControllerButton but) override;
 	virtual void onText(const char* str) override;
 
 	virtual bool selectable() const override;

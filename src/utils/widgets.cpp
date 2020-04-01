@@ -53,7 +53,7 @@ void ScrollBar::drag(const ivec2& mPos, const ivec2& mMov, const ivec2& listSize
 void ScrollBar::undrag(uint8 mBut, bool vert) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
-			motion = World::scene()->getMouseMove() * swap(0, -1, !vert);
+			motion = World::input()->getMouseMove() * swap(0, -1, !vert);
 		SDL_CaptureMouse(SDL_FALSE);
 		draggingSlider = false;
 		World::scene()->capture = nullptr;
@@ -194,6 +194,10 @@ void Button::onUnhover() {
 	color /= selectFactor;
 }
 
+void Button::onNavSelect(Direction dir) {
+	parent->navSelectNext(pcID, dir.vertical() ? center().x : center().y, dir);
+}
+
 bool Button::selectable() const {
 	return lcall || rcall || tipTex.valid();
 }
@@ -273,6 +277,89 @@ void Slider::onUndrag(uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {	// if dragging slider stop dragging slider
 		World::scene()->capture = nullptr;
 		World::prun(lcall, this);
+	}
+}
+
+void Slider::onKeypress(const SDL_Keysym& key) {
+	switch (key.scancode) {
+	case SDL_SCANCODE_UP:
+		val = vmin;
+		World::prun(rcall, this);
+		break;
+	case SDL_SCANCODE_DOWN:
+		val = vmax;
+		World::prun(rcall, this);
+		break;
+	case SDL_SCANCODE_LEFT:
+		if (val > vmin) {
+			val--;
+			World::prun(rcall, this);
+		}
+		break;
+	case SDL_SCANCODE_RIGHT:
+		if (val < vmax) {
+			val++;
+			World::prun(rcall, this);
+		}
+		break;
+	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
+		onUndrag(SDL_BUTTON_LEFT);
+	}
+}
+
+void Slider::onJButton(uint8 but) {
+	switch (but) {
+	case InputSys::jbutA: case InputSys::jbutB:
+		onUndrag(SDL_BUTTON_LEFT);
+	}
+}
+
+void Slider::onJHat(uint8 val) {
+	if (val & SDL_HAT_LEFT) {
+		if (val > vmin) {
+			val--;
+			World::prun(rcall, this);
+		}
+	} else if (val & SDL_HAT_UP) {
+		val = vmin;
+		World::prun(rcall, this);
+	}
+
+	if (val & SDL_HAT_RIGHT) {
+		if (val < vmax) {
+			val++;
+			World::prun(rcall, this);
+		}
+	} else if (val & SDL_HAT_DOWN) {
+		val = vmax;
+		World::prun(rcall, this);
+	}
+}
+
+void Slider::onGButton(SDL_GameControllerButton but) {
+	switch (but) {
+	case SDL_CONTROLLER_BUTTON_DPAD_UP:
+		val = vmin;
+		World::prun(rcall, this);
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+		val = vmax;
+		World::prun(rcall, this);
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+		if (val > vmin) {
+			val--;
+			World::prun(rcall, this);
+		}
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+		if (val < vmax) {
+			val++;
+			World::prun(rcall, this);
+		}
+		break;
+	case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_B:
+		onUndrag(SDL_BUTTON_LEFT);
 	}
 }
 
@@ -555,10 +642,6 @@ void ComboBox::setText(const string& str) {
 	setCurOpt(uint(std::find(options.begin(), options.end(), str) - options.begin()));
 }
 
-void ComboBox::setCurOpt(uint id) {
-	Label::setText(id < options.size() ? options[id] : "");
-}
-
 void ComboBox::set(vector<string>&& opts, uint id) {
 	options = std::move(opts);
 	setCurOpt(id);
@@ -596,6 +679,12 @@ void LabelEdit::onClick(const ivec2&, uint8 mBut) {
 
 void LabelEdit::onKeypress(const SDL_Keysym& key) {
 	switch (key.scancode) {
+	case SDL_SCANCODE_UP:	// move caret to start
+		setCPos(0);
+		break;
+	case SDL_SCANCODE_DOWN:	// move caret to end
+		setCPos(uint(text.length()));
+		break;
 	case SDL_SCANCODE_LEFT:	// move caret left
 		if (kmodAlt(key.mod))	// if holding alt skip word
 			setCPos(findWordStart());
@@ -673,6 +762,58 @@ void LabelEdit::onKeypress(const SDL_Keysym& key) {
 		World::prun(ecall, this);
 		break;
 	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
+		cancel();
+		World::prun(ccall, this);
+	}
+}
+
+void LabelEdit::onJButton(uint8 but) {
+	switch (but) {
+	case InputSys::jbutA:
+		confirm();
+		World::prun(ecall, this);
+		break;
+	case InputSys::jbutB:
+		cancel();
+		World::prun(ccall, this);
+	}
+}
+
+void LabelEdit::onJHat(uint8 val) {
+	if (val & SDL_HAT_LEFT) {
+		if (cpos)
+			setCPos(jumpCharB(cpos));
+	} else if (val & SDL_HAT_UP)
+		setCPos(0);
+
+	if (val & SDL_HAT_RIGHT) {
+		if (cpos < text.length())
+			setCPos(jumpCharF(cpos));
+	} else if (val & SDL_HAT_DOWN)
+		setCPos(uint(text.length()));
+}
+
+void LabelEdit::onGButton(SDL_GameControllerButton but) {
+	switch (but) {
+	case SDL_CONTROLLER_BUTTON_DPAD_UP:
+		setCPos(0);
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+		setCPos(uint(text.length()));
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+		if (cpos)
+			setCPos(jumpCharB(cpos));
+		break;
+	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+		if (cpos < text.length())
+			setCPos(jumpCharF(cpos));
+		break;
+	case SDL_CONTROLLER_BUTTON_A:
+		confirm();
+		World::prun(ecall, this);
+		break;
+	case SDL_CONTROLLER_BUTTON_B:
 		cancel();
 		World::prun(ccall, this);
 	}

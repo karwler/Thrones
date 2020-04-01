@@ -203,17 +203,15 @@ void Animation::append(Animation& ani) {
 // SCENE
 
 Scene::Scene() :
-	select(nullptr),
 	capture(nullptr),
+	select(nullptr),
+	firstSelect(nullptr),
 	meshes(FileSys::loadObjects()),
 	materials(FileSys::loadMaterials()),
 	texes(FileSys::loadTextures()),
 	shadowFunc(World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy),
 	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
-	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f),
-	mouseMove(0),
-	moveTime(0),
-	mouseLast(false)
+	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f)
 {}
 
 Scene::~Scene() {
@@ -246,7 +244,7 @@ void Scene::draw() {
 	else {
 		if (Widget* wgt = dynamic_cast<Widget*>(capture))
 			wgt->drawTop();
-		if (Button* but = dynamic_cast<Button*>(select); but && mouseLast)
+		if (Button* but = dynamic_cast<Button*>(select); but && World::input()->mouseLast)
 			but->drawTooltip();
 	}
 }
@@ -292,179 +290,88 @@ void Scene::onResize() {
 		overlay->onResize();
 }
 
-void Scene::onKeyDown(const SDL_KeyboardEvent& key) {
-	if (dynamic_cast<LabelEdit*>(capture))
-		capture->onKeypress(key.keysym);
-	else if (context)
-		context->onKeypress(key.keysym);
-	else if (!key.repeat)
-		switch (key.keysym.scancode) {
-		case SDL_SCANCODE_1: case SDL_SCANCODE_2: case SDL_SCANCODE_3: case SDL_SCANCODE_4: case SDL_SCANCODE_5: case SDL_SCANCODE_6: case SDL_SCANCODE_7: case SDL_SCANCODE_8: case SDL_SCANCODE_9: case SDL_SCANCODE_0:
-			World::state()->eventNumpress(uint8(key.keysym.scancode - SDL_SCANCODE_1));
-			break;
-		case SDL_SCANCODE_LALT:
-			World::state()->eventFavorize(FavorAct::on);
-			break;
-		case SDL_SCANCODE_LSHIFT:
-			World::state()->eventFavorize(FavorAct::now);
-			break;
-		case SDL_SCANCODE_SPACE:
-			World::state()->eventEndTurn();
-			break;
-#ifndef EMSCRIPTEN
-		case SDL_SCANCODE_LCTRL:
-			SDL_SetRelativeMouseMode(SDL_TRUE);
-			break;
-#endif
-		case SDL_SCANCODE_C:
-			World::state()->eventCameraReset();
-			break;
-		case SDL_SCANCODE_TAB:
-			World::program()->eventToggleChat();
-			break;
-		case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
-			if (popup)
-				World::prun(popup->kcall, nullptr);
-			else
-				World::state()->eventEnter();
-			break;
-		case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
-			if (popup)
-				World::prun(popup->ccall, nullptr);
-			else
-				World::state()->eventEscape();
-		}
-}
-
-void Scene::onKeyUp(const SDL_KeyboardEvent& key) {
-	if (!dynamic_cast<LabelEdit*>(capture) && !context && !key.repeat)
-		switch (key.keysym.scancode) {
-		case SDL_SCANCODE_LALT: case SDL_SCANCODE_LSHIFT:
-			World::state()->eventFavorize(FavorAct::off);
-			break;
-#ifndef EMSCRIPTEN
-		case SDL_SCANCODE_LCTRL:
-			SDL_SetRelativeMouseMode(SDL_FALSE);
-			simulateMouseMove();
-#endif
-		}
-}
-
-void Scene::onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse) {
-	if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_LCTRL] && !capture && !camera.moving) {
-		vec2 rot(glm::radians(float(mot.yrel) / 2.f), glm::radians(float(-mot.xrel) / 2.f));
-		camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
-		return;
-	}
-	mouseMove = ivec2(mot.xrel, mot.yrel);
-	moveTime = mot.timestamp;
-	mouseLast = mouse;
-
-	updateSelect(ivec2(mot.x, mot.y));
+void Scene::onMouseMove(const ivec2& pos, const ivec2& mov, uint32 state) {
+	updateSelect(pos);
 	if (capture)
-		capture->onDrag(ivec2(mot.x, mot.y), mouseMove);
+		capture->onDrag(pos, mov);
 	else if (context)
-		context->onMouseMove(ivec2(mot.x, mot.y));
-	else if (mot.state)
-		World::state()->eventDrag(mot.state);
+		context->onMouseMove(pos);
+	else if (state)
+		World::state()->eventDrag(state);
 }
 
-void Scene::onMouseDown(const SDL_MouseButtonEvent& but, bool mouse) {
-	switch (but.button) {
-	case SDL_BUTTON_MIDDLE:
-		World::state()->eventEndTurn();
-		break;
-	case SDL_BUTTON_X1:
-		if (dynamic_cast<ProgMatch*>(World::state()))
-			World::state()->eventFavorize(FavorAct::on);
-		else
-			World::state()->eventEscape();
-		return;
-	case SDL_BUTTON_X2:
-		if (dynamic_cast<ProgMatch*>(World::state()))
-			World::state()->eventFavorize(FavorAct::now);
-		else
-			World::state()->eventEnter();
-		return;
-	}
-
+void Scene::onMouseDown(const ivec2& pos, uint8 but) {
 	if (cstamp.but)
 		return;
-	mouseLast = mouse;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture); !popup && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
 	if (context && select != context.get())
 		setContext(nullptr);
 
-	cstamp = ClickStamp(select, getSelectedScrollArea(), ivec2(but.x, but.y), but.button);
+	cstamp = ClickStamp(select, getSelectedScrollArea(), pos, but);
 	if (cstamp.area)	// area goes first so widget can overwrite it's capture
-		cstamp.area->onHold(ivec2(but.x, but.y), but.button);
+		cstamp.area->onHold(pos, but);
 	if (cstamp.inter != cstamp.area)
-		cstamp.inter->onHold(ivec2(but.x, but.y), but.button);
+		cstamp.inter->onHold(pos, but);
 	if (!capture)		// can be set by previous onHold calls
-		World::state()->eventDrag(SDL_BUTTON(but.button));
+		World::state()->eventDrag(SDL_BUTTON(but));
 }
 
-void Scene::onMouseUp(const SDL_MouseButtonEvent& but, bool mouse) {
-	if (but.button == SDL_BUTTON_X1 || but.button == SDL_BUTTON_X2)
-		return World::state()->eventFavorize(FavorAct::off);
-
-	if (but.button != cstamp.but)
+void Scene::onMouseUp(const ivec2& pos, uint8 but) {
+	if (but != cstamp.but)
 		return;
-	mouseLast = mouse;
 	if (capture)
-		capture->onUndrag(but.button);
-	if (select && cstamp.inter == select && cursorInClickRange(ivec2(but.x, but.y)))
-		cstamp.inter->onClick(ivec2(but.x, but.y), but.button);
+		capture->onUndrag(but);
+	if (select && cstamp.inter == select && cursorInClickRange(pos))
+		cstamp.inter->onClick(pos, but);
 	if (!capture)
 		World::state()->eventUndrag();
 	cstamp = ClickStamp();
 }
 
-void Scene::onMouseWheel(const SDL_MouseWheelEvent& whe) {
-	mouseLast = true;
+void Scene::onMouseWheel(const ivec2& mov) {
 	Interactable* box = getSelectedScrollArea();
 	if (!box)
 		if (box = dynamic_cast<Context*>(select); !box)
 			box = dynamic_cast<TextBox*>(select);
 	if (box)
-		box->onScroll(ivec2(whe.x, whe.y) * scrollFactorWheel);
-	else if (whe.y)
-		World::state()->eventWheel(whe.y);
+		box->onScroll(mov * scrollFactorWheel);
+	else if (mov.y)
+		World::state()->eventWheel(mov.y);
 }
 
 void Scene::onMouseLeave() {
 	if (unselect(); cstamp.but) {		// get rid of select first to prevent click event
 		ivec2 mPos = mousePos();
-		onMouseUp({ SDL_MOUSEBUTTONUP, SDL_GetTicks(), World::window()->windowID(), 0, cstamp.but, SDL_RELEASED, 1, 0, mPos.x, mPos.y });
+		World::input()->eventMouseButtonUp({ SDL_MOUSEBUTTONUP, SDL_GetTicks(), World::window()->windowID(), 0, cstamp.but, SDL_RELEASED, 1, 0, mPos.x, mPos.y });
 	}
-}
-
-void Scene::onFingerMove(const SDL_TouchFingerEvent& fin) {
-	vec2 size = World::window()->screenView();
-	onMouseMove({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, false);
-}
-
-void Scene::onFingerGesture(const SDL_MultiGestureEvent& ges) {
-	if (dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
-		camera.zoom(int(ges.dDist * float(World::window()->screenView().y)));
-}
-
-void Scene::onFingerDown(const SDL_TouchFingerEvent& fin) {
-	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->screenView());
-	updateSelect(pos);
-	onMouseDown({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, false);
-}
-
-void Scene::onFingerUp(const SDL_TouchFingerEvent& fin) {
-	vec2 size = World::window()->screenView();
-	onMouseUp({ fin.type, fin.timestamp, World::window()->windowID(), SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, int(fin.x * size.x), int(fin.y * size.y) }, false);
-	updateSelect(ivec2(-1));
 }
 
 void Scene::onText(const char* str) {
 	if (capture)
 		capture->onText(str);
+}
+
+void Scene::onConfirm() {
+	if (World::input()->mouseLast = false; context)
+		context->confirm();
+	else if (popup)
+		World::prun(popup->kcall, nullptr);
+	else if (dynamic_cast<Slider*>(select))
+		capture = select;
+	else if (Button* but = dynamic_cast<Button*>(select))
+		but->onClick(but->position(), SDL_BUTTON_LEFT);
+	else
+		World::state()->eventEnter();
+}
+
+void Scene::onCancel() {
+	if (World::input()->mouseLast = false; context)
+		setContext(nullptr);
+	else if (popup)
+		World::prun(popup->ccall, nullptr);
+	else
+		World::state()->eventEscape();
 }
 
 void Scene::resetShadows() {
@@ -490,12 +397,12 @@ void Scene::resetLayouts() {
 	context.reset();
 
 	// set up new widgets
-	layout.reset(World::state()->createLayout());
+	layout.reset(World::state()->createLayout(firstSelect));
 	overlay.reset(World::state()->createOverlay());
 	layout->postInit();
 	if (overlay)
 		overlay->postInit();
-	simulateMouseMove();
+	World::input()->simulateMouseMove();
 }
 
 void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
@@ -504,13 +411,18 @@ void Scene::setPopup(Popup* newPopup, Widget* newCapture) {
 		popup->postInit();
 	if (capture = newCapture)
 		capture->onClick(mousePos(), SDL_BUTTON_LEFT);
-	simulateMouseMove();
+	World::input()->simulateMouseMove();
 }
 
 void Scene::setContext(Context* newContext) {
-	unselect();
-	context.reset(newContext);
-	simulateMouseMove();
+	if (context) {
+		if (context->getParent() && !World::input()->mouseLast)
+			updateSelect(context->getParent());
+		else if (select == context.get())
+			unselect();
+	}
+	if (context.reset(newContext); World::input()->mouseLast)
+		World::input()->simulateMouseMove();
 }
 
 void Scene::addAnimation(Animation&& anim) {
@@ -518,6 +430,17 @@ void Scene::addAnimation(Animation&& anim) {
 		animations.push_back(anim);
 	else
 		it->append(anim);
+}
+
+void Scene::navSelect(Direction dir) {
+	if (!popup) {
+		if (World::input()->mouseLast = false; context)
+			context->onNavSelect(dir);
+		else if (select)
+			select->onNavSelect(dir);
+		else
+			updateSelect(firstSelect);
+	}
 }
 
 void Scene::unselect() {
@@ -528,15 +451,15 @@ void Scene::unselect() {
 }
 
 void Scene::updateSelect() {
-	if (mouseLast)
+	if (World::input()->mouseLast)
 		updateSelect(mousePos());
 }
 
-void Scene::updateSelect(const ivec2& mPos) {
-	if (Interactable* cur = getSelected(mPos); cur != select) {
+void Scene::updateSelect(Interactable* sel) {
+	if (sel != select) {
 		if (select)
 			select->onUnhover();
-		if (select = cur)
+		if (select = sel)
 			select->onHover();
 	}
 }
@@ -588,12 +511,4 @@ BoardObject* Scene::findBoardObject(const ivec2& mPos) const {
 		if (Tile& it = World::game()->getTiles()[id]; it.rigid)
 			return &it;
 	return nullptr;
-}
-
-void Scene::simulateMouseMove() {
-	if (ivec2 pos; mouseLast) {
-		uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
-		onMouseMove({ SDL_MOUSEMOTION, SDL_GetTicks(), World::window()->windowID(), 0, state, pos.x, pos.y, 0, 0 }, mouseLast);
-	} else
-		onMouseMove({ SDL_FINGERMOTION, SDL_GetTicks(), World::window()->windowID(), SDL_TOUCH_MOUSEID, 0, -1, -1, 0, 0 }, mouseLast);
 }

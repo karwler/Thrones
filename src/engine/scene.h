@@ -137,9 +137,10 @@ inline bool Animation::operator==(const Animation& ani) const {
 // handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
-	Interactable* select;	// currently selected widget/object
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
+	Interactable* select;	// currently selected widget/object
+	Interactable* firstSelect;
 	vector<Object*> objects;
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
@@ -152,14 +153,10 @@ private:
 	void (Scene::*shadowFunc)();
 	Camera camera;
 	Light light;
-	ivec2 mouseMove;	// last recorded cursor position difference
-	uint32 moveTime;	// timestamp of last recorded mouseMove
-	bool mouseLast;		// last input was mouse or touch
 	ClickStamp cstamp;	// data about last mouse click
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
-	static constexpr uint32 moveTimeout = 50;
 
 public:
 	Scene();
@@ -168,18 +165,14 @@ public:
 	void draw();
 	void tick(float dSec);
 	void onResize();
-	void onKeyDown(const SDL_KeyboardEvent& key);
-	void onKeyUp(const SDL_KeyboardEvent& key);
-	void onMouseMove(const SDL_MouseMotionEvent& mot, bool mouse = true);
-	void onMouseDown(const SDL_MouseButtonEvent& but, bool mouse = true);
-	void onMouseUp(const SDL_MouseButtonEvent& but, bool mouse = true);
-	void onMouseWheel(const SDL_MouseWheelEvent& whe);
+	void onMouseMove(const ivec2& pos, const ivec2& mov, uint32 state);
+	void onMouseDown(const ivec2& pos, uint8 but);
+	void onMouseUp(const ivec2& pos, uint8 but);
+	void onMouseWheel(const ivec2& mov);
 	void onMouseLeave();
-	void onFingerMove(const SDL_TouchFingerEvent& fin);
-	void onFingerGesture(const SDL_MultiGestureEvent& ges);
-	void onFingerDown(const SDL_TouchFingerEvent& fin);
-	void onFingerUp(const SDL_TouchFingerEvent& fin);
 	void onText(const char* str);
+	void onConfirm();
+	void onCancel();
 
 	const Mesh* mesh(const string& name) const;
 	const Material* material(const string& name) const;
@@ -189,6 +182,8 @@ public:
 	void reloadTextures();
 	void resetShadows();
 	void reloadShader();
+	Interactable* getSelect() const;
+	Interactable* getFirstSelect() const;
 	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
@@ -197,27 +192,36 @@ public:
 	Overlay* getOverlay();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
+	Context* getContext();
 	void setContext(Context* newContext);
 	void addAnimation(Animation&& anim);
-	ivec2 getMouseMove() const;
 	bool cursorInClickRange(const ivec2& mPos) const;
 	vec3 pickerRay(const ivec2& mPos) const;
 	vec3 rayXZIsct(const vec3& ray) const;
 
+	void navSelect(Direction dir);
 	void updateSelect();
-private:
+	void updateSelect(Interactable* sel);
 	void updateSelect(const ivec2& mPos);
+private:
 	void unselect();
 	Interactable* getSelected(const ivec2& mPos);
 	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea() const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 	BoardObject* findBoardObject(const ivec2& mPos) const;
-	void simulateMouseMove();
 
 	void renderShadows();
 	void renderDummy() {}
 };
+
+inline Interactable* Scene::getSelect() const {
+	return select;
+}
+
+inline Interactable* Scene::getFirstSelect() const {
+	return firstSelect;
+}
 
 inline Camera* Scene::getCamera() {
 	return &camera;
@@ -243,12 +247,16 @@ inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
 	setPopup(popcap.first, popcap.second);
 }
 
-inline ivec2 Scene::getMouseMove() const {
-	return SDL_GetTicks() - moveTime < moveTimeout ? mouseMove : ivec2(0);
+inline Context* Scene::getContext() {
+	return context.get();
 }
 
 inline bool Scene::cursorInClickRange(const ivec2& mPos) const {
 	return glm::length(vec2(mPos - cstamp.pos)) <= clickThreshold;
+}
+
+inline void Scene::updateSelect(const ivec2& mPos) {
+	updateSelect(getSelected(mPos));
 }
 
 inline ScrollArea* Scene::getSelectedScrollArea() const {

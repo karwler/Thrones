@@ -378,7 +378,7 @@ void Program::eventIconSelect(Button* but) {
 }
 
 void Program::eventPlaceTileH() {
-	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select)) {
+	if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect())) {
 		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
 		if (uint8 tid = ps->getSelected(); ps->getCount(tid))
 			placeTile(til, tid);
@@ -386,7 +386,7 @@ void Program::eventPlaceTileH() {
 }
 
 void Program::eventPlaceTileD(Button* but) {
-	if (Tile* tile = dynamic_cast<Tile*>(World::scene()->select))
+	if (Tile* tile = dynamic_cast<Tile*>(World::scene()->getSelect()))
 		placeTile(tile, uint8(but->getID() - 1));
 }
 
@@ -433,7 +433,7 @@ void Program::placePiece(svec2 pos, uint8 type, Piece* occupant) {
 
 void Program::eventMoveTile(BoardObject* obj, uint8) {
 	// switch types with destination tile
-	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->select)) {
+	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->getSelect())) {
 		Com::Tile desType = dst->getType();
 		dst->setType(src->getType());
 		dst->setInteractivity(Tile::Interact::interact);
@@ -455,7 +455,7 @@ void Program::eventMovePiece(BoardObject* obj, uint8) {
 }
 
 void Program::eventClearTile() {
-	if (Tile* til = dynamic_cast<Tile*>(World::scene()->select); til && til->getType() != Com::Tile::empty) {
+	if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect()); til && til->getType() != Com::Tile::empty) {
 		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true, true);
 		til->setType(Com::Tile::empty);
 		til->setInteractivity(Tile::Interact::interact);
@@ -958,7 +958,7 @@ void Program::setState(ProgState* newState) {
 }
 
 BoardObject* Program::pickBob(svec2& pos, Piece*& pce) {
-	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->select);
+	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getSelect());
 	pos = bob ? game.ptog(bob->getPos()) : svec2(UINT16_MAX);
 	pce = dynamic_cast<Piece*>(bob);
 	return bob;

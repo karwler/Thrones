@@ -31,6 +31,7 @@ constexpr int imgInitFull = IMG_INIT_JPG | IMG_INIT_PNG;
 
 struct Sound {
 	static constexpr SDL_AudioSpec defaultSpec = { 48000, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
+	static constexpr SDL_AudioSpec mobileSpec = { 44100, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
 
 	uint8* data;
 	uint32 length;
@@ -49,9 +50,9 @@ inline void Sound::free() {
 }
 
 struct Material {
-	vec4 diffuse;
-	vec3 specular;
-	float shininess;
+	vec4 color;
+	vec3 spec;
+	float shine;
 
 	Material(const vec4& diffuse = vec4(1.f), const vec3& specular = vec3(1.f), float shininess = 32.f);
 };
@@ -62,36 +63,8 @@ struct Vertex {
 	vec2 tuv;
 
 	Vertex() = default;
-	Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv);
+	Vertex(const vec3& position, const vec3& normal, const vec2& texuv);
 };
 
 // other functions
 SDL_Surface* scaleSurface(SDL_Surface* img, int div);
-vector<string> readFileLines(const string& file);
-string readIniTitle(const string& line);
-pairStr readIniLine(const string& line);
-
-inline string makeIniLine(const string& title) {
-	return '[' + title + ']' + linend;
-}
-
-inline string makeIniLine(const string& key, const string& val) {
-	return key + '=' + val + linend;
-}
-
-template <class T = string>
-T readFile(const string& file) {
-	T data;
-	SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
-	if (!ifh)
-		return data;
-	int64 len = SDL_RWsize(ifh);
-	if (len <= 0)
-		return data;
-
-	data.resize(sizet(len));
-	if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read != data.size())
-		data.resize(read);
-	SDL_RWclose(ifh);
-	return data;
-}

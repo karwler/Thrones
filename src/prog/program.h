@@ -3,7 +3,7 @@
 #include "game.h"
 #include "progs.h"
 
-// handles the frontend
+// handles the front-end
 class Program {
 public:
 	enum Info : uint8 {
@@ -11,17 +11,34 @@ public:
 		INF_HOST = 1,			// is host of a room
 		INF_UNIQ = 2,			// is using or connected to single NetcpHost session
 		INF_GUEST_WAITING = 4	// shall only be set if INF_HOST is set
-	} info;
+	};
+
+	enum class FrameTime : uint8 {
+		none,
+		frames,
+		seconds
+	};
+
+	Info info;
+	FrameTime ftimeMode;
 	string curConfig;
 private:
 	uptr<ProgState> state;
 	uptr<Netcp> netcp;
 	Game game;
+	SDL_Thread* proc;
+	string latestVersion;
+	float ftimeSleep;
+
+	static constexpr float ftimeUpdateDelay = 0.5f;
 
 public:
 	Program();
+	~Program();
 
 	void start();
+	void eventUser(const SDL_UserEvent& user);
+	void tick(float dSec);
 
 	// main menu
 	void eventOpenMainMenu(Button* but = nullptr);
@@ -65,42 +82,57 @@ public:
 	void eventChatOpen(Button* but = nullptr);
 	void eventChatClose(Button* but = nullptr);
 	void eventToggleChat(Button* but = nullptr);
+	void eventCloseChat(Button* but = nullptr);
 	void eventHideChat(Button* but = nullptr);
+	void eventFocusChatLabel(Button* but);
 
 	// game setup
 	void eventOpenSetup();
 	void eventOpenSetup(Button* but);
 	void eventIconSelect(Button* but);
-	void eventPlaceTileH();
-	void eventPlaceTileD(Button* but);
-	void eventPlacePieceH();
-	void eventPlacePieceD(Button* but);
+	void eventPlaceTile();
+	void eventPlacePiece();
 	void eventMoveTile(BoardObject* obj, uint8 mBut);
 	void eventMovePiece(BoardObject* obj, uint8 mBut);
 	void eventClearTile();
 	void eventClearPiece();
 	void eventSetupNext(Button* but = nullptr);
 	void eventSetupBack(Button* but = nullptr);
-	void eventShowWaitPopup(Button* but = nullptr);
 	void eventOpenSetupSave(Button* but = nullptr);
 	void eventOpenSetupLoad(Button* but = nullptr);
+	void eventSetupPickPiece(Button* but);
 	void eventSetupNew(Button* but);
 	void eventSetupSave(Button* but);
 	void eventSetupLoad(Button* but);
 	void eventSetupDelete(Button* but);
 	void eventShowConfig(Button* but = nullptr);
+	void eventCloseConfigList(Button* but = nullptr);
 	void eventSwitchGameButtons(Button* but = nullptr);
 
 	// game match
 	void eventOpenMatch();
 	void eventEndTurn(Button* but = nullptr);
-	void eventPlaceDragon(Button* but = nullptr);
-	void eventSwitchFavor(Button* but = nullptr);
-	void eventSwitchFavorNow(Button* but = nullptr);
-	void eventFavorStart(BoardObject* obj, uint8 mBut = 0);
+	void eventPickFavor(Button* but = nullptr);
+	void eventSelectFavor(Button* but = nullptr);
+	void eventSwitchDestroy(Button* but = nullptr);
+	void eventKillDestroy(Button* but = nullptr);
+	void eventCancelDestroy(Button* but = nullptr);
+	void eventClickPlaceDragon(Button* but);
+	void eventHoldPlaceDragon(Button* but);
+	void eventPlaceDragon(BoardObject* obj, uint8 mBut = 0);
+	void eventEstablishB(Button* but = nullptr);
+	void eventEstablishP(BoardObject* obj, uint8 mBut = 0);
+	void eventRebuildTileB(Button* but = nullptr);
+	void eventRebuildTileP(BoardObject* obj, uint8 mBut = 0);
+	void eventOpenSpawner(Button* but = nullptr);
+	void eventSpawnPieceB(Button* but);
+	void eventSpawnPieceT(BoardObject* obj, uint8 mBut = 0);
+	void eventPieceStart(BoardObject* obj, uint8 mBut = 0);
 	void eventMove(BoardObject* obj, uint8 mBut);
-	void eventFire(BoardObject* obj, uint8 mBut);
+	void eventEngage(BoardObject* obj, uint8 mBut);
+	void eventPieceNoEngage(BoardObject* obj, uint8 mBut);
 	void eventAbortGame(Button* but = nullptr);
+	void eventSurrender(Button* but = nullptr);
 	void uninitGame();
 	void finishMatch(bool win);
 	void eventPostFinishMatch(Button* but = nullptr);
@@ -125,10 +157,15 @@ public:
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);
 	void eventSetVolumeLE(Button* but);
+	void eventSetColorAlly(sizet id, const string& str);
+	void eventSetColorEnemy(sizet id, const string& str);
 	void eventSetScaleTiles(Button* but);
 	void eventSetScalePieces(Button* but);
+	void eventSetTooltips(Button* but);
 	void eventSetChatLineLimitSL(Button* but);
 	void eventSetChatLineLimitLE(Button* but);
+	void eventSetDeadzoneSL(Button* but);
+	void eventSetDeadzoneLE(Button* but);
 	void eventSetResolveFamily(sizet id, const string& str);
 	void eventSetFontRegular(Button* but);
 	void eventResetSettings(Button* but);
@@ -137,34 +174,44 @@ public:
 
 	// other
 	void eventClosePopup(Button* but = nullptr);
-	void eventCloseOverlay(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
 	void eventClearLabel(Button* but);
-	void eventFocusChatLabel(Button* but);
 	void disconnect();
+	void eventCycleFrameCounter();
 
 	ProgState* getState();
 	Netcp* getNetcp();
 	Game* getGame();
+	const string& getLatestVersion() const;
 
 private:
 	void sendRoomName(Com::Code code, const string& name);
 	void postConfigUpdate();
 	static void setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint16 oarea, uint16 narea, bool scale);
-	static void updateAmtSlider(uint16* amts, LabelEdit** wgts, uint8 cnt, Slider* sld);
+	static void updateAmtSliders(Slider* sl, Com::Config& cfg, uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Com::Config::*counter)() const, string (*totstr)(const Com::Config&));
 	void setSaveConfig(const string& name, bool save = true);
-	void placeTile(Tile* tile, uint8 type);
-	void placePiece(svec2 pos, uint8 type, Piece* occupant);
 	void popuplateSetup(Setup& setup);
+	Piece* getUnplacedDragon();
 	void setShadowRes(uint16 newRes);
+	void setColorPieces(Settings::Color clr, Piece* pos, Piece* end);
+	template <class T> void setStandardSlider(Slider* sl, T& val);
+	template <class T> void setStandardSlider(LabelEdit* le, T& val);
 
 	void connect(bool client, const char* msg);
 	void setState(ProgState* newState);
 	BoardObject* pickBob(svec2& pos, Piece*& pce);
+
+#ifdef EMSCRIPTEN
+	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
+	static void fetchVersionFail(emscripten_fetch_t* fetch);
+#elif defined(WEBUTILS)
+	static int fetchVersion(void* data);
+	static sizet writeText(char* ptr, sizet size, sizet nmemb, void* userdata);
+#endif
+	static void pushFetchedVersion(const string& html, const string& rver);
 };
-ENUM_OPERATIONS(Program::Info, uint8)
 
 inline ProgState* Program::getState() {
 	return state.get();
@@ -176,4 +223,8 @@ inline Netcp* Program::getNetcp() {
 
 inline Game* Program::getGame() {
 	return &game;
+}
+
+inline const string& Program::getLatestVersion() const {
+	return latestVersion;
 }

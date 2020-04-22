@@ -5,17 +5,9 @@
 // class that makes accessing stuff easier
 class World {
 public:
-	static constexpr char argExternal = 'e';
-	static constexpr char argSetup = 'd';
-#ifdef EMSCRIPTEN
-	static constexpr char envLocale[] = "C";
-#else
-	static constexpr char envLocale[] = "";
-#endif
-
-	inline static Arguments args;
+	static inline Arguments args;
 private:
-	inline static WindowSys windowSys;		// the thing ontop of which everything runs
+	static inline WindowSys windowSys;		// the thing on top of which everything runs
 
 public:
 	static WindowSys* window();
@@ -30,7 +22,9 @@ public:
 	static Settings* sets();
 	static Scene* scene();
 	static const ShaderGeometry* geom();
+#ifndef OPENGLES
 	static const ShaderDepth* depth();
+#endif
 	static const ShaderGui* gui();
 
 #ifdef _WIN32
@@ -38,7 +32,7 @@ public:
 #endif
 	static void setArgs(int argc, char** argv);
 
-	template <class F, class... A> static void prun(F func, A... args);
+	template <class F, class... A> static void prun(F func, A... argv);
 	static void play(const string& name);
 };
 
@@ -91,31 +85,33 @@ inline const ShaderGeometry* World::geom() {
 	return windowSys.getGeom();
 }
 
+#ifndef OPENGLES
 inline const ShaderDepth* World::depth() {
 	return windowSys.getDepth();
 }
+#endif
 
 inline const ShaderGui* World::gui() {
-	return windowSys.getGUI();
+	return windowSys.getGui();
 }
 
 #ifdef _WIN32
 inline void World::setArgs(wchar* pCmdLine) {
-	args.setArgs(pCmdLine, { argSetup }, {});
+	args.setArgs(pCmdLine, { Settings::argSetup }, { Settings::argExternal });
 }
 #endif
 
 inline void World::setArgs(int argc, char** argv) {
-	args.setArgs(argc, argv, stos, { argSetup }, {});
+	args.setArgs(argc, argv, stos, { Settings::argSetup }, { Settings::argExternal });
 }
 
 template <class F, class... A>
-void World::prun(F func, A... args) {
+void World::prun(F func, A... argv) {
 	if (func)
-		(program()->*func)(args...);
+		(program()->*func)(argv...);
 }
 
 inline void World::play(const string& name) {
 	if (windowSys.getAudio())
-		windowSys.getAudio()->play(name);
+		windowSys.getAudio()->play(name, windowSys.getSets()->avolume);
 }

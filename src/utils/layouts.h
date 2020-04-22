@@ -2,16 +2,32 @@
 
 #include "widgets.h"
 
+// widget that can be navigated from/into (also handles switching navigation between UI and Objects)
+class Navigator : public Widget {
+public:
+	using Widget::Widget;
+	virtual ~Navigator() override = default;
+
+	virtual bool selectable() const override;
+	virtual void onNavSelect(Direction dir) override;
+	virtual void navSelectFrom(int mid, Direction dir);
+	virtual Interactable* findFirstSelectable() const;
+	void navSelectOut(const vec3& pos, Direction dir);
+
+private:
+	Interactable* findSelectable(const ivec2& entry) const;
+};
+
 // container for other widgets
-class Layout : public Widget {
+class Layout : public Navigator {
 protected:
 	vector<Widget*> widgets;
-	vector<ivec2> positions;	// widgets' positions. one element larger than wgts. last element is layout's size
+	vector<ivec2> positions;	// widgets' positions. one element larger than widgets. last element is layout's size
 	int spacing;		// space between widgets
 	bool vertical;		// how to arrange widgets
 
 public:
-	Layout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	Layout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0);
 	virtual ~Layout() override;
 
 	virtual void draw() const override;
@@ -19,9 +35,9 @@ public:
 	virtual void onResize() override;
 	virtual void postInit() override;
 	virtual bool selectable() const override;
-	virtual void onNavSelect(Direction dir) override;
+	virtual void navSelectFrom(int mid, Direction dir) override;
 	virtual void navSelectNext(sizet id, int mid, Direction dir);
-	virtual void navSelectFrom(int mid, Direction dir);
+	virtual Interactable* findFirstSelectable() const override;
 
 	Widget* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
@@ -40,10 +56,14 @@ protected:
 
 	void navSelectWidget(sizet id, int mid, Direction dir);
 private:
-	Interactable* findFirstSelectable() const;
 	void scanSequential(sizet id, int mid, Direction dir);
 	void scanPerpendicular(int mid, Direction dir);
+	void clearWidgets();
 };
+
+inline Layout::~Layout() {
+	clearWidgets();
+}
 
 inline Widget* Layout::getWidget(sizet id) const {
 	return widgets[id];
@@ -60,13 +80,13 @@ inline bool Layout::getVertical() const {
 // top level layout
 class RootLayout : public Layout {
 public:
-	static const vec4 defaultBgColor, uniformBgColor;
+	static constexpr vec4 uniformBgColor = { 0.f, 0.f, 0.f, 0.4f };
 
 protected:
-	const vec4 bgColor;
+	vec4 bgColor;
 
 public:
-	RootLayout(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, const vec4& bgColor = defaultBgColor);
+	RootLayout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0, const vec4& color = vec4(0.f));
 	virtual ~RootLayout() override = default;
 
 	virtual void draw() const override;
@@ -80,13 +100,13 @@ class Popup : public RootLayout {
 public:
 	BCall kcall, ccall;	// gets called on enter/escape press
 protected:
-	Size sizeY;			// use Widget's relSize as sizeX
+	Size sizeY;			// use Widget's relSize as width
 
 	static constexpr int margin = 5;
-	static const vec4 colorBackground;
+	static constexpr vec4 colorBackground = { 0.42f, 0.05f, 0.f, 1.f };
 
 public:
-	Popup(const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = 0, const vec4& bgColor = uniformBgColor);
+	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, const vec4& color = uniformBgColor);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
@@ -98,21 +118,27 @@ public:
 class Overlay : public Popup {
 private:
 	pair<Size, Size> relPos;
-	bool on;
+	vec4 boxColor;
+	bool show, interact;
 
 public:
-	Overlay(const pair<Size, Size>& relPos = pair(0.f, 0.f), const pair<Size, Size>& relSize = pair(1.f, 1.f), vector<Widget*>&& children = {}, BCall kcall = nullptr, BCall ccall = nullptr, bool vertical = true, int spacing = 0, const vec4& bgColor = defaultBgColor);
+	Overlay(const pair<Size, Size>& pos = pair(0.f, 0.f), const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, bool visible = false, bool interactive = true, int space = 0, const vec4& color = vec4(0.f));
 	virtual ~Overlay() override = default;
 
 	virtual void draw() const override;
 	virtual ivec2 position() const override;
 
-	bool getOn() const;
-	void setOn(bool yes);
+	bool getShow() const;
+	void setShow(bool yes);
+	bool canInteract() const;
 };
 
-inline bool Overlay::getOn() const {
-	return on;
+inline bool Overlay::getShow() const {
+	return show;
+}
+
+inline bool Overlay::canInteract() const {
+	return show && interact;
 }
 
 // places widgets vertically through which the user can scroll (DON"T PUT SCROLL AREAS INTO OTHER SCROLL AREAS)
@@ -121,7 +147,7 @@ private:
 	ScrollBar scroll;
 
 public:
-	ScrollArea(Size relSize = 1.f, vector<Widget*>&& children = {}, bool vertical = true, int spacing = 0, Layout* parent = nullptr, sizet id = SIZE_MAX);
+	using Layout::Layout;
 	virtual ~ScrollArea() override = default;
 
 	virtual void draw() const override;

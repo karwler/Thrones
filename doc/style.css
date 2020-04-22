@@ -89,10 +89,22 @@ a.sindent {
 	margin-left: 2em;
 }
 
+table.listing th {
+	padding-right: 1em;
+}
+
+table.listing td {
+	padding-right: 1em;
+}
+
+table.listing td.title {
+	padding-top: 1em;
+	padding-bottom: 0.5em;
+}
+
 table.listing td:first-child {
 	font-weight: bold;
 	vertical-align: top;
-	padding-right: 1em;
 }
 
 span.date {

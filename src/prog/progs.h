@@ -1,39 +1,51 @@
 #pragma once
 
+#include "types.h"
 #include "engine/fileSys.h"
 #include "utils/layouts.h"
-#include "utils/objects.h"
+
+enum class Switch : uint8 {
+	off,
+	on,
+	toggle
+};
 
 // for handling program state specific things that occur in all states
 class ProgState {
 public:
-	int smallHeight, lineHeight, superHeight, tooltipHeight;
-	int lineSpacing, superSpacing, iconSize;
-	int tooltipLimit;
-
-protected:
 	struct Text {
 		string text;
 		int length, height;
 
-		Text(string str, int height);
+		Text(string str, int sh);
 
-		static int strLen(const string& str, int height);
+		static int strLen(const char* str, int height);
 		template <class T> static int maxLen(T pos, T end, int height);
-		static int maxLen(const vector<vector<string>*>& lists, int height);
+		static int maxLen(const initlist<initlist<const char*>>& lists, int height);
 	};
 
+	static constexpr float defaultDim = 0.5f;
+
+	int smallHeight, lineHeight, superHeight, tooltipHeight;
+	int lineSpacing, superSpacing, iconSize;
+	uint tooltipLimit;
+	vec2 objectDragPos;
+
+protected:
 	struct ConfigIO {
+		//ComboBox* gameType;
+		CheckBox* ports;
+		CheckBox* rowBalancing;
+		CheckBox* setPieceOn;
+		LabelEdit* setPieceNum;
 		LabelEdit* width;
 		LabelEdit* height;
-		Slider* survivalSL;
-		LabelEdit* survivalLE;
-		ComboBox* survivalMode;
-		CheckBox* favorLimit;
-		LabelEdit* favorMax;
-		LabelEdit* dragonDist;
-		CheckBox* dragonSingle;
-		CheckBox* dragonDiag;
+		Slider* battleSL;
+		LabelEdit* battleLE;
+		CheckBox* favorTotal;
+		LabelEdit* favorLimit;
+		CheckBox* dragonLate;
+		CheckBox* dragonStraight;
 		array<LabelEdit*, Com::tileLim> tiles;
 		array<LabelEdit*, Com::tileLim> middles;
 		array<LabelEdit*, Com::pieceMax> pieces;
@@ -43,14 +55,14 @@ protected:
 		LabelEdit* winFortress;
 		LabelEdit* winThrone;
 		LabelEdit* capturers;
-		CheckBox* shiftLeft;
-		CheckBox* shiftNear;
 	};
 
-	static constexpr float defaultDim = 0.5f;
 	static constexpr float chatEmbedSize = 0.5f;
+	static constexpr float secondaryScrollThrottle = 0.1f;
 
 	TextBox* chatBox;
+	Overlay* notification;
+	Label* fpsText;
 
 public:
 	ProgState();
@@ -62,38 +74,56 @@ public:
 	virtual void eventWheel(int) {}
 	virtual void eventDrag(uint32) {}
 	virtual void eventUndrag() {}
-	virtual void eventFavorize(FavorAct) {}
 	virtual void eventEndTurn() {}
+	virtual void eventSurrender() {}
+	virtual void eventEngage() {}
+	virtual void eventDestroy(Switch) {}
+	virtual void eventFavor(Favor) {}
 	virtual void eventCameraReset();
+	virtual void eventSecondaryAxis(const ivec2&, float) {}
 	void eventResize();
 
 	virtual uint8 switchButtons(uint8 but);
 	virtual RootLayout* createLayout(Interactable*& selected) = 0;
-	virtual Overlay* createOverlay();
-	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Ok") const;
+	virtual vector<Overlay*> createOverlays();
+	Popup* createPopupMessage(string msg, BCall ccal, string ctxt = "Okay") const;
 	Popup* createPopupChoice(string msg, BCall kcal, BCall ccal) const;
 	pair<Popup*, Widget*> createPopupInput(string msg, BCall kcal, uint limit = UINT_MAX) const;
-	Popup* createPopupConfig(const Com::Config& cfg);
+	Popup* createPopupConfig(const Com::Config& cfg, ScrollArea*& cfgList) const;
 	TextBox* getChat();
+	Overlay* getNotification();
+	Label* getFpsText();
 	void toggleChatEmbedShow();
 	void hideChatEmbed();
 
+	Text makeFpsText(float dSec) const;
 	static string tileFortressString(const Com::Config& cfg);
 	static string middleFortressString(const Com::Config& cfg);
 	static string pieceTotalString(const Com::Config& cfg);
 protected:
-	Texture makeTooltip(const string& text) const;
-	Texture makeTooltipL(const vector<string>& lines) const;
+	static const char* pixelformatName(uint32 format);
+	Texture makeTooltip(const char* text) const;
+	Texture makeTooltipL(const char* text) const;
 
 	vector<Widget*> createChat(bool overlay = true);
-	vector<Widget*> createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active);
+	vector<Widget*> createConfigList(ConfigIO& wio, const Com::Config& cfg, bool active) const;
+	Overlay* createFpsCounter();
+	Overlay* createNotification();
 private:
-	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id);
-	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id);
+	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id) const;
+	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) const;
 };
 
 inline TextBox* ProgState::getChat() {
 	return chatBox;
+}
+
+inline Overlay* ProgState::getNotification() {
+	return notification;
+}
+
+inline Label* ProgState::getFpsText() {
+	return fpsText;
 }
 
 inline string ProgState::tileFortressString(const Com::Config& cfg) {
@@ -108,12 +138,18 @@ inline string ProgState::pieceTotalString(const Com::Config& cfg) {
 	return toStr(cfg.countPieces()) + '/' + toStr(cfg.homeSize.x * cfg.homeSize.y);
 }
 
+inline const char* ProgState::pixelformatName(uint32 format) {
+	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
+}
+
 class ProgMenu : public ProgState {
 public:
+	Label* versionNotif;
+
 	virtual ~ProgMenu() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEndTurn() override;
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 };
@@ -124,33 +160,23 @@ private:
 	vector<pair<string, bool>> rooms;
 
 public:
-	ProgLobby(vector<pair<string, bool>>&& rooms);
+	ProgLobby(vector<pair<string, bool>>&& roomList);
 	virtual ~ProgLobby() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEndTurn() override;
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
 	void openRoom(const string& name, bool open);
-	bool roomsMaxed() const;
-	bool roomTaken(const string& name);
 private:
 	 Label* createRoom(string name, bool open);
 };
 
 inline void ProgLobby::delRoom(const string& name) {
 	rlist->deleteWidget(sizet(std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) - rooms.begin()));
-}
-
-inline bool ProgLobby::roomsMaxed() const {
-	return rooms.size() >= Com::maxRooms;
-}
-
-inline bool ProgLobby::roomTaken(const string& name) {
-	return std::find_if(rooms.begin(), rooms.end(), [name](const pair<string, bool>& rm) -> bool { return rm.first == name; }) != rooms.end();
 }
 
 class ProgRoom : public ProgState {
@@ -160,7 +186,6 @@ public:
 private:
 	Label* startButton;
 	Label* kickButton;
-	TextBox* chatBox;
 
 public:
 	ProgRoom() = default;
@@ -168,24 +193,40 @@ public:
 	virtual ~ProgRoom() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEndTurn() override;
+	virtual void eventSecondaryAxis(const ivec2& val, float dSec) override;
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 	void updateStartButton();	// canStart only applies to State::host
 	void updateConfigWidgets(const Com::Config& cfg);
 	static void updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt, uint16 min, uint16 rest);
 private:
+	static void setAmtSliders(const Com::Config& cfg, const uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Com::Config::*counter)() const, string (*totstr)(const Com::Config&));
 	static void updateWinSlider(Label* amt, uint16 val, uint16 max);
 };
 
 class ProgGame : public ProgState {
 public:
+	static constexpr char msgFavorPick[] = "Pick a fate's favor";
+
+	Navigator* planeSwitch;
 	Label* message;
-	Draglet* bswapIcon;
+	Icon* bswapIcon;
+	ScrollArea* configList;
+
+	ProgGame();
+	virtual ~ProgGame() override = default;
+
+	virtual void eventSecondaryAxis(const ivec2& val, float dSec) override;
 
 	virtual uint8 switchButtons(uint8 but) override;
-	virtual Overlay* createOverlay() override;
+	virtual vector<Overlay*> createOverlays() override;
+	Popup* createPopupFavorPick(uint16 availableFF) const;
 };
+
+inline ProgGame::ProgGame() :
+	configList(nullptr)
+{}
 
 class ProgSetup : public ProgGame {
 public:
@@ -193,14 +234,18 @@ public:
 		tiles,
 		middles,
 		pieces,
+		preparation,
 		ready
 	};
 
+	static constexpr char msgPickPiece[] = "Pick piece (";
+
 	umap<string, Setup> setups;
 	vector<Com::Tile> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	uint16 piecePicksLeft;
 	bool enemyReady;
 private:
-	uint8 selected;
+	uint8 iselect;
 	Stage stage;
 	uint8 lastButton;	// last button that was used on lastHold (0 for none)
 	svec2 lastHold;		// position of last object that the cursor was dragged over
@@ -211,39 +256,44 @@ public:
 	ProgSetup();
 	virtual ~ProgSetup() override = default;
 
-	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEscape() override;	// for previous stage
+	virtual void eventEnter() override;		// for placing objects
 	virtual void eventNumpress(uint8 num) override;
 	virtual void eventWheel(int ymov) override;
 	virtual void eventDrag(uint32 mStat) override;
 	virtual void eventUndrag() override;
+	virtual void eventEndTurn() override;			// for next stage
+	virtual void eventEngage() override;			// for removing objects
+	virtual void eventFavor(Favor favor) override;	// for switching icons
 
 	Stage getStage() const;
-	bool setStage(Stage stg);	// returns true if match is ready to load
-	Draglet* getIcon(uint8 type) const;
-	void incdecIcon(uint8 type, bool inc, bool isTile);
+	void setStage(Stage stg);	// returns true if match is ready to load
+	Icon* getIcon(uint8 type) const;
+	void incdecIcon(uint8 type, bool inc);
 	uint16 getCount(uint8 type) const;
 	uint8 getSelected() const;
 	void selectNext(bool fwd);
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 	Popup* createPopupSaveLoad(bool save);
+	Popup* createPopupPiecePicker();
 
 	void setSelected(uint8 sel);
 private:
-	void setInteractivity();
 	Layout* makeTicons();
 	Layout* makePicons();
 	uint8 findNextSelect(bool fwd);
-	void switchIcon(uint8 type, bool on, bool isTile);
+	void switchIcon(uint8 type, bool on);
+	void handlePlacing();
+	void handleClearing();
 };
 
 inline ProgSetup::Stage ProgSetup::getStage() const {
 	return stage;
 }
 
-inline Draglet* ProgSetup::getIcon(uint8 type) const {
-	return static_cast<Draglet*>(icons->getWidget(type + 1));
+inline Icon* ProgSetup::getIcon(uint8 type) const {
+	return static_cast<Icon*>(icons->getWidget(type + 1));
 }
 
 inline uint16 ProgSetup::getCount(uint8 type) const {
@@ -251,7 +301,7 @@ inline uint16 ProgSetup::getCount(uint8 type) const {
 }
 
 inline uint8 ProgSetup::getSelected() const {
-	return selected;
+	return iselect;
 }
 
 inline void ProgSetup::selectNext(bool fwd) {
@@ -259,10 +309,15 @@ inline void ProgSetup::selectNext(bool fwd) {
 }
 
 class ProgMatch : public ProgGame {
+public:
+	Com::Piece spawning;	// type of piece to spawn
+	array<Icon*, favorMax> favorIcons;
+	Icon* destroyIcon;
 private:
-	Draglet* favorIcon;
-	Draglet* fnowIcon;
 	Label* turnIcon;
+	Label* rebuildIcon;
+	Label* establishIcon;
+	Label* spawnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 	uint16 unplacedDragons;
 
@@ -271,30 +326,32 @@ public:
 
 	virtual void eventEscape() override;
 	virtual void eventEnter() override;
+	virtual void eventNumpress(uint8 num) override;
 	virtual void eventWheel(int ymov) override;
-	virtual void eventFavorize(FavorAct act) override;
 	virtual void eventEndTurn() override;
+	virtual void eventSurrender() override;
+	virtual void eventEngage() override;
+	virtual void eventDestroy(Switch sw) override;
+	virtual void eventFavor(Favor favor) override;
 	virtual void eventCameraReset() override;
 
-	bool favorIconOn() const;
-	bool fnowIconOn() const;
-	FavorAct favorIconSelect() const;
-	void selectFavorIcon(FavorAct act, bool force = true);
-	void updateFavorIcon(bool on, uint8 cnt, uint8 tot);
-	void updateFnowIcon(bool on = false, uint8 cnt = 0);
+	Favor favorIconSelect() const;
+	Favor selectFavorIcon(Favor& type);	// returns the previous favor and sets type to none if not selectable
+	void updateFavorIcon(Favor type, bool on);
+	void updateEstablishIcon(bool on);
+	void destroyEstablishIcon();
+	void updateRebuildIcon(bool on);
+	void updateSpawnIcon(bool on);
 	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
 	void decreaseDragonIcon();
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
+	Popup* createPopupSpawner() const;
 };
 
-inline bool ProgMatch::favorIconOn() const {
-	return favorIcon && favorIcon->lcall;
-}
-
-inline bool ProgMatch::fnowIconOn() const {
-	return fnowIcon && fnowIcon->lcall;
+inline Favor ProgMatch::favorIconSelect() const {
+	return Favor(std::find_if(favorIcons.begin(), favorIcons.end(), [](Icon* it) -> bool { return it && it->selected; }) - favorIcons.begin());
 }
 
 class ProgSettings : public ProgState {
@@ -309,7 +366,7 @@ public:
 	virtual ~ProgSettings() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEndTurn() override;
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 
@@ -331,24 +388,27 @@ private:
 		"CHARGED"
 	};
 
+	ScrollArea* content;
+
 public:
 	virtual ~ProgInfo() override = default;
 
 	virtual void eventEscape() override;
-	virtual void eventEnter() override;
+	virtual void eventEndTurn() override;
+	virtual void eventSecondaryAxis(const ivec2& val, float dSec) override;
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 
 private:
-	void appendProgram(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendSystem(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendCurrentDisplay(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
-	void appendDisplay(vector<Widget*>& lines, int i, int width, const vector<string>& args);
-	void appendPower(vector<Widget*>& lines, int width, vector<string>& args, vector<string>& titles);
-	void appendAudioDevices(vector<Widget*>& lines, int width, vector<string>& titles, int iscapture);
-	void appendDrivers(vector<Widget*>& lines, int width, vector<string>& titles, int (*limit)(), const char* (*value)(int));
-	void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, const vector<string>& args, vector<string>& titles);
-	void appendRenderers(vector<Widget*>& lines, int width, const vector<string>& args, vector<string>& titles);
+	void appendProgram(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles);
+	void appendSystem(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles);
+	void appendCurrentDisplay(vector<Widget*>& lines, int width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles);
+	void appendDisplay(vector<Widget*>& lines, int i, int width, initlist<const char*>::iterator args);
+	void appendPower(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles);
+	void appendAudioDevices(vector<Widget*>& lines, int width, initlist<const char*>::iterator& titles, int iscapture);
+	void appendDrivers(vector<Widget*>& lines, int width, initlist<const char*>::iterator& titles, int (*limit)(), const char* (*value)(int));
+	void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles);
+	void appendRenderers(vector<Widget*>& lines, int width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles);
 	static string versionText(const SDL_version& ver);
 	static string ibtos(int val);
 };

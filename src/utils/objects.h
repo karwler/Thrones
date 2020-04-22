@@ -20,7 +20,7 @@ private:
 
 public:
 	Mesh();
-	Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 shape = GL_TRIANGLES);
+	Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 type = GL_TRIANGLES);
 
 	void free();
 	GLuint getVao() const;
@@ -58,15 +58,17 @@ public:
 	Object() = default;
 	Object(const Object&) = default;
 	Object(Object&&) = default;
-	Object(const vec3& pos, const vec3& ert = vec3(0.f), const vec3& scl = vec3(1.f), const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = false, bool show = true);
+	Object(const vec3& position, const vec3& rotation = vec3(0.f), const vec3& scale = vec3(1.f), const Mesh* model = nullptr, const Material* material = nullptr, GLuint texture = 0, bool interactive = false, bool visible = true);
 	virtual ~Object() override = default;
 
 	Object& operator=(const Object&) = default;
 	Object& operator=(Object&&) = default;
 
+#ifndef OPENGLES
 	void drawDepth() const;
-	virtual void draw() const;
 	virtual void drawTopDepth() const {}
+#endif
+	virtual void draw() const;
 	virtual void drawTop() const {}
 
 	const vec3& getPos() const;
@@ -79,7 +81,6 @@ protected:
 	const mat4& getTrans() const;
 	const mat3& getNormat() const;
 
-	static void updateColor(const vec4& diffuse, const vec3& specular, float shininess, GLuint texture);
 	static void setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl);
 	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl);
 };
@@ -125,13 +126,15 @@ class BoardObject : public Object {
 public:
 	enum Emission : uint8 {
 		EMI_NONE = 0,
-		EMI_DIM  = 1,
-		EMI_SEL  = 2,
+		EMI_DIM = 1,
+		EMI_SEL = 2,
 		EMI_HIGH = 4
 	};
 
 	GCall hgcall, ulcall, urcall;
+	float alphaFactor;
 
+	static constexpr float noEngageAlpha = 0.6f;
 protected:
 	static constexpr float topYpos = 0.1f;
 
@@ -143,22 +146,31 @@ public:
 	BoardObject() = default;
 	BoardObject(const BoardObject&) = default;
 	BoardObject(BoardObject&&) = default;
-	BoardObject(const vec3& pos, float rot = 0.f, const vec3& scl = vec3(1.f), GCall hgcall = nullptr, GCall ulcall = nullptr, GCall urcall = nullptr, const Mesh* mesh = nullptr, const Material* matl = nullptr, GLuint tex = 0, bool rigid = true, bool show = true);
+	BoardObject(const vec3& position, float rotation, float size, const Mesh* model, const Material* material, GLuint texture, bool visible, float alpha);
 	virtual ~BoardObject() override = default;
 
 	BoardObject& operator=(const BoardObject&) = default;
 	BoardObject& operator=(BoardObject&&) = default;
 
 	virtual void draw() const override;
+	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
+	virtual void onKeypress(const SDL_KeyboardEvent& key) override;
+	virtual void onKeyrelease(const SDL_KeyboardEvent& key) override;
+	virtual void onJButton(uint8 but) override;
+	virtual void onJHat(uint8 hat) override;
+	virtual void onGButton(SDL_GameControllerButton but) override;
+	virtual void onNavSelect(Direction dir) override;
+	virtual void cancelDrag() = 0;
+	void startKeyDrag(uint8 mBut);
 
 	Emission getEmission() const;
 	void setEmission(Emission emi);
-	void setRaycast(bool on, bool dim = false);
 protected:
+#ifndef OPENGLES
 	void drawTopMeshDepth(float ypos, const Mesh* tmesh) const;
+#endif
 	void drawTopMesh(float ypos, const Mesh* tmesh, const vec4& tdiffuse, GLuint ttexture) const;
 };
-ENUM_OPERATIONS(BoardObject::Emission, uint8)
 
 inline BoardObject::Emission BoardObject::getEmission() const {
 	return emission;
@@ -174,7 +186,7 @@ public:
 	};
 
 private:
-	static const vec4 moveIconColor;
+	static constexpr vec4 moveIconColor = { 1.f, 1.f, 1.f, 9.9f };
 
 	Com::Tile type;
 	bool breached;	// only for fortress
@@ -183,30 +195,36 @@ public:
 	Tile() = default;
 	Tile(const Tile&) = default;
 	Tile(Tile&&) = default;
-	Tile(const vec3& pos, float size, Com::Tile type, GCall hgcall, GCall ulcall, GCall urcall, bool rigid, bool show);
+	Tile(const vec3& position, float size, bool visible);
 	virtual ~Tile() override = default;
 
 	Tile& operator=(const Tile&) = default;
 	Tile& operator=(Tile&&) = default;
 
+#ifndef OPENGLES
 	virtual void drawTopDepth() const override;
+#endif
 	virtual void drawTop() const override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
+	virtual void cancelDrag() override;
 
 	Com::Tile getType() const;
-	void setType(Com::Tile newType);
-	void setTypeSilent(Com::Tile newType);
+	void setType(Com::Tile newType, Com::Tile altType = Com::Tile::empty);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
 	void setInteractivity(Interact lvl, bool dim = false);
 private:
-	static bool getShow(bool show, Com::Tile type);
+	const char* pickMesh();
 };
+
+inline const char* Tile::pickMesh() {
+	return type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress";
+}
 
 inline Com::Tile Tile::getType() const {
 	return type;
@@ -224,107 +242,6 @@ inline bool Tile::getBreached() const {
 	return breached;
 }
 
-inline bool Tile::getShow(bool show, Com::Tile type) {
-	return show && type != Com::Tile::empty;
-}
-
-// tiles on a board
-class TileCol {
-private:
-	Tile* tl;
-	uint16 home, extra, size;	// home = number of home tiles, extra = home + board width, size = all tiles
-
-public:
-	TileCol();
-	TileCol(const TileCol&) = delete;
-	TileCol(TileCol&&) = delete;
-	~TileCol();
-
-	void update(const Com::Config& conf);
-	uint16 getHome() const;
-	uint16 getExtra() const;
-	uint16 getSize() const;
-
-	TileCol& operator=(const TileCol&) = delete;
-	TileCol& operator=(TileCol&&) = delete;
-	Tile& operator[](uint16 i);
-	const Tile& operator[](uint16 i) const;
-	Tile* begin();
-	const Tile* begin() const;
-	Tile* end();
-	const Tile* end() const;
-	Tile* ene(pdift i = 0);
-	const Tile* ene(pdift i = 0) const;
-	Tile* mid(pdift i = 0);
-	const Tile* mid(pdift i = 0) const;
-	Tile* own(pdift i = 0);
-	const Tile* own(pdift i = 0) const;
-};
-
-inline TileCol::~TileCol() {
-	delete[] tl;
-}
-
-inline uint16 TileCol::getHome() const {
-	return home;
-}
-
-inline uint16 TileCol::getExtra() const {
-	return extra;
-}
-
-inline uint16 TileCol::getSize() const {
-	return size;
-}
-
-inline Tile& TileCol::operator[](uint16 i) {
-	return tl[i];
-}
-
-inline const Tile& TileCol::operator[](uint16 i) const {
-	return tl[i];
-}
-
-inline Tile* TileCol::begin() {
-	return tl;
-}
-
-inline const Tile* TileCol::begin() const {
-	return tl;
-}
-
-inline Tile* TileCol::end() {
-	return tl + size;
-}
-
-inline const Tile* TileCol::end() const {
-	return tl + size;
-}
-
-inline Tile* TileCol::ene(pdift i) {
-	return tl + i;
-}
-
-inline const Tile* TileCol::ene(pdift i) const {
-	return tl + i;
-}
-
-inline Tile* TileCol::mid(pdift i) {
-	return tl + home + i;
-}
-
-inline const Tile* TileCol::mid(pdift i) const {
-	return tl + home + i;
-}
-
-inline Tile* TileCol::own(pdift i) {
-	return tl + extra + i;
-}
-
-inline const Tile* TileCol::own(pdift i) const {
-	return tl + extra + i;
-}
-
 // player on tiles
 class Piece : public BoardObject {
 public:
@@ -333,40 +250,42 @@ private:
 	Com::Piece type;
 	bool drawTopSelf;
 
-	static const vec4 moveIconColor, attackHorseColor, fireIconColor;
+	static constexpr vec4 moveIconColor = { 0.9f, 0.9f, 0.9f, 0.9f };
+	static constexpr vec4 fireIconColor = { 1.f, 0.1f, 0.1f, 0.9f };
 
 public:
 	Piece() = default;
 	Piece(const Piece&) = default;
 	Piece(Piece&&) = default;
-	Piece(const vec3& pos, float rot, float size, Com::Piece type, GCall hgcall, GCall ulcall, GCall urcall, const Material* matl, bool rigid, bool show);
+	Piece(const vec3& position, float rotation, float size, const Material* material);
 	virtual ~Piece() override = default;
 
 	Piece& operator=(const Piece&) = default;
 	Piece& operator=(Piece&&) = default;
 
+#ifndef OPENGLES
 	virtual void drawTopDepth() const override;
+#endif
 	virtual void drawTop() const override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
+	virtual void cancelDrag() override;
 
 	Com::Piece getType() const;
-	uint8 firingDistance() const;	// 0 if non-firing piece
+	void setType(Com::Piece newType);
+	pair<uint8, uint8> firingArea() const;	// 0 if non-firing piece
 	void setActive(bool on);
 	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool forceRigid = false);
 	bool getDrawTopSelf() const;
+	void setInteractivity(bool on, bool dim, GCall holdCall, GCall leftCall, GCall rightCall);
 private:
 	float selfTopYpos(const Interactable* occupant) const;
 };
 
 inline Com::Piece Piece::getType() const {
 	return type;
-}
-
-inline uint8 Piece::firingDistance() const {
-	return type >= Com::Piece::crossbowman && type <= Com::Piece::trebuchet ? uint8(type) - uint8(Com::Piece::crossbowman) + 1 : 0;
 }
 
 inline void Piece::setActive(bool on) {
@@ -380,91 +299,3 @@ inline bool Piece::getDrawTopSelf() const {
 inline float Piece::selfTopYpos(const Interactable* occupant) const {
 	return dynamic_cast<const Piece*>(occupant) && occupant != this ? 1.1f * getScl().y : 0.01f;
 }
-
-// pieces on a board
-class PieceCol {
-private:
-	Piece* pc;
-	uint16 num, size;	// num = number of one player's pieces, i.e. size / 2
-
-public:
-	PieceCol();
-	PieceCol(const PieceCol&) = delete;
-	PieceCol(PieceCol&&) = delete;
-	~PieceCol();
-
-	void update(const Com::Config& conf);
-	uint16 getNum() const;
-	uint16 getSize() const;
-
-	PieceCol& operator=(const PieceCol&) = delete;
-	PieceCol& operator=(PieceCol&&) = delete;
-	Piece& operator[](uint16 i);
-	const Piece& operator[](uint16 i) const;
-	Piece* begin();
-	const Piece* begin() const;
-	Piece* end();
-	const Piece* end() const;
-	Piece* own(pdift i = 0);
-	const Piece* own(pdift i = 0) const;
-	Piece* ene(pdift i = 0);
-	const Piece* ene(pdift i = 0) const;
-};
-
-inline PieceCol::~PieceCol() {
-	delete[] pc;
-}
-
-inline uint16 PieceCol::getNum() const {
-	return num;
-}
-
-inline uint16 PieceCol::getSize() const {
-	return size;
-}
-
-inline Piece& PieceCol::operator[](uint16 i) {
-	return pc[i];
-}
-
-inline const Piece& PieceCol::operator[](uint16 i) const {
-	return pc[i];
-}
-
-inline Piece* PieceCol::begin() {
-	return pc;
-}
-
-inline const Piece* PieceCol::begin() const {
-	return pc;
-}
-
-inline Piece* PieceCol::end() {
-	return pc + size;
-}
-
-inline const Piece* PieceCol::end() const {
-	return pc + size;
-}
-
-inline Piece* PieceCol::own(pdift i) {
-	return pc + i;
-}
-
-inline const Piece* PieceCol::own(pdift i) const {
-	return pc + i;
-}
-
-inline Piece* PieceCol::ene(pdift i) {
-	return pc + num + i;
-}
-
-inline const Piece* PieceCol::ene(pdift i) const {
-	return pc + num + i;
-}
-
-enum class FavorAct : uint8 {
-	off,
-	on,
-	now
-};

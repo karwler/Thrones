@@ -5,19 +5,22 @@
 #include "server/server.h"
 #include <memory>
 #include <queue>
-#include <set>
 
-// forward declaraions and aliases
+// forward declarations and aliases
 class BoardObject;
 class Button;
 class Layout;
 class Program;
+class ProgMatch;
 class ProgState;
+class Scene;
+struct Settings;
+class ShaderGeometry;
 class ShaderGui;
+class WindowSys;
 
 template <class... T> using sptr = std::shared_ptr<T...>;
 template <class... T> using uptr = std::unique_ptr<T...>;
-template <class... T> using sset = std::set<T...>;
 
 using BCall = void (Program::*)(Button*);
 using GCall = void (Program::*)(BoardObject*, uint8);
@@ -25,12 +28,16 @@ using CCall = void (Program::*)(sizet, const string&);
 
 // general wrappers
 
+enum class UserCode : int32 {
+	versionFetch
+};
+
 constexpr float PI = float(M_PI);
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
+#ifndef OPENGLES
 GLuint makeCubemap(GLsizei res, GLenum active);
 void loadCubemap(GLuint tex, GLsizei res, GLenum active);
-#ifndef OPENGLES
 GLuint makeFramebufferNodraw(GLenum attach, GLuint tex);
 #endif
 
@@ -51,20 +58,33 @@ inline ivec2 mousePos() {
 	return p;
 }
 
+inline void pushEvent(UserCode code, void* data1 = nullptr, void* data2 = nullptr) {
+	SDL_Event event;
+	event.user = { SDL_USEREVENT, 0, 0, int32(code), data1, data2 };
+	SDL_PushEvent(&event);
+}
+
 #ifdef OPENGLES
 inline void glClearDepth(double d) {
 	glClearDepthf(float(d));
 }
 #endif
 
+template <class T, class... A>
+vector<T>& uniqueSort(vector<T>& vec, A... sorter) {
+	std::sort(vec.begin(), vec.end(), sorter...);
+	vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+	return vec;
+}
+
 // SDL_Rect wrapper
 
 struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
-	constexpr Rect(int x, int y, int w, int h);
-	constexpr Rect(int x, int y, const ivec2& size);
-	constexpr Rect(const ivec2& pos, int w, int h);
+	constexpr Rect(int px, int py, int sw, int sh);
+	constexpr Rect(int px, int py, const ivec2& size);
+	constexpr Rect(const ivec2& pos, int sw, int sh);
 	constexpr Rect(const ivec2& pos, const ivec2& size);
 
 	ivec2& pos();
@@ -81,16 +101,16 @@ inline constexpr Rect::Rect(int n) :
 	SDL_Rect{ n, n, n, n }
 {}
 
-inline constexpr Rect::Rect(int x, int y, int w, int h) :
-	SDL_Rect{ x, y, w, h }
+inline constexpr Rect::Rect(int px, int py, int sw, int sh) :
+	SDL_Rect{ px, py, sw, sh }
 {}
 
-inline constexpr Rect::Rect(int x, int y, const ivec2& size) :
-	SDL_Rect{ x, y, size.x, size.y }
+inline constexpr Rect::Rect(int px, int py, const ivec2& size) :
+	SDL_Rect{ px, py, size.x, size.y }
 {}
 
-inline constexpr Rect::Rect(const ivec2& pos, int w, int h) :
-	SDL_Rect{ pos.x, pos.y, w, h }
+inline constexpr Rect::Rect(const ivec2& pos, int sw, int sh) :
+	SDL_Rect{ pos.x, pos.y, sw, sh }
 {}
 
 inline constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
@@ -149,9 +169,8 @@ public:
 
 	void close();
 	void free();
-	GLuint getID() const;
+	operator GLuint() const;
 	const ivec2& getRes() const;
-	bool valid() const;
 	void reload(SDL_Surface* img, GLint iformat, GLenum pformat);
 private:
 	void load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
@@ -167,16 +186,12 @@ inline void Texture::free() {
 	glDeleteTextures(1, &id);
 }
 
-inline GLuint Texture::getID() const {
+inline Texture::operator GLuint() const {
 	return id;
 }
 
 inline const ivec2& Texture::getRes() const {
 	return res;
-}
-
-inline bool Texture::valid() const {
-	return res.x && res.y;
 }
 
 inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
@@ -199,7 +214,7 @@ private:
 	Dir dir;
 
 public:
-	constexpr Direction(Dir dir);
+	constexpr Direction(Dir direction);
 
 	constexpr operator Dir() const;
 
@@ -209,8 +224,8 @@ public:
 	constexpr bool negative() const;
 };
 
-inline constexpr Direction::Direction(Dir dir) :
-	dir(dir)
+inline constexpr Direction::Direction(Dir direction) :
+	dir(direction)
 {}
 
 inline constexpr Direction::operator Dir() const {
@@ -244,112 +259,66 @@ public:
 	Interactable& operator=(Interactable&&) = default;
 
 	virtual void tick(float) {}
-	virtual void onClick(const ivec2&, uint8) {}	// dummy function to have an out-of-line virtual function
+	virtual void onClick(const ivec2&, uint8) {}
 	virtual void onHold(const ivec2&, uint8) {}
 	virtual void onDrag(const ivec2&, const ivec2&) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}						// get's called on mouse button up if instance is Scene's capture
+	virtual void onUndrag(uint8) {}						// gets called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onScroll(const ivec2&) {}
-	virtual void onKeypress(const SDL_Keysym&) {}
+	virtual void onKeypress(const SDL_KeyboardEvent&) {}
+	virtual void onKeyrelease(const SDL_KeyboardEvent&) {}
 	virtual void onText(const char*) {}
 	virtual void onJButton(uint8) {}
 	virtual void onJHat(uint8) {}
+	virtual void onJAxis(uint8) {}
 	virtual void onGButton(SDL_GameControllerButton) {}
+	virtual void onGAxis(SDL_GameControllerAxis) {}
 	virtual void onNavSelect(Direction dir);
 };
-
-// for travel distance on game board
-
-class Dijkstra {
-private:
-	struct Node {
-		uint16 id;
-		uint16 dst;
-
-		Node() = default;
-		constexpr Node(uint16 id, uint16 dst);
-	};
-
-	struct Adjacent {
-		uint8 cnt;
-		uint16 adj[8];
-	};
-
-	struct Comp {
-		bool operator()(Node a, Node b);
-	};
-
-public:
-	static vector<uint16> travelDist(uint16 src, uint16 dlim, svec2 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize);
-};
-
-inline constexpr Dijkstra::Node::Node(uint16 id, uint16 dst) :
-	id(id),
-	dst(dst)
-{}
-
-inline bool Dijkstra::Comp::operator()(Node a, Node b) {
-	return a.dst > b.dst;
-}
 
 // geometry?
 
 template <class T>
-bool inRange(const T& val, const T& min, const T& lim) {
+T btom(bool fwd) {
+	return T(fwd) * T(2) - T(1);
+}
+
+template <class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+bool inRange(T val, T min, T lim) {
 	return val >= min && val < lim;
 }
 
-template <class T, glm::qualifier Q>
+template <class T, glm::qualifier Q, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
 bool inRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& lim) {
 	return inRange(val.x, min.x, lim.x) && inRange(val.y, min.y, lim.y);
 }
 
-template <class T>
-bool outRange(const T& val, const T& min, const T& lim) {
+template <class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+bool outRange(T val, T min, T lim) {
 	return val < min || val >= lim;
 }
 
-template <class T, glm::qualifier Q>
+template <class T, glm::qualifier Q, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
 bool outRange(const glm::vec<2, T, Q>& val, const glm::vec<2, T, Q>& min, const glm::vec<2, T, Q>& lim) {
 	return outRange(val.x, min.x, lim.x) || outRange(val.y, min.y, lim.y);
 }
 
-template <class T, glm::qualifier Q = glm::defaultp>
-glm::vec<2, T, Q> swap(const T& x, const T& y, bool swap) {
+template <class T, glm::qualifier Q = glm::defaultp, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+glm::vec<2, T, Q> swap(T x, T y, bool swap) {
 	return swap ? glm::vec<2, T, Q>(y, x) : glm::vec<2, T, Q>(x, y);
 }
 
-template <class T, std::enable_if_t<std::is_unsigned<T>::value, int> = 0>
+template <glm::length_t L, class T, glm::qualifier Q = glm::defaultp, std::enable_if_t<std::is_signed_v<T>, int> = 0>
+glm::vec<L, T, Q> deltaSingle(glm::vec<L, T, Q> v) {
+	for (glm::length_t i = 0; i < L; i++)
+		if (v[i])
+			v[i] = v[i] > T(0) ? T(1) : T(-1);
+	return v;
+}
+
+template <class T, std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
 T swapBits(T n, uint8 i, uint8 j) {
 	T x = ((n >> i) & 1) ^ ((n >> j) & 1);
 	return n ^ ((x << i) | (x << j));
-}
-
-template <class T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
-uint8 numDigits10(T num) {
-	return num > 0 ? uint8(std::log10(num)) + 1 : num ? uint8(std::log10(-num)) + 2 : 1;
-}
-
-// container stuff
-
-template <class T>
-vector<T>& uniqueSort(vector<T>& vec) {
-	std::sort(vec.begin(), vec.end());
-	vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
-	return vec;
-}
-
-template <class T>
-T popBack(vector<T>& vec) {
-	T t = std::move(vec.back());
-	vec.pop_back();
-	return t;
-}
-
-template <class T>
-void clear(vector<T*>& vec) {
-	for (T* it : vec)
-		delete it;
-	vec.clear();
 }

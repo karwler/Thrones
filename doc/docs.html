@@ -9,7 +9,7 @@
 </head>
 <body>
 	<nav>
-		<img src="../rsc/textures/title.png">
+		<img src="../rsc/textures/title.png" alt="">
 		<a href="rules.html">Rules</a>
 		<a href="docs.html">Docs</a>
 		<div class="flim"></div>
@@ -19,6 +19,7 @@
 	<a href="#h1_0">1 Miscellaneous</a><br>
 	<a href="#h1_1" class="sindent">1.1 Dependencies</a><br>
 	<a href="#h1_2" class="sindent">1.2 UI</a><br>
+	<a href="#h1_3" class="sindent">1.3 Bindings</a><br>
 	<a href="#h2_0">2 Preferences</a><br>
 	<a href="#h2_1" class="sindent">2.1 Settings</a><br>
 	<a href="#h2_2" class="sindent">2.2 Configurations</a><br>
@@ -29,11 +30,6 @@
 	<a href="#h0_0">4 Game</a><br>
 	<a href="#h4_1" class="sindent">4.1 Setup</a><br>
 	<a href="#h4_2" class="sindent">4.2 Match</a><br>
-	<a href="#h4_3" class="sindent">4.3 Move</a><br>
-	<a href="#h4_4" class="sindent">4.4 Switch</a><br>
-	<a href="#h4_5" class="sindent">4.5 Attack</a><br>
-	<a href="#h4_6" class="sindent">4.6 Fire</a><br>
-	<a href="#h4_7" class="sindent">4.7 Survival Check</a><br>
 
 	<h1 id="h1_0">1 Miscellaneous</h1>
 
@@ -54,9 +50,10 @@
 		<li>OpenGL 3.3 (x86) or OpenGL ES 3.0 (ARM)</li>
 		<li>FreeType</li>
 		<li>GLEW 2.1.0</li>
+		<li>libcurl</li>
 		<li>libjpeg (OpenGL ES)</li>
 		<li>libpng</li>
-		<li>SDL2 2.0.10</li>
+		<li>SDL2 2.0.12</li>
 		<li>SDL2_image 2.0.5</li>
 		<li>SDL2_ttf 2.0.15</li>
 		<li>zlib</li>
@@ -79,7 +76,7 @@
 	<h3>Scroll area</h3>
 	<p>Can be scrolled with either a scroll bar on the right, the mouse wheel or by left click holding and dragging inside the area.</p>
 	<h3>Slider</h3>
-	<p>Most slider's changes will be fully applied only once the dragging is done.</p>
+	<p>Most sliders' changes will be fully applied only once the dragging is done.</p>
 	<h3>Text edit</h3>
 	<p>Possible editing actions are:</p>
 	<table class="listing">
@@ -162,6 +159,208 @@
 		<tr>
 			<td>Escape or Tab or Back</td>
 			<td>set text to the original text and stop editing</td>
+		</tr>
+	</table>
+
+	<h2 id="h1_3">1.3 Bindings</h2>
+	<table class="listing">
+		<tr>
+			<th>Binding</th>
+			<th>Keyboard</th>
+			<th>DirectInput</th>
+			<th>XInput</th>
+			<th>Other</th>
+		</tr>
+		<tr>
+			<td class="title">General</td>
+		</tr>
+		<tr>
+			<td>Confirm</td>
+			<td>Return</td>
+			<td>2</td>
+			<td>A</td>
+			<td>Mouse Left</td>
+		</tr>
+		<tr>
+			<td>Cancel</td>
+			<td>Escape</td>
+			<td>1</td>
+			<td>B</td>
+			<td>Mouse X1, Phone Back</td>
+		</tr>
+		<tr>
+			<td>Next Menu</td>
+			<td>Space</td>
+			<td>0</td>
+			<td>Y</td>
+			<td>Mouse X2</td>
+		</tr>
+		<tr>
+			<td>Up</td>
+			<td>Arrow Up</td>
+			<td>Hat Up</td>
+			<td>D-pad Up</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Down</td>
+			<td>Arrow Down</td>
+			<td>Hat Down</td>
+			<td>D-pad Down</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Left</td>
+			<td>Arrow Left</td>
+			<td>Hat Left</td>
+			<td>D-pad Left</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Right</td>
+			<td>Arrow Right</td>
+			<td>Hat Right</td>
+			<td>D-pad Right</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Rotate Camera</td>
+			<td>Left Alt + Mouse Move</td>
+			<td>0, 1</td>
+			<td>Left Stick</td>
+			<td>Mouse Middle, Two Finger Drag</td>
+		</tr>
+		<tr>
+			<td>Center Camera</td>
+			<td>C</td>
+			<td>10</td>
+			<td>LS</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Frame Counter</td>
+			<td>P</td>
+			<td>11</td>
+			<td>RS</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Chat</td>
+			<td>Tab</td>
+			<td>8</td>
+			<td>Back</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Scroll</td>
+			<td></td>
+			<td>2, 3</td>
+			<td>Right Stick</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td class="title">Setup</td>
+		</tr>
+		<tr>
+			<td>Select Tile/Piece</td>
+			<td>1 - 0</td>
+			<td>4/6, 5/7</td>
+			<td>LB/LT, RB/RT</td>
+			<td>Mouse Wheel</td>
+		</tr>
+		<tr>
+			<td>Place/Move Tile/Piece</td>
+			<td>Return</td>
+			<td>2</td>
+			<td>A</td>
+			<td>Mouse Left</td>
+		</tr>
+		<tr>
+			<td>Remove Tile/Piece</td>
+			<td>X</td>
+			<td>3</td>
+			<td>X</td>
+			<td>Mouse Right</td>
+		</tr>
+		<tr>
+			<td>Next Stage</td>
+			<td>Space</td>
+			<td>0</td>
+			<td>Y</td>
+			<td>Mouse X2</td>
+		</tr>
+		<tr>
+			<td>Previous Stage</td>
+			<td>Escape</td>
+			<td>1</td>
+			<td>B</td>
+			<td>Mouse X1</td>
+		</tr>
+		<tr>
+			<td class="title">Match</td>
+		</tr>
+		<tr>
+			<td>Move Piece</td>
+			<td>Return</td>
+			<td>2</td>
+			<td>A</td>
+			<td>Mouse Left</td>
+		</tr>
+		<tr>
+			<td>Attack/Fire</td>
+			<td>X</td>
+			<td>3</td>
+			<td>X</td>
+			<td>Mouse Right</td>
+		</tr>
+		<tr>
+			<td>Favor Hasten</td>
+			<td>1</td>
+			<td>4</td>
+			<td>LB</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Favor Assault</td>
+			<td>2</td>
+			<td>6</td>
+			<td>RB</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Favor Conspire</td>
+			<td>3</td>
+			<td>5</td>
+			<td>LT</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Favor Deceive</td>
+			<td>4</td>
+			<td>7</td>
+			<td>RT</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Destroy Forest</td>
+			<td>D</td>
+			<td>9</td>
+			<td>Start</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>End Turn</td>
+			<td>Space</td>
+			<td>0</td>
+			<td>Y</td>
+			<td>Mouse X2</td>
+		</tr>
+		<tr>
+			<td>Surrender</td>
+			<td>S</td>
+			<td>12</td>
+			<td>Guide</td>
+			<td></td>
 		</tr>
 	</table>
 
@@ -252,21 +451,38 @@
 	<h3>Texture scale</h3>
 	<p>Scale of texture sizes.</p>
 	<h3>VSync</h3>
-	<ul>
-		<li>immediate</li>
-		<li>synchronized</li>
-		<li>adaptive</li>
-	</ul>
+	<table class="listing">
+		<tr>
+			<td>immediate</td>
+			<td>off</td>
+		</tr>
+		<tr>
+			<td>synchronized</td>
+			<td>regular on</td>
+		</tr>
+		<tr>
+			<td>adaptive</td>
+			<td>adaptive on (works on fewer systems)</td>
+		</tr>
+	</table>
 	<h3>Gamma</h3>
 	<p>Aka. brightness. Doesn't work on some systems.</p>
 	<h3>Volume</h3>
 	<p>Volume of sound effects. Disabled by default because the sound effects are terrible and annoying.</p>
+	<h3>Color ally</h3>
+	<p>Color of own pieces.</p>
+	<h3>Color enemy</h3>
+	<p>Color of the opponent's pieces.</p>
 	<h3>Scale tiles</h3>
 	<p>When enabled, the amounts of home and middle tiles will be adjusted accordingly when changing the homeland size. "New_amount_of_each_tile = old_amount * new_area / old_area", the area values referring to either the homeland area for homeland tiles or the width of the board for middle row tiles.</p>
 	<h3>Scale pieces</h3>
 	<p>When enabled, the amounts of a player's pieces will be adjusted accordingly when changing the homeland size. "New_amount_of_each_piece = old_amount * new_area / old_area" floored, the area values referring to the homeland area.</p>
+	<h3>Show tooltips</h3>
+	<p>Display widgets' tooltips when hovering over them with the cursor.</p>
 	<h3>Chat line limit</h3>
 	<p>Maximum number of line breaks in a chat widget.</p>
+	<h3>Deadzone</h3>
+	<p>Deadzone of all controllers' axes.</p>
 	<h3>Resolve family</h3>
 	<table class="listing">
 		<tr>
@@ -286,9 +502,13 @@
 	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
 
 	<h2 id="h2_2">2.2 Configurations</h2>
-	<p>
-		Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.
-	</p>
+	<p>Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.</p>
+	<h3>Ports</h3>
+	<p>Use the ports game variant.</p>
+	<h3>Row balancing</h3>
+	<p>Use the row balancing game variant.</p>
+	<h3>Set piece battle</h3>
+	<p>Use the set piece Battle game variant. The input field determines how many pieces each player can use.</p>
 	<h3>Homeland size</h3>
 	<table class="listing">
 		<tr>
@@ -300,34 +520,16 @@
 			<td>Is the number of tile rows of each player's homeland, which is "board_height / 2 - 1". The minimum is 2 because a fortress can't be placed in the bottom row and the maximum is 50, amounting to a maximum board height of 101.</td>
 		</tr>
 	</table>
-	<h3>Survival check pass</h3>
-	<p>The chance of passing a survival check.</p>
-	<h3>Survival check mode</h3>
-	<p>Describes the effect of a failed survival check when not attacking:</p>
-	<table class="listing">
-		<tr>
-			<td>disable</td>
-			<td>If the player hasn't taken any other action that turn and there are more active pieces, the acting piece will be disabled and the turn continues. If the player has taken an action previously or there are no more availible pieces, the turn ends.</td>
-		</tr>
-		<tr>
-			<td>finish</td>
-			<td>End the turn.</td>
-		</tr>
-		<tr>
-			<td>kill</td>
-			<td>Remove the acting piece if it's not a throne and end the turn.</td>
-		</tr>
-	</table>
-	<h3>Fate's Favor limit total</h3>
-	<p>If enabled, "Favor maximum" will be the limit of how many times each player can use Fate's Favor in one match. If disabled, "Favor maximum" will be the limit of how many Fate's Favors each player can stock up.</p>
-	<h3>Fate's Favor maximum</h3>
-	<p>Can be set to a value in the range of 0 to 255. Its effect is described by "Fate's Favor limit total".</p>
-	<h3>Dragon move limit</h3>
-	<p>The limit of how many steps a dragon can take when moving but not switching or attacking. Can be set to a value in the range of 0 to 255.</p>
+	<h3>Battle win chance</h3>
+	<p>Probability of winning a battle.</p>
+	<h3>Fate's favor maximum</h3>
+	<p>Can be set to a value in the range of 0 to 255. Its effect is described by "Fate's favor total".</p>
+	<h3>Fate's favor total</h3>
+	<p>If enabled, "Favor maximum" will be the limit of how many times each player can use each type of fate's favor in one match. If disabled, "Favor maximum" will be the limit of how many of each type of fate's favor each player can stock up.</p>
+	<h3>Dragon place late</h3>
+	<p>If enabled, dragons don't have to be placed during setup and can be placed later on homeland fortresses during the match.</p>
 	<h3>Dragon move straight</h3>
 	<p>If enabled, a dragon can only move in a straight line. Otherwise one move's steps will be treated separately and the dragon will use the shortest path to a destination.</p>
-	<h3>Dragon move diagonal</h3>
-	<p>If enabled, a dragon can additionally take diagonal steps. Otherwise it's limited to vertical and horizontal steps.</p>
 	<h3>Tile amounts</h3>
 	<p>A list of the amounts of each player's homeland tiles. The minimum amount for each tile type other than a fortress is the homeland height and the maximum of each is the number of remaining free tiles. Sliders' ranges are set accordingly. The amount of fortresses is set to the amount of the remaining free tiles on a homeland. The number of fortresses is limited to "homeland_height * 2 + board_width - 2" and when exceeded, other tile amounts will be increased with the priority being the order of the listed tile types.</p>
 	<h3>Middle amounts</h3>
@@ -340,10 +542,6 @@
 	<p>The number of enemy thrones that need to be killed in order to win. This number is limited to the number of a player's thrones. If both winning conditions are set to 0, this one will be set to 1. If the amount of thrones is set to 0, it'll be incremented and if the piece limit has been reached, one other piece amount will be decremented in turn, the priority being the reverse order of the listed piece types.</p>
 	<h3>Capturers</h3>
 	<p>A list of piece names which will be able to capture a fortress. If the list is empty, it'll be filled with all piece types.</p>
-	<h3>Shift left</h3>
-	<p>Move conflicting middle row tiles to the left of the player with the first turn.</p>
-	<h3>Shift near</h3>
-	<p>If enabled, start searching for free spaces for conflicting middle row tiles from the position of the conflicting tile. Otherwise start searching from one of the ends of the row.</p>
 
 	<h2 id="h2_3">2.3 Setups</h2>
 	<p>
@@ -362,8 +560,8 @@
 
 	<h2 id="h3_2">3.2 Server</h2>
 	<p>
-		The server program can be used to host multiple players and is currently limited to a maximum of 128 players and 64 rooms.<br>
-		When running it in the foreground, the following keys can be used:
+		The server program can be used to host multiple players. The maximum number of rooms is the limit of players halved and rounded up.<br>
+		If the program has been compiled without the "SERVICE" define, the following keys can be used when running it in the foreground:
 	</p>
 	<table class="listing">
 		<tr>
@@ -395,12 +593,16 @@
 			<td>resolve host only with IPv6 family (default is unspec)</td>
 		</tr>
 		<tr>
+			<td>-c &lt;number&gt;</td>
+			<td>maximum number of connected players (default is 1024)</td>
+		</tr>
+		<tr>
 			<td>-v</td>
 			<td>write output to console</td>
 		</tr>
 		<tr>
-			<td>-l</td>
-			<td>write output to a log file in the current working directory</td>
+			<td>-l &lt;directory&gt;</td>
+			<td>write output to log files in the specified directory</td>
 		</tr>
 	</table>
 
@@ -410,9 +612,10 @@
 	<h2 id="h4_1">4.1 Setup</h2>
 	<p>
 		The setup stage is a sequence of three phases of placing homeland tiles, middle row tiles and pieces.<br>
-		Tiles/pieces can be placed by dragging them with the left mouse button from the bottom icons or by selecting an icon in the bottom panel and left click holding on a free tile and optionally dragging the cursor across other occupied tiles to replace them. A type can be selected by pressing the icon, using the mouse wheel or pressing a number key. It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and possibly dragging the cursor onto other ones.<br>
+		Tiles/pieces can be placed by selecting an icon in the bottom panel and left click holding on a free tile and optionally dragging the cursor across other occupied tiles to replace them. A type can be selected by pressing the icon, using the mouse wheel or pressing a number key.<br>
+		It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and possibly dragging the cursor onto other ones.<br>
 		Fortress tiles will be places automatically, where no tiles were placed.<br>
-		After the setup the host program determines the first player, the middle row tiles will be rearranged accordingly and the match starts.
+		After the setup the host program determines the first player, the middle row tiles will be rearranged if necessary and the match starts.
 	</p>
 	<h3>Buttons</h3>
 	<table class="listing">
@@ -456,17 +659,19 @@
 
 	<h2 id="h4_2">4.2 Match</h2>
 	<p>
-		Normally pieces can be moved by dragging them with the left or right mouse button and whether they'll move, switch or attack depends on the destination. Firing pieces can fire by dragging them with the right mouse button or using the "Fire" button. A warhorse can only attack when being dragged with the right mouse button or using the "Fire" button.<br>
-		Holding the left Alt key or the X1 mouse button on the first action of a turn initializes a Fate's Favor for the piece that will be or is currently being dragged. When holding down left Shift or X2 instead, the Fate's Favor will be used on the current action. A mountain Fate's Favor is automatically used, when using any Fate's Favor on a piece that couldn't normally move onto a mountain, while it's being moved onto a mountain.<br>
-		A turn ends by pressing the Space bar or middle mouse button or when the limit of actions has been reached.<br>
-		The camera can be rotated by holding down the left Ctrl key, zoomed with the mouse wheel and reset by pressing the C key.<br>
-		The chat overlay can be toggled with the Tab key.
+		Pieces can be moved by dragging them with the left mouse button and whether they'll move or switch depends on the destination.<br>
+		Pieces can attack of fire by dragging them with the right mouse button or using the "Engage" button.<br>
+		A turn ends by pressing the according button button or when the limit of actions has been reached.<br>
 	</p>
 	<h3>Buttons</h3>
 	<table class="listing">
 		<tr>
 			<td>Exit</td>
 			<td>Exit the game.</td>
+		</tr>
+		<tr>
+			<td>Quit</td>
+			<td>Surrender to the opponent. If playing on a multi-room server, this button will just finish the match, rather than abort it and exit the room.</td>
 		</tr>
 		<tr>
 			<td>Config</td>
@@ -477,94 +682,25 @@
 			<td>Toggle the chat overlay.</td>
 		</tr>
 		<tr>
-			<td>Fire</td>
+			<td>Engage</td>
 			<td>When selected, the left mouse button will perform what the right mouse button would do.</td>
 		</tr>
 		<tr>
-			<td>FF: N/L</td>
-			<td>Displays the number of Fate's Favors in the player's possession out of the set limit. Can be selected to initialize a Fate's Favor.</td>
-		</tr>
-		<tr>
-			<td>FF: now</td>
-			<td>Can be selected to use a Fate's Favor on the current action.</td>
+			<td>Destroy</td>
+			<td>When selected and moving a rangers piece off a forest tile, that tile will be turned into plains.</td>
 		</tr>
 		<tr>
 			<td>Finish</td>
 			<td>End the turn. Disabled for the first action of a turn.</td>
 		</tr>
+		<tr>
+			<td>Fate's favor icons</td>
+			<td>An icon can be selected to start a fate's favor and deselected to abort or finish it.</td>
+		</tr>
+		<tr>
+			<td>Dragon icon</td>
+			<td>If during the setup stage a dragon wasn't placed, this icon can be dragged onto a homeland fortress to place said piece.</td>
+		</tr>
 	</table>
-
-	<h2 id="h4_3">4.3 Move</h2>
-	<ol>
-		<li>Fail if the start position is the destination position.</li>
-		<li>Fail when using a non-move Fate's Favor.</li>
-		<li>Fail if using a dragon and the destination tile is a forest.</li>
-		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
-		<li>When using a plains Fate's Favor or moving an enemy piece, check moving to an adjacent tile.</li>
-		<li>Fail if an action other than switch has been recorded during this turn.</li>
-		<li>If using a spearman and the start and destination tiles are water, check moving to a connected water tile or an adjacent tile.</li>
-		<li>If using a lancer and the start and destination tiles are plains, check moving to a connected plains tile or an adjacent tile.</li>
-		<li>If using a dragon, check moving horizontally, vertically or diagonally if enabled.</li>
-		<li>Otherwise check moving to an adjacent tile.</li>
-	</ol>
-
-	<h2 id="h4_4">4.4 Switch</h2>
-	<ol>
-		<li>Fail if the start position is the destination position.</li>
-		<li>Fail if using an enemy piece.</li>
-		<li>Fail when using a non-switch Fate's Favor.</li>
-		<li>Fail when using a forest Fate's Favor and the start or destination tile is not a forest or the occupying piece is an enemy.</li>
-		<li>Fail when using a water Fate's Favor and the start or destination tile is a mountain.</li>
-		<li>Fail if using a dragon and the destination tile is a forest.</li>
-		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
-		<li>Fail if not using a warhorse and an action other than move has been recorded during this turn and not using a forest or water Fate's Favor.</li>
-		<li>Fail if the destination tile is a mountain.</li>
-		<li>Fail if the occupying piece has the same type as the acting piece.</li>
-		<li>Fail if using a warhorse and the occupying piece is an enemy spearman.</li>
-		<li>Fail if using a warhorse and the destination tile is an unbreached fortress.</li>
-		<li>When not using a forest Fate's Favor, check moving to an adjacent tile.</li>
-	</ol>
-
-	<h2 id="h4_5">4.5 Attack</h2>
-	<ol>
-		<li>Fail if the start position is the destination position.</li>
-		<li>Fail if using an enemy piece.</li>
-		<li>Fail when using any Fate's Favor.</li>
-		<li>Fail if using a dragon and the destination tile is a forest.</li>
-		<li>Fail if the start tile is not a mountain and the destination tile is a mountain and the acting piece is not a ranger or a dragon and isn't using a mountain Fate's Favor.</li>
-		<li>Fail if it's the first turn.</li>
-		<li>Fail if an action has been recorded during this turn.</li>
-		<li>Fail if the destination tile is a mountain.</li>
-		<li>If using a throne, skip the next two checks.</li>
-		<li>Fail if the victim is a warhorse that has attacked during the previous turn.</li>
-		<li>Fail if the victim is an elephant and the destination tile is plains and not using a dragon.</li>
-		<li>Check moving to an adjacent tile.</li>
-	</ol>
-
-	<h2 id="h4_6">4.6 Fire</h2>
-	<ol>
-		<li>Fail if the start position is the destination position.</li>
-		<li>Fail if using an enemy piece.</li>
-		<li>Fail if it's the first turn.</li>
-		<li>Fail if an action has been recorded during this turn.</li>
-		<li>Fail if there's no victim.</li>
-		<li>Fail if the victim is an ally.</li>
-		<li>Fail if using any Fate's Favor.</li>
-		<li>Fail if the victim is a warhorse that has attacked during the previous turn.</li>
-		<li>Fail if the victim is an elephant and the destination tile is plains and not using a dragon.</li>
-		<li>Fail if the destination tile is a forest.</li>
-		<li>Fail if mountain tiles are between the start and destination positions.</li>
-		<li>Check if the destination position matches the acting piece's firing distance.</li>
-	</ol>
-
-	<h2 id="h4_7">4.7 Survival Check</h2>
-	<ol>
-		<li>Succeed if using a throne.</li>
-		<li>Succeed if switching and using a water Fate's Favor.</li>
-		<li>Run the check if not using a spearman and the start or destination tile is water.</li>
-		<li>Run the check if attacking or firing and the destination tile is an unbreached fortress.</li>
-		<li>Run the check if attacking and the victim is a dragon and not using a dragon.</li>
-		<li>Otherwise succeed.</li>
-	</ol>
 </body>
 </html>

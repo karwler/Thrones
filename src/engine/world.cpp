@@ -1,6 +1,4 @@
 #include "world.h"
-#include <clocale>
-#include <locale>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -12,13 +10,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 int main(int argc, char** argv) {
 	World::setArgs(argc, argv);
 #endif
-	std::setlocale(LC_ALL, "");
-	std::locale::global(std::locale(World::envLocale));
-	std::cout.imbue(std::locale());
-	std::cerr.imbue(std::locale());
-	World::window()->start();
 #ifdef __ANDROID__
-	exit(0);
+	exit(World::window()->start(World::args));
+#else
+	return World::window()->start(World::args);
 #endif
-	return 0;
 }

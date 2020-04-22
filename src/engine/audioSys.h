@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oven/oven.h"
+#include "utils/utils.h"
 
 class AudioSys {
 private:
@@ -11,10 +11,10 @@ private:
 	SDL_AudioDeviceID device;
 
 public:
-	AudioSys();
+	AudioSys(WindowSys* win);
 	~AudioSys();
 
-	void play(const string& name);
+	void play(const string& name, uint8 volume);
 
 private:
 	static void callback(void* udata, uint8* stream, int len);

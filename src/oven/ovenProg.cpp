@@ -9,13 +9,14 @@
 
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
+constexpr char argAudioM = 'A';
 constexpr char argMaterial = 'm';
 constexpr char argObject = 'o';
 constexpr char argShader = 's';
 constexpr char argShaderE = 'S';
 constexpr char argTexture = 't';
 constexpr char argTextureR = 'T';
-constexpr char messageUsage[] = "usage: tobjtobob <-a|-m|-o|-s|-t> <destination file> <input files>";
+constexpr char messageUsage[] = "usage: oven <-a|-m|-o|-s|-t> <destination file> <input files>";
 
 // OBJ FILE DATA
 
@@ -23,17 +24,17 @@ struct Element {
 	uint p, t, n;
 
 	Element() = default;
-	Element(uint p, uint t, uint n);
+	Element(uint pos, uint tuv, uint nrm);
 
 	uint& operator[](uint i);
 	uint* begin();
 	uint* end();
 };
 
-Element::Element(uint p, uint t, uint n) :
-	p(p),
-	t(t),
-	n(n)
+Element::Element(uint pos, uint tuv, uint nrm) :
+	p(pos),
+	t(tuv),
+	n(nrm)
 {}
 
 uint& Element::operator[](uint i) {
@@ -54,7 +55,7 @@ struct Blueprint {
 	vector<Vertex> data;
 
 	Blueprint(Blueprint&& bpr);
-	Blueprint(string&& name);
+	Blueprint(string&& capt);
 
 	Blueprint& operator=(Blueprint&& bpr);
 	bool empty() const;
@@ -66,8 +67,8 @@ Blueprint::Blueprint(Blueprint&& bpr) :
 	data(std::move(bpr.data))
 {}
 
-Blueprint::Blueprint(string&& name) :
-	name(std::move(name))
+Blueprint::Blueprint(string&& capt) :
+	name(std::move(capt))
 {}
 
 Blueprint& Blueprint::operator=(Blueprint&& bpr) {
@@ -89,26 +90,26 @@ struct Image {
 	GLint iformat;
 	GLenum pformat;
 
-	Image(string&& fname, vector<uint8>&& data, uint16 iformat, uint16 pformat);
+	Image(string&& fname, vector<uint8>&& pdata, uint16 itype, uint16 ptype);
 };
 
-Image::Image(string&& fname, vector<uint8>&& data, uint16 iformat, uint16 pformat) :
+Image::Image(string&& fname, vector<uint8>&& pdata, uint16 itype, uint16 ptype) :
 	name(std::move(fname)),
-	data(std::move(data)),
-	iformat(iformat),
-	pformat(pformat)
+	data(std::move(pdata)),
+	iformat(itype),
+	pformat(ptype)
 {}
 
 // AUDIOS
 
-static void loadWav(const char* file, vector<pair<string, Sound>>& auds) {
+static void loadWav(const char* file, vector<pair<string, Sound>>& auds, bool regular) {
 	Sound sound;
 	if (SDL_AudioSpec spec; SDL_LoadWAV(file, &spec, &sound.data, &sound.length)) {
-		if (sound.set(spec); sound.convert(Sound::defaultSpec))
+		if (sound.set(spec); sound.convert(regular ? Sound::defaultSpec : Sound::mobileSpec))
 			auds.emplace_back(filename(delExt(file)), sound);
 		else {
 			sound.free();
-			std::cerr << "error: couldn't convert " << file << std::endl;
+			std::cerr << "error: couldn't convert " << file << linend << SDL_GetError() << std::endl;
 		}
 	} else
 		std::cerr << "error: couldn't read " << file << linend << SDL_GetError() << std::endl;
@@ -121,18 +122,16 @@ static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
 		return;
 	}
 	uint8 obuf[audioHeaderSize];
-	uint32* up = reinterpret_cast<uint32*>(obuf + 2);
-	uint16* sp = reinterpret_cast<uint16*>(obuf + 6);
-	*sp = uint16(auds.size());
-	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
+	writeMem(obuf, uint16(auds.size()));
+	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
 
 	for (auto& [name, sound] : auds) {
 		obuf[0] = uint8(name.length());
 		obuf[1] = sound.channels;
-		up[0] = sound.length;
-		sp[0] = sound.frequency;
-		sp[1] = sound.format;
-		sp[2] = sound.samples;
+		writeMem(obuf + 2, sound.length);
+		writeMem(obuf + 6, sound.frequency);
+		writeMem(obuf + 8, sound.format);
+		writeMem(obuf + 10, sound.samples);
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), audioHeaderSize);
 		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
@@ -145,7 +144,7 @@ static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
 // MATERIALS
 
 static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
-	vector<string> lines = readFileLines(file);
+	vector<string> lines = readTextLines(loadFile(file));
 	if (lines.empty()) {
 		std::cerr << "error: couldn't read " << file << std::endl;
 		return;
@@ -160,16 +159,16 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 				mtls.push_back(std::move(next));
 		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
 			if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
-				mtls.back().second.diffuse = stofv<vec4>(&line[2], strtof, 1.f);
+				mtls.back().second.color = stofv<vec4>(&line[2], strtof, 1.f);
 			else if (c1 == 'S')
-				mtls.back().second.specular = stofv<vec3>(&line[2], strtof, 1.f);
+				mtls.back().second.spec = stofv<vec3>(&line[2], strtof, 1.f);
 		} else if (c0 == 'N') {
 			if (toupper(line[1]) == 'S')
-				mtls.back().second.shininess = sstof(&line[2]) / 1000.f * 128.f;
+				mtls.back().second.shine = sstof(&line[2]) / 1000.f * 128.f;
 		} else if (c0 == 'D')
-			mtls.back().second.diffuse.a = sstof(&line[1]);
+			mtls.back().second.color.a = sstof(&line[1]);
 		else if (c0 == 'T' && toupper(line[1]) == 'R')
-			mtls.back().second.diffuse.a = 1.f - sstof(&line[2]);	// inverse of d
+			mtls.back().second.color.a = 1.f - sstof(&line[2]);	// inverse of d
 	}
 	if (mtls.back().first.empty())
 		mtls.pop_back();
@@ -188,7 +187,7 @@ static void writeMaterials(const char* file, vector<pair<string, Material>>& mtl
 		uint8 nlen = uint8(name.length());
 		SDL_RWwrite(ofh, &nlen, sizeof(nlen), 1);
 		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
-		SDL_RWwrite(ofh, &matl, sizeof(matl), 1);
+		SDL_RWwrite(ofh, &matl, sizeof(float), sizeof(Material) / sizeof(float));
 	}
 	SDL_RWclose(ofh);
 }
@@ -206,7 +205,7 @@ static uint resolveObjId(int id, uint size) {
 static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, uint16>>& elems, Blueprint& obj) {
 	array<uint, 3> sizes = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
 	array<Element, 3> face;
-	uint8 v = 0, e = 0;
+	uint v = 0, e = 0;
 
 	for (char* end; *str && v < face.size();) {
 		if (int n = int(strtol(str, &end, 0)); end != str) {
@@ -224,13 +223,13 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 		if (*str)
 			str++;
 	}
-	if (v < face.size())
+	if (v < uint(face.size()))
 		return;
 
 	std::swap(face[1], face[2]);	// model is CW, need CCW
-	for (v = 0; v < face.size(); v++) {
+	for (v = 0; v < uint(face.size()); v++) {
 		if (!face[v].n) {
-			vec3 normal = glm::normalize(glm::cross(verts[face[cycle(v, uint8(face.size()), int8(-1))][0]] - verts[face[v][0]], verts[face[cycle(v, uint8(face.size()), int8(-2))][0]] - verts[face[v][0]]));
+			vec3 normal = glm::normalize(glm::cross(verts[face[cycle(v, uint(face.size()), int8(-1))][0]] - verts[face[v][0]], verts[face[cycle(v, uint(face.size()), int8(-2))][0]] - verts[face[v][0]]));
 			if (vector<vec3>::iterator it = std::find(norms.begin(), norms.end(), normal); it == norms.end()) {
 				face[v].n = uint(norms.size());
 				norms.push_back(normal);
@@ -248,7 +247,7 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 }
 
 static void loadObj(const char* file, vector<Blueprint>& bprs) {
-	vector<string> lines = readFileLines(file);
+	vector<string> lines = readTextLines(loadFile(file));
 	if (lines.empty()) {
 		std::cerr << "error: couldn't read " << file << std::endl;
 		return;
@@ -288,17 +287,16 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 		return;
 	}
 	uint8 obuf[objectHeaderSize];
-	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
-	*sp = uint16(bprs.size());
-	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
+	writeMem(obuf, uint16(bprs.size()));
+	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
 
 	for (const Blueprint& it : bprs) {
 		if (it.data.size() > 64000)
 			std::cout << "warning: " << it.name << "'s size of " << it.data.size() << " exceeds 8000 vertices" << std::endl;
 
 		obuf[0] = uint8(it.name.length());
-		sp[0] = uint16(it.elems.size());
-		sp[1] = uint16(it.data.size());
+		writeMem(obuf + 1, uint16(it.elems.size()));
+		writeMem(obuf + 3, uint16(it.data.size()));
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), objectHeaderSize);
 		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
@@ -311,7 +309,7 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 // SHADERS
 
 static bool checkText(char c) {
-	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+	return isalnum(c) || c == '_';
 }
 
 static bool checkSpace(char c) {
@@ -319,7 +317,7 @@ static bool checkSpace(char c) {
 }
 
 static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool gles) {
-	string text = trim(readFile(file));
+	string text = trim(loadFile(file));
 	bool keepLF = false;
 	for (sizet i = 0; i < text.length(); i++) {
 		if (checkSpace(text[i])) {
@@ -366,14 +364,12 @@ static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
 	}
-	uint8 obuf[shaderHeaderSize];
-	uint16* sp = reinterpret_cast<uint16*>(obuf + 1);
-	obuf[0] = uint8(srcs.size());
+	uint8 obuf[shaderHeaderSize] = { uint8(srcs.size()) };
 	SDL_RWwrite(ofh, obuf, sizeof(*obuf), 1);
 
 	for (const auto& [name, text] : srcs) {
 		*obuf = uint8(name.length());
-		*sp = uint16(text.length());
+		writeMem(obuf + 1, uint16(text.length()));
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), shaderHeaderSize);
 		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
@@ -426,7 +422,7 @@ static uint16 getPformat(uint32 format) {
 
 static void loadImg(const char* file, vector<Image>& imgs, bool regular) {
 	string name = filename(delExt(file));
-	vector<uint8> data = readFile<vector<uint8>>(file);
+	vector<uint8> data = loadFile<vector<uint8>>(file);
 	SDL_Surface* img;
 	if (data.empty() || !(img = IMG_Load_RW(SDL_RWFromMem(data.data(), int(data.size())), SDL_TRUE))) {
 		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
@@ -478,21 +474,18 @@ static void writeImages(const char* file, vector<Image>& imgs) {
 		return;
 	}
 	uint8 obuf[textureHeaderSize];
-	uint32* wp = reinterpret_cast<uint32*>(obuf + 1);
-	uint16* sp = reinterpret_cast<uint16*>(obuf + 5);
-	*sp = uint16(imgs.size());
-	SDL_RWwrite(ofh, sp, sizeof(*sp), 1);
+	writeMem(obuf, uint16(imgs.size()));
+	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
 
-	vector<uint32> sizes(imgs.size());
-	for (uint16 i = 0; i < imgs.size(); i++) {
-		obuf[0] = uint8(imgs[i].name.length());
-		wp[0] = uint32(imgs[i].data.size());
-		sp[0] = uint16(imgs[i].iformat);
-		sp[1] = uint16(imgs[i].pformat);
+	for (Image& it : imgs) {
+		obuf[0] = uint8(it.name.length());
+		writeMem(obuf + 1, uint32(it.data.size()));
+		writeMem(obuf + 5, uint16(it.iformat));
+		writeMem(obuf + 7, uint16(it.pformat));
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), textureHeaderSize);
-		SDL_RWwrite(ofh, imgs[i].name.c_str(), sizeof(*imgs[i].name.c_str()), imgs[i].name.length());
-		SDL_RWwrite(ofh, imgs[i].data.data(), sizeof(*imgs[i].data.data()), imgs[i].data.size());
+		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
+		SDL_RWwrite(ofh, it.data.data(), sizeof(*it.data.data()), it.data.size());
 	}
 	SDL_RWclose(ofh);
 }
@@ -508,7 +501,7 @@ void process(const char* dest, const vector<string>& files, F loader, void (*wri
 	if (!dats.empty())
 		writer(dest, dats);
 	else
-		std::cout << "nothing to write" << std::endl;
+		std::cout << "nothing to write for " << dest << std::endl;
 }
 
 #ifdef _WIN32
@@ -521,10 +514,12 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
+	if (Arguments arg(argc, argv, {}, { argAudio, argAudioM, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
 		std::cout << "no input files" << linend << messageUsage << std::endl;
 	else if (const char* dest = arg.getOpt(argAudio))
-		process(dest, arg.getVals(), loadWav, writeAudios);
+		process(dest, arg.getVals(), loadWav, writeAudios, true);
+	else if (dest = arg.getOpt(argAudioM))
+		process(dest, arg.getVals(), loadWav, writeAudios, false);
 	else if (dest = arg.getOpt(argMaterial))
 		process(dest, arg.getVals(), loadMtl, writeMaterials);
 	else if (dest = arg.getOpt(argObject))

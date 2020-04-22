@@ -1,23 +1,16 @@
-#include "engine/world.h"
+#include "utils.h"
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
-	if (a.h < b.h)
-		return true;
-	if (a.h > b.h)
-		return false;
-
-	if (a.w < b.w)
-		return true;
-	if (a.w > b.w)
-		return false;
-
-	if (a.refresh_rate < b.refresh_rate)
-		return true;
-	if (a.refresh_rate > b.refresh_rate)
-		return false;
+	if (a.h != b.h)
+		return a.h < b.h;
+	if (a.w != b.w)
+		return a.w < b.w;
+	if (a.refresh_rate != b.refresh_rate)
+		return a.refresh_rate < b.refresh_rate;
 	return a.format < b.format;
 }
 
+#ifndef OPENGLES
 GLuint makeCubemap(GLsizei res, GLenum active) {
 	GLuint cmap;
 	glGenTextures(1, &cmap);
@@ -36,7 +29,7 @@ void loadCubemap(GLuint tex, GLsizei res, GLenum active) {
 	for (uint i = 0; i < 6; i++)
 		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, res, res, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 }
-#ifndef OPENGLES
+
 GLuint makeFramebufferNodraw(GLenum attach, GLuint tex) {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
@@ -73,7 +66,7 @@ Texture::Texture(array<uint8, 3> color) {
 }
 
 void Texture::close() {
-	if (valid()) {
+	if (id) {
 		free();
 		*this = Texture();
 	}
@@ -92,44 +85,4 @@ void Texture::upload(SDL_Surface* img, GLint iformat, GLenum pformat) {
 	res = ivec2(img->w, img->h);
 	glBindTexture(GL_TEXTURE_2D, id);
 	glTexImage2D(GL_TEXTURE_2D, 0, iformat, res.x, res.y, 0, pformat, GL_UNSIGNED_BYTE, img->pixels);
-}
-
-// INTERACTABLE
-
-void Interactable::onNavSelect(Direction) {
-	World::scene()->updateSelect(World::scene()->getFirstSelect());
-}
-
-// DIJKSTRA
-
-vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, svec2 size, bool (*stepable)(uint16), uint16 (*const* vmov)(uint16, svec2), uint8 movSize) {
-	// init graph
-	uint16 area = size.x * size.y;
-	vector<Adjacent> grid(area);
-	for (uint16 i = 0; i < area; i++)
-		if (grid[i].cnt = 0; stepable(i) || i == src)	// ignore rules for starting point cause it can be a blocking piece
-			for (uint8 m = 0; m < movSize; m++)
-				if (uint16 ni = vmov[m](i, size); ni < area && stepable(ni))
-					grid[i].adj[grid[i].cnt++] = ni;
-
-	vector<bool> visited(area, false);
-	vector<uint16> dist(area, UINT16_MAX);
-	dist[src] = 0;
-
-	// dijkstra
-	std::priority_queue<Node, vector<Node>, Comp> nodes;
-	nodes.emplace(src, 0);
-	do {
-		uint16 u = nodes.top().id;
-		nodes.pop();
-		if (dist[u] < dlim && !visited[u]) {
-			for (uint8 i = 0; i < grid[u].cnt; i++)
-				if (uint16 v = grid[u].adj[i], du = dist[u] + 1; !visited[v] && du < dist[v]) {
-					dist[v] = du;
-					nodes.emplace(v, dist[v]);
-				}
-			visited[u] = true;
-		}
-	} while (!nodes.empty());
-	return dist;
 }

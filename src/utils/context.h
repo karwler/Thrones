@@ -16,7 +16,7 @@ private:
 	GLuint tex;
 
 public:
-	Context(const ivec2& mPos, const vector<string>& txts, CCall call, const ivec2& pos, int lineHeight, Widget* parent = nullptr, int width = 0);
+	Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner = nullptr, int width = 0);
 	virtual ~Context() override;
 
 	void draw() const;
@@ -35,7 +35,7 @@ public:
 
 private:
 	int itemPos(sizet id) const;
-	int calcPos(int pos, int& size, int limit);
+	static int calcPos(int pos, int& siz, int limit);
 };
 
 inline void Context::onMouseMove(const ivec2& mPos) {

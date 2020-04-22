@@ -1,26 +1,34 @@
 #include "engine/world.h"
 
-Context::Context(const ivec2& mPos, const vector<string>& txts, CCall call, const ivec2& pos, int lineHeight, Widget* widget, int width) :
-	size(width, int(txts.size()) * lineHeight),
+// INTERACTABLE
+
+void Interactable::onNavSelect(Direction) {
+	World::scene()->updateSelect(World::scene()->getFirstSelect());
+}
+
+// CONTEXT
+
+Context::Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner, int width) :
+	size(width, int(txts.size()) * lineH),
 	listSize(0, size.y),
-	call(call),
-	parent(widget),
-	lineHeight(lineHeight),
-	tex(World::scene()->blank())
+	call(cancelCall),
+	parent(owner),
+	lineHeight(lineH),
+	tex(World::scene()->texture())
 {
 	items.resize(txts.size());
 	for (sizet i = 0; i < txts.size(); i++) {
-		items[i] = pair(World::fonts()->render(txts[i], lineHeight), txts[i]);
+		items[i] = pair(World::fonts()->render(txts[i].c_str(), lineH), txts[i]);
 		if (int w = items[i].first.getRes().x + Label::textMargin * 2 + ScrollBar::width; w > size.x)
 			size.x = w;
 	}
-	position = ivec2(calcPos(pos.x, size.x, World::window()->screenView().x), calcPos(pos.y, size.y, World::window()->screenView().y));
+	position = ivec2(calcPos(pos.x, size.x, World::window()->getGuiView().x), calcPos(pos.y, size.y, World::window()->getGuiView().y));
 	onMouseMove(mPos);
 }
 
 Context::~Context() {
-	for (auto& [tex, str] : items)
-		tex.close();
+	for (auto& [itx, str] : items)
+		itx.close();
 }
 
 void Context::draw() const {
@@ -30,7 +38,7 @@ void Context::draw() const {
 
 	mvec2 i = listSize.y <= size.y ? mvec2(0, items.size()) : mvec2(scroll.listPos.y / lineHeight, (size.y + scroll.listPos.y + lineHeight - 1) / lineHeight);
 	for (ivec2 pos(rct.x + Label::textMargin, rct.y + int(i.x) * lineHeight - scroll.listPos.y); i.x < i.y; i.x++, pos.y += lineHeight)
-		Quad::draw(Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first.getID(), -1.f);
+		Quad::draw(Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first, -1.f);
 	scroll.draw(listSize, position, size, true, -1.f);
 }
 
@@ -82,10 +90,10 @@ void Context::confirm() {
 		World::scene()->setContext(nullptr);
 }
 
-int Context::calcPos(int pos, int& size, int limit) {
-	if (size >= limit) {
-		size = limit;
+int Context::calcPos(int pos, int& siz, int limit) {
+	if (siz >= limit) {
+		siz = limit;
 		return 0;
 	}
-	return pos + size <= limit ? pos : limit - size;
+	return pos + siz <= limit ? pos : limit - siz;
 }

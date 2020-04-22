@@ -6,32 +6,34 @@ namespace Com {
 
 Config::Config() :
 	homeSize(9, 4),
-	survivalPass(randomLimit / 2),
-	survivalMode(Survival::disable),
-	favorLimit(true),
-	favorMax(4),
-	dragonDist(4),
-	dragonSingle(true),
-	dragonDiag(true),
-	tileAmounts{ 13, 10, 5, 7 },
+	gameType(defaultGameType),
+	ports(false),
+	rowBalancing(false),
+	battlePass(randomLimit / 2),
+	favorLimit(1),
+	favorTotal(true),
+	dragonLate(false),
+	dragonStraight(true),
+	setPieceOn(false),
+	setPieceNum(10),
+	tileAmounts{ 14, 9, 5, 7 },
 	middleAmounts{ 1, 1, 1, 1 },
 	pieceAmounts{ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 },
 	winFortress(1),
 	winThrone(1),
-	capturers{ false, false, false, false, false, false, false, false, false, true },
-	shiftLeft(true),
-	shiftNear(true)
+	capturers{ false, false, false, false, false, false, false, false, false, true }
 {}
 
 Config& Config::checkValues() {
 	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
-	survivalPass = std::clamp(survivalPass, uint8(0), randomLimit);
+	battlePass = std::min(battlePass, randomLimit);
+	favorLimit = std::min(favorLimit, maxFavorMax);
 
 	for (uint16& it : tileAmounts)
 		if (it < homeSize.y)
 			it = homeSize.y;
 	uint16 hsize = homeSize.x * homeSize.y;
-	uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), homeSize.y);
+	uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), rowBalancing ? homeSize.y : 0);
 	uint16 fort = hsize - ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
 	for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
 		tileAmounts[i]++;
@@ -43,17 +45,22 @@ Config& Config::checkValues() {
 	if (!psize)
 		psize = pieceAmounts[uint8(Piece::throne)] = 1;
 
-	winFortress = std::clamp(winFortress, uint16(0), fort);
+	if (std::find(capturers.begin(), capturers.end(), true) == capturers.end())
+		std::fill(capturers.begin(), capturers.end(), true);
+	uint16 capCnt = 0;
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		if (capturers[i])
+			capCnt += pieceAmounts[i];
+	winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
+
 	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
-	if (!winFortress && !winThrone)
+	if (!(winFortress || winThrone))
 		if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
 			if (psize == hsize)
 				(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
 			pieceAmounts[uint8(Piece::throne)]++;
 		}
-
-	if (std::find(capturers.begin(), capturers.end(), true) == capturers.end())
-		std::fill(capturers.begin(), capturers.end(), true);
+	setPieceNum = std::max(std::max(setPieceNum, winFortress), winThrone);
 	return *this;
 }
 
@@ -77,61 +84,57 @@ uint16 Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
 void Config::toComData(uint8* data) const {
 	*data++ = uint8(homeSize.x);
 	*data++ = uint8(homeSize.y);
-	*data++ = survivalPass;
-	*data++ = uint8(survivalMode);
+	*data++ = uint8(gameType);
+	*data++ = ports;
+	*data++ = rowBalancing;
+	*data++ = battlePass;
 	*data++ = favorLimit;
-	*data++ = favorMax;
-	*data++ = dragonDist;
-	*data++ = dragonSingle;
-	*data++ = dragonDiag;
+	*data++ = favorTotal;
+	*data++ = dragonLate;
+	*data++ = dragonStraight;
+	*data++ = setPieceOn;
+	write16(data, setPieceNum);
 
-	uint16* sp = reinterpret_cast<uint16*>(data);
-	for (uint16 v : tileAmounts)
-		write16(sp++, v);
-	for (uint16 v : middleAmounts)
-		write16(sp++, v);
-	for (uint16 v : pieceAmounts)
-		write16(sp++, v);
-	write16(sp++, winFortress);
-	write16(sp++, winThrone);
-
-	data = std::copy(capturers.begin(), capturers.end(), reinterpret_cast<uint8*>(sp));
-	*data++ = shiftLeft;
-	*data++ = shiftNear;
+	for (uint16 ta : tileAmounts)
+		write16(data += sizeof(uint16), ta);
+	for (uint16 ma : middleAmounts)
+		write16(data += sizeof(uint16), ma);
+	for (uint16 pa : pieceAmounts)
+		write16(data += sizeof(uint16), pa);
+	write16(data += sizeof(uint16), winFortress);
+	write16(data += sizeof(uint16), winThrone);
+	std::copy(capturers.begin(), capturers.end(), data += sizeof(uint16));
 }
 
 void Config::fromComData(const uint8* data) {
 	homeSize.x = *data++;
 	homeSize.y = *data++;
-	survivalPass = *data++;
-	survivalMode = Survival(*data++);
+	gameType = GameType(*data++);
+	ports = *data++;
+	rowBalancing = *data++;
+	battlePass = *data++;
 	favorLimit = *data++;
-	favorMax = *data++;
-	dragonDist = *data++;
-	dragonSingle = *data++;
-	dragonDiag = *data++;
+	favorTotal = *data++;
+	dragonLate = *data++;
+	dragonStraight = *data++;
+	setPieceOn = *data++;
+	setPieceNum = read16(data);
 
-	const uint16* sp = reinterpret_cast<const uint16*>(data);
-	for (uint16& v : tileAmounts)
-		v = read16(sp++);
-	for (uint16& v : middleAmounts)
-		v = read16(sp++);
-	for (uint16& v : pieceAmounts)
-		v = read16(sp++);
-	winFortress = read16(sp++);
-	winThrone = read16(sp++);
-
-	data = reinterpret_cast<const uint8*>(sp);
+	for (uint16& ta : tileAmounts)
+		ta = read16(data += sizeof(uint16));
+	for (uint16& ma : middleAmounts)
+		ma = read16(data += sizeof(uint16));
+	for (uint16& pa : pieceAmounts)
+		pa = read16(data += sizeof(uint16));
+	winFortress = read16(data += sizeof(uint16));
+	winThrone = read16(data += sizeof(uint16));
+	data += sizeof(uint16);
 	std::copy(data, data + pieceMax, capturers.begin());
-	data += pieceMax;
-
-	shiftLeft = *data++;
-	shiftNear = *data++;
 }
 
 string Config::capturersString() const {
 	string value;
-	for (uint8 i = 0; i < capturers.size(); i++)
+	for (sizet i = 0; i < capturers.size(); i++)
 		if (capturers[i])
 			value += string(pieceNames[i]) + ' ';
 	value.pop_back();
@@ -145,34 +148,172 @@ void Config::readCapturers(const string& line) {
 			capturers[pi] = true;
 }
 
+// SOCKET FUNCTIONS
+
+static addrinfo* resolveAddress(const char* addr, const char* port, Family family) {
+	addrinfo hints{};
+	addrinfo* info;
+#ifdef __ANDROID__
+	hints.ai_flags = AI_ADDRCONFIG;
+#elif defined(EMSCRIPTEN)
+	hints.ai_flags = AI_V4MAPPED;
+#else
+	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+#endif
+	if (!addr)
+		hints.ai_flags |= AI_PASSIVE;
+	hints.ai_family = family == Family::v4 ? AF_INET : family == Family::v6 ? AF_INET6 : AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	return !getaddrinfo(addr, port, &hints, &info) ? info : nullptr;
+}
+
+static nsint createSocket(int family, int reuseaddr, int nodelay = 1) {
+	if (family != AF_INET && family != AF_INET6)
+		return nsint(-1);
+
+	nsint fd = socket(family, SOCK_STREAM, IPPROTO_TCP);
+	if (fd != -1) {
+		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<char*>(&reuseaddr), sizeof(reuseaddr));
+		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&nodelay), sizeof(nodelay));
+	}
+	return fd;
+}
+
+nsint bindSocket(const char* port, Family family) {
+	addrinfo* inf = resolveAddress(nullptr, port, family);
+	if (!inf)
+		throw Error(msgBindFail);
+
+	nsint fd = nsint(-1);
+	for (addrinfo* it = inf; it; it = it->ai_next) {
+		if (fd = createSocket(it->ai_family, 1); fd == -1)
+			continue;
+		if (bind(fd, it->ai_addr, socklent(it->ai_addrlen)) || listen(fd, 8))
+			closeSocket(fd);
+		else
+			break;
+	}
+	freeaddrinfo(inf);
+	if (fd == -1)
+		throw Error(msgBindFail);
+	return fd;
+}
+
+nsint acceptSocket(nsint fd) {
+	nsint sock = accept(fd, nullptr, nullptr);
+	if (sock == -1)
+		throw Error(msgAcceptFail);
+	return sock;
+}
+
+bool pollSocket(nsint fd) {
+	if (pollfd pfd = { fd, POLLIN | POLLRDHUP, 0 }; int rc = poll(&pfd, 1, 0)) {
+		if (rc < 0)
+			throw Error(msgPollFail);
+		if (pfd.revents & POLLIN)
+			return true;	// recv can handle disconnect
+		if (pfd.revents & polleventsDisconnect)
+			throw Error(msgConnectionLost);
+	}
+	return false;
+}
+
+static int doNoblockSocket(nsint fd, bool noblock) {
+#ifdef _WIN32
+	u_long on = noblock;
+	return ioctlsocket(fd, FIONBIO, &on);
+#elif !defined(EMSCRIPTEN)
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+		return flags;
+	return fcntl(fd, F_SETFL, noblock ? flags | O_NONBLOCK : flags & ~O_NONBLOCK);
+#else
+	return 0;
+#endif
+}
+
+#ifndef MSG_DONTWAIT
+static void noblockSocket(nsint fd, bool noblock) {
+	if (doNoblockSocket(fd, noblock))
+		throw Error(msgIoctlFail);
+}
+#endif
+
+static void sendNet(nsint fd, const void* data, uint size) {
+	if (send(fd, static_cast<const char*>(data), size, 0) != sendlen(size))
+		throw Error(msgConnectionLost);
+}
+
+static uint recvNet(nsint fd, void* data, uint size) {
+	long len = recv(fd, static_cast<char*>(data), size, 0);
+#ifdef EMSCRIPTEN
+	if (!len || (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+#else
+	if (len <= 0)
+#endif
+		throw Error(msgConnectionLost);
+	return uint(len);
+}
+
+static long recvNow(nsint fd, void* data, uint size) {
+#ifdef _WIN32
+	int len = recv(fd, static_cast<char*>(data), size, 0);
+	if (len < 0 && WSAGetLastError() == WSAEWOULDBLOCK)
+		return 0;
+#elif !defined(MSG_DONTWAIT)	// aka. macOS
+	ssize_t len = recv(fd, data, size, 0);
+	if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		return 0;
+#else
+	ssize_t len = recv(fd, data, size, MSG_DONTWAIT);
+	if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		return 0;
+#endif
+	return len > 0 ? len : -1;
+}
+
+void closeSocket(nsint& fd) {
+#ifdef _WIN32
+	closesocket(fd);
+#else
+	close(fd);
+#endif
+	fd = nsint(-1);
+}
+
 // UNIVERSAL FUNCTIONS
 
 static uint32 rol(uint32 value, uint8 bits) {
 	return (value << bits) | (value >> (32 - bits));
 }
 
-static uint32& blk0(uint32& block) {
-	return block = (rol(block, 24) & 0xFF00FF00) | (rol(block, 8) & 0x00FF00FF);
+static uint32 blk0(uint8* block, uint i) {
+	uint32 num = readMem<uint32>(block + i * sizeof(uint32));
+	num = (rol(num, 24) & 0xFF00FF00) | (rol(num, 8) & 0x00FF00FF);
+	writeMem(block + i * sizeof(uint32), num);
+	return num;
 }
 
-static uint32& blk(uint32* block, uint i) {
-	return block[i&15] = rol(block[(i+13)&15] ^ block[(i+8)&15] ^ block[(i+2)&15] ^ block[i&15], 1);
+static uint32 blk(uint8* block, uint i) {
+	uint32 num = rol(readMem<uint32>(block + ((i + 13) & 15) * sizeof(uint32)) ^ readMem<uint32>(block + ((i + 8) & 15) * sizeof(uint32)) ^ readMem<uint32>(block + ((i + 2) & 15) * sizeof(uint32)) ^ readMem<uint32>(block + (i & 15) * sizeof(uint32)), 1);
+	writeMem(block + (i & 15) * sizeof(uint32), num);
+	return num;
 }
 
 static void sha1Transform(uint32* state, uint8* buffer) {
-	uint32* block = reinterpret_cast<uint32*>(buffer);
 	array<uint32, 5> scop = { state[0], state[1], state[2], state[3], state[4] };
 	for (uint i = 0; i < 80; i++) {
 		if (i < 16)
-			scop[4] += ((scop[1] & (scop[2] ^ scop[3])) ^ scop[3]) + blk0(block[i]) + 0x5A827999 + rol(scop[0], 5);
+			scop[4] += ((scop[1] & (scop[2] ^ scop[3])) ^ scop[3]) + blk0(buffer, i) + 0x5A827999 + rol(scop[0], 5);
 		else if (i < 20)
-			scop[4] += ((scop[1] & (scop[2] ^ scop[3])) ^ scop[3]) + blk(block, i) + 0x5A827999 + rol(scop[0], 5);
+			scop[4] += ((scop[1] & (scop[2] ^ scop[3])) ^ scop[3]) + blk(buffer, i) + 0x5A827999 + rol(scop[0], 5);
 		else if (i < 40)
-			scop[4] += (scop[1] ^ scop[2] ^ scop[3]) + blk(block, i) + 0x6ED9EBA1 + rol(scop[0], 5);
+			scop[4] += (scop[1] ^ scop[2] ^ scop[3]) + blk(buffer, i) + 0x6ED9EBA1 + rol(scop[0], 5);
 		else if (i < 60)
-			scop[4] += (((scop[1] | scop[2]) & scop[3]) | (scop[1] & scop[2])) + blk(block, i) + 0x8F1BBCDC + rol(scop[0], 5);
+			scop[4] += (((scop[1] | scop[2]) & scop[3]) | (scop[1] & scop[2])) + blk(buffer, i) + 0x8F1BBCDC + rol(scop[0], 5);
 		else
-			scop[4] += (scop[1] ^ scop[2] ^ scop[3]) + blk(block, i) + 0xCA62C1D6 + rol(scop[0], 5);
+			scop[4] += (scop[1] ^ scop[2] ^ scop[3]) + blk(buffer, i) + 0xCA62C1D6 + rol(scop[0], 5);
 		scop[1] = rol(scop[1], 30);
 		std::rotate(scop.begin(), scop.end() - 1, scop.end());
 	}
@@ -200,7 +341,7 @@ static void sha1Update(uint32* state, uint32* count, uint8* buffer, uint8* data,
 	std::copy_n(data + i, len - i, buffer + j);
 }
 
-string digestSHA1(string str) {
+string digestSha1(string str) {
 	uint32 state[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
 	uint32 count[2] = { 0, 0 };
 	uint8 buffer[64];
@@ -230,8 +371,8 @@ string encodeBase64(const string& str) {
 	string ret;
 	uint8 arr3[3], arr4[4];
 	uint i = 0;
-	for (sizet l = 0; l < str.length(); l++) {
-		arr3[i++] = uint8(str[l]);
+	for (char ch : str) {
+		arr3[i++] = uint8(ch);
 		if (i == 3) {
 			arr4[0] = (arr3[0] & 0xFC) >> 2;
 			arr4[1] = uint8(((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4));
@@ -258,13 +399,6 @@ string encodeBase64(const string& str) {
 	return ret;
 }
 
-void discardAccept(nsint server) {
-	try {
-		nsint socket = acceptSocket(server);
-		closeSocket(socket);
-	} catch (const Error&) {}
-}
-
 void sendWaitClose(nsint socket) {
 	try {
 		uint8 frame[wsHeadMin] = { 0x88, 0 };
@@ -280,6 +414,18 @@ void sendVersion(nsint socket, bool webs) {
 	write16(data.data() + 1, uint16(data.size()));
 	std::copy_n(commonVersion, len, data.data() + dataHeadSize);
 	sendData(socket, data.data(), uint(data.size()), webs);
+}
+
+void sendRejection(nsint server) {
+	nsint tmps = nsint(-1);
+	try {
+		tmps = acceptSocket(server);
+		uint16 len = codeSizes.at(Code::full);
+		uint8 data[dataHeadSize] = { uint8(Code::full) };
+		write16(data + 1, len);
+		sendNet(tmps, data, len);
+	} catch (const Error&) {}
+	closeSocket(tmps);
 }
 
 void sendData(nsint socket, const uint8* data, uint len, bool webs) {
@@ -305,152 +451,11 @@ void sendData(nsint socket, const uint8* data, uint len, bool webs) {
 		sendNet(socket, data, len);
 }
 
-// SOCKET FUNCTIONS
-
-static addrinfo* resolveAddress(const char* addr, uint16 port, Family family) {
-	addrinfo hints;
-	addrinfo* info;
-	memset(&hints, 0, sizeof(hints));
-#ifdef __ANDROID__
-	hints.ai_flags = AI_NUMERICSERV | AI_ADDRCONFIG;
-#elif defined(EMSCRIPTEN)
-	hints.ai_flags = AI_V4MAPPED | AI_NUMERICSERV;
-#else
-	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_NUMERICSERV;
-#endif
-	if (!addr)
-		hints.ai_flags |= AI_PASSIVE;
-	hints.ai_family = family == Family::v4 ? AF_INET : family == Family::v6 ? AF_INET6 : AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
-	return !getaddrinfo(addr, toStr(port).c_str(), &hints, &info) ? info : nullptr;
-}
-
-static nsint createSocket(int family, int reuseaddr, int nodelay = 1) {
-	if (family != AF_INET && family != AF_INET6)
-		return -1;
-
-	nsint fd = socket(family, SOCK_STREAM, IPPROTO_TCP);
-	if (fd != -1) {
-		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<char*>(&reuseaddr), sizeof(reuseaddr));
-		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&nodelay), sizeof(nodelay));
-	}
-	return fd;
-}
-
-static int doNoblockSocket(nsint fd, bool noblock) {
-#ifdef _WIN32
-	u_long on = noblock;
-	return ioctlsocket(fd, FIONBIO, &on);
-#elif !defined(EMSCRIPTEN)
-	int on = noblock;
-	return ioctl(fd, FIONBIO, &on);
-#else
-	return 0;
-#endif
-}
-
-nsint bindSocket(uint16 port, Family family) {
-	addrinfo* inf = resolveAddress(nullptr, port, family);
-	if (!inf)
-		throw Error(msgBindFail);
-
-	nsint fd = -1;
-	for (addrinfo* it = inf; it; it = it->ai_next) {
-		if (fd = createSocket(it->ai_family, 1); fd == -1)
-			continue;
-		if (bind(fd, it->ai_addr, socklent(it->ai_addrlen)) || listen(fd, 8))
-			closeSocket(fd);
-		else
-			break;
-	}
-	freeaddrinfo(inf);
-	if (fd == -1)
-		throw Error(msgBindFail);
-	return fd;
-}
-
-nsint acceptSocket(nsint fd) {
-	nsint sock = accept(fd, nullptr, nullptr);
-	if (sock == -1)
-		throw Error(msgAcceptFail);
-	return sock;
-}
-
-bool pollSocket(nsint fd, int timeout) {
-	pollfd pfd = { fd, POLLIN | POLLRDHUP, 0 };
-#ifdef _WIN32
-	int rc = WSAPoll(&pfd, 1, timeout);
-#else
-	int rc = poll(&pfd, 1, timeout);
-#endif
-	if (!rc)
-		return false;
-	if (rc < 0)
-		throw Error(msgPollFail);
-	if (pfd.revents & polleventsDisconnect)
-		throw Error(msgConnectionLost);
-	if (pfd.revents & POLLIN)
-		return true;
-	return false;
-}
-
-void noblockSocket(nsint fd, bool noblock) {
-	if (doNoblockSocket(fd, noblock))
-		throw Error(msgIoctlFail);
-}
-
-void sendNet(nsint fd, const void* data, uint size) {
-	if (send(fd, static_cast<const char*>(data), size, 0) != sendlen(size))
-		throw Error(msgConnectionLost);
-}
-
-uint recvNet(nsint fd, void* data, uint size) {
-	long len = recv(fd, static_cast<char*>(data), size, 0);
-#ifdef EMSCRIPTEN
-	if (!len || (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
-#else
-	if (len <= 0)
-#endif
-		throw Error(msgConnectionLost);
-	return uint(len);
-}
-
-long recvNow(nsint fd, void* data, uint size) {
-#ifdef _WIN32
-	int len = recv(fd, static_cast<char*>(data), size, 0);
-	if (!len || (len < 0 && WSAGetLastError() != WSAEWOULDBLOCK)) {
-		noblockSocket(fd, false);
-		throw Error(msgConnectionLost);
-	}
-#elif !defined(MSG_DONTWAIT)	// aka. macOS
-	ssize_t len = recv(fd, data, size, 0);
-	if (!len || (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-		noblockSocket(fd, false);
-		throw Error(msgConnectionLost);
-	}
-#else
-	ssize_t len = recv(fd, data, size, MSG_DONTWAIT);
-	if (!len || (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
-		throw Error(msgConnectionLost);
-#endif
-	return len;
-}
-
-void closeSocket(nsint& fd) {
-#ifdef _WIN32
-	closesocket(fd);
-#else
-	close(fd);
-#endif
-	fd = -1;
-}
-
 // CONNECTOR
 
-Connector::Connector(const char* addr, uint16 port, Family family) :
+Connector::Connector(const char* addr, const char* port, Family family) :
 	inf(resolveAddress(addr, port, family)),
-	fd(-1)
+	fd(nsint(-1))
 {
 	if (!inf)
 		throw Error(msgConnectionFail);
@@ -467,13 +472,9 @@ Connector::~Connector() {
 
 nsint Connector::pollReady() {
 	pollfd pfd = { fd, POLLOUT | POLLRDHUP, 0 };
-#ifdef _WIN32
-	int rc = WSAPoll(&pfd, 1, 0);
-#else
 	int rc = poll(&pfd, 1, 0);
-#endif
 	if (!rc)
-		return -1;
+		return nsint(-1);
 	if (rc < 0 || (pfd.revents & polleventsDisconnect)) {
 		doNoblockSocket(fd, false);
 		closeSocket(fd);
@@ -481,13 +482,13 @@ nsint Connector::pollReady() {
 	} else if (pfd.revents & POLLOUT) {
 		if (!doNoblockSocket(fd, false)) {
 			nsint ret = fd;
-			fd = -1;
+			fd = nsint(-1);
 			return ret;
 		}
 		closeSocket(fd);
 		nextAddr(cur->ai_next);
 	}
-	return -1;
+	return nsint(-1);
 }
 
 void Connector::nextAddr(addrinfo* nxt) {
@@ -536,6 +537,33 @@ Buffer& Buffer::operator=(Buffer&& b) {
 	return *this;
 }
 
+uint Buffer::pushHead(Code code, uint16 dlen) {
+	uint end = checkOver(dlim + dataHeadSize);
+	data[dlim] = uint8(code);
+	write16(data + dlim + 1, dlen);
+	return dlim = end;
+}
+
+uint Buffer::allocate(Code code, uint16 dlen) {
+	uint end = checkOver(dlim + dlen);
+	data[dlim] = uint8(code);
+	write16(data + dlim + 1, dlen);
+	uint ret = dlim + dataHeadSize;
+	dlim = end;
+	return ret;
+}
+
+void Buffer::push(uint8 val) {
+	checkOver(dlim + 1);
+	data[dlim++] = val;
+}
+
+void Buffer::push(uint16 val) {
+	uint end = checkOver(dlim + sizeof(val));
+	write16(data + dlim, val);
+	dlim = end;
+}
+
 void Buffer::push(initlist<uint8> lst) {
 	uint end = checkOver(dlim + uint(lst.size()));
 	std::copy(lst.begin(), lst.end(), data + dlim);
@@ -556,36 +584,9 @@ void Buffer::push(const string& str) {
 	dlim = end;
 }
 
-void Buffer::push(uint8 val) {
-	checkOver(dlim + 1);
-	data[dlim++] = val;
-}
-
-void Buffer::push(uint16 val) {
-	uint end = checkOver(dlim + sizeof(val));
-	write16(data + dlim, val);
-	dlim = end;
-}
-
-uint Buffer::allocate(Code code, uint16 dlen) {
-	uint end = checkOver(dlim + dlen);
-	data[dlim] = uint8(code);
-	write16(data + dlim + 1, dlen);
-	uint ret = dlim + dataHeadSize;
-	dlim = end;
-	return ret;
-}
-
-uint Buffer::pushHead(Code code, uint16 dlen) {
-	uint end = checkOver(dlim + dataHeadSize);
-	data[dlim] = uint8(code);
-	write16(data + dlim + 1, dlen);
-	return dlim = end;
-}
-
 uint Buffer::write(uint8 val, uint pos) {
 	data[pos] = val;
-	return pos += sizeof(val);
+	return pos + sizeof(val);
 }
 
 uint Buffer::write(uint16 val, uint pos) {
@@ -618,20 +619,19 @@ uint8* Buffer::recv(nsint socket, bool webs) {
 	return recvHead(socket, ofs, mask, webs) ? recvLoad(ofs, mask) : nullptr;
 }
 
-void Buffer::recvData(nsint socket) {
+bool Buffer::recvData(nsint socket) {
 #ifndef MSG_DONTWAIT
 	noblockSocket(socket, true);
 #endif
-	for (;;) {
+	for (long len;; dlim += len) {
 		checkOver(dlim);	// allocate next block if full
-		long len = recvNow(socket, data + dlim, size - dlim);
-		if (len < 0)
-			break;
-		dlim += len;
-	}
+		if (len = recvNow(socket, data + dlim, size - dlim); len <= 0) {
 #ifndef MSG_DONTWAIT
-	noblockSocket(socket, false);
+			noblockSocket(socket, false);
 #endif
+			return len;
+		}
+	}
 }
 
 Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
@@ -646,7 +646,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 		if (!dat)
 			return Init::wait;
 		if (std::find(compatibleVersions.begin(), compatibleVersions.end(), readText(dat)) == compatibleVersions.end())
-			break;
+			return Init::version;
 		clearCur(webs);
 		return Init::connect; }
 	case Code::wsconn: {
@@ -670,7 +670,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 		string response = "HTTP/1.1 101 Switching Protocols\r\n"
 			"Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n"
-			"Sec-WebSocket-Accept: " + encodeBase64(digestSHA1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n";
+			"Sec-WebSocket-Accept: " + encodeBase64(digestSha1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n";
 		sendNet(socket, response.c_str(), uint(response.length()));
 		eraseFront(uint(rend - data));
 		webs = true;
@@ -724,12 +724,11 @@ bool Buffer::recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs) {
 	return dlim >= ofs + dataHeadSize;
 }
 
-uint8* Buffer::recvLoad(uint ofs, uint8* mask) {
+uint8* Buffer::recvLoad(uint ofs, const uint8* mask) {
 	if (mask) {
-		uint end = *reinterpret_cast<uint16*>(data + ofs + 1);
-		for (uint i = 0; i < sizeof(uint16); i++)
-			reinterpret_cast<uint8*>(&end)[i] ^= mask[i+1];
-		if (end = read16(&end) + ofs; dlim < end)
+		uint8 buf[sizeof(uint16)] = { uint8(data[ofs+1] ^ mask[1]), uint8(data[ofs+2] ^ mask[2]) };
+		uint end = read16(buf) + ofs;
+		if (dlim < end)
 			return nullptr;
 		unmask(mask, ofs, end);
 	} else if (dlim < read16(data + ofs + 1))

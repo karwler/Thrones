@@ -5,6 +5,7 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <poll.h>
@@ -14,6 +15,8 @@
 #endif
 
 #ifdef _WIN32
+#define poll WSAPoll
+
 using sendlen = int;
 using socklent = int;
 #else
@@ -25,4 +28,4 @@ using socklent = socklen_t;
 #define POLLRDHUP 0	// ignore if not present
 #endif
 
-constexpr short polleventsDisconnect = POLLRDHUP | POLLERR | POLLHUP | POLLNVAL;
+constexpr short polleventsDisconnect = POLLERR | POLLHUP | POLLNVAL | POLLRDHUP;

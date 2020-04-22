@@ -47,7 +47,6 @@ using int32 = int32_t;
 using uint32 = uint32_t;
 using int64 = int64_t;
 using uint64 = uint64_t;
-
 using sizet = size_t;
 using pdift = ptrdiff_t;
 
@@ -70,6 +69,7 @@ using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 using glm::ivec2;
+using glm::uvec4;
 using svec2 = glm::vec<2, uint16, glm::defaultp>;
 using mvec2 = glm::vec<2, sizet, glm::defaultp>;
 
@@ -83,33 +83,27 @@ constexpr char defaultWriteMode[] = "wb";
 
 // utility
 
-#define ENUM_OPERATIONS(EType, IType) \
-	inline constexpr EType operator~(EType a) { \
-		return EType(~IType(a)); \
-	} \
-	inline constexpr EType operator&(EType a, EType b) { \
-		return EType(IType(a) & IType(b)); \
-	} \
-	inline constexpr EType operator&=(EType& a, EType b) { \
-		return a = EType(IType(a) & IType(b)); \
-	} \
-	inline constexpr EType operator|(EType a, EType b) { \
-		return EType(IType(a) | IType(b)); \
-	} \
-	inline constexpr EType operator|=(EType& a, EType b) { \
-		return a = EType(IType(a) | IType(b)); \
-	} \
-	inline constexpr EType operator^(EType a, EType b) { \
-		return EType(IType(a) ^ IType(b)); \
-	} \
-	inline constexpr EType operator^=(EType& a, EType b) { \
-		return a = EType(IType(a) ^ IType(b)); \
-	}
-
 string filename(const string& path);
 string readWordM(const char*& pos);
+string strEnclose(string str);
+string strUnenclose(const char*& str);
 int strnatcmp(const char* a, const char* b);	// natural string compare
 uint8 u8clen(char c);
+vector<string> readTextLines(const string& text);
+string readIniTitle(const string& line);
+pairStr readIniLine(const string& line);
+
+template <class T>
+T readMem(const void* data) {
+	T val;
+	std::copy_n(static_cast<const uint8*>(data), sizeof(T), reinterpret_cast<uint8*>(&val));
+	return val;
+}
+
+template <class T>
+void* writeMem(void* data, const T& val) {
+	return std::copy_n(reinterpret_cast<const uint8*>(&val), sizeof(T), static_cast<uint8*>(data));
+}
 
 inline string readWord(const char* pos) {
 	return readWordM(pos);
@@ -159,14 +153,6 @@ inline bool notSpace(char c) {
 	return uchar(c) > ' ' && c != 0x7F;
 }
 
-inline bool isDigit(char c) {
-	return c >= '0' && c <= '9';
-}
-
-inline bool notDigit(char c) {
-	return c < '0' || c > '9';
-}
-
 inline string firstUpper(string str) {
 	str[0] = char(toupper(str[0]));
 	return str;
@@ -179,11 +165,74 @@ inline string trim(const string& str) {
 
 inline string delExt(const string& path) {
 	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
-	return it != path.rend() && *it == '.' ? string(path.begin(), it.base() - 1) : string();
+	return it != path.rend() ? *it == '.' && it + 1 != path.rend() && !isDsep(it[1]) ? string(path.begin(), it.base() - 1) : path : string();
 }
 
-inline bool isDotName(const string& str) {
-	return str[0] == '.' && (str[1] == '\0' || (str[1] == '.' && str[2] == '\0'));
+template <class T = string>
+T loadFile(const string& file) {
+	T data;
+	try {
+		SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
+		if (!ifh)
+			throw ifh;
+		int64 len = SDL_RWsize(ifh);
+		if (len == -1)
+			throw ifh;
+
+		data.resize(sizet(len));
+		if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
+			data.resize(read);
+		SDL_RWclose(ifh);
+	} catch (SDL_RWops* ifh) {
+		if (ifh)
+			SDL_RWclose(ifh);
+	}
+	return data;
+}
+
+template <class T, class U, std::enable_if_t<std::is_enum_v<T> && std::is_integral_v<U>, int> = 0>
+constexpr T operator+(T a, U b) {
+	return T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(b));
+}
+
+template <class T, class U, std::enable_if_t<std::is_enum_v<T> && std::is_integral_v<U>, int> = 0>
+constexpr T operator-(T a, U b) {
+	return T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator~(T a) {
+	return T(~std::underlying_type_t<T>(a));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator&(T a, T b) {
+	return T(std::underlying_type_t<T>(a) & std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator&=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) & std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator|(T a, T b) {
+	return T(std::underlying_type_t<T>(a) | std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator|=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) | std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator^(T a, T b) {
+	return T(std::underlying_type_t<T>(a) ^ std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator^=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) ^ std::underlying_type_t<T>(b));
 }
 
 // conversions
@@ -198,36 +247,36 @@ inline string stos(const char* str) {	// dummy function for Arguments::setArgs
 	return str;
 }
 
-inline const char* pixelformatName(uint32 format) {
-	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
+template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
+string toStr(T num) {
+	return std::to_string(num);
 }
 
-inline string toStr(float num) {
+template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
+inline string toStr(T num, sizet len) {
+	string str = std::to_string(num);
+	return len > str.length() ? string(len - str.length(), '0') + str : str;
+}
+
+template <class T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
+string toStr(T num) {
 	string str = std::to_string(num);
 	sizet id = str.find_last_not_of('0');
 	return str.substr(0, str[id] == '.' ? id : id + 1);
 }
 
-template <class T>
-string toStr(T num) {
-	return std::to_string(num);
-}
-
-inline string dispToStr(const SDL_DisplayMode& mode) {
-	return toStr(mode.w) + ' ' + toStr(mode.h) + ' ' + toStr(mode.refresh_rate) + ' ' + toStr(mode.format);
-}
-
 inline bool stob(const string& str) {
-	return !strncicmp(str, "true", 4) || !strncicmp(str, "yes", 3) || !strncicmp(str, "on", 2) || (str[0] >= '1' && str[0] <= '9');
+	return !strncicmp(str, "true", 4) || !strncicmp(str, "on", 2) || !strncicmp(str, "y", 1) || std::any_of(str.begin(), str.end(), [](char c) -> bool { return c >= '1' && c <= '9'; });
 }
 
-inline string btos(bool b) {
+inline const char* btos(bool b) {
 	return b ? "true" : "false";
 }
 
 template <class T, sizet N>
-T strToEnum(const array<const char*, N>& names, const string& str) {
-	return T(std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !strcicmp(it, str.c_str()); }) - names.begin());
+T strToEnum(const array<const char*, N>& names, const string& str, T defaultValue = T(N)) {
+	typename array<const char*, N>::const_iterator p = std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !strcicmp(it, str.c_str()); });
+	return p != names.end() ? T(p - names.begin()) : defaultValue;
 }
 
 inline long sstol(const char* str, int base = 0) {
@@ -278,11 +327,6 @@ inline double sstod(const string& str) {
 	return sstod(str.c_str());
 }
 
-template <class T>
-T btom(bool fwd) {
-	return T(fwd) * 2 - 1;
-}
-
 template <class T, class F, class... A>
 T readNumber(const char*& pos, F strtox, A... args) {
 	T num = T(0);
@@ -302,7 +346,7 @@ T stoxv(const char* str, F strtox, typename T::value_type fill, A... args) {
 	return vec;
 }
 
-template <class T, class F = float (*)(const char*, char**)>
+template <class T, class F = decltype(strtof)>
 T stofv(const char* str, F strtox = strtof, typename T::value_type fill = typename T::value_type(0)) {
 	return stoxv<T>(str, strtox, fill);
 }
@@ -312,7 +356,7 @@ T stoiv(const char* str, F strtox, typename T::value_type fill = typename T::val
 	return stoxv<T>(str, strtox, fill, base);
 }
 
-template <glm::length_t L, class T, glm::qualifier Q>
+template <glm::length_t L, class T, glm::qualifier Q, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
 string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
 	string str;
 	for (glm::length_t i = 0; i < L - 1; i++)
@@ -320,13 +364,7 @@ string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
 	return str + toStr(v[L-1]);
 }
 
-template <class T>
-string ntosPadded(T num, uint pad) {
-	string str = toStr(num);
-	return str.length() < pad ? string(pad - str.length(), '0') + str : str;
-}
-
-template <class U, class S, std::enable_if_t<std::is_unsigned<U>::value && std::is_signed<S>::value, int> = 0>
+template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_signed_v<S>, int> = 0>
 U cycle(U pos, U siz, S mov) {
 	U rst = pos + U(mov % S(siz));
 	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
@@ -336,13 +374,11 @@ template <class T>
 vector<string> sortNames(const umap<string, T>& vmap) {
 	vector<string> names(vmap.size());
 	vector<string>::iterator nit = names.begin();
-	for (const pair<const string, T>& cit : vmap)
-		*nit++ = cit.first;
+	for (auto& [name, vt] : vmap)
+		*nit++ = name;
 	std::sort(names.begin(), names.end(), strnatless);
 	return names;
 }
-
-// files
 
 // command line arguments
 class Arguments {
@@ -354,15 +390,15 @@ private:
 public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
-	Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt);
+	Arguments(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	Arguments(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt);
 #endif
-	Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt);
+	Arguments(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt);
 
 #ifdef _WIN32
-	void setArgs(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
+	void setArgs(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
 #endif
-	template <class C, class F> void setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt);
+	template <class C, class F> void setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt);
 
 	const vector<string>& getVals() const;
 	bool hasFlag(char key) const;
@@ -370,21 +406,21 @@ public:
 };
 
 #ifdef _WIN32
-inline Arguments::Arguments(wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
+inline Arguments::Arguments(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(pCmdLine, flg, opt);
 }
 
-inline Arguments::Arguments(int argc, wchar** argv, const uset<char>& flg, const uset<char>& opt) {
+inline Arguments::Arguments(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(argc - 1, argv + 1, wtos, flg, opt);
 }
 #endif
 
-inline Arguments::Arguments(int argc, char** argv, const uset<char>& flg, const uset<char>& opt) {
+inline Arguments::Arguments(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt) {
 	setArgs(argc - 1, argv + 1, stos, flg, opt);
 }
 
 template <class C, class F>
-void Arguments::setArgs(int argc, C** argv, F conv, const uset<char>& flg, const uset<char>& opt) {
+void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt) {
 	for (int i = 0; i < argc; i++) {
 		if (char key; argv[i][0] == '-') {
 			for (int j = 1; key = char(argv[i][j]); j++) {

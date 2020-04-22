@@ -29,7 +29,7 @@ public:
 	void tickGame();
 protected:
 	void tickValidate();
-	void tickDiscard();
+	void tickDiscard() {}
 };
 
 inline void Netcp::sendData(Com::Buffer& sendb) {
@@ -59,5 +59,5 @@ public:
 };
 
 inline NetcpHost::NetcpHost() :
-	server(-1)
+	server(nsint(-1))
 {}

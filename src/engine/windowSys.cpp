@@ -1,74 +1,7 @@
 #include "windowSys.h"
 #ifdef _WIN32
 #include <winsock2.h>
-#elif defined(EMSCRIPTEN)
-#include <emscripten.h>
 #endif
-
-// FONT SET
-
-FontSet::FontSet(bool regular) :
-	fontData(readFile<vector<uint8>>(FileSys::dataPath(regular ? fileFont : fileFontAlt)))
-{
-	if (!(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight)))
-		throw std::runtime_error(TTF_GetError());
-	int size;	// get approximate height scale factor
-	heightScale = !TTF_SizeUTF8(logFont, fontTestString, nullptr, &size) ? float(fontTestHeight) / float(size) : fallbackScale;
-	if (TTF_CloseFont(logFont); !(logFont = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, logSize)))
-		throw std::runtime_error(TTF_GetError());
-}
-
-void FontSet::clear() {
-	for (const auto& [size, font] : fonts)
-		TTF_CloseFont(font);
-	fonts.clear();
-}
-
-TTF_Font* FontSet::getFont(int height) {
-	height = int(float(height) * heightScale);
-	if (umap<int, TTF_Font*>::iterator it = fonts.find(height); it != fonts.end())
-		return it->second;
-
-	TTF_Font* font = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, height);
-	if (font)
-		fonts.emplace(height, font);
-	else
-		std::cerr << TTF_GetError() << std::endl;
-	return font;
-}
-
-int FontSet::length(const string& text, int height) {
-	int len = 0;
-	if (TTF_Font* font = getFont(height))
-		TTF_SizeUTF8(font, text.c_str(), &len, nullptr);
-	return len;
-}
-
-void FontSet::writeLog(string&& text, const ShaderGui* gui, const ivec2& res) {
-	logLines.push_back(std::move(text));
-	if (uint maxl = uint(res.y / int(float(logSize) / heightScale)); logLines.size() > maxl)
-		logLines.erase(logLines.begin(), logLines.begin() + pdift(logLines.size() - maxl));
-
-	string str;
-	for (const string& it : logLines)
-		str += it + '\n';
-	str.pop_back();
-	logTex.close();
-	if (logTex = TTF_RenderUTF8_Blended_Wrapped(logFont, str.c_str(), logColor, uint(res.x)); logTex.valid()) {
-		float trans[4] = { 0.f, 0.f, float(logTex.getRes().x), float(logTex.getRes().y) };
-		glUseProgram(*gui);
-		glBindVertexArray(gui->wrect.getVao());
-		glUniform4fv(gui->rect, 1, trans);
-		glBindTexture(GL_TEXTURE_2D, logTex.getID());
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
-	}
-}
-
-void FontSet::closeLog() {
-	logTex.close();
-	TTF_CloseFont(logFont);
-	logLines.clear();
-}
 
 // SHADERS
 
@@ -185,96 +118,96 @@ ShaderGui::ShaderGui(const string& srcVert, const string& srcFrag) :
 	glUniform1i(texsamp, 0);
 }
 
+// FONT SET
+
+FontSet::FontSet(bool regular) :
+	fontData(loadFile<vector<uint8>>(FileSys::dataPath(regular ? fileFont : fileFontAlt)))
+{
+	TTF_Font* tmp = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight);
+	if (!tmp)
+		throw std::runtime_error(TTF_GetError());
+	int size;	// get approximate height scale factor
+	heightScale = !TTF_SizeUTF8(tmp, fontTestString, nullptr, &size) ? float(fontTestHeight) / float(size) : fallbackScale;
+	TTF_CloseFont(tmp);
+}
+
+void FontSet::clear() {
+	for (const auto& [size, font] : fonts)
+		TTF_CloseFont(font);
+	fonts.clear();
+}
+
+TTF_Font* FontSet::getFont(int height) {
+	height = int(float(height) * heightScale);
+	if (umap<int, TTF_Font*>::iterator it = fonts.find(height); it != fonts.end())
+		return it->second;
+
+	TTF_Font* font = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, height);
+	if (font)
+		fonts.emplace(height, font);
+	else
+		std::cerr << TTF_GetError() << std::endl;
+	return font;
+}
+
+int FontSet::length(const char* text, int height) {
+	int len = 0;
+	if (TTF_Font* font = getFont(height))
+		TTF_SizeUTF8(font, text, &len, nullptr);
+	return len;
+}
+
+// LOADER
+
+void WindowSys::Loader::addLine(const string& str, WindowSys* win) {
+	logStr += str + '\n';
+	if (uint lines = std::count(logStr.begin(), logStr.end(), '\n'), maxl = uint(win->getScreenView().y / logSize); lines > maxl) {
+		sizet end = 0;
+		for (uint i = lines - maxl; i; i--)
+			end = logStr.find_first_of('\n', end) + 1;
+		logStr.erase(0, end);
+	}
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	if (Texture tex = win->getFonts()->render(logStr.c_str(), logSize, uint(win->getScreenView().x)); tex) {
+		glUseProgram(*win->getGui());
+		glBindVertexArray(win->getGui()->wrect.getVao());
+		Quad::draw(Rect(0, 0, tex.getRes()), vec4(1.f), tex);
+	}
+	SDL_GL_SwapWindow(win->getWindow());
+}
+
 // WINDOW SYS
 
-WindowSys::WindowSys() :
-	window(nullptr),
-	context(nullptr),
-	cursor(nullptr),
-	dSec(0.f),
-	run(true)
-{}
+int WindowSys::start(const Arguments& args) {
+	window = nullptr;
+	context = nullptr;
+	run = true;
+	cursorHeight = 18;
 
-void WindowSys::start() {
+	int rc = EXIT_SUCCESS;
 	try {
-		if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER))
-			throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
-		if (IMG_Init(imgInitFlags) != imgInitFlags)
-			throw std::runtime_error(string("failed to initialize textures:") + linend + SDL_GetError());
-		if (TTF_Init())
-			throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
-#ifdef _WIN32
-		if (WSADATA wsad; WSAStartup(MAKEWORD(2, 2), &wsad))
-			throw std::runtime_error(Com::msgWinsockFail);
-#endif
-
-#if SDL_VERSION_ATLEAST(2, 0, 10)
-		SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
-		SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
-#else
-		SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
-#endif
-		SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
-		SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-		SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
-		SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
-		SDL_EventState(SDL_TEXTEDITING, SDL_DISABLE);
-		SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
-		SDL_EventState(SDL_DOLLARGESTURE, SDL_DISABLE);
-		SDL_EventState(SDL_DOLLARRECORD, SDL_DISABLE);
-		SDL_EventState(SDL_CLIPBOARDUPDATE, SDL_DISABLE);
-		SDL_EventState(SDL_DROPFILE, SDL_DISABLE);
-		SDL_EventState(SDL_DROPBEGIN, SDL_DISABLE);
-		SDL_EventState(SDL_DROPCOMPLETE, SDL_DISABLE);
-		SDL_EventState(SDL_AUDIODEVICEADDED, SDL_DISABLE);
-		SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
-		SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
-		SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
-		SDL_EventState(SDL_JOYAXISMOTION, SDL_DISABLE);
-		SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_DISABLE);
-		SDL_StopTextInput();
-
-		FileSys::init();
+		init(args);
 #ifdef EMSCRIPTEN
-		loopFunc = &WindowSys::lateInit;
-		loopState = 0;
 		emscripten_set_main_loop_arg([](void* data) {
 			WindowSys* w = static_cast<WindowSys*>(data);
 			(w->*w->loopFunc)();
 		}, this, 0, true);
 #else
-		sets.reset(FileSys::loadSettings());
-		fonts.reset(new FontSet(sets->fontRegular));
-		createWindow();
-		writeLog("Initializing");
-		try {
-			audio.reset(new AudioSys);
-		} catch (const std::runtime_error& err) {
-			std::cerr << err.what() << std::endl;
-			writeLog(err.what());
-			audio.reset();
-		}
-		inputSys.reset(new InputSys);
-		scene.reset(new Scene);
-		program.reset(new Program);
-		fonts->closeLog();
-		program->start();
-		for (oldTime = SDL_GetTicks(); run; exec());
+		for (; run; exec());
 #endif
 	} catch (const std::runtime_error& e) {
-		std::cerr << e.what() << std::endl;
-		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", e.what(), window);
+		rc = showError("Error", e.what());
 #ifdef NDEBUG
 	} catch (...) {
-		std::cerr << "unknown error" << std::endl;
-		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "unknown error", window);
+		rc = showError("Error", "unknown error");
 #endif
 	}
 	program.reset();
 	scene.reset();
+	audio.reset();
 	inputSys.reset();
 	destroyWindow();
-	audio.reset();
 	fonts.reset();
 	sets.reset();
 
@@ -284,50 +217,8 @@ void WindowSys::start() {
 	TTF_Quit();
 	IMG_Quit();
 	SDL_Quit();
+	return rc;
 }
-
-#ifdef EMSCRIPTEN
-void WindowSys::lateInit() {
-	switch (loopState) {
-	case 0:
-		if (FileSys::canRead()) {
-			sets.reset(FileSys::loadSettings());
-			fonts.reset(new FontSet(sets->fontRegular));
-			createWindow();
-			writeLog("Initializing");
-			loopState++;
-		}
-		break;
-	case 1:
-		try {
-			audio.reset(new AudioSys);
-		} catch (const std::runtime_error& err) {
-			std::cerr << err.what() << std::endl;
-			writeLog(err.what());
-			audio.reset();
-		}
-		loopState++;
-		break;
-	case 2:
-		inputSys.reset(new InputSys);
-		loopState++;
-		break;
-	case 3:
-		scene.reset(new Scene);
-		loopState++;
-		break;
-	case 4:
-		program.reset(new Program);
-		loopState++;
-		break;
-	default:
-		fonts->closeLog();
-		program->start();
-		loopFunc = &WindowSys::exec;
-		oldTime = SDL_GetTicks();
-	}
-}
-#endif
 
 void WindowSys::exec() {
 	uint32 newTime = SDL_GetTicks();
@@ -340,16 +231,113 @@ void WindowSys::exec() {
 	inputSys->tick(dSec);
 	scene->tick(dSec);
 	try {
-		if (program->getNetcp())
-			program->getNetcp()->tick();
+		program->tick(dSec);
 	} catch (const Com::Error& err) {
 		program->disconnect();
 		scene->setPopup(program->getState()->createPopupMessage(err.message, &Program::eventPostDisconnectGame));
 	}
 
 	uint32 timeout = SDL_GetTicks() + eventCheckTimeout;
-	for (SDL_Event event; SDL_PollEvent(&event) && SDL_GetTicks() < timeout;)
+	do {
+		SDL_Event event;
+		if (!SDL_PollEvent(&event))
+			break;
 		handleEvent(event);
+	} while (SDL_GetTicks() < timeout);
+}
+
+void WindowSys::init(const Arguments& args) {
+	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER))
+		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
+	if (IMG_Init(imgInitFlags) != imgInitFlags)
+		throw std::runtime_error(string("failed to initialize textures:") + linend + SDL_GetError());
+	if (TTF_Init())
+		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
+#ifdef _WIN32
+	if (WSADATA wsad; WSAStartup(MAKEWORD(2, 2), &wsad))
+		throw std::runtime_error(Com::msgWinsockFail);
+#endif
+
+#if SDL_VERSION_ATLEAST(2, 0, 10)
+	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#else
+	SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
+#endif
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+	SDL_EventState(SDL_TEXTEDITING, SDL_DISABLE);
+	SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
+	SDL_EventState(SDL_DOLLARGESTURE, SDL_DISABLE);
+	SDL_EventState(SDL_DOLLARRECORD, SDL_DISABLE);
+	SDL_EventState(SDL_CLIPBOARDUPDATE, SDL_DISABLE);
+	SDL_EventState(SDL_DROPFILE, SDL_DISABLE);
+	SDL_EventState(SDL_DROPBEGIN, SDL_DISABLE);
+	SDL_EventState(SDL_DROPCOMPLETE, SDL_DISABLE);
+	SDL_EventState(SDL_AUDIODEVICEADDED, SDL_DISABLE);
+	SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
+	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
+	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
+	SDL_StopTextInput();
+
+	FileSys::init(args);
+#ifdef EMSCRIPTEN
+	loader = new Loader;
+	loopFunc = &WindowSys::load;
+#else
+	for (Loader loader; loader.state <= 5; load(&loader));
+#endif
+}
+
+#ifdef EMSCRIPTEN
+void WindowSys::load() {
+#else
+void WindowSys::load(Loader* loader) {
+#endif
+	switch (loader->state++) {
+	case 0:
+#ifdef EMSCRIPTEN
+		if (FileSys::canRead())
+			break;
+#endif
+		sets = std::make_unique<Settings>(FileSys::loadSettings());
+		fonts = std::make_unique<FontSet>(sets->fontRegular);
+		createWindow();
+		loader->addLine("initializing", this);
+		break;
+	case 1:
+		inputSys = std::make_unique<InputSys>();
+		loader->addLine("loading audio", this);
+		break;
+	case 2:
+		try {
+			audio = std::make_unique<AudioSys>(this);
+		} catch (const std::runtime_error& err) {
+			audio.reset();
+			std::cerr << err.what() << std::endl;
+		}
+		loader->addLine("loading objects", this);
+		break;
+	case 3:
+		scene = std::make_unique<Scene>();
+		scene->loadObjects();
+		loader->addLine("loading textures", this);
+		break;
+	case 4:
+		scene->loadTextures();
+		loader->addLine("starting", this);
+		break;
+	case 5:
+#ifdef EMSCRIPTEN
+		delete loader;
+		loopFunc = &WindowSys::exec;
+#endif
+		program = std::make_unique<Program>();
+		program->start();
+		oldTime = SDL_GetTicks();
+	}
 }
 
 void WindowSys::createWindow() {
@@ -377,10 +365,10 @@ void WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-#endif
 #ifdef DEBUG
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_RELEASE_BEHAVIOR, 0);
+#endif
 #endif
 	if (!(window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags)))
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
@@ -397,22 +385,20 @@ void WindowSys::createWindow() {
 	SDL_SetWindowBrightness(window, sets->gamma);
 
 	// load icons
-#ifdef EMSCRIPTEN
-	cursorHeight = fallbackCursorSize;
-#elif !defined(__ANDROID__)
+#ifndef __ANDROID__
+#ifndef EMSCRIPTEN
 	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileIcon).c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
+#endif
 	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileCursor).c_str())) {
 		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
 			cursorHeight = uint8(icon->h);
 			SDL_SetCursor(cursor);
-		} else
-			cursorHeight = fallbackCursorSize;
+		}
 		SDL_FreeSurface(icon);
-	} else
-		cursorHeight = fallbackCursorSize;
+	}
 #endif
 
 	// create context and set up rendering
@@ -439,25 +425,25 @@ void WindowSys::createWindow() {
 #endif
 
 	umap<string, string> sources = FileSys::loadShaders();
-	geom.reset(new ShaderGeometry(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get()));
+	geom = std::make_unique<ShaderGeometry>(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get());
 #ifndef OPENGLES
-	depth.reset(new ShaderDepth(sources.at(fileDepthVert), sources.at(fileDepthGeom), sources.at(fileDepthFrag)));
+	depth = std::make_unique<ShaderDepth>(sources.at(fileDepthVert), sources.at(fileDepthGeom), sources.at(fileDepthFrag));
 #endif
-	gui.reset(new ShaderGui(sources.at(fileGuiVert), sources.at(fileGuiFrag)));
+	gui = std::make_unique<ShaderGui>(sources.at(fileGuiVert), sources.at(fileGuiFrag));
 
 	// init startup log
-	glViewport(0, 0, curView.x, curView.y);
-	glUniform4fv(gui->uvrc, 1, logTexUV);
-	glUniform1f(gui->zloc, 0.f);
-	glUniform4fv(gui->color, 1, logTexColor);
+	glViewport(0, 0, screenView.x, screenView.y);
 	glActiveTexture(GL_TEXTURE0);
+	glUseProgram(*gui);
+	glUniform2f(gui->pview, float(screenView.x) / 2.f, float(screenView.y) / 2.f);
 }
 
 void WindowSys::destroyWindow() {
-	geom.reset();
-	depth.reset();
 	gui.reset();
-	SDL_FreeCursor(cursor);
+#ifndef OPENGLES
+	depth.reset();
+#endif
+	geom.reset();
 	SDL_GL_DeleteContext(context);
 	SDL_DestroyWindow(window);
 }
@@ -503,8 +489,14 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_JOYHATMOTION:
 		inputSys->eventJoystickHat(event.jhat);
 		break;
+	case SDL_JOYAXISMOTION:
+		inputSys->eventJoystickAxis(event.jaxis);
+		break;
 	case SDL_CONTROLLERBUTTONDOWN:
 		inputSys->eventGamepadButton(event.cbutton);
+		break;
+	case SDL_CONTROLLERAXISMOTION:
+		inputSys->eventGamepadAxis(event.caxis);
 		break;
 	case SDL_DROPTEXT:
 		scene->onText(event.drop.file);
@@ -513,11 +505,11 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_WINDOWEVENT:
 		eventWindow(event.window);
 		break;
-	case SDL_JOYDEVICEADDED:
-		inputSys->addController(event.jdevice.which);
+	case SDL_JOYDEVICEADDED: case SDL_JOYDEVICEREMOVED:
+		inputSys->resetControllers();
 		break;
-	case SDL_JOYDEVICEREMOVED:
-		inputSys->removeController(event.jdevice.which);
+	case SDL_USEREVENT:
+		program->eventUser(event.user);
 		break;
 	case SDL_QUIT:
 		close();
@@ -526,6 +518,9 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 
 void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	switch (winEvent.event) {
+	case SDL_WINDOWEVENT_ENTER:
+		scene->updateSelect();
+		break;
 	case SDL_WINDOWEVENT_LEAVE:
 		scene->onMouseLeave();
 		break;
@@ -534,10 +529,13 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 	}
 }
 
-void WindowSys::writeLog(string&& text) {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	fonts->writeLog(std::move(text), gui.get(), curView);
-	SDL_GL_SwapWindow(window);
+void WindowSys::setTextInput(Interactable* capture) {
+	scene->capture = capture;
+	capture ? SDL_StartTextInput() : SDL_StopTextInput();
+#ifdef __ANDROID__	// TODO: somehow check for SDL_IsScreenKeyboardShown maybe including SDL_HasScreenKeyboardSupport or SDL_TextEditingEvent
+	guiView.y = capture ? guiView.y / 2 : screenView.y;
+	scene->onResize();
+#endif
 }
 
 void WindowSys::setVsync(Settings::VSync vsync) {
@@ -580,16 +578,19 @@ void WindowSys::setScreen() {
 
 void WindowSys::setWindowMode() {
 #ifndef __ANDROID__
-	if (sets->screen <= Settings::Screen::borderless) {
+	switch (sets->screen) {
+	case Settings::Screen::window: case Settings::Screen::borderless:
 		SDL_SetWindowFullscreen(window, 0);
 		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
-	} else  if (sets->screen == Settings::Screen::fullscreen) {
+		break;
+	case Settings::Screen::fullscreen:
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-	} else {
+		break;
+	case Settings::Screen::desktop:
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
@@ -601,10 +602,11 @@ void WindowSys::updateView() {
 #ifdef __ANDROID__
 	SDL_Rect rect;
 	SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window), &rect);	// SDL_GL_GetDrawableSize don't work properly
-	curView = ivec2(rect.w, rect.h);
+	screenView = ivec2(rect.w, rect.h);
 #else
-	SDL_GL_GetDrawableSize(window, &curView.x, &curView.y);
+	SDL_GL_GetDrawableSize(window, &screenView.x, &screenView.y);
 #endif
+	guiView = screenView;
 }
 
 void WindowSys::setGamma(float gamma) {
@@ -613,11 +615,10 @@ void WindowSys::setGamma(float gamma) {
 }
 
 void WindowSys::resetSettings() {
-	sets.reset(new Settings);
+	sets = std::make_unique<Settings>();
 	scene->reloadTextures();
 	scene->resetShadows();
 	scene->reloadShader();
-	fonts.reset(new FontSet(sets->fontRegular));
 	reloadFont(sets->fontRegular);
 	checkCurDisplay();
 	setSwapInterval();
@@ -627,7 +628,7 @@ void WindowSys::resetSettings() {
 
 void WindowSys::reloadGeom() {
 	umap<string, string> sources = FileSys::loadShaders();
-	geom.reset(new ShaderGeometry(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get()));
+	geom = std::make_unique<ShaderGeometry>(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets.get());
 }
 
 bool WindowSys::checkCurDisplay() {
@@ -677,4 +678,10 @@ vector<SDL_DisplayMode> WindowSys::displayModes() const {
 		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode))
 			mods.push_back(mode);
 	return uniqueSort(mods);
+}
+
+int WindowSys::showError(const char* caption, const char* message) {
+	std::cerr << message << std::endl;
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, message, window);
+	return EXIT_FAILURE;
 }

@@ -12,9 +12,12 @@ public:
 	static constexpr float zfar = 100.f;
 	static constexpr float pmaxSetup = -PI / 2.f + PI / 10.f, pmaxMatch = -PI / 2.f + PI / 20.f;
 	static constexpr float ymaxSetup = PI / 6.f, ymaxMatch = PI * 2.f;
-	static const vec3 posSetup, posMatch;
-	static const vec3 latSetup, latMatch;
-	static const vec3 up, center;
+	static constexpr vec3 posSetup = { Com::Config::boardWidth / 2.f, 9.f, Com::Config::boardWidth / 2.f + 9.f };
+	static constexpr vec3 posMatch = { Com::Config::boardWidth / 2.f, 12.f, Com::Config::boardWidth / 2.f + 10.f };
+	static constexpr vec3 latSetup = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 2.5f };
+	static constexpr vec3 latMatch = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 1.f };
+	static constexpr vec3 up = { 0.f, 1.f, 0.f };
+	static constexpr vec3 center = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f };
 
 	bool moving;		// whether the camera is currently moving (animation)
 	float pmax, ymax;
@@ -27,7 +30,7 @@ private:
 	mat4 proj;
 
 public:
-	Camera(const vec3& pos, const vec3& lat, float pmax, float ymax);
+	Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax);
 
 	void updateView() const;
 	void updateProjection();
@@ -37,6 +40,7 @@ public:
 	void rotate(const vec2& dRot, float dYaw);
 	void zoom(int mov);
 	vec3 direction(const ivec2& mPos) const;
+	ivec2 screenPos(const vec3& pnt) const;
 private:
 	void updateRotations(const vec3& pvec, const vec3& lvec);
 	static float calcPitch(const vec3& pos, float dist);
@@ -88,7 +92,7 @@ struct ClickStamp {
 	ivec2 pos;
 	uint8 but;
 
-	ClickStamp(Interactable* inter = nullptr, ScrollArea* area = nullptr, const ivec2& pos = ivec2(INT_MIN), uint8 but = 0);
+	ClickStamp(Interactable* interact = nullptr, ScrollArea* scrollArea = nullptr, const ivec2& position = ivec2(INT_MIN), uint8 button = 0);
 };
 
 // defines change of object properties at a time
@@ -106,14 +110,13 @@ struct Keyframe {
 	float time;		// time difference between this and previous keyframe
 	Change change;	// what members get affected
 
-	Keyframe(float time, Change change, const vec3& pos = vec3(), const quat& rot = quat(), const vec3& scl = vec3());
+	Keyframe(float timeOfs, Change changes, const vec3& position = vec3(), const quat& rotation = quat(), const vec3& scale = vec3());
 };
-ENUM_OPERATIONS(Keyframe::Change, uint8)
 
 // a sequence of keyframes applied to an object
 class Animation {
 private:
-	std::queue<Keyframe> keyframes;
+	std::queue<Keyframe> kframes;
 	Keyframe begin;		// initial state of the object
 	union {
 		Object* object;
@@ -122,8 +125,8 @@ private:
 	bool useObject;
 
 public:
-	Animation(Object* object, std::queue<Keyframe>&& keyframes);
-	Animation(Camera* camera, std::queue<Keyframe>&& keyframes);
+	Animation(Object* obj, std::queue<Keyframe>&& keyframes);
+	Animation(Camera* cam, std::queue<Keyframe>&& keyframes);
 
 	bool tick(float dSec);
 	void append(Animation& ani);
@@ -134,9 +137,10 @@ inline bool Animation::operator==(const Animation& ani) const {
 	return useObject == ani.useObject && (useObject ? object == ani.object : camera == ani.camera);
 }
 
-// handles more backend UI interactions, works with widgets (UI elements), and contains Program and Library
+// handles more back-end UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
+	Camera camera;
 	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
 	Interactable* select;	// currently selected widget/object
@@ -144,14 +148,13 @@ private:
 	vector<Object*> objects;
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
-	uptr<Overlay> overlay;
+	vector<Overlay*> overlays;
 	uptr<Context> context;
 	vector<Animation> animations;
 	umap<string, Mesh> meshes;
-	umap<string, Material> materials;
+	umap<string, Material> matls;
 	umap<string, Texture> texes;
 	void (Scene::*shadowFunc)();
-	Camera camera;
 	Light light;
 	ClickStamp cstamp;	// data about last mouse click
 
@@ -172,34 +175,38 @@ public:
 	void onMouseLeave();
 	void onText(const char* str);
 	void onConfirm();
+	void onXbutConfirm();
 	void onCancel();
+	void onXbutCancel();
 
 	const Mesh* mesh(const string& name) const;
 	const Material* material(const string& name) const;
+	void loadObjects();
 	const Texture* getTex(const string& name) const;
-	GLuint texture(const string& name) const;
-	GLuint blank() const;
+	GLuint texture(const string& name = string()) const;
+	void loadTextures();
 	void reloadTextures();
 	void resetShadows();
 	void reloadShader();
 	Interactable* getSelect() const;
 	Interactable* getFirstSelect() const;
-	Camera* getCamera();
 	void setObjects(vector<Object*>&& objs);
 	void resetLayouts();
 	RootLayout* getLayout();
 	Popup* getPopup();
-	Overlay* getOverlay();
+	vector<Overlay*>& getOverlays();
 	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void setPopup(const pair<Popup*, Widget*>& popcap);
 	Context* getContext();
 	void setContext(Context* newContext);
 	void addAnimation(Animation&& anim);
+	void delegateStamp(Interactable* inter);
 	bool cursorInClickRange(const ivec2& mPos) const;
 	vec3 pickerRay(const ivec2& mPos) const;
 	vec3 rayXZIsct(const vec3& ray) const;
 
-	void navSelect(Direction dir);
+	void navSelect(Direction dir, bool& mouseLast);
+	void resetSelect();
 	void updateSelect();
 	void updateSelect(Interactable* sel);
 	void updateSelect(const ivec2& mPos);
@@ -207,9 +214,8 @@ private:
 	void unselect();
 	Interactable* getSelected(const ivec2& mPos);
 	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
-	ScrollArea* getSelectedScrollArea() const;
+	ScrollArea* getSelectedScrollArea(Interactable* inter) const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
-	BoardObject* findBoardObject(const ivec2& mPos) const;
 
 	void renderShadows();
 	void renderDummy() {}
@@ -221,10 +227,6 @@ inline Interactable* Scene::getSelect() const {
 
 inline Interactable* Scene::getFirstSelect() const {
 	return firstSelect;
-}
-
-inline Camera* Scene::getCamera() {
-	return &camera;
 }
 
 inline void Scene::setObjects(vector<Object*>&& objs) {
@@ -239,12 +241,12 @@ inline Popup* Scene::getPopup() {
 	return popup.get();
 }
 
-inline Overlay* Scene::getOverlay() {
-	return overlay.get();
-}
-
 inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
 	setPopup(popcap.first, popcap.second);
+}
+
+inline vector<Overlay*>& Scene::getOverlays() {
+	return overlays;
 }
 
 inline Context* Scene::getContext() {
@@ -259,8 +261,8 @@ inline void Scene::updateSelect(const ivec2& mPos) {
 	updateSelect(getSelected(mPos));
 }
 
-inline ScrollArea* Scene::getSelectedScrollArea() const {
-	return dynamic_cast<Widget*>(select) ? findFirstScrollArea(static_cast<Widget*>(select)) : nullptr;
+inline ScrollArea* Scene::getSelectedScrollArea(Interactable* inter) const {
+	return dynamic_cast<Widget*>(inter) ? findFirstScrollArea(static_cast<Widget*>(inter)) : nullptr;
 }
 
 inline vec3 Scene::pickerRay(const ivec2& mPos) const {
@@ -276,7 +278,7 @@ inline const Mesh* Scene::mesh(const string& name) const {
 }
 
 inline const Material* Scene::material(const string& name) const {
-	return &materials.at(name);
+	return &matls.at(name);
 }
 
 inline const Texture* Scene::getTex(const string& name) const {
@@ -284,13 +286,5 @@ inline const Texture* Scene::getTex(const string& name) const {
 }
 
 inline GLuint Scene::texture(const string& name) const {
-	return texes.at(name).getID();
-}
-
-inline GLuint Scene::blank() const {
-	return texes.at(string()).getID();
-}
-
-inline void Scene::reloadTextures() {
-	FileSys::reloadTextures(texes);
+	return texes.at(name);
 }

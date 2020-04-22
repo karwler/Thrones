@@ -1,0 +1,30 @@
+newmtl tile
+Kd 0.8 0.8 0.8
+Ks 0.3 0.3 0.3
+Ns 600
+
+newmtl plains
+Kd 1 1 0
+Ks 0.3 0.3 0.3
+Ns 600
+
+newmtl forest
+Kd 0 1 0
+Ks 0.3 0.3 0.3
+Ns 600
+
+newmtl mountain
+Kd 1 0 0
+Ks 0.3 0.3 0.3
+Ns 600
+
+newmtl water
+Kd 0 0 1
+Ks 0.3 0.3 0.3
+Ns 600
+
+newmtl empty
+Kd 0.8 0.8 0.8
+Ks 0.3 0.3 0.3
+Ns 600
+d 0.12

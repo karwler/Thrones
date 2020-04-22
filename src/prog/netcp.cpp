@@ -5,7 +5,7 @@ using namespace Com;
 
 Netcp::Netcp() :
 	tickproc(nullptr),
-	socket(-1),
+	socket(nsint(-1)),
 	webs(false)
 {}
 
@@ -15,7 +15,7 @@ Netcp::~Netcp() {
 }
 
 void Netcp::connect() {
-	connector.reset(new Connector(World::sets()->address.c_str(), World::sets()->port, World::sets()->resolveFamily));
+	connector = std::make_unique<Connector>(World::sets()->address.c_str(), World::sets()->port.c_str(), World::sets()->resolveFamily);
 	tickproc = &Netcp::tickConnect;
 }
 
@@ -43,12 +43,13 @@ void Netcp::tickConnect() {
 void Netcp::tickWait() {
 	if (!pollSocket(socket))
 		return;
-	for (recvb.recvData(socket);; recvb.clearCur(webs)) {
-		uint8* data = recvb.recv(socket, webs);
-		if (!data)
-			break;
-
+	bool final = recvb.recvData(socket);
+	for (uint8* data; data = recvb.recv(socket, webs); recvb.clearCur(webs))
 		switch (Code(data[0])) {
+		case Code::version:
+			throw Error("Server expected version " + readText(data));
+		case Code::full:
+			throw Error("Server full");
 		case Code::rlist:
 			World::program()->info &= ~Program::INF_UNIQ;
 			World::program()->eventOpenLobby(data + dataHeadSize);
@@ -60,17 +61,15 @@ void Netcp::tickWait() {
 		default:
 			throw Error("Invalid response: " + toStr(*data));
 		}
-	}
+	if (final)
+		throw Error(msgConnectionLost);
 }
 
 void Netcp::tickLobby() {
 	if (!pollSocket(socket))
 		return;
-	for (recvb.recvData(socket);; recvb.clearCur(webs)) {
-		uint8* data = recvb.recv(socket, webs);
-		if (!data)
-			break;
-
+	bool final = recvb.recvData(socket);
+	for (uint8* data; data = recvb.recv(socket, webs); recvb.clearCur(webs))
 		switch (Code(data[0])) {
 		case Code::rlist:
 			World::program()->eventOpenLobby(data + dataHeadSize);
@@ -79,7 +78,7 @@ void Netcp::tickLobby() {
 			World::state<ProgLobby>()->addRoom(readName(data + dataHeadSize));
 			break;
 		case Code::cnrnew:
-			World::program()->eventHostRoomReceive(data + dataHeadSize);
+			World::program()->eventHostRoomReceive(data);
 			break;
 		case Code::rerase:
 			World::state<ProgLobby>()->delRoom(readName(data + dataHeadSize));
@@ -103,7 +102,7 @@ void Netcp::tickLobby() {
 			break;
 		case Code::config:
 			World::game()->recvConfig(data + dataHeadSize);
-			World::state<ProgRoom>()->updateConfigWidgets(World::game()->getConfig());
+			World::state<ProgRoom>()->updateConfigWidgets(World::game()->board.config);
 			break;
 		case Code::start:
 			World::game()->recvStart(data + dataHeadSize);
@@ -114,17 +113,15 @@ void Netcp::tickLobby() {
 		default:
 			throw Error("Invalid net code " + toStr(data[0]) + " of size " + toStr(read16(data + 1)));
 		}
-	}
+	if (final)
+		throw Error(msgConnectionLost);
 }
 
 void Netcp::tickGame() {
 	if (!pollSocket(socket))
 		return;
-	for (recvb.recvData(socket);; recvb.clearCur(webs)) {
-		uint8* data = recvb.recv(socket, webs);
-		if (!data)
-			break;
-
+	bool final = recvb.recvData(socket);
+	for (uint8* data; data = recvb.recv(socket, webs); recvb.clearCur(webs))
 		switch (Code(data[0])) {
 		case Code::rlist:
 			World::program()->uninitGame();
@@ -151,8 +148,12 @@ void Netcp::tickGame() {
 		case Code::breach:
 			World::game()->recvBreach(data + dataHeadSize);
 			break;
+		case Code::tile:
+			World::game()->recvTile(data + dataHeadSize);
+			break;
 		case Code::record:
-			World::game()->recvRecord(data + dataHeadSize);
+			if (World::game()->recvRecord(data + dataHeadSize); !World::netcp())	// it's possible that this instance gets deleted
+				return;
 			break;
 		case Code::message:
 			World::program()->eventRecvMessage(data);
@@ -160,31 +161,30 @@ void Netcp::tickGame() {
 		default:
 			throw Error("Invalid net code " + toStr(data[0]) + " of size " + toStr(read16(data + 1)));
 		}
-	}
+	if (final)
+		throw Error(msgConnectionLost);
 }
 
 void Netcp::tickValidate() {
 	if (!pollSocket(socket))
 		return;
-	for (recvb.recvData(socket);;)
+	for (bool final = recvb.recvData(socket);;)
 		switch (recvb.recvConn(socket, webs)) {
 		case Buffer::Init::wait:
+			if (final)
+				throw Error(msgConnectionLost);
 			return;
 		case Buffer::Init::connect:
+			if (final)
+				throw Error(msgConnectionLost);
 			World::game()->sendStart();
 			break;
+		case Buffer::Init::version:
+			sendVersion(socket, webs);
 		case Buffer::Init::error:
 			closeSocket(socket);
-			tickproc = &NetcpHost::tickDiscard;
+			tickproc = &Netcp::tickDiscard;
 			return;
-		}
-}
-
-void Netcp::tickDiscard() {
-	if (pollSocket(socket))
-		if (recvb.recvData(socket); uint8* data = recvb.recv(socket, webs)) {
-			std::cerr << "unexprected data with code '" << uint(data[0]) << '\'' << std::endl;
-			recvb.clear();
 		}
 }
 
@@ -202,7 +202,7 @@ NetcpHost::~NetcpHost() {
 }
 
 void NetcpHost::connect() {
-	server = bindSocket(World::sets()->port, World::sets()->resolveFamily);
+	server = bindSocket(World::sets()->port.c_str(), World::sets()->resolveFamily);
 	tickproc = &NetcpHost::tickDiscard;
 }
 
@@ -212,11 +212,10 @@ void NetcpHost::disconnect() {
 }
 
 void NetcpHost::tick() {
-	if (socket != -1)
-		(this->*tickproc)();
+	(this->*tickproc)();
 	if (pollSocket(server)) {
 		if (socket != -1)
-			discardAccept(server);
+			sendRejection(server);
 		else try {
 			socket = acceptSocket(server);
 			tickproc = &NetcpHost::tickValidate;

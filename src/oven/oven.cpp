@@ -18,7 +18,7 @@ bool Sound::convert(const SDL_AudioSpec& dsts) {
 
 	cvt.len = int(length);
 	cvt.buf = static_cast<uint8*>(SDL_malloc(sizet(cvt.len * cvt.len_mult)));
-	if (SDL_memcpy(cvt.buf, data, length);  SDL_ConvertAudio(&cvt)) {
+	if (SDL_memcpy(cvt.buf, data, length); SDL_ConvertAudio(&cvt)) {
 		SDL_free(cvt.buf);
 		return false;	// failed to convert
 	}
@@ -34,17 +34,17 @@ bool Sound::convert(const SDL_AudioSpec& dsts) {
 // MATERIAL
 
 Material::Material(const vec4& diffuse, const vec3& specular, float shininess) :
-	diffuse(diffuse),
-	specular(specular),
-	shininess(shininess)
+	color(diffuse),
+	spec(specular),
+	shine(shininess)
 {}
 
 // VERTEX
 
-Vertex::Vertex(const vec3& pos, const vec3& nrm, const vec2& tuv) :
-	pos(pos),
-	nrm(nrm),
-	tuv(tuv)
+Vertex::Vertex(const vec3& position, const vec3& normal, const vec2& texuv) :
+	pos(position),
+	nrm(normal),
+	tuv(texuv)
 {}
 
 // FUNCTIONS
@@ -62,28 +62,4 @@ SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
 			std::cerr << "failed to create scaled surface: " << SDL_GetError() << std::endl;
 	}
 	return img;
-}
-
-vector<string> readFileLines(const string& file) {
-	vector<string> lines(1);
-	for (char c : readFile(file)) {
-		if (c != '\n' && c != '\r')
-			lines.back() += c;
-		else if (!lines.back().empty())
-			lines.emplace_back();
-	}
-	if (lines.back().empty())
-		lines.pop_back();
-	return lines;
-}
-
-string readIniTitle(const string& line) {
-	sizet li = line.find_first_of('[');
-	sizet ri = line.find_last_of(']');
-	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : string();
-}
-
-pairStr readIniLine(const string& line) {
-	sizet id = line.find_first_of('=');
-	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
 }

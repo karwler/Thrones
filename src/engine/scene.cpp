@@ -2,20 +2,13 @@
 
 // CAMERA
 
-const vec3 Camera::posSetup(Com::Config::boardWidth / 2.f, 9.f, Com::Config::boardWidth / 2.f + 9.f);
-const vec3 Camera::posMatch(Com::Config::boardWidth / 2.f, 12.f, Com::Config::boardWidth / 2.f + 10.f);
-const vec3 Camera::latSetup(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 2.5f);
-const vec3 Camera::latMatch(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 1.f);
-const vec3 Camera::up(0.f, 1.f, 0.f);
-const vec3 Camera::center(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f);
-
-Camera::Camera(const vec3& pos, const vec3& lat, float pmax, float ymax) :
+Camera::Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax) :
 	moving(false),
-	pmax(pmax),
-	ymax(ymax)
+	pmax(pitchMax),
+	ymax(yawMax)
 {
 	updateProjection();
-	setPos(pos, lat);
+	setPos(position, lookAt);
 }
 
 void Camera::updateView() const {
@@ -26,7 +19,7 @@ void Camera::updateView() const {
 }
 
 void Camera::updateProjection() {
-	vec2 res = World::window()->screenView();
+	vec2 res = World::window()->getScreenView();
 	proj = glm::perspective(glm::radians(fov), res.x / res.y, znear, zfar);
 
 	res /= 2.f;
@@ -68,7 +61,7 @@ void Camera::zoom(int mov) {
 }
 
 vec3 Camera::direction(const ivec2& mPos) const {
-	vec2 res = World::window()->screenView();
+	vec2 res = World::window()->getScreenView();
 	vec3 dir = glm::normalize(lat - pos);
 
 	float vl = std::tan(glm::radians(fov / 2.f)) * znear;
@@ -79,6 +72,12 @@ vec3 Camera::direction(const ivec2& mPos) const {
 	res /= 2.f;
 	vec2 m((float(mPos.x) - res.x) / res.x, -(float(mPos.y) - res.y) / res.y);
 	return glm::normalize(dir * znear + h * m.x + v * m.y);
+}
+
+ivec2 Camera::screenPos(const vec3& pnt) const {
+	vec2 res = vec2(World::window()->getScreenView()) / 2.f;
+	vec2 pix = vec2(proj * glm::lookAt(pos, lat, up) * vec4(pnt, 1.f)) / 10.f;	// TODO: why 10?
+	return vec2((pix.x + 1.f) * res.x, (1.f - pix.y) * res.y);
 }
 
 // LIGHT
@@ -133,56 +132,56 @@ void Light::updateValues(float range) {
 
 // CLICK STAMP
 
-ClickStamp::ClickStamp(Interactable* inter, ScrollArea* area, const ivec2& pos, uint8 but) :
-	inter(inter),
-	area(area),
-	pos(pos),
-	but(but)
+ClickStamp::ClickStamp(Interactable* interact, ScrollArea* scrollArea, const ivec2& position, uint8 button) :
+	inter(interact),
+	area(scrollArea),
+	pos(position),
+	but(button)
 {}
 
 // KEYFRAME
 
-Keyframe::Keyframe(float time, Change change, const vec3& pos, const quat& rot, const vec3& scl) :
-	pos(pos),
-	scl(scl),
-	rot(rot),
-	time(time),
-	change(change)
+Keyframe::Keyframe(float timeOfs, Change changes, const vec3& position, const quat& rotation, const vec3& scale) :
+	pos(position),
+	scl(scale),
+	rot(rotation),
+	time(timeOfs),
+	change(changes)
 {}
 
 // ANIMATION
 
-Animation::Animation(Object* object, std::queue<Keyframe>&& keyframes) :
-	keyframes(std::move(keyframes)),
-	begin(0.f, Keyframe::CHG_NONE, object->getPos(), object->getRot(), object->getScl()),
-	object(object),
+Animation::Animation(Object* obj, std::queue<Keyframe>&& keyframes) :
+	kframes(std::move(keyframes)),
+	begin(0.f, Keyframe::CHG_NONE, obj->getPos(), obj->getRot(), obj->getScl()),
+	object(obj),
 	useObject(true)
 {}
 
-Animation::Animation(Camera* camera, std::queue<Keyframe>&& keyframes) :
-	keyframes(std::move(keyframes)),
-	begin(0.f, Keyframe::CHG_NONE, camera->getPos(), quat(), camera->getLat()),
-	camera(camera),
+Animation::Animation(Camera* cam, std::queue<Keyframe>&& keyframes) :
+	kframes(std::move(keyframes)),
+	begin(0.f, Keyframe::CHG_NONE, cam->getPos(), quat(), cam->getLat()),
+	camera(cam),
 	useObject(false)
 {
-	camera->moving = true;
+	cam->moving = true;
 }
 
 bool Animation::tick(float dSec) {
 	begin.time += dSec;
-	if (float td = keyframes.front().time > 0.f ? std::clamp(begin.time / keyframes.front().time, 0.f, 1.f) : 1.f; useObject) {
-		if (keyframes.front().change & Keyframe::CHG_POS)
-			object->setPos(glm::mix(begin.pos, keyframes.front().pos, td));
-		if (keyframes.front().change & Keyframe::CHG_ROT)
-			object->setRot(glm::mix(begin.rot, keyframes.front().rot, td));
-		if (keyframes.front().change & Keyframe::CHG_SCL)
-			object->setScl(glm::mix(begin.scl, keyframes.front().scl, td));
+	if (float td = kframes.front().time > 0.f ? std::clamp(begin.time / kframes.front().time, 0.f, 1.f) : 1.f; useObject) {
+		if (kframes.front().change & Keyframe::CHG_POS)
+			object->setPos(glm::mix(begin.pos, kframes.front().pos, td));
+		if (kframes.front().change & Keyframe::CHG_ROT)
+			object->setRot(glm::mix(begin.rot, kframes.front().rot, td));
+		if (kframes.front().change & Keyframe::CHG_SCL)
+			object->setScl(glm::mix(begin.scl, kframes.front().scl, td));
 	} else
-		camera->setPos(keyframes.front().change & Keyframe::CHG_POS ? glm::mix(begin.pos, keyframes.front().pos, td) : camera->getPos(), keyframes.front().change & Keyframe::CHG_LAT ? glm::mix(begin.scl, keyframes.front().scl, td) : camera->getLat());
+		camera->setPos(kframes.front().change & Keyframe::CHG_POS ? glm::mix(begin.pos, kframes.front().pos, td) : camera->getPos(), kframes.front().change & Keyframe::CHG_LAT ? glm::mix(begin.scl, kframes.front().scl, td) : camera->getLat());
 
-	if (begin.time >= keyframes.front().time) {
-		float ovhead = begin.time - keyframes.front().time;
-		if (keyframes.pop(); !keyframes.empty()) {
+	if (begin.time >= kframes.front().time) {
+		float ovhead = begin.time - kframes.front().time;
+		if (kframes.pop(); !kframes.empty()) {
 			begin = Keyframe(0.f, Keyframe::CHG_NONE, useObject ? object->getPos() : camera->getPos(), useObject ? object->getRot() : quat(), useObject ? object->getScl() : camera->getLat());
 			return tick(ovhead);
 		}
@@ -194,23 +193,20 @@ bool Animation::tick(float dSec) {
 }
 
 void Animation::append(Animation& ani) {
-	while (!ani.keyframes.empty()) {
-		keyframes.push(ani.keyframes.front());
-		ani.keyframes.pop();
+	while (!ani.kframes.empty()) {
+		kframes.push(ani.kframes.front());
+		ani.kframes.pop();
 	}
 }
 
 // SCENE
 
 Scene::Scene() :
+	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
 	capture(nullptr),
 	select(nullptr),
 	firstSelect(nullptr),
-	meshes(FileSys::loadObjects()),
-	materials(FileSys::loadMaterials()),
-	texes(FileSys::loadTextures()),
 	shadowFunc(World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy),
-	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
 	light(vec3(Com::Config::boardWidth / 2.f, 4.f, Com::Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f)
 {}
 
@@ -224,7 +220,7 @@ Scene::~Scene() {
 void Scene::draw() {
 	(this->*shadowFunc)();
 	glUseProgram(*World::geom());
-	glViewport(0, 0, World::window()->screenView().x, World::window()->screenView().y);
+	glViewport(0, 0, World::window()->getScreenView().x, World::window()->getScreenView().y);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	for (Object* it : objects)
 		if (it->show)
@@ -235,8 +231,9 @@ void Scene::draw() {
 	glUseProgram(*World::gui());
 	glBindVertexArray(World::gui()->wrect.getVao());
 	layout->draw();
-	if (overlay && overlay->getOn())
-		overlay->draw();
+	for (Overlay* it : overlays)
+		if (it->getShow())
+			it->draw();
 	if (popup)
 		popup->draw();
 	if (context)
@@ -250,6 +247,7 @@ void Scene::draw() {
 }
 
 void Scene::renderShadows() {
+#ifndef OPENGLES
 	glUseProgram(*World::depth());
 	glViewport(0, 0, World::sets()->shadowRes, World::sets()->shadowRes);
 	glBindFramebuffer(GL_FRAMEBUFFER, light.depthFrame);
@@ -260,14 +258,15 @@ void Scene::renderShadows() {
 	if (Object* obj = dynamic_cast<Object*>(capture))
 		obj->drawTopDepth();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#endif
 }
 
 void Scene::tick(float dSec) {
 	layout->tick(dSec);
 	if (popup)
 		popup->tick(dSec);
-	if (overlay)
-		overlay->tick(dSec);
+	for (Overlay* it : overlays)
+		it->tick(dSec);
 	if (context)
 		context->tick(dSec);
 
@@ -286,8 +285,8 @@ void Scene::onResize() {
 	layout->onResize();
 	if (popup)
 		popup->onResize();
-	if (overlay)
-		overlay->onResize();
+	for (Overlay* it : overlays)
+		it->onResize();
 }
 
 void Scene::onMouseMove(const ivec2& pos, const ivec2& mov, uint32 state) {
@@ -308,7 +307,8 @@ void Scene::onMouseDown(const ivec2& pos, uint8 but) {
 	if (context && select != context.get())
 		setContext(nullptr);
 
-	cstamp = ClickStamp(select, getSelectedScrollArea(), pos, but);
+	updateSelect(pos);
+	cstamp = ClickStamp(select, getSelectedScrollArea(select), pos, but);
 	if (cstamp.area)	// area goes first so widget can overwrite it's capture
 		cstamp.area->onHold(pos, but);
 	if (cstamp.inter != cstamp.area)
@@ -330,12 +330,12 @@ void Scene::onMouseUp(const ivec2& pos, uint8 but) {
 }
 
 void Scene::onMouseWheel(const ivec2& mov) {
-	Interactable* box = getSelectedScrollArea();
+	Interactable* box = getSelectedScrollArea(select);
 	if (!box)
 		if (box = dynamic_cast<Context*>(select); !box)
 			box = dynamic_cast<TextBox*>(select);
 	if (box)
-		box->onScroll(mov * scrollFactorWheel);
+		box->onScroll(ivec2(mov.x, -mov.y) * scrollFactorWheel);
 	else if (mov.y)
 		World::state()->eventWheel(mov.y);
 }
@@ -343,7 +343,7 @@ void Scene::onMouseWheel(const ivec2& mov) {
 void Scene::onMouseLeave() {
 	if (unselect(); cstamp.but) {		// get rid of select first to prevent click event
 		ivec2 mPos = mousePos();
-		World::input()->eventMouseButtonUp({ SDL_MOUSEBUTTONUP, SDL_GetTicks(), World::window()->windowID(), 0, cstamp.but, SDL_RELEASED, 1, 0, mPos.x, mPos.y });
+		World::input()->eventMouseButtonUp({ SDL_MOUSEBUTTONUP, SDL_GetTicks(), 0, 0, cstamp.but, SDL_RELEASED, 1, 0, mPos.x, mPos.y });
 	}
 }
 
@@ -353,20 +353,31 @@ void Scene::onText(const char* str) {
 }
 
 void Scene::onConfirm() {
-	if (World::input()->mouseLast = false; context)
+	World::input()->mouseLast = false;
+	if (context)
 		context->confirm();
 	else if (popup)
 		World::prun(popup->kcall, nullptr);
-	else if (dynamic_cast<Slider*>(select))
-		capture = select;
+	else if (Slider* sl = dynamic_cast<Slider*>(select))
+		sl->onHold(sl->sliderRect().pos(), SDL_BUTTON_LEFT);
 	else if (Button* but = dynamic_cast<Button*>(select))
 		but->onClick(but->position(), SDL_BUTTON_LEFT);
 	else
 		World::state()->eventEnter();
 }
 
+void Scene::onXbutConfirm() {
+	if (context)
+		context->confirm();
+	else if (popup)
+		World::prun(popup->kcall, nullptr);
+	else
+		World::state()->eventEndTurn();
+}
+
 void Scene::onCancel() {
-	if (World::input()->mouseLast = false; context)
+	World::input()->mouseLast = false;
+	if (context)
 		setContext(nullptr);
 	else if (popup)
 		World::prun(popup->ccall, nullptr);
@@ -374,11 +385,35 @@ void Scene::onCancel() {
 		World::state()->eventEscape();
 }
 
+void Scene::onXbutCancel() {
+	if (context)
+		setContext(nullptr);
+	else if (popup)
+		World::prun(popup->ccall, nullptr);
+	else
+		World::state()->eventEscape();
+}
+
+void Scene::loadObjects() {
+	meshes = FileSys::loadObjects(World::geom());
+	matls = FileSys::loadMaterials();
+}
+
+void Scene::loadTextures() {
+	texes = FileSys::loadTextures(World::sets()->texScale);
+}
+
+void Scene::reloadTextures() {
+	FileSys::reloadTextures(texes, World::sets()->texScale);
+}
+
 void Scene::resetShadows() {
+#ifndef OPENGLES
 	shadowFunc = World::sets()->shadowRes ? &Scene::renderShadows : &Scene::renderDummy;
 	glUseProgram(*World::geom());
 	loadCubemap(light.depthMap, World::sets()->shadowRes ? World::sets()->shadowRes : 1, Light::depthTexa);
 	glActiveTexture(GL_TEXTURE0);
+#endif
 }
 
 void Scene::reloadShader() {
@@ -398,10 +433,10 @@ void Scene::resetLayouts() {
 
 	// set up new widgets
 	layout.reset(World::state()->createLayout(firstSelect));
-	overlay.reset(World::state()->createOverlay());
+	overlays = World::state()->createOverlays();
 	layout->postInit();
-	if (overlay)
-		overlay->postInit();
+	for (Overlay* it : overlays)
+		it->postInit();
 	World::input()->simulateMouseMove();
 }
 
@@ -432,9 +467,15 @@ void Scene::addAnimation(Animation&& anim) {
 		it->append(anim);
 }
 
-void Scene::navSelect(Direction dir) {
+void Scene::delegateStamp(Interactable* inter) {
+	cstamp.inter = inter;
+	cstamp.area = getSelectedScrollArea(inter);
+}
+
+void Scene::navSelect(Direction dir, bool& mouseLast) {
 	if (!popup) {
-		if (World::input()->mouseLast = false; context)
+		mouseLast = false;
+		if (context)
 			context->onNavSelect(dir);
 		else if (select)
 			select->onNavSelect(dir);
@@ -448,6 +489,11 @@ void Scene::unselect() {
 		select->onUnhover();
 		select = nullptr;
 	}
+}
+
+void Scene::resetSelect() {
+	select = nullptr;
+	updateSelect();
 }
 
 void Scene::updateSelect() {
@@ -465,18 +511,25 @@ void Scene::updateSelect(Interactable* sel) {
 }
 
 Interactable* Scene::getSelected(const ivec2& mPos) {
-	if (outRange(mPos, ivec2(0), World::window()->screenView()))
+	if (outRange(mPos, ivec2(0), World::window()->getScreenView()))
 		return nullptr;
 	if (context && context->rect().contain(mPos))
 		return context.get();
 
-	for (Layout* box = popup ? popup.get() : overlay && overlay->getOn() && overlay->rect().contain(mPos) ? overlay.get() : layout.get();;) {
+	Layout* box = layout.get();
+	if (popup)
+		box = popup.get();
+	else for (vector<Overlay*>::reverse_iterator it = overlays.rbegin(); it != overlays.rend(); it++)
+		if ((*it)->canInteract() && (*it)->rect().contain(mPos))
+			box = *it;
+
+	for (;;) {
 		Rect frame = box->frame();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
-				return (*it)->selectable() ? *it : getScrollOrObject(mPos, *it);
+				return dynamic_cast<Navigator*>(*it) ? World::game()->board.findObject(rayXZIsct(pickerRay(mPos))) : (*it)->selectable() ? *it : getScrollOrObject(mPos, *it);
 		} else
 			return getScrollOrObject(mPos, box);
 	}
@@ -485,7 +538,7 @@ Interactable* Scene::getSelected(const ivec2& mPos) {
 Interactable* Scene::getScrollOrObject(const ivec2& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
-	return !popup ? static_cast<Interactable*>(findBoardObject(mPos)) : static_cast<Interactable*>(popup.get());
+	return !popup ? static_cast<Interactable*>(World::game()->board.findObject(rayXZIsct(pickerRay(mPos)))) : static_cast<Interactable*>(popup.get());
 }
 
 ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
@@ -496,19 +549,4 @@ ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
 	while (parent && !dynamic_cast<ScrollArea*>(parent))
 		parent = parent->getParent();
 	return dynamic_cast<ScrollArea*>(parent);
-}
-
-BoardObject* Scene::findBoardObject(const ivec2& mPos) const {
-	vec3 isct = rayXZIsct(pickerRay(mPos));
-	if (const vec4& bb = World::game()->getBoardBounds(); isct.x < bb.x || isct.x >= bb.z || isct.z < bb.y || isct.z >= bb.a)
-		return nullptr;
-
-	svec2 pp = World::game()->ptog(isct);
-	for (Piece& it : World::game()->getPieces())
-		if (it.rigid && World::game()->ptog(it.getPos()) == pp)
-			return &it;
-	if (uint16 id = World::game()->posToId(pp); id < World::game()->getTiles().getSize())
-		if (Tile& it = World::game()->getTiles()[id]; it.rigid)
-			return &it;
-	return nullptr;
 }

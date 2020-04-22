@@ -19,8 +19,13 @@ def getVersion():
 		return re.search(r'char\s*commonVersion\[.*\]\s*=\s*"(.*)"', fh.read()).group(1)
 
 def getThreads():
-	cnt = sys.argv[2] if len(sys.argv) > 2 else str(psutil.cpu_count(False))
-	return str(cnt) if cnt else '1'
+	jobs = None
+	for it in sys.argv:
+		if it[0] == 'j':
+			jobs = it[1:]
+	if jobs == None:
+		jobs = str(psutil.cpu_count(False))
+	return jobs if jobs else '1'
 
 def writeZip(odir):
 	with zipfile.ZipFile(odir + '.zip', 'w', zipfile.ZIP_DEFLATED) as zh:
@@ -93,7 +98,10 @@ def expWin(odir, pdir, msg):
 def genProject(pdir, pref = '', *gopt):
 	mkdir(pdir)
 	os.chdir(pdir)
-	prun(pref, 'cmake', '..', *gopt)
+	if 'debug' in sys.argv:
+		prun(pref, 'cmake', '..', *gopt, '-DCMAKE_BUILD_TYPE=Debug')
+	else:
+		prun(pref, 'cmake', '..', *gopt)
 
 def genLinux(pdir, target = '', *gopt):
 	genProject(pdir, '', *gopt)
@@ -109,6 +117,7 @@ def genWeb(pdir):
 	os.rename(os.path.join(wglRel, 'data'), 'data')
 	os.rename(os.path.join(wglRel, 'licenses'), 'licenses')
 	os.rename(os.path.join('data', 'thrones.png'), 'thrones.png')
+	shutil.copy(os.path.join('..', 'tools', 'server.py'), 'server.py')
 	prun('emmake', 'make', '-j', getThreads())
 
 if __name__ == '__main__':

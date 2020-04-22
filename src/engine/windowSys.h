@@ -14,64 +14,15 @@
 #endif
 #endif
 
-// loads different font sizes from one font and handles basic log display
-class FontSet {
-private:
-	static constexpr char fileFont[] = "romanesque.ttf";
-	static constexpr char fileFontAlt[] = "merriweather.otf";
-	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
-	static constexpr int fontTestHeight = 100;
-	static constexpr int logSize = 18;
-	static constexpr float fallbackScale = 0.9f;
-#ifdef OPENGLES
-	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// R and B need to be switched
-#else
-	static constexpr SDL_Color textColor = { 255, 193, 37, 255 };
-#endif
-	static constexpr SDL_Color logColor = { 230, 220, 220, 220 };
-
-	umap<int, TTF_Font*> fonts;
-	vector<uint8> fontData;
-	TTF_Font* logFont;
-	vector<string> logLines;
-	Texture logTex;
-	float heightScale;	// for scaling down font size to fit requested height
-
-public:
-	FontSet(bool regular);
-	~FontSet();
-
-	void clear();
-	int length(const string& text, int height);
-	Texture render(const string& text, int height);
-	Texture render(const string& text, int height, uint length);
-
-	void writeLog(string&& text, const ShaderGui* gui, const ivec2& res);
-	void closeLog();	// doesn't get called in destructor
-
-private:
-	TTF_Font* getFont(int height);
-};
-
-inline FontSet::~FontSet() {
-	clear();
-}
-
-inline Texture FontSet::render(const string& text, int height) {
-	return TTF_RenderUTF8_Blended(getFont(height), text.c_str(), textColor);
-}
-
-inline Texture FontSet::render(const string& text, int height, uint length) {
-	return TTF_RenderUTF8_Blended_Wrapped(getFont(height), text.c_str(), textColor, length);
-}
-
 // for drawing
 class Shader {
 public:
 	static constexpr GLuint vpos = 0, normal = 1, uvloc = 2;
 
+protected:
 	GLuint program;
 
+public:
 	Shader(const string& srcVert, const string& srcFrag);
 #ifndef OPENGLES
 	Shader(const string& srcVert, const string& srcGeom, const string& srcFrag);
@@ -106,16 +57,16 @@ private:
 	static string editShadowAlg(string src, bool calc, bool soft);
 };
 
+#ifndef OPENGLES
 class ShaderDepth : public Shader {
 public:
 	GLint model;
 	GLint shadowMats;
 	GLint lightPos, farPlane;
 
-#ifndef OPENGLES
 	ShaderDepth(const string& srcVert, const string& srcGeom, const string& srcFrag);
-#endif
 };
+#endif
 
 class ShaderGui : public Shader {
 public:
@@ -125,6 +76,49 @@ public:
 
 	ShaderGui(const string& srcVert, const string& srcFrag);
 };
+
+// loads different font sizes from one font and handles basic log display
+class FontSet {
+private:
+	static constexpr char fileFont[] = "romanesque.ttf";
+	static constexpr char fileFontAlt[] = "merriweather.otf";
+	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
+	static constexpr int fontTestHeight = 100;
+	static constexpr float fallbackScale = 0.9f;
+#ifdef OPENGLES
+	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// R and B need to be switched
+#else
+	static constexpr SDL_Color textColor = { 255, 193, 37, 255 };
+#endif
+
+	umap<int, TTF_Font*> fonts;
+	vector<uint8> fontData;
+	float heightScale;	// for scaling down font size to fit requested height
+
+public:
+	FontSet(bool regular);
+	~FontSet();
+
+	void clear();
+	int length(const char* text, int height);
+	Texture render(const char* text, int height);
+	Texture render(const char* text, int height, uint length);
+
+private:
+	TTF_Font* getFont(int height);
+};
+
+inline FontSet::~FontSet() {
+	clear();
+}
+
+inline Texture FontSet::render(const char* text, int height) {
+	return TTF_RenderUTF8_Blended(getFont(height), text, textColor);
+}
+
+inline Texture FontSet::render(const char* text, int height, uint length) {
+	return TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length);
+}
 
 // handles window events and contains video settings
 class WindowSys {
@@ -143,17 +137,12 @@ private:
 
 	static constexpr uint32 eventCheckTimeout = 50;
 	static constexpr float ticksPerSec = 1000.f;
-	static constexpr uint8 fallbackCursorSize = 18;
-	static constexpr float logTexUV[4] = { 0.f, 0.f, 1.f, 1.f };
-	static constexpr float logTexColor[4] = { 1.f, 1.f, 1.f, 1.f };
 #ifdef OPENGLES
 	static constexpr int imgInitFlags = imgInitFull;
 #else
 	static constexpr int imgInitFlags = IMG_INIT_PNG;
 #endif
-	static constexpr array<ivec2, 28> resolutions = {
-		ivec2(256, 144),
-		ivec2(426, 240),
+	static constexpr array<ivec2, 26> resolutions = {
 		ivec2(640, 360),
 		ivec2(768, 432),
 		ivec2(800, 450),
@@ -182,6 +171,17 @@ private:
 		ivec2(15360, 8640)
 	};
 
+	struct Loader {
+		static constexpr int logSize = 18;
+
+		string logStr;
+		uint8 state;
+
+		Loader();
+
+		void addLine(const string& str, WindowSys* win);
+	};
+
 	uptr<AudioSys> audio;
 	uptr<InputSys> inputSys;
 	uptr<Program> program;
@@ -190,34 +190,32 @@ private:
 	SDL_Window* window;
 	SDL_GLContext context;
 	uptr<ShaderGeometry> geom;
+#ifndef OPENGLES
 	uptr<ShaderDepth> depth;
+#endif
 	uptr<ShaderGui> gui;
 	uptr<FontSet> fonts;
-	SDL_Cursor* cursor;
-	ivec2 curView;
+	ivec2 screenView, guiView;
 	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 	uint8 cursorHeight;
 #ifdef EMSCRIPTEN
+	Loader* loader;
 	void (WindowSys::*loopFunc)();
-	uint loopState;
 #endif
 
 public:
-	WindowSys();
-
-	void start();
+	int start(const Arguments& args);
 	void close();
 
-	ivec2 screenView() const;
-	ivec2 guiView() const;
+	const ivec2& getScreenView() const;
+	const ivec2& getGuiView() const;
 	uint8 getCursorHeight() const;
 	vector<ivec2> windowSizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	uint32 windowID() const;
-	void writeLog(string&& text);
+	void setTextInput(Interactable* capture = nullptr);
 	void setScreen();
 	void setVsync(Settings::VSync vsync);
 	void setGamma(float gamma);
@@ -232,14 +230,21 @@ public:
 	Scene* getScene();
 	Settings* getSets();
 	const ShaderGeometry* getGeom() const;
+#ifndef OPENGLES
 	const ShaderDepth* getDepth() const;
-	const ShaderGui* getGUI() const;
+#endif
+	const ShaderGui* getGui() const;
+	SDL_Window* getWindow();
+	float getDeltaSec() const;
 
 private:
-#ifdef EMSCRIPTEN
-	void lateInit();
-#endif
+	void init(const Arguments& args);
 	void exec();
+#ifdef EMSCRIPTEN
+	void load();
+#else
+	void load(Loader* loader);
+#endif
 	void createWindow();
 	void destroyWindow();
 	void handleEvent(const SDL_Event& event);	// pass events to their specific handlers
@@ -247,22 +252,26 @@ private:
 	void setSwapInterval();
 	bool trySetSwapInterval();
 	void setWindowMode();
-
 	void updateView();
 	bool checkCurDisplay();
 	template <class T> static bool checkResolution(T& val, const vector<T>& modes);
+	int showError(const char* caption, const char* message);
 };
+
+inline WindowSys::Loader::Loader() :
+	state(0)
+{}
 
 inline void WindowSys::close() {
 	run = false;
 }
 
-inline ivec2 WindowSys::screenView() const {
-	return curView;
+inline const ivec2& WindowSys::getScreenView() const {
+	return screenView;
 }
 
-inline ivec2 WindowSys::guiView() const {
-	return SDL_IsScreenKeyboardShown(window) && dynamic_cast<LabelEdit*>(scene->capture) ? ivec2(curView.x, curView.y / 2) : curView;
+inline const ivec2& WindowSys::getGuiView() const {
+	return guiView;
 }
 
 inline uint8 WindowSys::getCursorHeight() const {
@@ -297,22 +306,28 @@ inline const ShaderGeometry* WindowSys::getGeom() const {
 	return geom.get();
 }
 
+#ifndef OPENGLES
 inline const ShaderDepth* WindowSys::getDepth() const {
 	return depth.get();
 }
+#endif
 
-inline const ShaderGui* WindowSys::getGUI() const {
+inline const ShaderGui* WindowSys::getGui() const {
 	return gui.get();
+}
+
+inline SDL_Window* WindowSys::getWindow() {
+	return window;
+}
+
+inline float WindowSys::getDeltaSec() const {
+	return dSec;
 }
 
 inline int WindowSys::displayID() const {
 	return SDL_GetWindowDisplayIndex(window);
 }
 
-inline uint32 WindowSys::windowID() const {
-	return SDL_GetWindowID(window);
-}
-
 inline void WindowSys::reloadFont(bool regular) {
-	fonts.reset(new FontSet(sets->fontRegular = regular));
+	fonts = std::make_unique<FontSet>(sets->fontRegular = regular);
 }

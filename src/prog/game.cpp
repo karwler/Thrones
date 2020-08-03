@@ -46,8 +46,6 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 	Action action = move ? occupant ? ACT_SWAP : ACT_MOVE : ACT_ATCK;
 	if (pos == dst)
 		throw string();
-	if (eneRec.info == Record::battleFail && action != ACT_MOVE)
-		throw string("Only moving is allowed");
 
 	checkActionRecord(piece, occupant, action, favor);
 	switch (action) {
@@ -57,8 +55,6 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 		placePiece(piece, dst);
 		break;
 	case ACT_SWAP:
-		if (ownRec.actors.count(occupant) || ownRec.assault.count(occupant))
-			throw string("Can't switch with that piece");
 		if (board.isEnemyPiece(occupant) && piece->getType() != Com::Piece::warhorse && favor != Favor::deceive)
 			throw string("Piece can't switch with an enemy");
 		if (favor != Favor::assault && favor != Favor::deceive && piece->getType() == Com::Piece::warhorse && board.isEnemyPiece(occupant)) {
@@ -104,8 +100,6 @@ void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
 	Favor favor = World::state<ProgMatch>()->favorIconSelect();
 	if (pos == dst)
 		throw string();
-	if (eneRec.info == Record::battleFail)
-		throw string("Only moving is allowed");
 
 	checkActionRecord(killer, victim, ACT_FIRE, favor);
 	checkKiller(killer, victim, dtil, false);
@@ -188,27 +182,50 @@ void Game::spawnPiece(Com::Piece type, Tile* tile, bool reinit) {
 }
 
 void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor favor) {
-	if (favor == Favor::assault) {
+	if (eneRec.info == Record::battleFail && action != ACT_MOVE)
+		throw string("Only moving is allowed");
+
+	switch (favor) {
+	case Favor::hasten:
+		if (action != ACT_MOVE)
+			throw firstUpper(favorNames[uint8(favor)]) + " is limited to moving";
+		break;
+	case Favor::assault:
 		if (!(action & ACT_MS))
 			throw firstUpper(favorNames[uint8(favor)]) + " is limited to moving and switching";
 		if (ownRec.actors.count(occupant))
-			throw string("Can't switch with that piece");
+			throw "Can't switch with a non-" + string(favorNames[uint8(Favor::assault)])+ " piece";
 		if (umap<Piece*, Action>::iterator it = ownRec.assault.find(piece); it != ownRec.assault.end() && (it->second & ~(action == ACT_MOVE ? ACT_SWAP : ACT_MOVE)))
 			throw "Piece can't " + string(action == ACT_MOVE ? "move" : "switch");
-	} else {
-		if (favor == Favor::none && action == ACT_MOVE && eneRec.info != Record::battleFail)
-			if (umap<Piece*, Action>::iterator it = ownRec.actors.find(piece); ownRec.actors.size() >= 2 || (ownRec.actors.size() == 1 && (it != ownRec.actors.end() ? it->second & ~ACT_SWAP : ownRec.actors.begin()->second & ~ACT_MOVE)))
-				throw string("Piece can't move");
-		if (favor == Favor::none && action == ACT_SWAP)
-			if (umap<Piece*, Action>::iterator it = ownRec.actors.find(piece); it != ownRec.actors.end() ? (it->first->getType() != Com::Piece::warhorse && (it->second & ~ACT_MOVE)) || ownRec.actors.size() >= 2 : !ownRec.actors.empty())
-				throw string("Piece can't switch");
-		if (favor == Favor::hasten && action != ACT_MOVE)
-			throw firstUpper(favorNames[uint8(favor)]) + " is limited to moving";
-		if (favor == Favor::deceive && (action != ACT_SWAP || board.isOwnPiece(occupant)))
+		break;
+	case Favor::deceive:
+		if (action != ACT_SWAP || board.isOwnPiece(occupant))
 			throw firstUpper(favorNames[uint8(favor)]) + " is limited to switching enemy pieces";
-		if (action == ACT_SWAP && ownRec.assault.count(occupant))
-			throw string("Can't switch with an ") + favorNames[uint8(Favor::assault)] + "piece";
+		break;
+	case Favor::none:
+		if (action == ACT_MOVE && eneRec.info != Record::battleFail) {
+			umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
+			if (ownRec.actors.size() >= 2)
+				throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
+			if (!ownRec.actors.empty() && (it != ownRec.actors.end() ? bool(it->second & ~ACT_SWAP) : ownRec.actors.begin()->second == ACT_MS))
+				throw string("Piece can't move");
+		} else if (action == ACT_SWAP) {
+			if (piece->getType() == Com::Piece::warhorse) {
+				umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
+				if (ownRec.actors.size() >= (it != ownRec.actors.end() ? 3 : 2))
+					throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
+				if (!ownRec.actors.empty() && (it != ownRec.actors.end() ? it->second & ~ACT_MS : ownRec.actors.begin()->second & ~ACT_MOVE))
+					throw string("Piece can't switch");
+			} else {
+				if (ownRec.actors.size() >= 2)
+					throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
+				if (!ownRec.actors.empty() && (ownRec.actors.begin()->second & ~ACT_MOVE))
+					throw string("Piece can't switch");
+			}
+		}
 	}
+	if (favor != Favor::assault && action == ACT_SWAP && ownRec.assault.count(occupant))
+		throw string("Can't switch with an ") + favorNames[uint8(Favor::assault)] + "piece";
 }
 
 void Game::checkKiller(Piece* killer, Piece* victim, Tile* dtil, bool attack) {

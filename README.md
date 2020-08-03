@@ -58,8 +58,10 @@ The only supported compiler is MSVC. MinGW might also work, but hasn't been test
 
 
 ## TODO  
+- test moving and switching  
 - in emscripten there's an exception thrown somewhere  
 - homefront  
 - victory points  
+- buttons on android are too small  
 - windows server doesn't send rejections properly  
 - shadows aren't working properly on some systems  

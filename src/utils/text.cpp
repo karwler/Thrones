@@ -1,6 +1,8 @@
 #include "text.h"
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <sys/stat.h>
 #endif
 
 string filename(const string& path) {
@@ -133,6 +135,17 @@ string readIniTitle(const string& line) {
 pairStr readIniLine(const string& line) {
 	sizet id = line.find('=');
 	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
+}
+
+void createDirectories(const string& path) {
+	for (string::const_iterator end = std::find_if_not(path.begin(), path.end(), isDsep); end != path.end(); end = std::find_if_not(end, path.end(), isDsep)) {
+		end = std::find_if(end, path.end(), isDsep);
+#ifdef _WIN32
+		CreateDirectoryW(stow(string(path.begin(), end)).c_str(), nullptr);
+#else
+		mkdir(string(path.begin(), end).c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+#endif
+	}
 }
 
 SDL_DisplayMode strToDisp(const string& str) {

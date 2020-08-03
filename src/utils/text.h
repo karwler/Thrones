@@ -92,6 +92,7 @@ uint8 u8clen(char c);
 vector<string> readTextLines(const string& text);
 string readIniTitle(const string& line);
 pairStr readIniLine(const string& line);
+void createDirectories(const string& path);
 
 template <class T>
 T readMem(const void* data) {
@@ -171,21 +172,13 @@ inline string delExt(const string& path) {
 template <class T = string>
 T loadFile(const string& file) {
 	T data;
-	try {
-		SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode);
-		if (!ifh)
-			throw ifh;
-		int64 len = SDL_RWsize(ifh);
-		if (len == -1)
-			throw ifh;
-
-		data.resize(sizet(len));
-		if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
-			data.resize(read);
+	if (SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode)) {
+		if (int64 len = SDL_RWsize(ifh); len != -1) {
+			data.resize(sizet(len));
+			if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
+				data.resize(read);
+		}
 		SDL_RWclose(ifh);
-	} catch (SDL_RWops* ifh) {
-		if (ifh)
-			SDL_RWclose(ifh);
 	}
 	return data;
 }

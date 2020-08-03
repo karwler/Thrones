@@ -1,6 +1,4 @@
 #include "windowSys.h"
-#include <filesystem>
-namespace fs = std::filesystem;
 
 // SETTINGS
 
@@ -93,7 +91,7 @@ void FileSys::init(const Arguments& args) {
 		if (const char* path = getenv("HOME"))
 			dirConfig = path + string("/.config/thrones/");
 #endif
-		fs::create_directories(fs::u8path(dirConfig));
+		createDirectories(dirConfig);
 	} else
 		dirConfig = dirData;
 #endif

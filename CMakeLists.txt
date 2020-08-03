@@ -13,6 +13,8 @@ set(SERVER_NAME "Server")
 set(DATA_NAME "assets")
 set(ADATA_NAME "${DATA_NAME}_android")
 set(OVEN_NAME "oven")
+set(TLIB_NAME "tlib")
+set(TESTS_NAME "tests")
 
 set(ASSET_WAV
 	"rsc/audio/ammo.wav"
@@ -155,6 +157,24 @@ set(OVEN_SRC
 	"src/oven/ovenProg.cpp"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
+
+set(TLIB_SRC
+	"src/oven/oven.cpp"
+	"src/oven/oven.h"
+	"src/server/common.h"
+	"src/server/server.cpp"
+	"src/server/server.h"
+	"src/utils/text.cpp"
+	"src/utils/text.h"
+	"src/utils/utils.cpp"
+	"src/utils/utils.h")
+
+set(TESTS_SRC
+	"src/test/server.cpp"
+	"src/test/tests.cpp"
+	"src/test/tests.h"
+	"src/test/text.cpp"
+	"src/test/utils.cpp")
 
 # dependencies
 
@@ -551,9 +571,25 @@ else()
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/thrones.desktop" "${EXE_DIR}")
 endif()
 
+# tests
+
+add_library(${TLIB_NAME} STATIC EXCLUDE_FROM_ALL ${TLIB_SRC})
+target_compile_definitions(${TLIB_NAME} PUBLIC AS_LIBRARY)
+target_link_libraries(${TLIB_NAME} SDL2)
+
+enable_testing()
+add_executable(${TESTS_NAME} EXCLUDE_FROM_ALL ${TESTS_SRC})
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	target_link_libraries(${TESTS_NAME} ${TLIB_NAME} "${LIB_SDL}" "${LIB_IMG}")
+else()
+	target_link_libraries(${TESTS_NAME} ${TLIB_NAME} SDL2 SDL2_image)
+endif()
+add_dependencies(${TESTS_NAME} ${TLIB_NAME})
+add_test(NAME ${TESTS_NAME} COMMAND ${TESTS_NAME})
+
 # prettyfiers
 
-set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC})
+set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC} ${TLIB_SRC} ${TESTS_SRC})
 foreach(FSRC IN LISTS ALL_SRC)
 	get_filename_component(FGRP "${FSRC}" DIRECTORY)
 	string(REPLACE "/" ";" FGRP "${FGRP}")

@@ -24,11 +24,11 @@ void Record::addProtect(Piece* piece, bool strong) {
 }
 
 Action Record::actionsExhausted() const {
-	uint16 moveCnt = 0;
+	uint8 moves = 0, swaps = 0;
 	for (auto& [pce, act] : actors) {
-		if (moveCnt += bool(act & ACT_MOVE); moveCnt >= 2)
-			return ACT_MOVE;
-		if ((act & ACT_MS) == ACT_MS && !(pce->getType() == Com::Piece::warhorse && lastAct.second == ACT_SWAP))
+		moves += moves < 2 && (act & ACT_MOVE);
+		swaps += !swaps && (act & ACT_SWAP);
+		if (moves + swaps >= 2 && !(lastAct.first->getType() == Com::Piece::warhorse && lastAct.second == ACT_SWAP))
 			return ACT_MS;
 		if (act & ACT_AF)
 			return ACT_AF;

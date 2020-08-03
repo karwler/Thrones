@@ -200,14 +200,14 @@ void Board::disableOwnPiecesInteract(bool rigid, bool dim) {
 }
 
 void Board::restorePiecesInteract(const Record& orec) {
-	if (orec.actionsExhausted()) {
+	if (orec.actionsExhausted()) {	// for when there's FFs
 		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
-	} else if (umap<Piece*, Action>::const_iterator pit = std::find_if(orec.actors.begin(), orec.actors.end(), [](const pair<const Piece*, Action>& pa) -> bool { return pa.second & ~ACT_MOVE; }); pit != orec.actors.end()) {
+	} else if (orec.actors.size() == 1 && (orec.actors.begin()->second & ACT_MS) == ACT_MS) {	// for moving and switching a warhorse
 		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
-		pit->first->setInteractivity(pit->first->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
-	} else {
+		orec.actors.begin()->first->setInteractivity(orec.actors.begin()->first->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+	} else {	// business as usual
 		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 			it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 		for (auto& [pce, act] : orec.assault)

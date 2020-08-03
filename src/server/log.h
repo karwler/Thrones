@@ -5,20 +5,26 @@
 #include <fstream>
 
 // struct tm wrapper
-struct Date {
+struct DateTime {
 	uint8 sec, min, hour;
 	uint8 day, month;
 	uint8 wday;
-	int16 year;
+	uint16 year;
 
-	Date(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, int16 tyear, uint8 weekDay);
+	DateTime() = default;
+	DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay);
 
-	static Date now();
+	static DateTime now();
 	string toString(char ts = '-', char sep = '_', char ds = '-') const;
+	bool datecmp(const DateTime& date) const;
 };
 
-inline string Date::toString(char ts, char sep, char ds) const {
+inline string DateTime::toString(char ts, char sep, char ds) const {
 	return toStr(year) + ds + toStr(month, 2) + ds + toStr(day, 2) + sep + toStr(hour, 2) + ts + toStr(min, 2) + ts + toStr(sec, 2);
+}
+
+inline bool DateTime::datecmp(const DateTime& date) const {
+	return day == date.day && month == date.month && year == date.year;
 }
 
 // for simultaneous console and file output
@@ -27,10 +33,10 @@ private:
 	static constexpr uint maxLogfiles = 8;
 	static constexpr char fileRecords[] = "records.txt";
 
-	string dir;	// TODO: handle unicode on Windows
+	string dir;
 	std::deque<string> files;
 	std::ofstream lfile;
-	uint8 lastDay;
+	DateTime lastLog;
 	bool verbose;
 
 public:
@@ -39,22 +45,24 @@ public:
 
 	template <class... A> void write(std::ostream& vofs, A&&... args);
 private:
-	void openFile(const Date& now);
-	void removeOldFiles();
+	void openFile(const DateTime& now);
 	vector<string> readFile(const string& path);
 };
+
+inline void Log::end() {
+	lfile.close();
+}
 
 template <class... A>
 void Log::write(std::ostream& vofs, A&&... args) {
 	if (verbose)
 		(vofs << ... << std::forward<A>(args)) << std::endl;
 	if (!dir.empty()) {
-		if (lfile.good())
-			(lfile << ... << std::forward<A>(args)) << linend;
-		if (Date now = Date::now(); now.day != lastDay) {
+		if (DateTime now = DateTime::now(); !now.datecmp(lastLog)) {
 			lfile.close();
-			removeOldFiles();
 			openFile(now);
 		}
+		if (lfile.good())
+			(lfile << ... << std::forward<A>(args)) << std::endl;
 	}
 }

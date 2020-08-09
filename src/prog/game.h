@@ -9,8 +9,9 @@
 class Game {
 public:
 	Board board;
-	array<uint8, Com::tileLim> favorsCount, favorsLeft;
+	array<uint16, Com::tileLim> favorsCount, favorsLeft;
 	uint16 availableFF;
+	uint16 vpOwn, vpEne;
 private:
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
@@ -26,6 +27,7 @@ public:
 	void finishSetup();
 	void finishFavor(Favor next, Favor previous);
 	void setNoEngage(Piece* piece);
+	bool turnDone() const;
 	bool getMyTurn() const;
 	const Record& getOwnRec() const;
 	const Record& getEneRec() const;
@@ -50,19 +52,24 @@ public:
 	void spawnPiece(Com::Piece type, Tile* tile, bool reinit);	// set tile to nullptr for auto-select (only for farm, city or single fortress)
 	void prepareTurn(bool fcont);
 	void endTurn();
+	bool checkPointsWin();
 	void surrender();
-	void changeTile(Tile* tile, Com::Tile type);
+	void changeTile(Tile* tile, Com::Tile type, TileTop top = TileTop::none);
 
+#ifdef DEBUG
+	void processCommand(const char* cmd);
+#endif
 private:
 	bool concludeAction(Piece* piece, Action action, Favor favor);	// returns false if the match ended
 	void checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor favor);
 	void checkKiller(Piece* killer, Piece* victim, Tile* dtil, bool attack);
 	void doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dtil, Action action);	// return true if the killer can move to the victim's position
 	bool checkWin();
-	void doWin(bool win);
+	void doWin(Record::Info win);
 	void placePiece(Piece* piece, svec2 pos);	// set the position and check if a favor has been gained
 	void removePiece(Piece* piece);				// remove from board
 	void breachTile(Tile* tile, bool yes = true);
+	static string actionRecordMsg(Action action, bool self);
 	static std::default_random_engine createRandomEngine();
 };
 

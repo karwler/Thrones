@@ -15,6 +15,7 @@ void Game::finishSetup() {
 	std::fill(favorsCount.begin(), favorsCount.end(), 0);
 	std::fill(favorsLeft.begin(), favorsLeft.end(), board.config.favorLimit);
 	availableFF = board.countAvailableFavors();
+	vpOwn = vpEne = 0;
 }
 
 void Game::finishFavor(Favor next, Favor previous) {
@@ -94,10 +95,11 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 }
 
 void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
+	ProgMatch* pm = World::state<ProgMatch>();
 	svec2 pos = board.ptog(killer->getPos());
 	Tile* stil = board.getTile(pos);
 	Tile* dtil = board.getTile(dst);
-	Favor favor = World::state<ProgMatch>()->favorIconSelect();
+	Favor favor = pm->favorIconSelect();
 	if (pos == dst)
 		throw string();
 
@@ -117,7 +119,8 @@ void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
 			throw string("Can't fire over ") + Com::tileNames[uint8(type)] + 's';
 
 	doEngage(killer, pos, dst, victim, dtil, ACT_FIRE);
-	concludeAction(killer, ACT_FIRE, favor);
+	if (concludeAction(killer, ACT_FIRE, favor) && availableFF)
+		World::scene()->setPopup(pm->createPopupFavorPick(availableFF));
 	World::play("ammo");
 }
 
@@ -135,18 +138,25 @@ bool Game::concludeAction(Piece* piece, Action action, Favor favor) {
 	if (checkWin())
 		return false;
 
-	bool noFavors = std::none_of(favorsCount.begin(), favorsCount.end(), [](uint8 cnt) -> bool { return cnt; });
-	if (Action termin = ownRec.actionsExhausted(); (termin != ACT_NONE && noFavors) || (termin & (ACT_AF | ACT_SPAWN)) || eneRec.info == Record::battleFail)
+	if (bool done = turnDone(); (done && !(board.config.opts & Com::Config::homefront)) || eneRec.info == Record::battleFail) {
+		if (checkPointsWin())
+			return false;
 		endTurn();
-	else {
+	} else {
 		ProgMatch* pm = World::state<ProgMatch>();
 		pm->updateSpawnIcon(false);
 		pm->updateTurnIcon(true);
+		pm->updateFavorIcons(!done);
 		pm->message->setText("Your turn");	// in case it got changed during the turn
 		board.setFavorInteracts(pm->favorIconSelect(), ownRec);
 		board.setPxpadPos(nullptr);
 	}
 	return true;
+}
+
+bool Game::turnDone() const {
+	Action termin = ownRec.actionsExhausted();
+	return (termin != ACT_NONE && std::none_of(favorsCount.begin(), favorsCount.end(), [](uint16 cnt) -> bool { return cnt; })) || (termin & (ACT_AF | ACT_SPAWN));
 }
 
 void Game::placeDragon(Piece* dragon, svec2 pos, Piece* occupant) {
@@ -168,17 +178,21 @@ void Game::rebuildTile(Piece* throne, bool reinit) {
 	if (reinit)
 		board.restorePiecesInteract(ownRec);
 	breachTile(board.getTile(board.ptog(throne->getPos())), false);
+	World::state<ProgMatch>()->updateTurnIcon(true);
 }
 
 void Game::establishTile(Piece* throne, bool reinit) {
-	changeTile(board.establishTile(throne, reinit, ownRec, World::state<ProgMatch>()), board.ownCity ? Com::Tile::city : Com::Tile::farm);
+	Tile* tile = board.establishTile(throne, reinit, ownRec, World::state<ProgMatch>());
+	changeTile(tile, tile->getType(), board.findTileTop(tile));
+	World::state<ProgMatch>()->updateTurnIcon(true);
 }
 
 void Game::spawnPiece(Com::Piece type, Tile* tile, bool reinit) {
-	if (Piece* pce = board.findSpawnablePiece(type, tile, reinit, ownRec)) {
-		placePiece(pce, board.idToPos(board.tileId(tile)));
-		concludeAction(pce, ACT_SPAWN, Favor::none);
-	}
+	if (Piece* occ = board.findOccupant(tile))
+		removePiece(occ);
+	Piece* pce = board.findSpawnablePiece(type, reinit);
+	placePiece(pce, board.idToPos(board.tileId(tile)));
+	concludeAction(pce, ACT_SPAWN, Favor::none);
 }
 
 void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor favor) {
@@ -194,9 +208,10 @@ void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor
 		if (!(action & ACT_MS))
 			throw firstUpper(favorNames[uint8(favor)]) + " is limited to moving and switching";
 		if (ownRec.actors.count(occupant))
-			throw "Can't switch with a non-" + string(favorNames[uint8(Favor::assault)])+ " piece";
-		if (umap<Piece*, Action>::iterator it = ownRec.assault.find(piece); it != ownRec.assault.end() && (it->second & ~(action == ACT_MOVE ? ACT_SWAP : ACT_MOVE)))
-			throw "Piece can't " + string(action == ACT_MOVE ? "move" : "switch");
+			throw "Can't switch with a non-" + string(favorNames[uint8(Favor::assault)]) + " piece";
+		if (umap<Piece*, Action>::iterator it = ownRec.assault.find(piece); it != ownRec.assault.end())
+			if (Action act = it->second & ~(action == ACT_MOVE ? ACT_SWAP : ACT_MOVE))
+				throw actionRecordMsg(act, true);
 		break;
 	case Favor::deceive:
 		if (action != ACT_SWAP || board.isOwnPiece(occupant))
@@ -205,27 +220,52 @@ void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor
 	case Favor::none:
 		if (action == ACT_MOVE && eneRec.info != Record::battleFail) {
 			umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
-			if (ownRec.actors.size() >= 2)
+			if (ownRec.actors.size() >= (it != ownRec.actors.end() ? 3 : 2))
 				throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
-			if (!ownRec.actors.empty() && (it != ownRec.actors.end() ? bool(it->second & ~ACT_SWAP) : ownRec.actors.begin()->second == ACT_MS))
-				throw string("Piece can't move");
-		} else if (action == ACT_SWAP) {
-			if (piece->getType() == Com::Piece::warhorse) {
-				umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
-				if (ownRec.actors.size() >= (it != ownRec.actors.end() ? 3 : 2))
-					throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
-				if (!ownRec.actors.empty() && (it != ownRec.actors.end() ? it->second & ~ACT_MS : ownRec.actors.begin()->second & ~ACT_MOVE))
-					throw string("Piece can't switch");
-			} else {
-				if (ownRec.actors.size() >= 2)
-					throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
-				if (!ownRec.actors.empty() && (ownRec.actors.begin()->second & ~ACT_MOVE))
-					throw string("Piece can't switch");
+			if (it != ownRec.actors.end())
+				if (Action act = it->second & ~ACT_SWAP)
+					throw actionRecordMsg(act, true);
+			if (umap<Piece*, Action>::iterator oth = std::find_if(ownRec.actors.begin(), ownRec.actors.end(), [piece](const pair<Piece*, Action>& pa) -> bool { return pa.first != piece; }); oth != ownRec.actors.end()) {
+				if (Action act = oth->second & ~ACT_MS)
+					throw actionRecordMsg(act, false);
+				if ((oth->second & ACT_MS) == ACT_MS)
+					throw string("A piece has already moved and switched");
+				if (it != ownRec.actors.end() && it->second)
+					throw string("Piece can't move anymore");
 			}
-		}
+		} else if (action == ACT_SWAP) {
+			umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
+			if (ownRec.actors.size() >= (it != ownRec.actors.end() ? 3 : 2))
+				throw toStr(ownRec.actors.size()) + " non-" + favorNames[uint8(Favor::assault)] + " pieces have already acted";
+			if (it != ownRec.actors.end())
+				if (Action act = it->second & ~(it->first->getType() != Com::Piece::warhorse ? ACT_MOVE : ACT_MS))
+					throw actionRecordMsg(act, true);
+			if (umap<Piece*, Action>::iterator oth = std::find_if(ownRec.actors.begin(), ownRec.actors.end(), [piece](const pair<Piece*, Action>& pa) -> bool { return pa.first != piece; }); oth != ownRec.actors.end()) {
+				if (Action act = oth->second & ~ACT_MOVE)
+					throw actionRecordMsg(act, false);
+				if (it != ownRec.actors.end() && (it->first->getType() != Com::Piece::warhorse ? it->second : it->second & ~ACT_SWAP))
+					throw string("Piece can't switch anymore");
+			}
+		} else if (!ownRec.actors.empty())
+			throw string("A piece has already acted");
 	}
 	if (favor != Favor::assault && action == ACT_SWAP && ownRec.assault.count(occupant))
 		throw string("Can't switch with an ") + favorNames[uint8(Favor::assault)] + "piece";
+}
+
+string Game::actionRecordMsg(Action action, bool self) {
+	string pref = self ? "Piece has already " : "A piece has already ";
+	if (action & ACT_MOVE)
+		return pref + "moved";
+	if (action & ACT_SWAP)
+		return pref + "switched";
+	if (action & ACT_ATCK)
+		return pref + "attacked";
+	if (action & ACT_FIRE)
+		return pref + "fired";
+	if (action & ACT_SPAWN)
+		return pref + "spawned";
+	return pref + "acted";
 }
 
 void Game::checkKiller(Piece* killer, Piece* victim, Tile* dtil, bool attack) {
@@ -245,7 +285,7 @@ void Game::checkKiller(Piece* killer, Piece* victim, Tile* dtil, bool attack) {
 			throw string("Piece is protected during this turn");
 		if (victim->getType() == Com::Piece::elephant && dtil->getType() == Com::Tile::plains && killer->getType() != Com::Piece::dragon && killer->getType() != Com::Piece::throne)
 			throw firstUpper(Com::pieceNames[uint8(killer->getType())]) + " can't attack an " + Com::pieceNames[uint8(victim->getType())] + " on " + Com::tileNames[uint8(dtil->getType())];
-	} else if (board.config.gameType != Com::Config::GameType::homefront || (dtil->getType() != Com::Tile::fortress && dtil != board.eneFarm) || dtil->getBreached())
+	} else if (!(board.config.opts & Com::Config::homefront) || (dtil->getType() != Com::Tile::fortress && !board.findTileTop(dtil).isFarm()) || dtil->getBreached())
 		throw "Can't " + (attack ? action : action + " at") + " nothing";
 }
 
@@ -269,7 +309,7 @@ void Game::doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dt
 		if (breachTile(dtil); killer->getType() == Com::Piece::dragon)
 			placePiece(killer, dst);
 	} else {
-		if ((dtil == board.eneFarm || dtil == board.ownFarm) && !dtil->getBreached())
+		if (board.findTileTop(dtil).isFarm() && !dtil->getBreached())
 			breachTile(dtil);
 		if (victim)
 			removePiece(victim);
@@ -278,20 +318,30 @@ void Game::doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dt
 	}
 }
 
-bool Game::checkWin() {
-	if (board.checkThroneWin(board.getPieces().own(), board.ownPieceAmts)) {	// no need to check if enemy throne has occupied own fortress
-		doWin(false);
-		return true;
-	}
-	if (board.checkThroneWin(board.getPieces().ene(), board.enePieceAmts) || board.checkFortressWin()) {
-		doWin(true);
+bool Game::checkPointsWin() {
+	Record::Info win = board.countVictoryPoints(vpOwn, vpEne, eneRec);
+	World::state<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
+	if (win != Record::none) {
+		doWin(win);
 		return true;
 	}
 	return false;
 }
 
-void Game::doWin(bool win) {
-	ownRec.info = win ? Record::win : Record::loose;
+bool Game::checkWin() {
+	if (board.checkThroneWin(board.getPieces().own(), board.ownPieceAmts)) {	// no need to check if enemy throne has occupied own fortress
+		doWin(Record::loose);
+		return true;
+	}
+	if (board.checkThroneWin(board.getPieces().ene(), board.enePieceAmts) || board.checkFortressWin()) {
+		doWin(Record::win);
+		return true;
+	}
+	return false;
+}
+
+void Game::doWin(Record::Info win) {
+	ownRec.info = win;
 	endTurn();
 	World::program()->finishMatch(win);
 }
@@ -301,7 +351,7 @@ void Game::surrender() {
 	sendb.push(uint8(Record::loose));
 	sendb.push({ uint16(UINT16_MAX), uint16(0) });
 	World::netcp()->sendData(sendb);
-	World::program()->finishMatch(false);
+	World::program()->finishMatch(Record::loose);
 }
 
 void Game::prepareTurn(bool fcont) {
@@ -313,12 +363,11 @@ void Game::prepareTurn(bool fcont) {
 
 	ProgMatch* pm = World::state<ProgMatch>();
 	pm->message->setText(myTurn ? xmov ? "Opponent lost a battle" : "Your turn" : "Opponent's turn");
-	for (uint8 i = 0; i < favorMax; i++)
-		pm->updateFavorIcon(Favor(i), myTurn && !xmov);
-	pm->updateRebuildIcon(myTurn && !xmov);
 	pm->updateEstablishIcon(myTurn && !xmov);
+	pm->updateRebuildIcon(myTurn && !xmov);
 	pm->updateSpawnIcon(myTurn && !xmov);
 	pm->updateTurnIcon(xmov || fcont);
+	pm->updateFavorIcons(myTurn && !xmov);
 	pm->setDragonIcon(myTurn && !xmov);
 }
 
@@ -352,8 +401,10 @@ void Game::recvRecord(const uint8* data) {
 		ownRec = Record();
 	}
 
-	if (eneRec.info == Record::win || eneRec.info == Record::loose)
-		World::program()->finishMatch(eneRec.info == Record::loose);
+	board.countVictoryPoints(vpOwn, vpEne, eneRec);
+	World::state<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
+	if (eneRec.info == Record::win || eneRec.info == Record::loose || eneRec.info == Record::tie)
+		World::program()->finishMatch(eneRec.info == Record::win ? Record::loose : eneRec.info == Record::loose ? Record::win : Record::tie);
 	else {
 		myTurn = true;
 		prepareTurn(fcont);
@@ -449,7 +500,7 @@ void Game::recvMove(const uint8* data) {
 void Game::placePiece(Piece* piece, svec2 pos) {
 	if (uint16 fid = board.posToId(pos); piece->getType() == Com::Piece::throne && board.getTiles()[fid].getType() == Com::Tile::fortress && piece->lastFortress != fid)
 		if (piece->lastFortress = fid; availableFF < std::accumulate(favorsLeft.begin(), favorsLeft.end(), uint16(0)))
-			availableFF++;
+		availableFF++;
 
 	piece->updatePos(pos, true);
 	sendb.pushHead(Com::Code::move);
@@ -472,7 +523,7 @@ void Game::removePiece(Piece* piece) {
 }
 
 void Game::breachTile(Tile* tile, bool yes) {
-	tile->setBreached(true);
+	tile->setBreached(yes);
 	sendb.pushHead(Com::Code::breach);
 	sendb.push(board.inverseTileId(tile));
 	sendb.push(uint8(yes));
@@ -481,22 +532,19 @@ void Game::breachTile(Tile* tile, bool yes) {
 
 void Game::recvTile(const uint8* data) {
 	uint16 pos = Com::read16(data);
-	if (Com::Tile type = Com::Tile(data[sizeof(uint16)]); type == Com::Tile::farm || type == Com::Tile::city) {
-		board.getTiles()[pos].setType(board.getTiles()[pos].getType(), type);
-		(type == Com::Tile::farm ? board.eneFarm : board.eneCity) = &board.getTiles()[pos];
-	} else if (board.getTiles()[pos].setType(type); type == Com::Tile::fortress)
-		if (Piece* pce = board.findPiece(board.getPieces().begin(), board.getPieces().end(), board.idToPos(pos)); pce && pce->getType() == Com::Piece::throne)
+	if (board.getTiles()[pos].setType(Com::Tile(data[sizeof(uint16)] & 0xF)); board.getTiles()[pos].getType() == Com::Tile::fortress)
+		if (Piece* pce = board.findOccupant(board.idToPos(pos)); pce && pce->getType() == Com::Piece::throne)
 			pce->lastFortress = pos;
+	if (TileTop top = TileTop(data[sizeof(uint16)] >> 4); top != TileTop::none)
+		board.setTileTop(top, &board.getTiles()[pos]);
 }
 
-void Game::changeTile(Tile* tile, Com::Tile type) {
-	if (type != Com::Tile::farm && type != Com::Tile::city)
-		tile->setType(type);
-	else
-		tile->setType(tile->getType(), type);
+void Game::changeTile(Tile* tile, Com::Tile type, TileTop top) {
+	if (tile->setType(type); top != TileTop::none)
+		board.setTileTop(top, tile);
 	sendb.pushHead(Com::Code::tile);
 	sendb.push(board.inverseTileId(tile));
-	sendb.push(uint8(type));
+	sendb.push(uint8(uint8(type) | (top.invert() << 4)));
 	World::netcp()->sendData(sendb);
 }
 
@@ -511,3 +559,9 @@ std::default_random_engine Game::createRandomEngine() {
 	}
 	return randGen;
 }
+
+#ifdef DEBUG
+void Game::processCommand(const char*) {
+	// TODO: fill
+}
+#endif

@@ -22,10 +22,6 @@ public:
 
 	Com::Config config;
 	array<uint16, Com::pieceMax> ownPieceAmts, enePieceAmts;
-	Tile* ownFarm;
-	Tile* ownCity;
-	Tile* eneFarm;
-	Tile* eneCity;
 private:
 	uint16 boardHeight;	// total number of rows
 	float objectSize;	// width and height of a tile/piece
@@ -34,8 +30,10 @@ private:
 	vec4 boardBounds;
 
 	Mesh gridat;
-	Object ground, board, bgrid, screen, pxpad;
+	Object ground, board, bgrid, screen;
 	TileCol tiles;
+	array<BoardObject, TileTop::none> tileTops;
+	Object pxpad;
 	PieceCol pieces;
 
 public:
@@ -66,6 +64,7 @@ public:
 	Piece* findPiece(Piece* beg, Piece* end, svec2 pos);
 	PieceCol& getPieces();
 	Piece* getOwnPieces(Com::Piece type);
+	Piece* getEnePieces(Com::Piece type);
 	Piece* findOccupant(const Tile* tile);
 	Piece* findOccupant(svec2 pos);
 	BoardObject* findObject(const vec3& isct);
@@ -90,13 +89,18 @@ public:
 	void takeOutFortress();
 	void setFavorInteracts(Favor favor, const Record& orec);
 	void setPxpadPos(const Piece* piece);
+	BoardObject* getTileTop(TileTop top);
+	TileTop findTileTop(const Tile* tile);
+	Tile* getTileBot(TileTop top);
+	void setTileTop(TileTop top, const Tile* tile);
 	void selectEstablishable();
 	bool tileRebuildable(Piece* throne);
 	void selectRebuildable();
 	Tile* establishTile(Piece* throne, bool reinit, const Record& orec, ProgMatch* match);
 	bool pieceSpawnable(Com::Piece type);
-	void selectSpawners();
-	Piece* findSpawnablePiece(Com::Piece type, Tile*& tile, bool reinit, const Record& orec);
+	void selectSpawners();	// can only happen when spawning on fortresses
+	Tile* findSpawnableTile(Com::Piece type);
+	Piece* findSpawnablePiece(Com::Piece type, bool reinit);
 
 	void collectTilesBySingle(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*));
@@ -115,6 +119,7 @@ public:
 	uset<uint16> collectEngageTiles(const Piece* piece);
 	bool checkThroneWin(Piece* pcs, const array<uint16, Com::pieceMax>& amts);
 	bool checkFortressWin();
+	Record::Info countVictoryPoints(uint16& own, uint16& ene, const Record& erec);
 
 	svec2 boardLimit() const;
 	const vec4& getBoardBounds() const;
@@ -128,7 +133,7 @@ public:
 	uint16 inversePieceId(Piece* piece) const;
 
 private:
-	template <class T> static void setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id);
+	template <class S> static void setObjectAddrs(S src, sizet size, vector<Object*>::iterator& dst);
 	void setTiles(Tile* tils, uint16 yofs, bool show);
 	void setMidTiles();
 	void setPieces(Piece* pces, float rot, const Material* matl);
@@ -186,6 +191,10 @@ inline Piece* Board::getOwnPieces(Com::Piece type) {
 	return getPieces(pieces.own(), ownPieceAmts, type);
 }
 
+inline Piece* Board::getEnePieces(Com::Piece type) {
+	return getPieces(pieces.ene(), ownPieceAmts, type);
+}
+
 inline Piece* Board::findOccupant(const Tile* tile) {
 	return findOccupant(idToPos(tileId(tile)));
 }
@@ -214,16 +223,20 @@ inline void Board::setOwnTilesInteract(Tile::Interact lvl, bool dim) {
 	setTilesInteract(tiles.own(), tiles.getHome(), lvl, dim);
 }
 
-inline void Board::setMidTilesInteract(Tile::Interact lvl, bool dim) {
-	setTilesInteract(tiles.mid(), config.homeSize.x, lvl, dim);
-}
-
 inline vector<uint16> Board::countOwnTiles() const {
 	return countTiles(tiles.own(), tiles.getHome(), vector<uint16>(config.tileAmounts.begin(), config.tileAmounts.end()));
 }
 
 inline vector<uint16> Board::countMidTiles() const {
 	return countTiles(tiles.mid(), config.homeSize.x, vector<uint16>(config.middleAmounts.begin(), config.middleAmounts.end()));
+}
+
+inline BoardObject* Board::getTileTop(TileTop top) {
+	return &tileTops[top];
+}
+
+inline Tile* Board::getTileBot(TileTop top) {
+	return getTile(ptog(tileTops[top].getPos()));
 }
 
 inline void Board::collectTilesBySingle(uset<uint16>& tcol, uint16 pos) {

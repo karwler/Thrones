@@ -39,7 +39,7 @@ static void testReadWordM() {
 	const char* str = "the quick\tbrown  fox\r\njumps\rover\v\vthe \tlazy\n dog";
 	const char* words[] = { "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog" };
 	for (const char** exp = words; *str; exp++)
-		assertEqual(readWordM(str), *exp);
+		assertEqual(readWord(str), *exp);
 }
 
 static void testStrEnclose() {
@@ -274,6 +274,33 @@ static void testCycle() {
 	assertEqual(cycle(2u, 3u, -4), 1u);
 }
 
+static void testNumDigits() {
+	assertEqual(numDigits(00u, 8), 1);
+	assertEqual(numDigits(01u, 8), 1);
+	assertEqual(numDigits(07u, 8), 1);
+	assertEqual(numDigits(010u, 8), 2);
+	assertEqual(numDigits(011u, 8), 2);
+	assertEqual(numDigits(077u, 8), 2);
+	assertEqual(numDigits(0100u, 8), 3);
+	assertEqual(numDigits(0101u, 8), 3);
+	assertEqual(numDigits(0u, 10), 1);
+	assertEqual(numDigits(1u, 10), 1);
+	assertEqual(numDigits(9u, 10), 1);
+	assertEqual(numDigits(10u, 10), 2);
+	assertEqual(numDigits(11u, 10), 2);
+	assertEqual(numDigits(99u, 10), 2);
+	assertEqual(numDigits(100u, 10), 3);
+	assertEqual(numDigits(101u, 10), 3);
+	assertEqual(numDigits(0x0u, 16), 1);
+	assertEqual(numDigits(0x1u, 16), 1);
+	assertEqual(numDigits(0xFu, 16), 1);
+	assertEqual(numDigits(0x10u, 16), 2);
+	assertEqual(numDigits(0x11u, 16), 2);
+	assertEqual(numDigits(0x99u, 16), 2);
+	assertEqual(numDigits(0x100u, 16), 3);
+	assertEqual(numDigits(0x101u, 16), 3);
+}
+
 static void testSortNames() {
 	umap<string, int> vals = { pair("a01", 0), pair("zb", 0), pair("a1", 0), pair("Zb", 0), pair("a10", 0) };
 	assertRange(sortNames(vals), vector<string>({ "a01", "a1", "a10", "Zb", "zb" }));
@@ -316,6 +343,7 @@ void testText() {
 	testReadNumber();
 	testStoxv();
 	testCycle();
+	testNumDigits();
 	testSortNames();
 	testArguments();
 }

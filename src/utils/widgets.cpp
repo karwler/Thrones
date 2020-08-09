@@ -559,9 +559,9 @@ void TextBox::cutLines() {
 
 // ICON
 
-Icon::Icon(Size size, string line, BCall leftCall, BCall rightCall, BCall holdCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+Icon::Icon(Size size, string line, BCall leftCall, BCall rightCall, BCall holdCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr, bool select) :
 	Label(size, std::move(line), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
-	selected(false),
+	selected(select),
 	hcall(holdCall)
 {}
 

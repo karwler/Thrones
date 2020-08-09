@@ -6,22 +6,17 @@ namespace Com {
 
 Config::Config() :
 	homeSize(9, 4),
-	gameType(defaultGameType),
-	ports(false),
-	rowBalancing(false),
 	battlePass(randomLimit / 2),
+	opts(favorTotal | dragonStraight),
+	victoryPointsNum(21),
+	setPieceBattleNum(10),
 	favorLimit(1),
-	favorTotal(true),
-	dragonLate(false),
-	dragonStraight(true),
-	setPieceOn(false),
-	setPieceNum(10),
 	tileAmounts{ 14, 9, 5, 7 },
 	middleAmounts{ 1, 1, 1, 1 },
 	pieceAmounts{ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 },
-	winFortress(1),
 	winThrone(1),
-	capturers{ false, false, false, false, false, false, false, false, false, true }
+	winFortress(1),
+	capturers(1 << uint8(Piece::throne))
 {}
 
 Config& Config::checkValues() {
@@ -29,38 +24,61 @@ Config& Config::checkValues() {
 	battlePass = std::min(battlePass, randomLimit);
 	favorLimit = std::min(favorLimit, maxFavorMax);
 
-	for (uint16& it : tileAmounts)
-		if (it < homeSize.y)
-			it = homeSize.y;
-	uint16 hsize = homeSize.x * homeSize.y;
-	uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), rowBalancing ? homeSize.y : 0);
-	uint16 fort = hsize - ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
-	for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
+	uint16 hsize = homeSize.x * homeSize.y, fort = hsize;
+	if (opts & rowBalancing) {
+		for (uint16& it : tileAmounts)
+			if (it < homeSize.y)
+				it = homeSize.y;
+		uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), homeSize.y);
+		fort -= ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
+	} else
+		fort -= floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1));
+
+	if ((opts & homefront) && fort > 1) {	// TODO: remove this
+		ceilAmounts(hsize - fort, hsize - 1, tileAmounts.data(), uint8(tileAmounts.size() - 1));
+		fort = 1;
+	} else for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
 		tileAmounts[i]++;
 		fort--;
 	}
-	floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
+
+	uint16 mids = floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
+	uint16 mort = homeSize.x - mids * 2;
+	if (opts & victoryPoints) {
+		if ((opts & victoryPointsEquidistant) && !(homeSize.x % 2) && !mort)
+			mort = homeSize.x - floorAmounts(mids, middleAmounts.data(), mids - 2, uint8(middleAmounts.size() - 1)) * 2;
+		else if (!mort || ((opts & victoryPointsEquidistant) && (homeSize.x % 2 ? !(mort % 2) : mort % 2))) {
+			(*std::find_if(middleAmounts.rbegin(), middleAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
+			mort++;
+		}
+	}
+	victoryPointsNum = std::clamp(victoryPointsNum, uint16(1), uint16(UINT16_MAX - mort));
 
 	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, uint8(pieceAmounts.size() - 1));
-	if (!psize)
+	if ((opts & homefront) && pieceAmounts[uint8(Piece::throne)] > 1) {	// TODO: remove this block
+		psize -= pieceAmounts[uint8(Piece::throne)] - 1;
+		pieceAmounts[uint8(Piece::throne)] = 1;
+	} else if (!psize)
 		psize = pieceAmounts[uint8(Piece::throne)] = 1;
+	if (!capturers)
+		capturers = 0x3FF;	// all pieces set
 
-	if (std::find(capturers.begin(), capturers.end(), true) == capturers.end())
-		std::fill(capturers.begin(), capturers.end(), true);
-	uint16 capCnt = 0;
-	for (uint8 i = 0; i < Com::pieceMax; i++)
-		if (capturers[i])
-			capCnt += pieceAmounts[i];
-	winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
+	if (!(opts & victoryPoints)) {
+		uint16 capCnt = 0;
+		for (uint8 i = 0; i < Com::pieceMax; i++)
+			if (capturers & (1 << i))
+				capCnt += pieceAmounts[i];
+		winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
 
-	winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
-	if (!(winFortress || winThrone))
-		if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
-			if (psize == hsize)
-				(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
-			pieceAmounts[uint8(Piece::throne)]++;
-		}
-	setPieceNum = std::max(std::max(setPieceNum, winFortress), winThrone);
+		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
+		if (!(winFortress || winThrone))
+			if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
+				if (psize == hsize)
+					(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
+				pieceAmounts[uint8(Piece::throne)]++;
+			}
+		setPieceBattleNum = std::max(std::max(setPieceBattleNum, winFortress), winThrone);
+	}
 	return *this;
 }
 
@@ -84,16 +102,11 @@ uint16 Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
 void Config::toComData(uint8* data) const {
 	*data++ = uint8(homeSize.x);
 	*data++ = uint8(homeSize.y);
-	*data++ = uint8(gameType);
-	*data++ = ports;
-	*data++ = rowBalancing;
 	*data++ = battlePass;
-	*data++ = favorLimit;
-	*data++ = favorTotal;
-	*data++ = dragonLate;
-	*data++ = dragonStraight;
-	*data++ = setPieceOn;
-	write16(data, setPieceNum);
+	write16(data, opts);
+	write16(data += sizeof(uint16), victoryPointsNum);
+	write16(data += sizeof(uint16), setPieceBattleNum);
+	write16(data += sizeof(uint16), favorLimit);
 
 	for (uint16 ta : tileAmounts)
 		write16(data += sizeof(uint16), ta);
@@ -101,24 +114,19 @@ void Config::toComData(uint8* data) const {
 		write16(data += sizeof(uint16), ma);
 	for (uint16 pa : pieceAmounts)
 		write16(data += sizeof(uint16), pa);
-	write16(data += sizeof(uint16), winFortress);
 	write16(data += sizeof(uint16), winThrone);
-	std::copy(capturers.begin(), capturers.end(), data += sizeof(uint16));
+	write16(data += sizeof(uint16), winFortress);
+	write16(data += sizeof(uint16), capturers);
 }
 
 void Config::fromComData(const uint8* data) {
 	homeSize.x = *data++;
 	homeSize.y = *data++;
-	gameType = GameType(*data++);
-	ports = *data++;
-	rowBalancing = *data++;
 	battlePass = *data++;
-	favorLimit = *data++;
-	favorTotal = *data++;
-	dragonLate = *data++;
-	dragonStraight = *data++;
-	setPieceOn = *data++;
-	setPieceNum = read16(data);
+	opts = Option(read16(data));
+	victoryPointsNum = read16(data += sizeof(uint16));
+	setPieceBattleNum = read16(data += sizeof(uint16));
+	favorLimit = read16(data += sizeof(uint16));
 
 	for (uint16& ta : tileAmounts)
 		ta = read16(data += sizeof(uint16));
@@ -126,26 +134,9 @@ void Config::fromComData(const uint8* data) {
 		ma = read16(data += sizeof(uint16));
 	for (uint16& pa : pieceAmounts)
 		pa = read16(data += sizeof(uint16));
-	winFortress = read16(data += sizeof(uint16));
 	winThrone = read16(data += sizeof(uint16));
-	data += sizeof(uint16);
-	std::copy(data, data + pieceMax, capturers.begin());
-}
-
-string Config::capturersString() const {
-	string value;
-	for (sizet i = 0; i < capturers.size(); i++)
-		if (capturers[i])
-			value += string(pieceNames[i]) + ' ';
-	value.pop_back();
-	return value;
-}
-
-void Config::readCapturers(const string& line) {
-	std::fill(capturers.begin(), capturers.end(), false);
-	for (const char* pos = line.c_str(); *pos;)
-		if (uint8 pi = strToEnum<uint8>(pieceNames, readWordM(pos)); pi < pieceMax)
-			capturers[pi] = true;
+	winFortress = read16(data += sizeof(uint16));
+	capturers = read16(data += sizeof(uint16));
 }
 
 // SOCKET FUNCTIONS

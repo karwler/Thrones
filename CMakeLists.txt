@@ -63,14 +63,13 @@ set(ASSET_SHD
 set(ASSET_IMG
 	"rsc/textures/assault.png"
 	"rsc/textures/catapult.png"
-	#"rsc/textures/city.png"
+	"rsc/textures/city.png"
 	"rsc/textures/conspire.png"
 	"rsc/textures/crossbowmen.png"
-	"rsc/textures/crosshair.png"
 	"rsc/textures/deceive.png"
 	"rsc/textures/dragon.png"
 	"rsc/textures/elephant.png"
-	#"rsc/textures/farm.png"
+	"rsc/textures/farm.png"
 	"rsc/textures/forest.png"
 	"rsc/textures/fortress.png"
 	"rsc/textures/grass.png"
@@ -80,6 +79,7 @@ set(ASSET_IMG
 	"rsc/textures/mountain.png"
 	"rsc/textures/plains.png"
 	"rsc/textures/rangers.png"
+	"rsc/textures/reticle.png"
 	"rsc/textures/rock.png"
 	"rsc/textures/throne.png"
 	"rsc/textures/title.png"
@@ -458,8 +458,13 @@ function(setCommonTargetProperties TARGET_NAME OUT_DIR)
 	endif()
 
 	if(STRIPPER)
-		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-							COMMAND "${STRIPPER}" -s "${OUT_DIR}/${TEXE_NAME}")
+		if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+								COMMAND "${STRIPPER}" "${OUT_DIR}/${TEXE_NAME}")
+		else()
+			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+								COMMAND "${STRIPPER}" -s "${OUT_DIR}/${TEXE_NAME}")
+		endif()
 	endif()
 endfunction()
 

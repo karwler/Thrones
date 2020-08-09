@@ -6,6 +6,12 @@ Board::Board(const Scene* scene) :
 	board(vec3(Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->mesh("table"), scene->material("board"), scene->texture("rock")),
 	bgrid(vec3(0.f), vec3(0.f), vec3(1.f), &gridat, scene->material("grid"), scene->texture()),
 	screen(vec3(Com::Config::boardWidth / 2.f, screenYUp, Com::Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->mesh("screen"), scene->material("screen"), scene->texture("wall")),
+	tileTops{
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::ownFarm).name()), false, 1.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::ownCity).name()), false, 1.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), PI, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::eneFarm).name()), false, 1.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), PI, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::eneCity).name()), false, 1.f)
+	},
 	pxpad(gtop(svec2(UINT16_MAX), 0.001f), vec3(0.f), vec3(0.f), scene->mesh("outline"), scene->material("red"), scene->texture(), false, false)	// show indicates if destruction pad is being used
 {}
 
@@ -24,6 +30,11 @@ vector<Object*> Board::initObjects(const Com::Config& cfg, bool regular, const S
 	pieces.update(config, regular);
 	setBgrid();
 	screen.setPos(vec3(screen.getPos().x, screen.getPos().y, Com::Config::boardWidth / 2.f - objectSize / 2.f));
+	for (BoardObject& it : tileTops) {
+		it.setPos(gtop(svec2(UINT16_MAX)));
+		it.setScl(vec3(objectSize));
+		it.show = false;
+	}
 	pxpad.setScl(vec3(objectSize));
 
 	// prepare objects for setup
@@ -34,21 +45,20 @@ vector<Object*> Board::initObjects(const Com::Config& cfg, bool regular, const S
 	setPieces(pieces.ene(), 0.f, scene->material(Settings::colorNames[uint8(sets->colorEnemy)]));
 
 	// collect array of references to all objects
-	array<Object*, 4> others = { &ground, &board, &bgrid, &screen };
-	sizet oi = others.size();
-	vector<Object*> objs(others.size() + tiles.getSize() + 1 + pieces.getSize());
-	std::copy(others.begin(), others.end(), objs.begin());
-	setObjectAddrs(tiles.begin(), tiles.getSize(), objs, oi);
-	objs[oi++] = &pxpad;
-	setObjectAddrs(pieces.begin(), pieces.getSize(), objs, oi);
+	initlist<Object*> others = { &ground, &board, &bgrid, &screen };
+	vector<Object*> objs(others.size() + tiles.getSize() + tileTops.size() + 1 + pieces.getSize());
+	vector<Object*>::iterator oi = std::copy(others.begin(), others.end(), objs.begin());
+	setObjectAddrs(tiles.begin(), tiles.getSize(), oi);
+	setObjectAddrs(tileTops.begin(), tileTops.size(), oi);
+	*oi++ = &pxpad;
+	setObjectAddrs(pieces.begin(), pieces.getSize(), oi);
 	return objs;
 }
 
-template <class T>
-void Board::setObjectAddrs(T* data, sizet size, vector<Object*>& dst, sizet& id) {
+template <class S>
+void Board::setObjectAddrs(S src, sizet size, vector<Object*>::iterator& dst) {
 	for (sizet i = 0; i < size; i++)
-		dst[id+i] = &data[i];
-	id += size;
+		*dst++ = &src[i];
 }
 
 void Board::setTiles(Tile* tils, uint16 yofs, bool show) {
@@ -61,6 +71,11 @@ void Board::setTiles(Tile* tils, uint16 yofs, bool show) {
 void Board::setMidTiles() {
 	for (uint16 i = 0; i < config.homeSize.x; i++)
 		*tiles.mid(i) = Tile(gtop(svec2(i, config.homeSize.y)), objectSize, true);
+	if ((config.opts & (Com::Config::victoryPoints | Com::Config::victoryPointsEquidistant)) == (Com::Config::victoryPoints | Com::Config::victoryPointsEquidistant)) {
+		uint16 forts = config.homeSize.x - config.countMiddles() * 2;
+		for (uint16 i = (config.homeSize.x - forts) / 2; i < (config.homeSize.x + forts) / 2; i++)
+			tiles.mid(i)->setType(Com::Tile::fortress);
+	}
 }
 
 void Board::setPieces(Piece* pces, float rot, const Material* matl) {
@@ -100,7 +115,7 @@ void Board::uninitObjects() {
 }
 
 uint16 Board::countAvailableFavors() {
-	uint16 flim = uint16(config.favorLimit) * uint16(Favor::none);
+	uint16 flim = config.favorLimit * 4;
 	uint16 availFF = 0;
 	for (Piece* throne = getOwnPieces(Com::Piece::throne); throne != pieces.ene(); throne++)
 		if (uint16 pos = posToId(ptog(throne->getPos())); tiles[pos].getType() == Com::Tile::fortress)
@@ -115,7 +130,8 @@ void Board::prepareMatch(bool myTurn, Com::Tile* buf) {
 		it->show = true;
 	for (Piece* it = pieces.ene(); it != pieces.end(); it++)
 		it->show = pieceOnBoard(it);
-	ownFarm = ownCity = eneFarm = eneCity = nullptr;
+	for (Object& it : tileTops)
+		it.show = false;
 
 	// rearrange middle tiles
 	vector<Com::Tile> mid(config.homeSize.x);
@@ -134,7 +150,7 @@ void Board::rearangeMiddle(Com::Tile* mid, Com::Tile* buf, bool myTurn) {
 		}
 
 	for (uint16 i = myTurn ? 0 : config.homeSize.x - 1, fm = btom<uint16>(myTurn); i < config.homeSize.x; i += fm)
-		if (mid[i] != Com::Tile::empty && buf[i] != Com::Tile::empty) {
+		if (mid[i] < Com::Tile::fortress && buf[i] < Com::Tile::fortress) {
 			Com::Tile val = mid[i];
 			mid[i] = Com::Tile::empty;
 			uint16 a = findEmptyMiddle(mid, i, uint16(-1)), b = findEmptyMiddle(mid, i, 1);
@@ -161,7 +177,7 @@ void Board::prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record
 			pce->alphaFactor = BoardObject::noEngageAlpha;
 
 		// restore fortresses
-		if (config.gameType != Com::Config::GameType::homefront)
+		if (!(config.opts & Com::Config::homefront))
 			for (Tile& til : tiles)
 				if (til.isBreachedFortress())
 					if (!findPiece(pieces.begin(), pieces.end(), ptog(til.getPos())))
@@ -188,6 +204,11 @@ void Board::setTilesInteract(Tile* tiles, uint16 num, Tile::Interact lvl, bool d
 		tiles[i].setInteractivity(lvl, dim);
 }
 
+void Board::setMidTilesInteract(Tile::Interact lvl, bool dim) {
+	for (Tile* it = tiles.mid(); it != tiles.own(); it++)
+		it->setInteractivity(it->getType() != Com::Tile::fortress ? lvl : Tile::Interact::ignore, dim || it->getType() == Com::Tile::fortress);
+}
+
 void Board::setOwnPiecesVisible(bool on) {
 	for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 		if (it->setInteractivity(on, false, nullptr, on ? &Program::eventMovePiece : nullptr, nullptr); pieceOnHome(it))
@@ -208,9 +229,14 @@ void Board::restorePiecesInteract(const Record& orec) {
 			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
 		orec.actors.begin()->first->setInteractivity(orec.actors.begin()->first->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 	} else {	// business as usual
-		for (Piece* it = pieces.own(); it != pieces.ene(); it++)
+		if (orec.actors.size() >= 2) {	// for pieces with more than a total of two actions
+			for (Piece* it = pieces.own(); it != pieces.ene(); it++)
+				it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
+			for (auto [pce, act] : orec.actors)
+				pce->setInteractivity(pce->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+		} else for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 			it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
-		for (auto& [pce, act] : orec.assault)
+		for (auto [pce, act] : orec.assault)
 			pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
 	}
 	for (Piece* it = pieces.ene(); it != pieces.end(); it++)
@@ -235,7 +261,7 @@ void Board::checkOwnTiles() const {
 				throw firstUpper(Com::tileNames[uint8(Com::Tile::fortress)]) + " at " + toStr(x) + '|' + toStr(y - config.homeSize.y - 1) + " not allowed";
 		}
 
-		if (config.rowBalancing)	// check diversity in each row
+		if (config.opts & Com::Config::rowBalancing)	// check diversity in each row
 			for (uint8 i = 0; i < Com::tileLim; i++)
 				if (!cnt[i] && config.tileAmounts[i])
 					throw firstUpper(Com::tileNames[i]) + " missing in row " + toStr(y - config.homeSize.y - 1);
@@ -259,7 +285,7 @@ void Board::checkMidTiles() const {
 void Board::checkOwnPieces() const {
 	uint16 forts = config.countFreeTiles();
 	for (const Piece* it = pieces.own(); it != pieces.ene(); it++)
-		if (!it->show && !(it->getType() == Com::Piece::dragon && config.dragonLate && forts))
+		if (!it->show && !(it->getType() == Com::Piece::dragon && (config.opts & Com::Config::dragonLate) && forts))
 			throw firstUpper(Com::pieceNames[uint8(it->getType())]) + " wasn't placed";
 }
 
@@ -326,7 +352,7 @@ void Board::collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile
 }
 
 void Board::collectTilesByPorts(uset<uint16>& tcol, uint16 pos) {
-	if (svec2 p = idToPos(pos); config.ports && tiles[pos].getType() == Com::Tile::water && (!p.x || p.x == config.homeSize.x - 1 || !p.y || p.y == boardHeight - 1)) {
+	if (svec2 p = idToPos(pos); (config.opts & Com::Config::ports) && tiles[pos].getType() == Com::Tile::water && (!p.x || p.x == config.homeSize.x - 1 || !p.y || p.y == boardHeight - 1)) {
 		for (uint16 b : { 0, tiles.getSize() - config.homeSize.x })
 			for (uint16 i = 0; i < config.homeSize.x; i++)
 				if (uint16 id = b + i; tiles[id].getType() == Com::Tile::water)
@@ -391,7 +417,7 @@ uset<uint16> Board::collectMoveTiles(const Piece* piece, const Record& erec, Fav
 	else if (piece->getType() == Com::Piece::lancer && tiles[pos].getType() == Com::Tile::plains)
 		collectTilesForLancer(tcol, pos);
 	else if (piece->getType() == Com::Piece::dragon)
-		(this->*(config.dragonStraight ? &Board::collectTilesByStraight : &Board::collectTilesByArea))(tcol, pos, dragonDist, spaceAvailableDragon);
+		(this->*(config.opts & Com::Config::dragonStraight ? &Board::collectTilesByStraight : &Board::collectTilesByArea))(tcol, pos, dragonDist, spaceAvailableDragon);
 	else
 		collectTilesBySingle(tcol, pos);
 	return tcol;
@@ -426,12 +452,12 @@ void Board::setFavorInteracts(Favor favor, const Record& orec) {
 		if (orec.actors.size() >= 2 || std::any_of(orec.actors.begin(), orec.actors.end(), [](const pair<const Piece*, Action>& it) -> bool { return it.second & ACT_SWAP; })) {
 			for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 				it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
-			for (auto& [pce, act] : orec.actors)
+			for (auto [pce, act] : orec.actors)
 				pce->setInteractivity(pce->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 		} else {
 			for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 				it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
-			for (auto& [pce, act] : orec.assault)
+			for (auto [pce, act] : orec.assault)
 				pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
 		}
 		for (Piece* it = pieces.ene(); it != pieces.end(); it++)
@@ -441,9 +467,9 @@ void Board::setFavorInteracts(Favor favor, const Record& orec) {
 		if (umap<Piece*, Action>::const_iterator pa = orec.assault.find(orec.lastAss.first); pa == orec.assault.end()) {
 			for (Piece* it = pieces.own(); it != pieces.ene(); it++)
 				it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
-			for (auto& [pce, act] : orec.actors)
+			for (auto [pce, act] : orec.actors)
 				pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
-			for (auto& [pce, act] : orec.assault)
+			for (auto [pce, act] : orec.assault)
 				if ((act & ACT_MS) == ACT_MS)
 					pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
 		} else {
@@ -477,17 +503,27 @@ void Board::setPxpadPos(const Piece* piece) {
 		pxpad.setPos(vec3(piece->getPos().x, pxpad.getPos().y, piece->getPos().z));
 }
 
+TileTop Board::findTileTop(const Tile* tile) {
+	svec2 pos = ptog(tile->getPos());
+	return std::find_if(tileTops.begin(), tileTops.end(), [this, pos](const Object& it) -> bool { return ptog(it.getPos()) == pos; }) - tileTops.begin();
+}
+
+void Board::setTileTop(TileTop top, const Tile* tile) {
+	tileTops[top].setPos(vec3(tile->getPos().x, tileTops[top].getPos().y, tile->getPos().z));
+	tileTops[top].show = true;
+}
+
 void Board::selectEstablishable() {
 	for (Piece& it : pieces)
 		it.setInteractivity(false, true, nullptr, nullptr, nullptr);
 	for (Piece* it = getOwnPieces(Com::Piece::throne); it != pieces.ene(); it++)
 		if (it->show)
-			it->setInteractivity(true, false, &Program::eventEstablishP, nullptr, nullptr);
+			it->setInteractivity(true, false, &Program::eventEstablish, nullptr, nullptr);
 }
 
 bool Board::tileRebuildable(Piece* throne) {
 	if (throne->show)
-		if (Tile* til = getTile(ptog(throne->getPos())); (til->getType() == Com::Tile::fortress || til == ownFarm) && til->getBreached())
+		if (Tile* til = getTile(ptog(throne->getPos())); (til->getType() == Com::Tile::fortress || findTileTop(til) == TileTop::ownFarm) && til->getBreached())
 			return true;
 	return false;
 }
@@ -497,36 +533,46 @@ void Board::selectRebuildable() {
 		it.setInteractivity(false, true, nullptr, nullptr, nullptr);
 	for (Piece* it = getOwnPieces(Com::Piece::throne); it != pieces.ene(); it++)
 		if (tileRebuildable(it))
-			it->setInteractivity(true, false, &Program::eventRebuildTileP, nullptr, nullptr);
+			it->setInteractivity(true, false, &Program::eventRebuildTile, nullptr, nullptr);
 }
 
 Tile* Board::establishTile(Piece* throne, bool reinit, const Record& orec, ProgMatch* match) {
 	svec2 pos = ptog(throne->getPos());
-	for (Tile& it : getTiles())
-		if (it.getType() == Com::Tile::fortress || &it == ownFarm || &it == eneFarm || &it == ownCity || &it == eneCity)
-			if (svec2 dp = glm::abs(ptog(it.getPos()) - pos); dp.x < 3 || dp.y < 3)
-				throw string("Tile too close to a ") + Com::tileNames[uint8(&it == ownFarm || &it == eneFarm ? Com::Tile::farm : &it == ownCity || &it == eneCity ? Com::Tile::city : it.getType())];
+	for (Tile& it : tiles)
+		if (TileTop top = findTileTop(&it); (it.getType() == Com::Tile::fortress && (&it < tiles.mid() || &it >= tiles.own())) || top != TileTop::none)
+			if (svec2 dp = glm::abs(ivec2(ptog(it.getPos())) - ivec2(pos)); dp.x < 3 && dp.y < 3)
+				throw "Tile is too close to a " + string(top == TileTop::none ? Com::tileNames[uint8(it.getType())] : top.name());
 
 	Tile* tile = getTile(pos);
-	if (ownFarm) {
-		ownCity = tile;
+	if (tileTops[TileTop::ownFarm].show) {
+		setTileTop(TileTop::ownCity, tile);
 		match->destroyEstablishIcon();
 	} else
-		ownFarm = tile;
+		setTileTop(TileTop::ownFarm, tile);
 	if (reinit)
 		restorePiecesInteract(orec);
 	return tile;
 }
 
 bool Board::pieceSpawnable(Com::Piece type) {
-	if (type == Com::Piece::lancer || type == Com::Piece::rangers) {
-		if (!ownFarm || ownFarm->getBreached() || findOccupant(ownFarm))
+	switch (type) {
+	case Com::Piece::rangers: case Com::Piece::lancer:
+		if (!tileTops[TileTop::ownFarm].show)
 			return false;
-	} else if (type == Com::Piece::spearmen || type == Com::Piece::catapult || type == Com::Piece::elephant) {
-		if (!ownCity || findOccupant(ownCity))
+		if (Tile* til = getTileBot(TileTop::ownFarm); til->getBreached() || findOccupant(til))
 			return false;
-	} else if (std::none_of(tiles.own(), tiles.end(), [this](Tile& dt) -> bool { return dt.isUnbreachedFortress() && !findOccupant(&dt); }))	// no need to check if not dragon or throne
+		break;
+	case Com::Piece::spearmen: case Com::Piece::catapult: case Com::Piece::elephant:
+		if (!tileTops[TileTop::ownCity].show || findOccupant(getTileBot(TileTop::ownCity)))
+			return false;
+		break;
+	case Com::Piece::crossbowmen: case Com::Piece::trebuchet: case Com::Piece::warhorse:
+		if (std::none_of(tiles.own(), tiles.end(), [](const Tile& dt) -> bool { return dt.isUnbreachedFortress(); }))
+			return false;
+		break;
+	default:
 		return false;
+	}
 
 	for (Piece* it = getOwnPieces(type); it->getType() == type; it++)
 		if (!it->show)
@@ -538,32 +584,39 @@ void Board::selectSpawners() {
 	for (Tile* it = tiles.ene(); it != tiles.own(); it++)
 		it->setEmission(it->getEmission() | BoardObject::EMI_DIM);
 	for (Tile* it = tiles.own(); it != tiles.end(); it++) {
-		if (!it->isUnbreachedFortress() || findOccupant(it))
+		if (!it->isUnbreachedFortress())
 			it->setEmission(it->getEmission() | BoardObject::EMI_DIM);
 		else
-			it->hgcall = &Program::eventSpawnPieceT;
+			it->hgcall = &Program::eventSpawnPiece;
 	}
+	for (BoardObject& it : tileTops)
+		it.setEmission(it.getEmission() | BoardObject::EMI_DIM);
 	for (Piece& it : pieces)
 		it.setInteractivity(false, true, nullptr, nullptr, nullptr);
 }
 
-Piece* Board::findSpawnablePiece(Com::Piece type, Tile*& tile, bool reinit, const Record& orec) {
-	if (!tile) {
-		if (type == Com::Piece::lancer || type == Com::Piece::rangers)
-			tile = ownFarm;
-		else if (type == Com::Piece::spearmen || type == Com::Piece::catapult || type == Com::Piece::elephant)
-			tile = ownCity;
-		else
-			tile = std::find_if(getTiles().own(), getTiles().end(), [this](Tile& it) -> bool { return it.isUnbreachedFortress() && !findOccupant(&it); });
+Tile* Board::findSpawnableTile(Com::Piece type) {
+	switch (type) {
+	case Com::Piece::rangers: case Com::Piece::lancer:
+		return getTileBot(TileTop::ownFarm);
+	case Com::Piece::spearmen: case Com::Piece::catapult: case Com::Piece::elephant:
+		return getTileBot(TileTop::ownCity);
+	case Com::Piece::crossbowmen: case Com::Piece::trebuchet: case Com::Piece::warhorse:
+		return std::find_if(tiles.own(), tiles.end(), [](const Tile& it) -> bool { return it.isUnbreachedFortress(); });
 	}
+	return nullptr;
+}
+
+Piece* Board::findSpawnablePiece(Com::Piece type, bool reinit) {
 	for (Piece* it = getOwnPieces(type); it->getType() == type; it++)
 		if (!it->show) {
-			if (reinit) {
+			if (reinit) {	// pieces should be reinitialized later in prepareTurn because this should be the only action in a turn
 				for (Tile& ti : tiles) {
 					ti.hgcall = nullptr;
 					ti.setEmission(ti.getEmission() & ~BoardObject::EMI_DIM);
 				}
-				restorePiecesInteract(orec);
+				for (BoardObject& tt : tileTops)
+					tt.setEmission(tt.getEmission() & ~BoardObject::EMI_DIM);
 			}
 			return it;
 		}
@@ -577,20 +630,32 @@ bool Board::checkThroneWin(Piece* pcs, const array<uint16, Com::pieceMax>& amts)
 			if (!pcs[i].show && !--c)
 				return true;
 	} else
-		return std::none_of(pcs, pcs + pieces.getNum(), [](Piece& it) -> bool { return it.show; });	// check if all board.getPieces() dead
+		return std::none_of(pcs, pcs + pieces.getNum(), [](Piece& it) -> bool { return it.show; });	// check if all pieces dead
 	return false;
 }
 
 bool Board::checkFortressWin() {
 	if (uint16 cnt = config.winFortress)											// if there's a fortress quota
-		for (Tile* tit = tiles.ene(); tit != tiles.mid(); tit++)					// iterate enemy board.getTiles()
+		for (Tile* tit = tiles.ene(); tit != tiles.mid(); tit++)					// iterate enemy tiles
 			if (Piece* pit = pieces.own(); tit->getType() == Com::Tile::fortress)	// if tile is an enemy fortress
 				for (uint8 pi = 0; pi < Com::pieceMax; pit += ownPieceAmts[pi++])	// iterate piece types
-					if (config.capturers[pi])										// if the piece type is a capturer
+					if (config.capturers & (1 << pi))								// if the piece type is a capturer
 						for (uint16 i = 0; i < ownPieceAmts[pi]; i++)				// iterate board.getPieces() of that type
 							if (tileId(tit) == posToId(ptog(pit[i].getPos())) && !--cnt)	// if such a piece is on the fortress
 								return true;										// decrement fortress counter and win if 0
 	return false;
+}
+
+Record::Info Board::countVictoryPoints(uint16& own, uint16& ene, const Record& erec) {
+	if ((config.opts & Com::Config::victoryPoints) && erec.info != Record::battleFail) {
+		for (Tile* it = tiles.mid(); it != tiles.own(); it++)
+			if (it->getType() == Com::Tile::fortress)
+				if (Piece* pce = findOccupant(it))
+					(isOwnPiece(pce) ? own : ene)++;
+		if (own >= config.victoryPointsNum || ene >= config.victoryPointsNum)
+			return own > ene ? Record::win : own < ene ? Record::loose : Record::tie;
+	}
+	return Record::none;
 }
 
 #ifdef DEBUG
@@ -614,7 +679,7 @@ vector<Object*> Board::initDummyObjects(const Com::Config& cfg, const Settings* 
 	amts.assign(config.middleAmounts.begin(), config.middleAmounts.end());
 	for (sizet i = 0; t < amts.size(); i++) {
 		for (; t < amts.size() && !amts[t]; t++);
-		if (t < amts.size()) {
+		if (t < amts.size() && tiles.mid(i)->getType() == Com::Tile::empty) {
 			tiles.mid(i)->setType(Com::Tile(t));
 			amts[t]--;
 		}

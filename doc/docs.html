@@ -503,10 +503,14 @@
 
 	<h2 id="h2_2">2.2 Configurations</h2>
 	<p>Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.</p>
+	<h3>Victory Points</h3>
+	<p>Use the victory points game variant. The input field determines how many points each player needs to collect to win. If the checkbox is set, middle row fortresses will be placed in the center. If it isn't checked, middle row fortresses will be placed in the remaining free spaces.</p>
 	<h3>Ports</h3>
 	<p>Use the ports game variant.</p>
 	<h3>Row balancing</h3>
 	<p>Use the row balancing game variant.</p>
+	<h3>Homefront</h3>
+	<p>Use the homefront game variant.</p>
 	<h3>Set piece battle</h3>
 	<p>Use the set piece Battle game variant. The input field determines how many pieces each player can use.</p>
 	<h3>Homeland size</h3>
@@ -530,14 +534,14 @@
 	<p>If enabled, dragons don't have to be placed during setup and can be placed later on homeland fortresses during the match.</p>
 	<h3>Dragon move straight</h3>
 	<p>If enabled, a dragon can only move in a straight line. Otherwise one move's steps will be treated separately and the dragon will use the shortest path to a destination.</p>
-	<h3>Tile amounts</h3>
+	<h3>Homeland tiles</h3>
 	<p>A list of the amounts of each player's homeland tiles. The minimum amount for each tile type other than a fortress is the homeland height and the maximum of each is the number of remaining free tiles. Sliders' ranges are set accordingly. The amount of fortresses is set to the amount of the remaining free tiles on a homeland. The number of fortresses is limited to "homeland_height * 2 + board_width - 2" and when exceeded, other tile amounts will be increased with the priority being the order of the listed tile types.</p>
-	<h3>Middle amounts</h3>
-	<p>A list of the amounts of middle row tiles per player. The total amount is limited to the range of 0 to "board_width / 2" floored. The amount of fortresses is set to the amount of the remaining free tiles, that is "board_width - total_amount_of_tiles_per_player * 2". The sliders work like the homeland tile amount sliders.</p>
-	<h3>Piece amounts</h3>
-	<p>A list of the amounts of each piece type per player. The total amount of pieces is limited to the range of 1 to the homeland tile count. If there's 0 pieces, the amount of thrones will be set to 1. The sliders work like the tile amount sliders.</p>
 	<h3>Fortresses captured</h3>
 	<p>The number of enemy fortresses that need to be captured in order to win. This value is limited to the number of homeland fortresses.</p>
+	<h3>Middle tiles</h3>
+	<p>A list of the amounts of middle row tiles per player. The total amount is limited to the range of 0 to "board_width / 2" floored. The amount of fortresses is set to the amount of the remaining free tiles, that is "board_width - total_amount_of_tiles_per_player * 2". The sliders work like the homeland tile amount sliders.</p>
+	<h3>Pieces</h3>
+	<p>A list of the amounts of each piece type per player. The total amount of pieces is limited to the range of 1 to the homeland tile count. If there's 0 pieces, the amount of thrones will be set to 1. The sliders work like the tile amount sliders.</p>
 	<h3>Thrones killed</h3>
 	<p>The number of enemy thrones that need to be killed in order to win. This number is limited to the number of a player's thrones. If both winning conditions are set to 0, this one will be set to 1. If the amount of thrones is set to 0, it'll be incremented and if the piece limit has been reached, one other piece amount will be decremented in turn, the priority being the reverse order of the listed piece types.</p>
 	<h3>Capturers</h3>

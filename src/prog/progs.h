@@ -33,11 +33,14 @@ public:
 
 protected:
 	struct ConfigIO {
-		//ComboBox* gameType;
+		CheckBox* victoryPoints;
+		LabelEdit* victoryPointsNum;
+		CheckBox* vpEquidistant;
 		CheckBox* ports;
 		CheckBox* rowBalancing;
-		CheckBox* setPieceOn;
-		LabelEdit* setPieceNum;
+		CheckBox* homefront;
+		CheckBox* setPieceBattle;
+		LabelEdit* setPieceBattleNum;
 		LabelEdit* width;
 		LabelEdit* height;
 		Slider* battleSL;
@@ -52,9 +55,9 @@ protected:
 		Label* tileFortress;
 		Label* middleFortress;
 		Label* pieceTotal;
-		LabelEdit* winFortress;
 		LabelEdit* winThrone;
-		LabelEdit* capturers;
+		LabelEdit* winFortress;
+		array<Icon*, Com::pieceMax> capturers;
 	};
 
 	static constexpr float chatEmbedSize = 0.5f;
@@ -199,9 +202,9 @@ public:
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 	void updateStartButton();	// canStart only applies to State::host
 	void updateConfigWidgets(const Com::Config& cfg);
+	static void setAmtSliders(const Com::Config& cfg, const uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Com::Config::*counter)() const, string (*totstr)(const Com::Config&));
 	static void updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt, uint16 min, uint16 rest);
 private:
-	static void setAmtSliders(const Com::Config& cfg, const uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Com::Config::*counter)() const, string (*totstr)(const Com::Config&));
 	static void updateWinSlider(Label* amt, uint16 val, uint16 max);
 };
 
@@ -315,8 +318,10 @@ public:
 	Icon* destroyIcon;
 private:
 	Label* turnIcon;
-	Label* rebuildIcon;
+	Label* vpOwn;
+	Label* vpEne;
 	Label* establishIcon;
+	Label* rebuildIcon;
 	Label* spawnIcon;
 	Layout* dragonIcon;	// has to be nullptr if dragon can't be placed anymore
 	uint16 unplacedDragons;
@@ -338,6 +343,8 @@ public:
 	Favor favorIconSelect() const;
 	Favor selectFavorIcon(Favor& type);	// returns the previous favor and sets type to none if not selectable
 	void updateFavorIcon(Favor type, bool on);
+	void updateFavorIcons(bool on);
+	void updateVictoryPoints(uint16 own, uint16 ene);
 	void updateEstablishIcon(bool on);
 	void destroyEstablishIcon();
 	void updateRebuildIcon(bool on);
@@ -345,6 +352,7 @@ public:
 	void updateTurnIcon(bool on);
 	void setDragonIcon(bool on);
 	void decreaseDragonIcon();
+	void resetIcons(bool on);
 
 	virtual RootLayout* createLayout(Interactable*& selected) override;
 	Popup* createPopupSpawner() const;

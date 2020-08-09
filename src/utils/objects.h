@@ -137,6 +137,7 @@ public:
 	static constexpr float noEngageAlpha = 0.6f;
 protected:
 	static constexpr float topYpos = 0.1f;
+	static constexpr vec4 moveColorFactor = { 1.f, 1.f, 1.f, 9.9f };
 
 private:
 	float diffuseFactor;
@@ -160,16 +161,16 @@ public:
 	virtual void onJHat(uint8 hat) override;
 	virtual void onGButton(SDL_GameControllerButton but) override;
 	virtual void onNavSelect(Direction dir) override;
-	virtual void cancelDrag() = 0;
+	virtual void cancelDrag() {}
 	void startKeyDrag(uint8 mBut);
 
 	Emission getEmission() const;
-	void setEmission(Emission emi);
+	virtual void setEmission(Emission emi);
 protected:
 #ifndef OPENGLES
 	void drawTopMeshDepth(float ypos, const Mesh* tmesh) const;
 #endif
-	void drawTopMesh(float ypos, const Mesh* tmesh, const vec4& tdiffuse, GLuint ttexture) const;
+	void drawTopMesh(float ypos, const Mesh* tmesh, const Material& tmatl, GLuint ttexture) const;
 };
 
 inline BoardObject::Emission BoardObject::getEmission() const {
@@ -186,8 +187,6 @@ public:
 	};
 
 private:
-	static constexpr vec4 moveIconColor = { 1.f, 1.f, 1.f, 9.9f };
-
 	Com::Tile type;
 	bool breached;	// only for fortress
 
@@ -212,12 +211,13 @@ public:
 	virtual void cancelDrag() override;
 
 	Com::Tile getType() const;
-	void setType(Com::Tile newType, Com::Tile altType = Com::Tile::empty);
+	void setType(Com::Tile newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
 	bool getBreached() const;
 	void setBreached(bool yes);
 	void setInteractivity(Interact lvl, bool dim = false);
+	virtual void setEmission(Emission emi) override;
 private:
 	const char* pickMesh();
 };
@@ -249,9 +249,6 @@ public:
 private:
 	Com::Piece type;
 	bool drawTopSelf;
-
-	static constexpr vec4 moveIconColor = { 0.9f, 0.9f, 0.9f, 0.9f };
-	static constexpr vec4 fireIconColor = { 1.f, 0.1f, 0.1f, 0.9f };
 
 public:
 	Piece() = default;

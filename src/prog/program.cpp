@@ -264,25 +264,58 @@ void Program::eventUpdateConfig(Button*) {
 	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), Com::tileLim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
 	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), Com::pieceMax, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
 	cfg.homeSize = newHome;
-	//cfg.gameType = Com::Config::GameType(ph->wio.gameType->getCurOpt());
-	cfg.ports = ph->wio.ports->on;
-	cfg.rowBalancing = ph->wio.rowBalancing->on;
-	cfg.setPieceOn = ph->wio.setPieceOn->on;
-	cfg.setPieceNum = uint16(sstol(ph->wio.setPieceNum->getText()));
+	cfg.opts = ph->wio.victoryPoints->on ? cfg.opts | Com::Config::victoryPoints : cfg.opts & ~Com::Config::victoryPoints;
+	cfg.victoryPointsNum = uint16(sstol(ph->wio.victoryPointsNum->getText()));
+	cfg.opts = ph->wio.vpEquidistant->on ? cfg.opts | Com::Config::victoryPointsEquidistant : cfg.opts & ~Com::Config::victoryPointsEquidistant;
+	cfg.opts = ph->wio.ports->on ? cfg.opts | Com::Config::ports : cfg.opts & ~Com::Config::ports;
+	cfg.opts = ph->wio.rowBalancing->on ? cfg.opts | Com::Config::rowBalancing : cfg.opts & ~Com::Config::rowBalancing;
+	cfg.opts = ph->wio.homefront->on ? cfg.opts | Com::Config::homefront : cfg.opts & ~Com::Config::homefront;
+	cfg.opts = ph->wio.setPieceBattle->on ? cfg.opts | Com::Config::setPieceBattle : cfg.opts & ~Com::Config::setPieceBattle;
+	cfg.setPieceBattleNum = uint16(sstol(ph->wio.setPieceBattleNum->getText()));
 	cfg.battlePass = uint8(sstol(ph->wio.battleLE->getText()));
-	cfg.favorTotal = ph->wio.favorTotal->on;
-	cfg.favorLimit = uint8(sstol(ph->wio.favorLimit->getText()));
-	cfg.dragonLate = ph->wio.dragonLate->on;
-	cfg.dragonStraight = ph->wio.dragonStraight->on;
-	cfg.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
+	cfg.opts = ph->wio.favorTotal->on ? cfg.opts | Com::Config::favorTotal : cfg.opts & ~Com::Config::favorTotal;
+	cfg.favorLimit = uint16(sstol(ph->wio.favorLimit->getText()));
+	cfg.opts = ph->wio.dragonLate->on ? cfg.opts | Com::Config::dragonLate : cfg.opts & ~Com::Config::dragonLate;
+	cfg.opts = ph->wio.dragonStraight->on ? cfg.opts | Com::Config::dragonStraight : cfg.opts & ~Com::Config::dragonStraight;
 	cfg.winThrone = uint16(sstol(ph->wio.winThrone->getText()));
-	cfg.readCapturers(ph->wio.capturers->getText());
+	cfg.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
+	cfg.capturers = 0;
+	for (uint8 i = 0; i < Com::pieceMax; i++)
+		cfg.capturers |= uint16(ph->wio.capturers[i]->selected) << i;
 	cfg.checkValues();
 	ph->updateConfigWidgets(cfg);
 	postConfigUpdate();
 }
 
-void Program::eventUpdateConfigC(sizet, const string&) {
+void Program::eventUpdateConfigI(Button* but) {
+	static_cast<Icon*>(but)->selected = !static_cast<Icon*>(but)->selected;
+	eventUpdateConfig();
+}
+
+void Program::eventUpdateConfigV(Button* but) {
+	if (World::sets()->autoVictoryPoints) {
+		ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+		Com::Config& cfg = ph->confs[curConfig];
+		uint16 tils = cfg.countTiles(), mids = cfg.countMiddles();
+		const char* num;
+		if (static_cast<CheckBox*>(but)->on) {
+			if (uint16 must = cfg.homeSize.x * cfg.homeSize.y; tils < must)
+				Com::Config::ceilAmounts(tils, must, cfg.tileAmounts.data(), uint8(cfg.tileAmounts.size() - 1));
+			if (uint16 must = (cfg.homeSize.x - cfg.homeSize.x / 3) / 2; mids > must)
+				Com::Config::floorAmounts(mids, cfg.middleAmounts.data(), must, uint8(cfg.middleAmounts.size() - 1));
+			num = "0";
+		} else {
+			if (uint16 must = cfg.homeSize.x * cfg.homeSize.y - 1; tils > must)
+				Com::Config::floorAmounts(tils, cfg.tileAmounts.data(), must, uint8(cfg.tileAmounts.size() - 1));
+			if (uint16 must = (cfg.homeSize.x - cfg.homeSize.x / 9) / 2; mids < must)
+				Com::Config::ceilAmounts(mids, must, cfg.middleAmounts.data(), uint8(cfg.middleAmounts.size() - 1));
+			num = "1";
+		}
+		ph->setAmtSliders(cfg, cfg.tileAmounts.data(), ph->wio.tiles.data(), ph->wio.tileFortress, Com::tileLim, cfg.opts & Com::Config::rowBalancing ? cfg.homeSize.y : 0, &Com::Config::countFreeTiles, &ProgState::tileFortressString);
+		ph->setAmtSliders(cfg, cfg.middleAmounts.data(), ph->wio.middles.data(), ph->wio.middleFortress, Com::tileLim, 0, &Com::Config::countFreeMiddles, &ProgState::middleFortressString);
+		ph->wio.winThrone->setText(num);
+		ph->wio.winFortress->setText(num);
+	}
 	eventUpdateConfig();
 }
 
@@ -319,7 +352,7 @@ void Program::setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint1
 void Program::eventTileSliderUpdate(Button* but) {
 	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
 	Com::Config& cfg = pr->confs[curConfig];
-	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.tileAmounts.data(), pr->wio.tiles.data(), pr->wio.tileFortress, Com::tileLim, cfg.homeSize.y, &Com::Config::countFreeTiles, ProgState::tileFortressString);
+	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.tileAmounts.data(), pr->wio.tiles.data(), pr->wio.tileFortress, Com::tileLim, cfg.opts & Com::Config::rowBalancing ? cfg.homeSize.y : 0, &Com::Config::countFreeTiles, ProgState::tileFortressString);
 }
 
 void Program::eventMiddleSliderUpdate(Button* but) {
@@ -372,6 +405,10 @@ void Program::eventSendMessage(Button* but) {
 	Com::write16(data.data() + 1, uint16(data.size()));
 	std::copy(msg.begin(), msg.end(), data.data() + Com::dataHeadSize);
 	netcp->sendData(data);
+#ifdef DEBUG
+	if (!msg.empty() && msg[0] == '/')
+		game.processCommand(msg.data() + 1);
+#endif
 }
 
 void Program::eventRecvMessage(const uint8* data) {
@@ -436,16 +473,16 @@ void Program::eventOpenSetup() {
 	ps->setStage(ProgSetup::Stage::tiles);
 	ps->rcvMidBuffer.resize(game.board.config.homeSize.x);
 	ps->piecePicksLeft = 0;
-	if (game.board.config.setPieceOn && game.board.config.setPieceNum < game.board.config.countPieces()) {
+	if ((game.board.config.opts & Com::Config::setPieceBattle) && game.board.config.setPieceBattleNum < game.board.config.countPieces()) {
 		game.board.ownPieceAmts.fill(0);
-		ps->piecePicksLeft = game.board.config.setPieceNum;
+		ps->piecePicksLeft = game.board.config.setPieceBattleNum;
 		if (game.board.config.winThrone) {
 			game.board.ownPieceAmts[uint8(Com::Piece::throne)] += game.board.config.winThrone;
 			ps->piecePicksLeft -= game.board.config.winThrone;
 		} else {
 			uint16 caps = game.board.config.winFortress;
-			for (uint8 i = uint(Com::Piece::throne); i < Com::pieceMax && caps; i--)
-				if (game.board.config.capturers[i]) {
+			for (uint8 i = uint8(Com::Piece::throne); i < Com::pieceMax && caps; i--)
+				if (game.board.config.capturers & (1 << i)) {
 					uint16 diff = std::min(caps, uint16(game.board.config.pieceAmounts[i] - game.board.ownPieceAmts[i]));
 					game.board.ownPieceAmts[i] += diff;
 					ps->piecePicksLeft -= diff;
@@ -647,7 +684,7 @@ void Program::eventSetupLoad(Button* but) {
 			it->setType(Com::Tile::empty);
 
 		array<uint16, Com::tileLim> cnt = game.board.config.tileAmounts;
-		for (auto& [pos, type] : stp.tiles)
+		for (auto [pos, type] : stp.tiles)
 			if (pos.x < game.board.config.homeSize.x && pos.y < game.board.config.homeSize.y && cnt[uint8(type)]) {
 				cnt[uint8(type)]--;
 				game.board.getTile(svec2(pos.x, pos.y + game.board.config.homeSize.y + 1))->setType(type);
@@ -658,7 +695,7 @@ void Program::eventSetupLoad(Button* but) {
 			it->setType(Com::Tile::empty);
 
 		array<uint16, Com::tileLim> cnt = game.board.config.middleAmounts;
-		for (auto& [pos, type] : stp.mids)
+		for (auto [pos, type] : stp.mids)
 			if (pos < game.board.config.homeSize.x && cnt[uint8(type)]) {
 				cnt[uint8(type)]--;
 				game.board.getTiles().mid(pos)->setType(type);
@@ -669,7 +706,7 @@ void Program::eventSetupLoad(Button* but) {
 			it->updatePos();
 
 		array<uint16, Com::pieceMax> cnt = game.board.ownPieceAmts;
-		for (auto& [pos, type] : stp.pieces)
+		for (auto [pos, type] : stp.pieces)
 			if (pos.x < game.board.config.homeSize.x && pos.y < game.board.config.homeSize.y && cnt[uint8(type)]) {
 				cnt[uint8(type)]--;
 				Piece* pieces = game.board.getOwnPieces(type);
@@ -716,12 +753,13 @@ void Program::eventOpenMatch() {
 
 void Program::eventEndTurn(Button*) {
 	game.finishFavor(Favor::none, static_cast<ProgMatch*>(state.get())->favorIconSelect());	// in case assault FF has been used
-	game.endTurn();
+	if (!game.checkPointsWin())
+		game.endTurn();
 }
 
 void Program::eventPickFavor(Button* but) {
 	uint8 fid = uint8(but->getIndex() - 1);
-	if (game.favorsCount[fid]++; game.board.config.favorTotal)
+	if (game.favorsCount[fid]++; game.board.config.opts & Com::Config::favorTotal)
 		game.favorsLeft[fid]--;
 
 	if (--game.availableFF) {
@@ -729,9 +767,10 @@ void Program::eventPickFavor(Button* but) {
 			but->setDim(ProgState::defaultDim);
 			but->lcall = nullptr;
 		}
-	} else if (dynamic_cast<ProgMatch*>(state.get()))
+	} else if (ProgMatch* pm = dynamic_cast<ProgMatch*>(state.get())) {
+		pm->updateFavorIcons(game.getMyTurn() && !World::game()->turnDone() && game.getEneRec().info != Record::battleFail);
 		eventClosePopup();
-	else
+	} else
 		eventSetupNext();
 }
 
@@ -785,7 +824,7 @@ Piece* Program::getUnplacedDragon() {
 	return pce;
 }
 
-void Program::eventEstablishB(Button*) {
+void Program::eventEstablish(Button*) {
 	switch (std::count_if(game.board.getOwnPieces(Com::Piece::throne), game.board.getPieces().ene(), [](Piece& it) -> bool { return it.show; })) {
 	case 0:
 		World::scene()->setPopup(state->createPopupMessage("No " + string(Com::pieceNames[uint8(Com::Piece::throne)]) + " for establishing", &Program::eventClosePopup));
@@ -799,51 +838,58 @@ void Program::eventEstablishB(Button*) {
 		break;
 	default:
 		game.board.selectEstablishable();
+		static_cast<ProgMatch*>(state.get())->resetIcons(false);
 	}
 }
 
-void Program::eventEstablishP(BoardObject* obj, uint8) {
+void Program::eventEstablish(BoardObject* obj, uint8) {
 	try {
 		game.establishTile(static_cast<Piece*>(obj), true);
+		static_cast<ProgMatch*>(state.get())->resetIcons(true);
 	} catch (const string& err) {
 		World::scene()->setPopup(state->createPopupMessage(err, &Program::eventClosePopup));
 	}
 }
 
-void Program::eventRebuildTileB(Button*) {
+void Program::eventRebuildTile(Button*) {
 	switch (std::count_if(game.board.getOwnPieces(Com::Piece::throne), game.board.getPieces().ene(), [this](Piece& it) -> bool { return game.board.tileRebuildable(&it); })) {
 	case 0:
-		World::scene()->setPopup(state->createPopupMessage("No " + string(Com::pieceNames[uint8(Com::Piece::throne)]) + " for rebuilding", &Program::eventClosePopup));
+		World::scene()->setPopup(state->createPopupMessage("Can't rebuild", &Program::eventClosePopup));
 		break;
 	case 1:
 		game.rebuildTile(std::find_if(game.board.getOwnPieces(Com::Piece::throne), game.board.getPieces().ene(), [this](Piece& it) -> bool { return game.board.tileRebuildable(&it); }), false);
 		break;
 	default:
 		game.board.selectRebuildable();
+		static_cast<ProgMatch*>(state.get())->resetIcons(false);
 	}
 }
 
-void Program::eventRebuildTileP(BoardObject* obj, uint8) {
+void Program::eventRebuildTile(BoardObject* obj, uint8) {
 	game.rebuildTile(static_cast<Piece*>(obj), true);
+	static_cast<ProgMatch*>(state.get())->resetIcons(true);
 }
 
 void Program::eventOpenSpawner(Button*) {
 	World::scene()->setPopup(static_cast<ProgMatch*>(state.get())->createPopupSpawner());
 }
 
-void Program::eventSpawnPieceB(Button* but) {
+void Program::eventSpawnPiece(Button* but) {
 	Com::Piece type = Com::Piece(but->getParent()->getIndex() * but->getParent()->getWidgets().size() + but->getIndex());
-	uint forts = uint(std::count_if(game.board.getTiles().own(), game.board.getTiles().end(), [this](Tile& it) -> bool { return it.isUnbreachedFortress() && !game.board.findOccupant(&it); }));
+	uint forts = uint(std::count_if(game.board.getTiles().own(), game.board.getTiles().end(), [](const Tile& it) -> bool { return it.isUnbreachedFortress(); }));
 	if (type == Com::Piece::lancer || type == Com::Piece::rangers || type == Com::Piece::spearmen || type == Com::Piece::catapult || type == Com::Piece::elephant || forts == 1)
-		game.spawnPiece(type, nullptr, false);
+		game.spawnPiece(type, game.board.findSpawnableTile(type), false);
 	else {
-		static_cast<ProgMatch*>(state.get())->spawning = type;
+		ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+		pm->spawning = type;
 		game.board.selectSpawners();
+		pm->resetIcons(false);
 	}
+	eventClosePopup();
 }
 
-void Program::eventSpawnPieceT(BoardObject* obj, uint8) {
-	game.spawnPiece(static_cast<ProgMatch*>(state.get())->spawning, static_cast<Tile*>(obj), true);
+void Program::eventSpawnPiece(BoardObject* obj, uint8) {
+	game.spawnPiece(static_cast<ProgMatch*>(state.get())->spawning, static_cast<Tile*>(obj), true);	// no need to reset icons because the turn should be over
 }
 
 void Program::eventPieceStart(BoardObject* obj, uint8 mBut) {
@@ -920,10 +966,10 @@ void Program::uninitGame() {
 	}
 }
 
-void Program::finishMatch(bool win) {
+void Program::finishMatch(Record::Info win) {
 	if (info & INF_UNIQ)
 		disconnect();
-	World::scene()->setPopup(state->createPopupMessage(win ? "You win" : "You lose", &Program::eventPostFinishMatch));
+	World::scene()->setPopup(state->createPopupMessage(win == Record::win ? "You win" :  win == Record::loose ? "You lose" : "You tied", &Program::eventPostFinishMatch));
 }
 
 void Program::eventPostFinishMatch(Button*) {
@@ -1108,6 +1154,11 @@ void Program::eventSetScaleTiles(Button* but) {
 
 void Program::eventSetScalePieces(Button* but) {
 	World::sets()->scalePieces = static_cast<CheckBox*>(but)->on;
+	eventSaveSettings();
+}
+
+void Program::eventSetAutoVictoryPoints(Button* but) {
+	World::sets()->autoVictoryPoints = static_cast<CheckBox*>(but)->on;
 	eventSaveSettings();
 }
 

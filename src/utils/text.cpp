@@ -13,7 +13,7 @@ string filename(const string& path) {
 	return string(std::find_if(end, path.rend(), isDsep).base(), end.base());
 }
 
-string readWordM(const char*& pos) {
+string readWord(const char*& pos) {
 	const char* end;
 	for (; isSpace(*pos); pos++);
 	for (end = pos; notSpace(*end); end++);

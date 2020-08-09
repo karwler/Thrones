@@ -34,6 +34,7 @@ struct Record {
 		none,
 		win,
 		loose,
+		tie,
 		battleFail
 	};
 
@@ -50,6 +51,68 @@ struct Record {
 	void addProtect(Piece* piece, bool strong);
 	Action actionsExhausted() const;	// returns terminating actions
 };
+
+class TileTop {
+public:
+	enum Type : uint8 {
+		ownFarm,
+		ownCity,
+		eneFarm,
+		eneCity,
+		none
+	};
+
+	static constexpr array<const char*, 2> names = {
+		"farm",
+		"city"
+	};
+private:
+	Type type;
+
+public:
+	template <class T> constexpr TileTop(T tileTop);
+
+	constexpr operator Type() const;
+	constexpr bool isFarm() const;
+	constexpr bool isCity() const;
+	constexpr bool isOwn() const;
+	constexpr bool isEne() const;
+	constexpr TileTop::Type invert() const;
+	constexpr const char* name() const;
+};
+
+template <class T>
+constexpr TileTop::TileTop(T tileTop) :
+	type(Type(tileTop))
+{}
+
+inline constexpr TileTop::operator Type() const {
+	return type;
+}
+
+inline constexpr bool TileTop::isFarm() const {
+	return type < none && !(type % 2);
+}
+
+inline constexpr bool TileTop::isCity() const {
+	return type < none && type % 2;
+}
+
+constexpr bool TileTop::isOwn() const {
+	return type <= ownCity;
+}
+
+constexpr bool TileTop::isEne() const {
+	return type == eneFarm || type == eneCity;
+}
+
+constexpr TileTop::Type TileTop::invert() const {
+	return isOwn() ? type + 2 : isEne() ? type - 2 : type;
+}
+
+inline constexpr const char* TileTop::name() const {
+	return names[type%2];
+}
 
 class Dijkstra {
 private:

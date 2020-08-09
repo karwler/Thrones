@@ -212,7 +212,8 @@ void NetcpHost::disconnect() {
 }
 
 void NetcpHost::tick() {
-	(this->*tickproc)();
+	if ((this->*tickproc)(); !World::netcp())	// in case this instance gets deleted
+		return;
 	if (pollSocket(server)) {
 		if (socket != -1)
 			sendRejection(server);

@@ -217,7 +217,6 @@ public:
 	constexpr Direction(Dir direction);
 
 	constexpr operator Dir() const;
-
 	constexpr bool vertical() const;
 	constexpr bool horizontal() const;
 	constexpr bool positive() const;

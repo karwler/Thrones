@@ -40,8 +40,6 @@ enum class Tile : uint8 {
 	mountain,
 	water,
 	fortress,
-	farm,
-	city,
 	empty
 };
 constexpr uint8 tileLim = uint8(Tile::fortress);
@@ -52,8 +50,6 @@ constexpr array<const char*, uint8(Tile::empty)+1> tileNames = {
 	"mountain",
 	"water",
 	"fortress",
-	"farm",
-	"city",
 	""
 };
 
@@ -123,52 +119,44 @@ enum class Code : uint8 {
 };
 
 // variable game properties (shall never be changed after loading)
-class Config {
-public:
-	enum class GameType : uint8 {
-		standard,
-		victoryPoints,
-		homefront
-	};
-	static constexpr array<const char*, sizet(GameType::homefront)+1> gameTypeNames = {
-		"Standard",
-		"Victory Points",
-		"Homefront"
+struct Config {
+	enum Option : uint16 {
+		victoryPoints = 0x1,
+		victoryPointsEquidistant = 0x2,
+		ports = 0x4,
+		rowBalancing = 0x8,
+		homefront = 0x10,
+		setPieceBattle = 0x20,
+		favorTotal = 0x40,
+		dragonLate = 0x80,
+		dragonStraight = 0x100
 	};
 
 	svec2 homeSize;		// neither width nor height shall exceed UINT8_MAX
-	GameType gameType;
-	bool ports;
-	bool rowBalancing;
 	uint8 battlePass;
-	uint8 favorLimit;
-	bool favorTotal;
-	bool dragonLate;
-	bool dragonStraight;
-	bool setPieceOn;
-	uint16 setPieceNum;
+	Option opts;
+	uint16 victoryPointsNum;
+	uint16 setPieceBattleNum;
+	uint16 favorLimit;
 	array<uint16, tileLim> tileAmounts;
 	array<uint16, tileLim> middleAmounts;
 	array<uint16, pieceMax> pieceAmounts;
-	uint16 winFortress, winThrone;
-	array<bool, pieceMax> capturers;
+	uint16 winThrone, winFortress;
+	uint16 capturers;	// bitmask of piece types that can capture fortresses
 
 	static constexpr char defaultName[] = "default";
-	static constexpr GameType defaultGameType = GameType::standard;
-	static constexpr uint16 dataSize = sizeof(gameType) + sizeof(uint8) + sizeof(uint8) + sizeof(battlePass) + sizeof(favorLimit) + sizeof(uint8) + sizeof(uint8) + sizeof(uint8) + sizeof(uint8) + sizeof(setPieceNum) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winFortress) + sizeof(winThrone) + pieceMax * sizeof(uint8);
+	static constexpr uint16 dataSize = sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers);
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
 	static constexpr svec2 minHomeSize = { 5, 2 };
 	static constexpr svec2 maxHomeSize = { 101, 50 };
-	static constexpr uint8 maxFavorMax = 255;
+	static constexpr uint16 maxFavorMax = UINT16_MAX / 4;
 
 	Config();
 
 	Config& checkValues();
 	void toComData(uint8* data) const;
 	void fromComData(const uint8* data);
-	string capturersString() const;
-	void readCapturers(const string& line);
 	uint16 countTiles() const;
 	uint16 countMiddles() const;
 	uint16 countPieces() const;
@@ -176,7 +164,6 @@ public:
 	uint16 countFreeMiddles() const;
 	uint16 countFreePieces() const;
 
-private:
 	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, uint8 ei, uint16 floor = 0);
 	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
 };

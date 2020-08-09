@@ -69,7 +69,8 @@ public:
 	void eventConfigNewInput(Button* but = nullptr);
 	void eventConfigNew(Button* but = nullptr);
 	void eventUpdateConfig(Button* but = nullptr);
-	void eventUpdateConfigC(sizet id, const string& str);
+	void eventUpdateConfigI(Button* but);
+	void eventUpdateConfigV(Button* but);
 	void eventUpdateReset(Button* but);
 	void eventTileSliderUpdate(Button* but);
 	void eventMiddleSliderUpdate(Button* but);
@@ -120,13 +121,13 @@ public:
 	void eventClickPlaceDragon(Button* but);
 	void eventHoldPlaceDragon(Button* but);
 	void eventPlaceDragon(BoardObject* obj, uint8 mBut = 0);
-	void eventEstablishB(Button* but = nullptr);
-	void eventEstablishP(BoardObject* obj, uint8 mBut = 0);
-	void eventRebuildTileB(Button* but = nullptr);
-	void eventRebuildTileP(BoardObject* obj, uint8 mBut = 0);
+	void eventEstablish(Button* but = nullptr);
+	void eventEstablish(BoardObject* obj, uint8 mBut = 0);
+	void eventRebuildTile(Button* but = nullptr);
+	void eventRebuildTile(BoardObject* obj, uint8 mBut = 0);
 	void eventOpenSpawner(Button* but = nullptr);
-	void eventSpawnPieceB(Button* but);
-	void eventSpawnPieceT(BoardObject* obj, uint8 mBut = 0);
+	void eventSpawnPiece(Button* but);
+	void eventSpawnPiece(BoardObject* obj, uint8 mBut = 0);
 	void eventPieceStart(BoardObject* obj, uint8 mBut = 0);
 	void eventMove(BoardObject* obj, uint8 mBut);
 	void eventEngage(BoardObject* obj, uint8 mBut);
@@ -134,7 +135,7 @@ public:
 	void eventAbortGame(Button* but = nullptr);
 	void eventSurrender(Button* but = nullptr);
 	void uninitGame();
-	void finishMatch(bool win);
+	void finishMatch(Record::Info win);
 	void eventPostFinishMatch(Button* but = nullptr);
 	void eventPostDisconnectGame(Button* but = nullptr);
 	void eventHostLeft(const uint8* data);
@@ -161,6 +162,7 @@ public:
 	void eventSetColorEnemy(sizet id, const string& str);
 	void eventSetScaleTiles(Button* but);
 	void eventSetScalePieces(Button* but);
+	void eventSetAutoVictoryPoints(Button* but);
 	void eventSetTooltips(Button* but);
 	void eventSetChatLineLimitSL(Button* but);
 	void eventSetChatLineLimitLE(Button* but);

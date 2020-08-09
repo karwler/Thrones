@@ -84,7 +84,7 @@ constexpr char defaultWriteMode[] = "wb";
 // utility
 
 string filename(const string& path);
-string readWordM(const char*& pos);
+string readWord(const char*& pos);
 string strEnclose(string str);
 string strUnenclose(const char*& str);
 int strnatcmp(const char* a, const char* b);	// natural string compare
@@ -104,10 +104,6 @@ T readMem(const void* data) {
 template <class T>
 void* writeMem(void* data, const T& val) {
 	return std::copy_n(reinterpret_cast<const uint8*>(&val), sizeof(T), static_cast<uint8*>(data));
-}
-
-inline string readWord(const char* pos) {
-	return readWordM(pos);
 }
 
 inline bool strnatless(const string& a, const string& b) {
@@ -183,9 +179,33 @@ T loadFile(const string& file) {
 	return data;
 }
 
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator++(T& a) {
+	return a = T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(1));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator++(T& a, int) {
+	T r = a;
+	a = T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(1));
+	return r;
+}
+
 template <class T, class U, std::enable_if_t<std::is_enum_v<T> && std::is_integral_v<U>, int> = 0>
 constexpr T operator+(T a, U b) {
 	return T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator--(T& a) {
+	return a = T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(1));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator--(T& a, int) {
+	T r = a;
+	a = T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(1));
+	return r;
 }
 
 template <class T, class U, std::enable_if_t<std::is_enum_v<T> && std::is_integral_v<U>, int> = 0>
@@ -361,6 +381,11 @@ template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_si
 U cycle(U pos, U siz, S mov) {
 	U rst = pos + U(mov % S(siz));
 	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
+}
+
+template <class T, std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
+uint8 numDigits(T num, uint8 base = 10) {
+	return uint8(log(float(num)) / log(float(base))) + 1;
 }
 
 template <class T>

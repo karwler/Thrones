@@ -25,10 +25,10 @@ void Record::addProtect(Piece* piece, bool strong) {
 
 Action Record::actionsExhausted() const {
 	uint8 moves = 0, swaps = 0;
-	for (auto& [pce, act] : actors) {
-		moves += moves < 2 && (act & ACT_MOVE);
-		swaps += !swaps && (act & ACT_SWAP);
-		if (moves + swaps >= 2 && !(lastAct.first->getType() == Com::Piece::warhorse && lastAct.second == ACT_SWAP))
+	for (auto [pce, act] : actors) {
+		moves += moves < 2 && bool(act & ACT_MOVE);
+		swaps += !swaps && bool(act & ACT_SWAP) && pce->getType() != Com::Piece::warhorse;
+		if (moves + swaps >= 2)
 			return ACT_MS;
 		if (act & ACT_AF)
 			return ACT_AF;
@@ -101,7 +101,7 @@ PieceCol::PieceCol() :
 {}
 
 void PieceCol::update(const Com::Config& conf, bool regular) {
-	if (uint16 cnt = conf.setPieceOn && regular ? std::min(conf.countPieces(), conf.setPieceNum) : conf.countPieces(); cnt != num) {
+	if (uint16 cnt = (conf.opts & Com::Config::setPieceBattle) && regular ? std::min(conf.countPieces(), conf.setPieceBattleNum) : conf.countPieces(); cnt != num) {
 		num = cnt;
 		size = cnt * 2;
 

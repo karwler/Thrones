@@ -115,15 +115,15 @@ void BoardObject::drawTopMeshDepth(float ypos, const Mesh* tmesh) const {
 }
 #endif
 
-void BoardObject::drawTopMesh(float ypos, const Mesh* tmesh, const vec4& tdiffuse, GLuint ttexture) const {
+void BoardObject::drawTopMesh(float ypos, const Mesh* tmesh, const Material& tmatl, GLuint ttexture) const {
 	glBindVertexArray(tmesh->getVao());
 	mat4 model;
 	setTransform(model, vec3(World::state()->objectDragPos.x, ypos, World::state()->objectDragPos.y), getRot(), getScl());
 	glUniformMatrix4fv(World::geom()->model, 1, GL_FALSE, glm::value_ptr(model));
 	glUniformMatrix3fv(World::geom()->normat, 1, GL_FALSE, glm::value_ptr(getNormat()));
-	glUniform4fv(World::geom()->materialDiffuse, 1, glm::value_ptr(tdiffuse));
-	glUniform3fv(World::geom()->materialSpecular, 1, glm::value_ptr(matl->spec));
-	glUniform1f(World::geom()->materialShininess, matl->shine);
+	glUniform4fv(World::geom()->materialDiffuse, 1, glm::value_ptr(tmatl.color));
+	glUniform3fv(World::geom()->materialSpecular, 1, glm::value_ptr(tmatl.spec));
+	glUniform1f(World::geom()->materialShininess, tmatl.shine);
 	glBindTexture(GL_TEXTURE_2D, ttexture);
 	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), Mesh::elemType, nullptr);
 }
@@ -227,16 +227,20 @@ void BoardObject::onGButton(SDL_GameControllerButton but) {
 }
 
 void BoardObject::onNavSelect(Direction dir) {
-	if (svec2 gpos = World::game()->board.ptog(getPos()) + swap(uint16(dir.positive() ? 1 : -1), uint16(0), dir.vertical()); inRange(gpos, svec2(0), World::game()->board.boardLimit())) {
+	svec2 mov = swap(uint16(dir.positive() ? 1 : -1), uint16(0), dir.vertical());
+	for (svec2 gpos = World::game()->board.ptog(getPos()) + mov; inRange(gpos, svec2(0), World::game()->board.boardLimit()); gpos += mov) {
 		if (Piece* pce = World::game()->board.findOccupant(gpos); pce && pce->rigid) {
 			World::state()->objectDragPos = vec2(pce->getPos().x, pce->getPos().z);
 			World::scene()->updateSelect(pce);
-		} else if (Tile* til = World::game()->board.getTile(gpos); til->rigid) {
+			return;
+		}
+		if (Tile* til = World::game()->board.getTile(gpos); til->rigid) {
 			World::state()->objectDragPos = vec2(til->getPos().x, til->getPos().z);
 			World::scene()->updateSelect(til);
-		} else if (ProgGame* pg = dynamic_cast<ProgGame*>(World::state()); pg && !World::scene()->capture)
-			pg->planeSwitch->navSelectOut(getPos(), dir);
-	} else if (ProgGame* pg = dynamic_cast<ProgGame*>(World::state()); pg && !World::scene()->capture)
+			return;
+		}
+	}
+	if (ProgGame* pg = dynamic_cast<ProgGame*>(World::state()); pg && !World::scene()->capture)
 		pg->planeSwitch->navSelectOut(getPos(), dir);
 }
 
@@ -265,7 +269,7 @@ void Tile::drawTopDepth() const {
 #endif
 
 void Tile::drawTop() const {
-	drawTopMesh(topYpos, mesh, matl->color * moveIconColor, tex);
+	drawTopMesh(topYpos, mesh, Material(matl->color * moveColorFactor, matl->spec, matl->shine), tex);
 }
 
 void Tile::onHold(const ivec2& mPos, uint8 mBut) {
@@ -301,12 +305,12 @@ void Tile::cancelDrag() {
 	World::scene()->capture = nullptr;
 }
 
-void Tile::setType(Com::Tile newType, Com::Tile altType) {
+void Tile::setType(Com::Tile newType) {
 	type = newType;
-	alphaFactor = newType != Com::Tile::empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
+	alphaFactor = type != Com::Tile::empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
 	mesh = World::scene()->mesh(pickMesh());
-	matl = World::scene()->material(altType == Com::Tile::empty ? type != Com::Tile::empty ? "tile" : "empty" : Com::tileNames[uint8(type)]);
-	tex = World::scene()->texture(Com::tileNames[uint8(altType == Com::Tile::empty ? type : altType)]);
+	matl = World::scene()->material(type != Com::Tile::empty ? "tile" : "empty");
+	tex = World::scene()->texture(Com::tileNames[uint8(type)]);
 }
 
 void Tile::setBreached(bool yes) {
@@ -317,8 +321,14 @@ void Tile::setBreached(bool yes) {
 
 void Tile::setInteractivity(Interact lvl, bool dim) {
 	rigid = lvl != Interact::ignore;
-	setEmission(dim ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
+	setEmission(dim || breached ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
 	ulcall = lvl == Interact::interact && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
+}
+
+void Tile::setEmission(Emission emi) {
+	BoardObject::setEmission(emi);
+	if (TileTop top = World::game()->board.findTileTop(this); top != TileTop::none)
+		World::game()->board.getTileTop(top)->setEmission(emi);
 }
 
 // PIECE
@@ -337,10 +347,10 @@ void Piece::drawTopDepth() const {
 
 void Piece::drawTop() const {
 	if (drawTopSelf)
-		drawTopMesh(selfTopYpos(World::scene()->getSelect()), mesh, matl->color * moveIconColor, tex);
+		drawTopMesh(selfTopYpos(World::scene()->getSelect()), mesh, Material(matl->color * moveColorFactor, matl->spec, matl->shine), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
-		drawTopMesh(topYpos, World::scene()->mesh("plane"), fireIconColor, World::scene()->texture("crosshair"));
+		drawTopMesh(topYpos, World::scene()->mesh("plane"), *World::scene()->material("reticle"), World::scene()->texture("reticle"));
 		glEnable(GL_DEPTH_TEST);
 	}
 }

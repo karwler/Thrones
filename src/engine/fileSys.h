@@ -89,6 +89,7 @@ struct Settings {
 	uint8 avolume;
 	Color colorAlly, colorEnemy;
 	bool scaleTiles, scalePieces;
+	bool autoVictoryPoints;
 	bool tooltips;
 	Com::Family resolveFamily;
 	bool fontRegular;
@@ -124,15 +125,13 @@ private:
 	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordMsamples[] = "samples";
-	static constexpr char iniKeywordTexScale[] = "texture_scale";
-	static constexpr char iniKeywordShadowRes[] = "shadow_resolution";
-	static constexpr char iniKeywordSoftShadows[] = "soft_shadows";
+	static constexpr char iniKeywordTexScale[] = "textures";
+	static constexpr char iniKeywordShadows[] = "shadows";
 	static constexpr char iniKeywordGamma[] = "gamma";
 	static constexpr char iniKeywordAVolume[] = "volume";
-	static constexpr char iniKeywordColorAlly[] = "color_ally";
-	static constexpr char iniKeywordColorEnemy[] = "color_enemy";
-	static constexpr char iniKeywordScaleTiles[] = "scale_tiles";
-	static constexpr char iniKeywordScalePieces[] = "scale_pieces";
+	static constexpr char iniKeywordColors[] = "colors";
+	static constexpr char iniKeywordScales[] = "scales";
+	static constexpr char iniKeywordAutoVictoryPoints[] = "auto_vp";
 	static constexpr char iniKeywordTooltips[] = "tooltips";
 	static constexpr char iniKeywordChatLines[] = "chat_lines";
 	static constexpr char iniKeywordDeadzone[] = "deadzone";
@@ -142,13 +141,13 @@ private:
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
 
-	static constexpr char iniKeywordGameType[] = "game";
+	static constexpr char iniKeywordVictoryPoints[] = "victory_points";
 	static constexpr char iniKeywordPorts[] = "ports";
 	static constexpr char iniKeywordRowBalancing[] = "row_balancing";
-	static constexpr char iniKeywordSetPieceBattle[] = "set_piece_battle";
+	static constexpr char iniKeywordHomefront[] = "homefront";
+	static constexpr char iniKeywordSetPieceBattle[] = "piece_battle";
 	static constexpr char iniKeywordBoardSize[] = "size";
 	static constexpr char iniKeywordBattlePass[] = "battle_win";
-	static constexpr char iniKeywordFavorTotal[] = "favor_total";
 	static constexpr char iniKeywordFavorLimit[] = "favor_limit";
 	static constexpr char iniKeywordDragonLate[] = "dragon_late";
 	static constexpr char iniKeywordDragonStraight[] = "dragon_straight";
@@ -158,7 +157,6 @@ private:
 	static constexpr char iniKeywordWinFortress[] = "win_fortresses";
 	static constexpr char iniKeywordWinThrone[] = "win_thrones";
 	static constexpr char iniKeywordCapturers[] = "capturers";
-	static constexpr char iniKeywordShiftLeft[] = "shift_left";
 
 public:
 	static void init(const Arguments& args);
@@ -183,10 +181,17 @@ public:
 private:
 	static string configPath(const char* file);
 
+	static void readShadows(const char* str, Settings& sets);
+	static void readColors(const char* str, Settings& sets);
+	static void readScales(const char* str, Settings& sets);
 	static void readVersionLookup(const char* str, pair<string, string>& vl);
-	static void readPiecePool(const char* str, Com::Config* cfg);
+	static void readVictoryPoints(const char* str, Com::Config* cfg);
+	static void readSetPieceBattle(const char* str, Com::Config* cfg);
+	static void readFavorLimit(const char* str, Com::Config* cfg);
 	template <sizet N, sizet S> static void readAmount(const pairStr& it, sizet wlen, const array<const char*, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const string& word, const array<const char*, N>& names, const array<uint16, S>& amts);
+	static uint16 readCapturers(const string& line);
+	static void writeCapturers(string& text, uint16 capturers);
 	static void writeIniLine(string& text, const string& title);
 	static void writeIniLine(string& text, const string& key, const string& val);
 	static void writeFile(const string& path, const string& text);

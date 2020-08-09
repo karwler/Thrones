@@ -31,6 +31,7 @@ Settings::Settings() :
 	colorEnemy(defaultEnemy),
 	scaleTiles(true),
 	scalePieces(false),
+	autoVictoryPoints(true),
 	tooltips(true),
 	resolveFamily(defaultFamily),
 	fontRegular(true)
@@ -118,10 +119,8 @@ Settings FileSys::loadSettings() {
 #ifndef OPENGLES
 		if (!strcicmp(il.first, iniKeywordMsamples))
 			sets.msamples = uint8(std::min(sstoul(il.second), 8ul));
-		else if (!strcicmp(il.first, iniKeywordShadowRes))
-			sets.shadowRes = uint16(std::min(sstoul(il.second), ulong(Settings::shadowResMax)));
-		else if (!strcicmp(il.first, iniKeywordSoftShadows))
-			sets.softShadows = stob(il.second);
+		else if (!strcicmp(il.first, iniKeywordShadows))
+			readShadows(il.second.c_str(), sets);
 		else
 #endif
 		if (!strcicmp(il.first, iniKeywordTexScale))
@@ -132,14 +131,12 @@ Settings FileSys::loadSettings() {
 			sets.gamma = std::clamp(sstof(il.second), 0.f, Settings::gammaMax);
 		else if (!strcicmp(il.first, iniKeywordAVolume))
 			sets.avolume = uint8(std::min(sstoul(il.second), ulong(SDL_MIX_MAXVOLUME)));
-		else if (!strcicmp(il.first, iniKeywordColorAlly))
-			sets.colorAlly = strToEnum(Settings::colorNames, il.second, Settings::defaultAlly);
-		else if (!strcicmp(il.first, iniKeywordColorEnemy))
-			sets.colorEnemy = strToEnum(Settings::colorNames, il.second, Settings::defaultEnemy);
-		else if (!strcicmp(il.first, iniKeywordScaleTiles))
-			sets.scaleTiles = stob(il.second);
-		else if (!strcicmp(il.first, iniKeywordScalePieces))
-			sets.scalePieces = stob(il.second);
+		else if (!strcicmp(il.first, iniKeywordColors))
+			readColors(il.second.c_str(), sets);
+		else if (!strcicmp(il.first, iniKeywordScales))
+			readScales(il.second.c_str(), sets);
+		else if (!strcicmp(il.first, iniKeywordAutoVictoryPoints))
+			sets.autoVictoryPoints = stob(il.second);
 		else if (!strcicmp(il.first, iniKeywordTooltips))
 			sets.tooltips = stob(il.second);
 		else if (!strcicmp(il.first, iniKeywordChatLines))
@@ -150,7 +147,7 @@ Settings FileSys::loadSettings() {
 			sets.resolveFamily = strToEnum(Com::familyNames, il.second, Settings::defaultFamily);
 		else if (!strcicmp(il.first, iniKeywordFontRegular))
 			sets.fontRegular = stob(il.second);
-#ifdef WEBUTILS
+#if defined(WEBUTILS) || defined(EMSCRIPTEN)
 		else if (!strcicmp(il.first, iniKeywordVersionLookup))
 			readVersionLookup(il.second.c_str(), sets.versionLookup);
 #endif
@@ -160,6 +157,25 @@ Settings FileSys::loadSettings() {
 			sets.port = std::move(il.second);
 	}
 	return sets;
+}
+
+void FileSys::readShadows(const char* str, Settings& sets) {
+	if (string word = readWord(str); !word.empty())
+		sets.shadowRes = uint16(std::min(sstoul(word), ulong(Settings::shadowResMax)));
+	if (string word = readWord(str); !word.empty())
+		sets.softShadows = stob(word);
+}
+
+void FileSys::readColors(const char* str, Settings& sets) {
+	sets.colorAlly = strToEnum(Settings::colorNames, readWord(str), Settings::defaultAlly);
+	sets.colorEnemy = strToEnum(Settings::colorNames, readWord(str), Settings::defaultEnemy);
+}
+
+void FileSys::readScales(const char* str, Settings& sets) {
+	if (string word = readWord(str); !word.empty())
+		sets.scaleTiles = stob(word);
+	if (string word = readWord(str); !word.empty())
+		sets.scalePieces = stob(word);
 }
 
 void FileSys::readVersionLookup(const char* str, pair<string, string>& vl) {
@@ -181,23 +197,21 @@ void FileSys::saveSettings(const Settings* sets) {
 #endif
 #ifndef OPENGLES
 	writeIniLine(text, iniKeywordMsamples, toStr(sets->msamples));
-	writeIniLine(text, iniKeywordShadowRes, toStr(sets->shadowRes));
-	writeIniLine(text, iniKeywordSoftShadows, btos(sets->softShadows));
+	writeIniLine(text, iniKeywordShadows, toStr(sets->shadowRes) + ' ' + btos(sets->softShadows));
 #endif
 	writeIniLine(text, iniKeywordTexScale, toStr(sets->texScale));
 	writeIniLine(text, iniKeywordVsync, Settings::vsyncNames[uint8(sets->vsync+1)]);
 	writeIniLine(text, iniKeywordGamma, toStr(sets->gamma));
 	writeIniLine(text, iniKeywordAVolume, toStr(sets->avolume));
-	writeIniLine(text, iniKeywordColorAlly, Settings::colorNames[uint8(sets->colorAlly)]);
-	writeIniLine(text, iniKeywordColorEnemy, Settings::colorNames[uint8(sets->colorEnemy)]);
-	writeIniLine(text, iniKeywordScaleTiles, btos(sets->scaleTiles));
-	writeIniLine(text, iniKeywordScalePieces, btos(sets->scalePieces));
+	writeIniLine(text, iniKeywordColors, string(Settings::colorNames[uint8(sets->colorAlly)]) + ' ' + Settings::colorNames[uint8(sets->colorEnemy)]);
+	writeIniLine(text, iniKeywordScales, string(btos(sets->scaleTiles)) + ' ' + btos(sets->scalePieces));
+	writeIniLine(text, iniKeywordAutoVictoryPoints, btos(sets->autoVictoryPoints));
 	writeIniLine(text, iniKeywordTooltips, btos(sets->tooltips));
 	writeIniLine(text, iniKeywordChatLines, toStr(sets->chatLines));
 	writeIniLine(text, iniKeywordDeadzone, toStr(sets->deadzone));
 	writeIniLine(text, iniKeywordResolveFamily, Com::familyNames[uint8(sets->resolveFamily)]);
 	writeIniLine(text, iniKeywordFontRegular, btos(sets->fontRegular));
-#ifdef WEBUTILS
+#if defined(WEBUTILS) || defined(EMSCRIPTEN)
 	writeIniLine(text, iniKeywordVersionLookup, strEnclose(sets->versionLookup.first) + ' ' + strEnclose(sets->versionLookup.second));
 #endif
 	writeIniLine(text, iniKeywordAddress, sets->address);
@@ -212,26 +226,26 @@ umap<string, Com::Config> FileSys::loadConfigs() {
 		if (string title = readIniTitle(line); !title.empty())
 			cit = &confs.emplace(std::move(title), Com::Config()).first->second;
 		else if (cit) {
-			if (pairStr it = readIniLine(line); !strcicmp(it.first, iniKeywordGameType))
-				cit->gameType = strToEnum(Com::Config::gameTypeNames, it.second, Com::Config::defaultGameType);
+			if (pairStr it = readIniLine(line); !strcicmp(it.first, iniKeywordVictoryPoints))
+				readVictoryPoints(it.second.c_str(), cit);
 			else if (!strcicmp(it.first, iniKeywordPorts))
-				cit->ports = stob(it.second);
+				cit->opts = stob(it.second) ? cit->opts | Com::Config::ports : cit->opts & ~Com::Config::ports;
 			else if (!strcicmp(it.first, iniKeywordRowBalancing))
-				cit->rowBalancing = stob(it.second);
+				cit->opts = stob(it.second) ? cit->opts | Com::Config::rowBalancing : cit->opts & ~Com::Config::rowBalancing;
+			else if (!strcicmp(it.first, iniKeywordHomefront))
+				cit->opts = stob(it.second) ? cit->opts | Com::Config::homefront : cit->opts & ~Com::Config::homefront;
 			else if (!strcicmp(it.first, iniKeywordSetPieceBattle))
-				readPiecePool(it.second.c_str(), cit);
+				readSetPieceBattle(it.second.c_str(), cit);
 			else if (!strcicmp(it.first, iniKeywordBoardSize))
 				cit->homeSize = stoiv<svec2>(it.second.c_str(), strtol);
 			else if (!strcicmp(it.first, iniKeywordBattlePass))
 				cit->battlePass = uint8(sstol(it.second));
-			else if (!strcicmp(it.first, iniKeywordFavorTotal))
-				cit->favorTotal = stob(it.second);
 			else if (!strcicmp(it.first, iniKeywordFavorLimit))
-				cit->favorLimit = uint8(sstol(it.second));
+				readFavorLimit(it.second.c_str(), cit);
 			else if (!strcicmp(it.first, iniKeywordDragonLate))
-				cit->dragonLate = stob(it.second);
+				cit->opts = stob(it.second) ? cit->opts | Com::Config::dragonLate : cit->opts & ~Com::Config::dragonLate;
 			else if (!strcicmp(it.first, iniKeywordDragonStraight))
-				cit->dragonStraight = stob(it.second);
+				cit->opts = stob(it.second) ? cit->opts | Com::Config::dragonStraight : cit->opts & ~Com::Config::dragonStraight;
 			else if (sizet len = strlen(iniKeywordTile); !strncicmp(it.first, iniKeywordTile, len))
 				readAmount(it, len, Com::tileNames, cit->tileAmounts);
 			else if (len = strlen(iniKeywordMiddle); !strncicmp(it.first, iniKeywordMiddle, len))
@@ -243,15 +257,33 @@ umap<string, Com::Config> FileSys::loadConfigs() {
 			else if (!strcicmp(it.first, iniKeywordWinThrone))
 				cit->winThrone = uint16(sstol(it.second));
 			else if (!strcicmp(it.first, iniKeywordCapturers))
-				cit->readCapturers(it.second);
+				cit->capturers = readCapturers(it.second);
 		}
 	}
 	return !confs.empty() ? confs : umap<string, Com::Config>{ pair(Com::Config::defaultName, Com::Config()) };
 }
 
-void FileSys::readPiecePool(const char* str, Com::Config* cfg) {
-	cfg->setPieceOn = stob(readWordM(str));
-	cfg->setPieceNum = uint16(sstoul(str));
+void FileSys::readVictoryPoints(const char* str, Com::Config* cfg) {
+	if (string word = readWord(str); !word.empty())
+		cfg->opts = stob(word) ? cfg->opts | Com::Config::victoryPoints : cfg->opts & ~Com::Config::victoryPoints;
+	if (string word = readWord(str); !word.empty())
+		cfg->victoryPointsNum = uint16(sstol(word));
+	if (string word = readWord(str); !word.empty())
+		cfg->opts = stob(word) ? cfg->opts | Com::Config::victoryPointsEquidistant : cfg->opts & ~Com::Config::victoryPointsEquidistant;
+}
+
+void FileSys::readSetPieceBattle(const char* str, Com::Config* cfg) {
+	if (string word = readWord(str); !word.empty())
+		cfg->opts = stob(word) ? cfg->opts | Com::Config::setPieceBattle : cfg->opts & ~Com::Config::setPieceBattle;
+	if (string word = readWord(str); !word.empty())
+		cfg->setPieceBattleNum = uint16(sstol(word));
+}
+
+void FileSys::readFavorLimit(const char* str, Com::Config* cfg) {
+	if (string word = readWord(str); !word.empty())
+		cfg->favorLimit = uint16(sstol(word));
+	if (string word = readWord(str); !word.empty())
+		cfg->opts = stob(word) ? cfg->opts | Com::Config::favorTotal : cfg->opts & ~Com::Config::favorTotal;
 }
 
 template <sizet N, sizet S>
@@ -260,26 +292,34 @@ void FileSys::readAmount(const pairStr& it, sizet wlen, const array<const char*,
 		amts[id] = uint16(sstol(it.second));
 }
 
+uint16 FileSys::readCapturers(const string& line) {
+	uint16 capturers = 0;
+	for (const char* pos = line.c_str(); *pos;)
+		if (uint8 id = strToEnum<uint8>(Com::pieceNames, readWord(pos)); id < Com::pieceNames.size())
+			capturers |= 1 << id;
+	return capturers;
+}
+
 void FileSys::saveConfigs(const umap<string, Com::Config>& confs) {
 	string text;
 	for (auto& [name, cfg] : confs) {
 		writeIniLine(text, name);
-		//writeIniLine(text, iniKeywordGameType, Com::Config::gameTypeNames[uint8(cfg.gameType)]);
-		writeIniLine(text, iniKeywordPorts, btos(cfg.ports));
-		writeIniLine(text, iniKeywordRowBalancing, btos(cfg.rowBalancing));
-		writeIniLine(text, iniKeywordSetPieceBattle, string(btos(cfg.setPieceOn)) + ' ' + toStr(cfg.setPieceNum));
+		writeIniLine(text, iniKeywordVictoryPoints, string(btos(cfg.opts & Com::Config::victoryPoints)) + ' ' + toStr(cfg.victoryPointsNum) + ' ' + btos(cfg.opts & Com::Config::victoryPointsEquidistant));
+		writeIniLine(text, iniKeywordPorts, btos(cfg.opts & Com::Config::ports));
+		writeIniLine(text, iniKeywordRowBalancing, btos(cfg.opts & Com::Config::rowBalancing));
+		writeIniLine(text, iniKeywordHomefront, btos(cfg.opts & Com::Config::homefront));
+		writeIniLine(text, iniKeywordSetPieceBattle, string(btos(cfg.opts & Com::Config::setPieceBattle)) + ' ' + toStr(cfg.setPieceBattleNum));
 		writeIniLine(text, iniKeywordBoardSize, toStr(cfg.homeSize));
 		writeIniLine(text, iniKeywordBattlePass, toStr(cfg.battlePass));
-		writeIniLine(text, iniKeywordFavorTotal, btos(cfg.favorTotal));
-		writeIniLine(text, iniKeywordFavorLimit, toStr(cfg.favorLimit));
-		writeIniLine(text, iniKeywordDragonLate, btos(cfg.dragonLate));
-		writeIniLine(text, iniKeywordDragonStraight, btos(cfg.dragonStraight));
+		writeIniLine(text, iniKeywordFavorLimit, toStr(cfg.favorLimit) + ' ' + btos(cfg.opts & Com::Config::favorTotal));
+		writeIniLine(text, iniKeywordDragonLate, btos(cfg.opts & Com::Config::dragonLate));
+		writeIniLine(text, iniKeywordDragonStraight, btos(cfg.opts & Com::Config::dragonStraight));
 		writeAmounts(text, iniKeywordTile, Com::tileNames, cfg.tileAmounts);
 		writeAmounts(text, iniKeywordMiddle, Com::tileNames, cfg.middleAmounts);
 		writeAmounts(text, iniKeywordPiece, Com::pieceNames, cfg.pieceAmounts);
 		writeIniLine(text, iniKeywordWinFortress, toStr(cfg.winFortress));
 		writeIniLine(text, iniKeywordWinThrone, toStr(cfg.winThrone));
-		writeIniLine(text, iniKeywordCapturers, cfg.capturersString());
+		writeCapturers(text, cfg.capturers);
 		text += linend;
 	}
 	writeFile(configPath(fileConfigs), text);
@@ -289,6 +329,16 @@ template <sizet N, sizet S>
 void FileSys::writeAmounts(string& text, const string& word, const array<const char*, N>& names, const array<uint16, S>& amts) {
 	for (sizet i = 0; i < amts.size(); i++)
 		writeIniLine(text, word + names[i], toStr(amts[i]));
+}
+
+void FileSys::writeCapturers(string& text, uint16 capturers) {
+	string str;
+	for (sizet i = 0; i < Com::pieceMax; i++)
+		if (capturers & (1 << i))
+			str += string(Com::pieceNames[i]) + ' ';
+	if (!str.empty())
+		str.pop_back();
+	writeIniLine(text, iniKeywordCapturers, str);
 }
 
 umap<string, Setup> FileSys::loadSetups() {

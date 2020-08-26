@@ -1,35 +1,24 @@
-#include "common.h"
 #include "log.h"
+#include "server.h"
 #include <csignal>
 #ifdef _WIN32
 #include <conio.h>
-#else
+#elif !defined(SERVICE)
 #include <termios.h>
 #endif
 using namespace Com;
 
-static bool cprocValidate(uint pid);
-static bool cprocPlayer(uint pid);
+struct Player;
+
+static bool cprocValidate(nsint pfd, Player& player);
+static bool cprocPlayer(nsint pfd, Player& player);
 
 // PLAYER
 
 struct Player {
-	enum class State : uint8 {
-		lobby,
-		host,
-		guest
-	};
-	static constexpr array<const char*, uint8(State::guest)+1> stateNames = {
-		"lobby",
-		"host",
-		"guest"
-	};
-
 	Buffer recvb;
-	bool (*cproc)(uint);
-	string room;
-	uint partner;
-	State state;
+	bool (*cproc)(nsint, Player&);
+	nsint partner;
 	bool webs;
 
 	Player();
@@ -37,290 +26,357 @@ struct Player {
 
 Player::Player() :
 	cproc(cprocValidate),
-	partner(UINT_MAX),
-	state(State::lobby),
+	partner(INVALID_SOCKET),
 	webs(false)
 {}
 
 // PLAYER ERROR
 
 struct PlayerError {
-	const uset<uint> pids;
+	const uset<nsint> pfds;
 
-	PlayerError(uset<uint>&& ids);
+	PlayerError(uset<nsint>&& fds);
+	PlayerError(initlist<nsint> fds);
 };
 
-PlayerError::PlayerError(uset<uint>&& ids) :
-	pids(std::move(ids))
+PlayerError::PlayerError(uset<nsint>&& fds) :
+	pfds(std::move(fds))
 {}
+
+PlayerError::PlayerError(initlist<nsint> fds) :
+	pfds(fds)
+{}
+
+// TERMINAL
+
+#if !defined(_WIN32) && !defined(SERVICE)
+struct Terminal {
+	termios termst;
+	tcflag_t oldLflag;
+
+	Terminal();
+	~Terminal();
+};
+
+Terminal::Terminal() {
+	tcgetattr(STDIN_FILENO, &termst);
+	oldLflag = termst.c_lflag;
+	termst.c_lflag &= ~uint(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
+}
+
+Terminal::~Terminal() {
+	termst.c_lflag = oldLflag;
+	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
+}
+#endif
 
 // SERVER
 
 constexpr uint32 checkTimeout = 500;
 constexpr uint defaultMaxPlayers = 1024;
+constexpr uint maxPlayersLimit = 2040;
 constexpr char argPort = 'p';
 constexpr char arg4 = '4';
 constexpr char arg6 = '6';
 constexpr char argMaxPlayers = 'c';
 constexpr char argLog = 'l';
+constexpr char argMaxLogs = 'm';
 constexpr char argVerbose = 'v';
 
 static bool running = true;
 static uint maxPlayers;
 static Buffer sendb;
-static vector<Player> players;
-static vector<pollfd> pfds;			// player socket data (last element is server)
-static umap<string, bool> rooms;	// name, isFull
+static umap<nsint, Player> players;	// socket, player data
+static umap<nsint, string> rooms;	// host socket, room name
 static Log slog;
-#if !defined(_WIN32) && !defined(SERVICE)
-static termios termst;
-static tcflag_t oldLflag;
-#endif
 
 static uint maxRooms() {
 	return maxPlayers / 2 + maxPlayers % 2;
 }
 
-static void sendRoomList(uint pid, Code code = Code::rlist) {
+template <class T>
+void rekeyRoom(T room, nsint key) {
+	umap<nsint, string>::node_type rnode = rooms.extract(room);
+	rnode.key() = key;
+	rooms.insert(std::move(rnode));
+}
+
+static void sendRoomList(nsint pfd, Player& player, Code code = Code::rlist) {
 	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
-	sendb.push(uint8(rooms.size()));
-	for (auto& [name, full] : rooms) {
-		sendb.push({ uint8(full), uint8(name.length()) });
+	sendb.push(uint64(pfd));
+	sendb.push(uint16(rooms.size()));
+	for (auto& [host, name] : rooms) {
+		sendb.push({ uint8(((players.at(host).partner == INVALID_SOCKET) << 7) | name.length()) });
 		sendb.push(name);
 	}
 	sendb.write(uint16(sendb.getDlim()), ofs);
-	sendb.send(pfds[pid].fd, players[pid].webs);
+	sendb.send(pfd, player.webs);
 }
 
-static void sendRoomData(Code code, const string& name, initlist<uint8> extra, uset<uint>& errPids) {
+static void sendRoomData(Code code, const string& name, initlist<uint8> extra, uset<nsint>& errPfds) {
 	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
 	sendb.push(extra);
 	sendb.push(uint8(name.length()));
 	sendb.push(name);
 	sendb.write(uint16(sendb.getDlim()), ofs);
-	for (uint i = 0; i < uint(players.size()); i++)
-		if (players[i].state == Player::State::lobby) {
+	for (auto& [pfd, player] : players)
+		if (player.partner == INVALID_SOCKET && !rooms.count(pfd)) {
 			try {
-				sendb.send(pfds[i].fd, players[i].webs, false);
+				sendb.send(pfd, player.webs, false);
 			} catch (const Error& err) {
-				errPids.insert(i);
-				slog.write(std::cerr, "failed to send room data '", uint(code), "' of '", name, "' to player '", i, "': ", err.message);
+				errPfds.insert(pfd);
+				slog.err("failed to send room data ", uint(code), " of ", name, " to player ", pfd, ": ", err.what());
 			}
 		}
 	sendb.clear();
 }
 
 static void sendRoomData(Code code, const string& name, initlist<uint8> extra = {}) {
-	uset<uint> errPids;
-	if (sendRoomData(code, name, extra, errPids); !errPids.empty())
-		throw PlayerError(std::move(errPids));
+	uset<nsint> errPfds;
+	if (sendRoomData(code, name, extra, errPfds); !errPfds.empty())
+		throw PlayerError(std::move(errPfds));
 }
 
-static void createRoom(const uint8* data, uint pid) {
-	string room = readName(data);
-	bool maxed = rooms.size() >= maxRooms();
-	bool ok = !(maxed || rooms.count(room));
+static void createRoom(const uint8* data, nsint pfd, Player& player) {
+	string name = readName(data);
+	CncrnewCode code = CncrnewCode::ok;
+	if (name.length() > roomNameLimit)
+		code = CncrnewCode::length;
+	else if (rooms.size() >= maxRooms())
+		code = CncrnewCode::full;
+	else if (std::any_of(rooms.begin(), rooms.end(), [&name](const pair<const nsint, string>& it) -> bool { return it.second == name; }))
+		code = CncrnewCode::taken;
+
 	try {
-		string msg = ok ? "" : maxed ? "Server full" : "Name taken";
-		sendb.pushHead(Code::cnrnew, dataHeadSize + uint16(msg.length()));
-		sendb.push(msg);
-		sendb.send(pfds[pid].fd, players[pid].webs);
+		sendb.pushHead(Code::cnrnew);
+		sendb.push(uint8(code));
+		sendb.send(pfd, player.webs);
 	} catch (const Error& err) {
 		sendb.clear();
-		slog.write(std::cerr, "failed to send host ", ok ? "accept" : "rejection", " to player '", pid, "': ", err.message);
-		throw PlayerError({ pid });
+		slog.err("failed to send host ", code == CncrnewCode::ok ? "accept" : "rejection", " to player ", pfd, ": ", err.what());
+		throw PlayerError{ pfd };
 	}
-
-	if (ok) {
-		players[pid].room = std::move(room);
-		players[pid].state = Player::State::host;
-		rooms.emplace(players[pid].room, true);
-		sendRoomData(Code::rnew, players[pid].room);
+	if (code == CncrnewCode::ok) {
+		umap<nsint, string>::iterator it = rooms.emplace(pfd, std::move(name)).first;
+		sendRoomData(Code::rnew, it->second);
 	}
 }
 
-static void joinRoom(const uint8* data, uint pid) {
+static void joinRoom(const uint8* data, nsint pfd, Player& player) {
 	string name = readName(data);
-	if (uint ptc = uint(std::find_if(players.begin(), players.end(), [pid, &name](Player& it) -> bool { return &it != &players[pid] && it.room == name; }) - players.begin()); rooms.count(name) && rooms[name] && ptc < players.size()) {
+	umap<nsint, string>::iterator room = std::find_if(rooms.begin(), rooms.end(), [&name](const pair<const nsint, string>& it) -> bool { return it.second == name; });
+	if (umap<nsint, Player>::iterator host = room != rooms.end() ? players.find(room->first) : players.end(); host != players.end() && host->second.partner == INVALID_SOCKET) {
 		try {
 			sendb.pushHead(Code::hello);
-			sendb.send(pfds[ptc].fd, players[ptc].webs);
+			sendb.send(room->first, host->second.webs);
 		} catch (const Error& err) {
-			slog.write(std::cerr, "failed to send join request from player '", pid, "' to player '", ptc, "': ", err.message);
+			slog.err("failed to send join request from player ", pfd, " to player ", room->first, ": ", err.what());
 			sendb.clear();
 			try {
 				sendb.pushHead(Code::cnjoin, Com::dataHeadSize + 1);
 				sendb.push(uint8(false));
-				sendb.send(pfds[pid].fd, players[pid].webs);
+				sendb.send(pfd, player.webs);
 			} catch (const Error& e) {
 				sendb.clear();
-				slog.write(std::cerr, "failed to send join rejection to player '", pid, "': ", e.message);
-				throw PlayerError({ pid, ptc });
+				slog.err("failed to send join rejection to player ", pfd, ": ", e.what());
+				throw PlayerError{ pfd, room->first };
 			}
-			throw PlayerError({ ptc });
+			throw PlayerError{ room->first };
 		}
-		players[pid].room = std::move(name);
-		players[pid].state = Player::State::guest;
-		players[pid].partner = ptc;
-		players[ptc].partner = pid;
-		sendRoomData(Code::ropen, players[pid].room, { uint8(rooms[players[pid].room] = false) });
+		player.partner = room->first;
+		host->second.partner = pfd;
+		sendRoomData(Code::ropen, name, { uint8(false) });
 	} else {
 		try {
 			sendb.pushHead(Code::cnjoin, Com::dataHeadSize + 1);
 			sendb.push(uint8(false));
-			sendb.send(pfds[pid].fd, players[pid].webs);
+			sendb.send(pfd, player.webs);
 		} catch (const Error& err) {
 			sendb.clear();
-			slog.write(std::cerr, "failed to send join rejection to player '", pid, "': ", err.message);
-			throw PlayerError({ pid });
+			slog.err("failed to send join rejection to player ", pfd, ": ", err.what());
+			throw PlayerError{ pfd };
 		}
 	}
 }
 
-static void leaveRoom(uint pid, bool sendList = true) {
-	uset<uint> errPids;
-	uint ptc = players[pid].partner;
-	if (players[pid].state == Player::State::guest) {
-		sendRoomData(Code::ropen, players[pid].room, { uint8(rooms[players[pid].room] = true) }, errPids);
+static void leaveRoom(uint pfd, Player& player, Code listCode = Code::rlist) {	// use Code::version to not send a room list
+	uset<nsint> errPfds;
+	umap<nsint, Player>::iterator partner = players.find(player.partner);
+	if (umap<nsint, string>::iterator room = rooms.find(pfd); room == rooms.end()) {	// is a guest
+		room = rooms.find(partner->first);
+		sendRoomData(Code::ropen, room->second, { uint8(true) }, errPfds);
+	} else if (partner == players.end()) {	// is a host without guest
+		sendRoomData(Code::rerase, room->second, {}, errPfds);
+		rooms.erase(room);
+	} else {	// is host with guest
+		sendRoomData(Code::ropen, room->second, { uint8(true) }, errPfds);
+		rekeyRoom(room, partner->first);
+	}
+
+	if (partner != players.end()) {
 		try {
 			sendb.pushHead(Code::leave);
-			sendb.send(pfds[ptc].fd, players[ptc].webs);
+			sendb.send(partner->first, partner->second.webs);
 		} catch (const Error& err) {
-			slog.write(std::cerr, "failed to send leave info from player '", pid, "' to player '", ptc, "': ", err.message);
-			errPids.insert(pid);
+			slog.err("failed to send leave info from player ", pfd, " to player ", partner->first, ": ", err.what());
+			errPfds.insert(partner->first);
 		}
-	} else {	// must be host
-		rooms.erase(players[pid].room);
-		sendRoomData(Code::rerase, players[pid].room, {}, errPids);
-		if (ptc < players.size()) {
-			players[ptc].state = Player::State::lobby;
+		player.partner = partner->second.partner = INVALID_SOCKET;
+	}
+
+	if (listCode != Code::version) {
+		try {
+			sendRoomList(pfd, player, listCode);
+		} catch (const Error& err) {
+			slog.err("failed to send room list to player ", pfd, ": ", err.what());
+			errPfds.insert(pfd);
+		}
+	}
+	if (!errPfds.empty())
+		throw PlayerError(std::move(errPfds));
+}
+
+static void transferHost(nsint pfd, Player& player) {
+	umap<nsint, Player>::iterator partner = players.find(player.partner);
+	rekeyRoom(pfd, partner->first);
+	try {
+		sendb.pushHead(Code::thost);
+		sendb.send(partner->first, partner->second.webs);
+	} catch (const Error& err) {
+		slog.err("failed to send host info from player ", pfd, " to player ", partner->first, ": ", err.what());
+		throw PlayerError{ pfd, partner->first };	// host will have already changed its UI, so kick both
+	}
+}
+
+static void globalMessage(uint8* data, nsint pfd, Player& player) {
+	uset<nsint> errPfds;
+	for (auto& [fd, pl] : players)
+		if (fd != pfd && pl.partner == INVALID_SOCKET && !rooms.count(fd)) {
 			try {
-				sendRoomList(ptc, Code::hgone);
+				player.recvb.redirect(fd, data, pl.webs);
 			} catch (const Error& err) {
-				slog.write(std::cerr, "failed to send room list to player '", ptc, "': ", err.message);
-				errPids.insert(pid);
+				errPfds.insert(fd);
+				slog.err("failed to send global message to player ", fd, ": ", err.what());
 			}
 		}
-	}
-
-	if (players[pid].state = Player::State::lobby; ptc < players.size())
-		players[pid].partner = players[ptc].partner = UINT_MAX;
-	if (sendList) {
-		try {
-			sendRoomList(pid);
-		} catch (const Error& err) {
-			slog.write(std::cerr, "failed to send room list to player '", pid, "': ", err.message);
-			errPids.insert(pid);
-		}
-	}
-	if (!errPids.empty())
-		throw PlayerError(std::move(errPids));
+	if (!errPfds.empty())
+		throw PlayerError(std::move(errPfds));
 }
 
-static void connectPlayer(nsint server) {
-	if (players.size() >= maxPlayers) {
-		sendRejection(server);
-		slog.write(std::cout, "rejected incoming connection");
-	} else try {
-		pfds.insert(pfds.end() - 1, pollfd{ acceptSocket(server), POLLIN | POLLRDHUP, 0 });
-		players.emplace_back();
-		slog.write(std::cout, "player '", players.size() - 1, "' connected");
-	} catch (const Error& err) {
-		slog.write(std::cerr, err.message);
+static void redirectData(uint8* data, nsint pfd, Player& player) {
+	if (Code(data[0]) < Code::hello || Code(data[0]) > Code::message) {
+		slog.err("invalid net code ", uint(data[0]), " from player ", pfd, " of size ", read16(data + 1));
+		throw PlayerError{ pfd };
 	}
-}
-
-static void disconnectPlayer(uint pid) {
-	if (players[pid].state != Player::State::lobby)
-		leaveRoom(pid, false);
-	closeSocket(pfds[pid].fd);
-	pfds.erase(pfds.begin() + pid);
-
-	for (Player& it : players)
-		if (it.partner > pid && it.partner < players.size())
-			it.partner--;
-	players.erase(players.begin() + pid);
-	slog.write(std::cout, "player '", pid, "' disconnected");
-}
-
-static void disconnectPlayers(uint& icur, vector<uint> pids) {
-	for (sizet i = 0; i < pids.size(); i++) {
-		if (pids[i] <= icur)
-			icur--;
-		for (sizet j = i + 1; j < pids.size(); j++)
-			if (pids[j] > pids[i])
-				pids[j]--;
-		disconnectPlayer(pids[i]);
+	umap<nsint, Player>::iterator partner = players.find(player.partner);
+	if (partner == players.end()) {
+		slog.err("data with code ", uint(data[0]), " from player ", pfd, " of size ", read16(data + 1), " to invalid partner ", player.partner);
+		throw PlayerError{ pfd };
 	}
-}
 
-bool cprocValidate(uint pid) {
 	try {
-		switch (players[pid].recvb.recvConn(pfds[pid].fd, players[pid].webs)) {
+		player.recvb.redirect(partner->first, data, partner->second.webs);
+	} catch (const Error& err) {
+		slog.err("failed to send data with code ", uint(data[0]), " of size ", read16(data + 1), " from player ", pfd, " to player ", partner->first, ": ", err.what());
+		throw PlayerError{ partner->first };
+	}
+}
+
+static void connectPlayer(vector<pollfd>& pfds) {
+	if (players.size() >= maxPlayers) {
+		sendRejection(pfds[0].fd);
+		slog.out("rejected incoming connection");
+	} else try {
+		pfds.push_back({ acceptSocket(pfds[0].fd), POLLIN | POLLRDHUP, 0 });
+		players.emplace(pfds.back().fd, Player());
+		slog.out("player ", pfds.back().fd, " connected");
+	} catch (const Error& err) {
+		slog.err(err.what());
+	}
+}
+
+static void disconnectPlayers(uint& icur, vector<pollfd>& pfds, const uset<nsint>& dfds) {
+	for (nsint fd : dfds) {
+		vector<pollfd>::iterator pit = std::find_if(pfds.begin() + 1, pfds.end(), [fd](const pollfd& it) -> bool { return it.fd == fd; });
+		if (pit <= pfds.begin() + icur)
+			--icur;
+
+		if (umap<nsint, Player>::iterator player = players.find(fd); player != players.end()) {
+			if (player->second.partner != INVALID_SOCKET || rooms.count(player->first))
+				leaveRoom(player->first, player->second, Code::version);
+			players.erase(player);
+		}
+		closeSocketV(fd);
+		if (pit != pfds.end())
+			pfds.erase(pit);
+		slog.out("player ", fd, " disconnected");
+	}
+}
+
+bool cprocValidate(nsint pfd, Player& player) {
+	try {
+		switch (player.recvb.recvConn(pfd, player.webs)) {
 		case Buffer::Init::wait:
 			return false;
 		case Buffer::Init::connect:
 			try {
-				sendRoomList(pid);
+				sendRoomList(pfd, player);
 			} catch (const Error& err) {
 				sendb.clear();
-				slog.write(std::cerr, "failed to send room list to player '", pid, "': ", err.message);
-				throw PlayerError({ pid });
+				slog.err("failed to send room list to player ", pfd, ": ", err.what());
+				throw PlayerError{ pfd };
 			}
-			players[pid].cproc = cprocPlayer;
+			player.cproc = cprocPlayer;
 			break;
 		case Buffer::Init::version:
-			sendVersion(pfds[pid].fd, players[pid].webs);
+			sendVersion(pfd, player.webs);
 		case Buffer::Init::error:
-			throw PlayerError({ pid });
+			throw PlayerError{ pfd };
 		}
 	} catch (const Error&) {
-		throw PlayerError({ pid });
+		throw PlayerError{ pfd };
 	}
 	return true;
 }
 
-bool cprocPlayer(uint pid) {
+bool cprocPlayer(nsint pfd, Player& player) {
 	uint8* data;
 	try {
-		if (!(data = players[pid].recvb.recv(pfds[pid].fd, players[pid].webs)))
+		if (!(data = player.recvb.recv(pfd, player.webs)))
 			return false;
 	} catch (const Error&) {
-		throw PlayerError({ pid });
+		throw PlayerError{ pfd };
 	}
 
-	switch (Code(data[0])) {
-	case Code::rnew:
-		createRoom(data + dataHeadSize, pid);
-		break;
-	case Code::join:
-		joinRoom(data + dataHeadSize, pid);
-		break;
-	case Code::leave:
-		leaveRoom(pid);
-		break;
-	case Code::kick:
-		leaveRoom(players[pid].partner);
-		break;
-	default: {
-		if (Code(data[0]) < Code::hello || Code(data[0]) > Code::message) {
-			slog.write(std::cerr, "invalid net code '", uint(data[0]), "' from player '", pid, "' of size '", read16(data + 1), '\'');
-			throw PlayerError({ pid });
+	try {
+		switch (Code(data[0])) {
+		case Code::rnew:
+			createRoom(data + dataHeadSize, pfd, player);
+			break;
+		case Code::glmessage:
+			globalMessage(data, pfd, player);
+			break;
+		case Code::join:
+			joinRoom(data + dataHeadSize, pfd, player);
+			break;
+		case Code::leave:
+			leaveRoom(pfd, player);
+			break;
+		case Code::thost:
+			transferHost(pfd, player);
+			break;
+		case Code::kick:
+			leaveRoom(player.partner, players.at(player.partner), Code::kick);
+			break;
+		default:
+			redirectData(data, pfd, player);
 		}
-		uint ptc = players[pid].partner;
-		if (ptc >= players.size()) {
-			slog.write(std::cerr, "data with code '", uint(data[0]), "' from player '", pid, "' of size '", read16(data + 1), "' to invalid partner '", ptc + '\'');
-			throw PlayerError({ pid });
-		}
-
-		try {
-			players[pid].recvb.redirect(pfds[ptc].fd, data, players[ptc].webs);
-		} catch (const Error& err) {
-			slog.write(std::cerr, "failed to send data with code '", uint(data[0]), "' of size '", read16(data + 1), "' from player '", pid, "' to player '", ptc, "': ", err.message);
-			throw PlayerError({ ptc });
-		}
-	} }
-	players[pid].recvb.clearCur(players[pid].webs);
+	} catch (const PlayerError&) {
+		player.recvb.clearCur(player.webs);
+		throw;
+	}
+	player.recvb.clearCur(player.webs);
 	return true;
 }
 
@@ -330,13 +386,13 @@ void printTable(vector<array<string, S>>& table, const char* title, array<string
 	array<uint, S> lens{};
 	table[0] = std::move(header);
 	for (const array<string, S>& it : table)
-		for (sizet i = 0; i < S; i++)
+		for (sizet i = 0; i < S; ++i)
 			if (it[i].length() > lens[i])
 				lens[i] = uint(it[i].length());
 
 	std::cout << title << linend;
 	for (const array<string, S>& it : table) {
-		for (sizet i = 0; i < S; i++)
+		for (sizet i = 0; i < S; ++i)
 			std::cout << it[i] << string(lens[i] - it[i].length() + 2, ' ');
 		std::cout << linend;
 	}
@@ -358,25 +414,26 @@ static void checkInput() {
 #endif
 	switch (ch) {
 	case 'P': {
-		vector<array<string, 4>> table(players.size() + 1);
-		for (sizet i = 0; i < players.size(); i++)
-			table[i+1] = { toStr(i), Player::stateNames[uint8(players[i].state)], players[i].state != Player::State::lobby ? table[i+1][2] = players[i].room : string(), players[i].partner < players.size() ? table[i+1][3] = toStr(players[i].partner) : string() };
-		printTable(table, "Players:", { "ID", "STATE", "ROOM", "PARTNER" });
+		vector<array<string, 2>> table(players.size() + 1);
+		uint i = 1;
+		for (auto& [pfd, player] : players)
+			table[i++] = { toStr(pfd), player.partner != INVALID_SOCKET ? toStr(player.partner) : string() };
+		printTable(table, "Players:", { "SOCKET", "PARTNER" });
 		break; }
 	case 'R': {
-		vector<string> names = sortNames(rooms);
-		vector<array<string, 2>> table(names.size() + 1);
-		for (sizet i = 0; i < names.size(); i++) {
-			table[i+1][1] = btos(rooms[names[i]]);
-			table[i+1][0] = std::move(names[i]);
+		vector<array<string, 3>> table(rooms.size() + 1);
+		uint i = 1;
+		for (auto& [host, name] : rooms) {
+			Player& player = players.at(host);
+			table[i++] = { name, toStr(host), player.partner != INVALID_SOCKET ? toStr(player.partner) : string() };
 		}
-		printTable(table, "Rooms:", { "NAME", "OPEN" });
+		printTable(table, "Rooms:", { "NAME", "HOST", "GUEST" });
 		break; }
 	case 'Q':
 		running = false;
 		break;
 	default:
-		std::cerr << "unknown input: '" << char(ch) << "' (" << ch << ')' << std::endl;
+		std::cerr << "unknown input: " << char(ch) << " (" << ch << ')' << std::endl;
 	}
 }
 #endif
@@ -385,29 +442,30 @@ static void eventExit(int) {
 	running = false;
 }
 
-static bool exec() {
+static bool exec(vector<pollfd>& pfds) {
 	if (int rcp = poll(pfds.data(), ulong(pfds.size()), checkTimeout)) {
-		if (rcp < 0 || (pfds.back().revents & polleventsDisconnect)) {
-			slog.write(std::cerr, msgPollFail);
+		if (rcp < 0 || (pfds[0].revents & polleventsDisconnect)) {
+			slog.err(msgPollFail);
 			return running = false;
 		}
 
-		if (pfds.back().revents & POLLIN)
-			connectPlayer(pfds.back().fd);
-		for (uint i = 0; i < uint(players.size()); i++) {
+		if (pfds[0].revents & POLLIN)
+			connectPlayer(pfds);
+		for (uint i = 1; i < pfds.size(); ++i) {
 			try {
 				if (pfds[i].revents & POLLIN) {
-					bool final = players[i].recvb.recvData(pfds[i].fd);
-					while (players[i].cproc(i));
+					Player& player = players.at(pfds[i].fd);
+					bool final = player.recvb.recvData(pfds[i].fd);
+					while (player.cproc(pfds[i].fd, player));
 					if (final)
-						throw PlayerError({ i });
-				}
-				if (pfds[i].revents & polleventsDisconnect)
-					throw PlayerError({ i });
+						throw PlayerError{ pfds[i].fd };
+				} else if (pfds[i].revents & polleventsDisconnect)
+					throw PlayerError{ pfds[i].fd };
 			} catch (const PlayerError& err) {
-				disconnectPlayers(i, vector<uint>(err.pids.begin(), err.pids.end()));
+				disconnectPlayers(i, pfds, err.pfds);
 			} catch (...) {
-				slog.write(std::cerr, "unexpected error during player '", i, "' iteration");
+				slog.err("unexpected error during player ", pfds[i].fd, " iteration");
+				disconnectPlayers(i, pfds, { pfds[i].fd });
 			}
 		}
 	}
@@ -417,15 +475,15 @@ static bool exec() {
 	return running;
 }
 
-static int cleanup(int rc) {
-	for (pollfd& it : pfds)
-		closeSocket(it.fd);
+static int cleanup(const vector<pollfd>& pfds, int rc) {
+	slog.out("exiting with code ", rc);
+	for (vector<pollfd>::const_reverse_iterator it = pfds.rbegin(); it != pfds.rend(); ++it) {
+		closeSocketV(it->fd);
+		slog.out("socket ", it->fd, " closed");
+	}
 	slog.end();
 #ifdef _WIN32
 	WSACleanup();
-#elif !defined(SERVICE)
-	termst.c_lflag = oldLflag;
-	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
 #endif
 	return rc;
 }
@@ -434,32 +492,28 @@ static int cleanup(int rc) {
 int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
-#ifndef SERVICE
-	tcgetattr(STDIN_FILENO, &termst);
-	oldLflag = termst.c_lflag;
-	termst.c_lflag &= ~uint(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
-#endif
 	signal(SIGQUIT, eventExit);
 #endif
 	signal(SIGINT, eventExit);
 	signal(SIGABRT, eventExit);
 	signal(SIGTERM, eventExit);
 
+	vector<pollfd> pfds = { { INVALID_SOCKET, POLLIN | POLLRDHUP, 0 } };	// first element is server
 	try {
-		Arguments args(argc, argv, { arg4, arg6, argVerbose }, { argPort, argMaxPlayers, argLog });
-		slog.start(args.hasFlag(argVerbose), args.getOpt(argLog));
+		Arguments args(argc, argv, { arg4, arg6, argVerbose }, { argPort, argMaxPlayers, argLog, argMaxLogs });
+		const char* maxLogs = args.getOpt(argMaxLogs);
+		slog.start(args.hasFlag(argVerbose), args.getOpt(argLog), maxLogs ? sstoul(maxLogs) : Log::defaultMaxLogfiles);
 
 		const char* port = args.getOpt(argPort);
 		if (!port)
 			port = defaultPort;
 		const char* playerLim = args.getOpt(argMaxPlayers);
-		maxPlayers = playerLim ? std::min(sstoul(playerLim), ulong(UINT_MAX)) : defaultMaxPlayers;
-		Family family = Family::any;
+		maxPlayers = playerLim ? std::min(sstoul(playerLim), ulong(maxPlayersLimit)) : defaultMaxPlayers;
+		int family = AF_UNSPEC;
 		if (args.hasFlag(arg4) && !args.hasFlag(arg6))
-			family = Family::v4;
+			family = AF_INET;
 		else if (args.hasFlag(arg6) && !args.hasFlag(arg4))
-			family = Family::v6;
+			family = AF_INET6;
 
 #ifdef _WIN32
 		DWORD pid = GetCurrentProcessId();
@@ -468,21 +522,24 @@ int main(int argc, char** argv) {
 #else
 		pid_t pid = getpid();
 #endif
-		pfds.push_back({ bindSocket(port, family), POLLIN | POLLRDHUP, 0 });
-		slog.write(std::cout, "Thrones Server v", commonVersion, linend, "PID: ", pid, linend, "port: ", port, linend, "family: ", familyNames[uint8(family)], linend, "player limit: ", maxPlayers, linend, "room limit: ", maxRooms(), linend);
+		pfds[0].fd = bindSocket(port, family);
+		slog.out(linend, "Thrones Server v", commonVersion, linend, "PID: ", pid, linend, "port: ", port, linend, "family: ", family == AF_INET ? "AF_INET" : family == AF_INET6 ? "AF_INET6" : "AF_UNSPEC", linend, "player limit: ", maxPlayers, linend, "room limit: ", maxRooms(), linend);
 	} catch (const Error& err) {
-		slog.write(std::cerr, err.message);
-		return cleanup(EXIT_FAILURE);
+		slog.err(err.what());
+		return cleanup(pfds, EXIT_FAILURE);
 	}
 
+#if !defined(_WIN32) && !defined(SERVICE)
+	Terminal term;	// here to set and reset the terminal
+#endif
 	try {
-		while (exec());
+		while (exec(pfds));
 	} catch (const std::runtime_error& err) {
-		slog.write(std::cerr, "runtime error: ", err.what());
-		return cleanup(EXIT_FAILURE);
+		slog.err("runtime error: ", err.what());
+		return cleanup(pfds, EXIT_FAILURE);
 	} catch (...) {
-		slog.write(std::cerr, "unknown error");
-		return cleanup(EXIT_FAILURE);
+		slog.err("unknown error");
+		return cleanup(pfds, EXIT_FAILURE);
 	}
-	return cleanup(EXIT_SUCCESS);
+	return cleanup(pfds, EXIT_SUCCESS);
 }

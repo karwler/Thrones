@@ -9,19 +9,9 @@ public:
 	static constexpr uint16 dragonDist = 4;
 	static constexpr float screenYUp = 0.f;
 	static constexpr float screenYDown = -4.2f;
-	static constexpr array<uint16 (*)(uint16, svec2), 8> adjacentFull = {
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x ? id - lim.x - 1 : UINT16_MAX; },							// left up
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },											// up
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x != lim.x - 1 ? id - lim.x + 1 : UINT16_MAX; },				// right up
-		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x ? id - 1 : UINT16_MAX; },												// left
-		[](uint16 id, svec2 lim) -> uint16 { return id % lim.x != lim.x - 1 ? id + 1 : UINT16_MAX; },									// right
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x ? id + lim.x - 1 : UINT16_MAX; },				// left down
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 ? id + lim.x : UINT16_MAX; },								// down
-		[](uint16 id, svec2 lim) -> uint16 { return id / lim.x != lim.y - 1 && id % lim.x != lim.x - 1 ? id + lim.x + 1 : UINT16_MAX; }	// right down
-	};
 
-	Com::Config config;
-	array<uint16, Com::pieceMax> ownPieceAmts, enePieceAmts;
+	Config config;
+	array<uint16, Piece::lim> ownPieceAmts, enePieceAmts;
 private:
 	uint16 boardHeight;	// total number of rows
 	float objectSize;	// width and height of a tile/piece
@@ -40,15 +30,18 @@ public:
 	Board(const Scene* scene);
 	~Board();
 
-	void updateConfigValues();
-	vector<Object*> initObjects(const Com::Config& cfg, bool regular, const Settings* sets, const Scene* scene);
+#ifndef OPENGLES
+	void drawObjectDepths() const;
+#endif
+	void drawObjects() const;
+	void initObjects(const Config& cfg, bool regular, const Settings* sets, const Scene* scene);
 #ifdef DEBUG
-	vector<Object*> initDummyObjects(const Com::Config& cfg, const Settings* sets, const Scene* scene);
+	void initDummyObjects(const Config& cfg, const Settings* sets, const Scene* scene);
 #endif
 	void uninitObjects();
 	void initOwnPieces();
 	uint16 countAvailableFavors();
-	void prepareMatch(bool myTurn, Com::Tile* buf);
+	void prepareMatch(bool myTurn, Tile::Type* buf);
 	void prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record& erec);
 
 	TileCol& getTiles();
@@ -59,12 +52,12 @@ public:
 	bool isEnemyTile(const Tile* til) const;
 	uint16 tileCompressionSize() const;
 	uint8 compressTile(uint16 e) const;
-	static Com::Tile decompressTile(const uint8* src, uint16 i);
-	Piece* getPieces(Piece* beg, const array<uint16, Com::pieceMax>& amts, Com::Piece type);
+	static Tile::Type decompressTile(const uint8* src, uint16 i);
+	Piece* getPieces(Piece* beg, const array<uint16, Piece::lim>& amts, Piece::Type type);
 	Piece* findPiece(Piece* beg, Piece* end, svec2 pos);
 	PieceCol& getPieces();
-	Piece* getOwnPieces(Com::Piece type);
-	Piece* getEnePieces(Com::Piece type);
+	Piece* getOwnPieces(Piece::Type type);
+	Piece* getEnePieces(Piece::Type type);
 	Piece* findOccupant(const Tile* tile);
 	Piece* findOccupant(svec2 pos);
 	BoardObject* findObject(const vec3& isct);
@@ -93,20 +86,21 @@ public:
 	TileTop findTileTop(const Tile* tile);
 	Tile* getTileBot(TileTop top);
 	void setTileTop(TileTop top, const Tile* tile);
-	void selectEstablishable();
+	void selectEstablishers();
+	pair<Tile*, TileTop> checkTileEstablishable(Piece* throne);
 	bool tileRebuildable(Piece* throne);
-	void selectRebuildable();
-	Tile* establishTile(Piece* throne, bool reinit, const Record& orec, ProgMatch* match);
-	bool pieceSpawnable(Com::Piece type);
+	void selectRebuilders();
+	bool pieceSpawnable(Piece::Type type);
 	void selectSpawners();	// can only happen when spawning on fortresses
-	Tile* findSpawnableTile(Com::Piece type);
-	Piece* findSpawnablePiece(Com::Piece type, bool reinit);
+	Tile* findSpawnableTile(Piece::Type type);
+	Piece* findSpawnablePiece(Piece::Type type);
+	void resetTilesAfterSpawn();
 
 	void collectTilesBySingle(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*));
 	void collectTilesByArea(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*));
 	void collectTilesByType(uset<uint16>& tcol, uint16 pos, bool (*stepable)(uint16, void*));
-	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Com::Tile type, bool (*stepable)(uint16, void*));
+	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Tile::Type type, bool (*stepable)(uint16, void*));
 	void collectTilesByPorts(uset<uint16>& tcol, uint16 pos);
 	void collectTilesForLancer(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByDistance(uset<uint16>& tcol, svec2 pos, pair<uint8, uint8> dist);
@@ -117,7 +111,7 @@ public:
 	void highlightEngageTiles(Piece* pce);									// ^
 	uset<uint16> collectMoveTiles(const Piece* piece, const Record& erec, Favor favor, bool single = false);
 	uset<uint16> collectEngageTiles(const Piece* piece);
-	bool checkThroneWin(Piece* pcs, const array<uint16, Com::pieceMax>& amts);
+	bool checkThroneWin(Piece* pcs, const array<uint16, Piece::lim>& amts);
 	bool checkFortressWin();
 	Record::Info countVictoryPoints(uint16& own, uint16& ene, const Record& erec);
 
@@ -133,14 +127,16 @@ public:
 	uint16 inversePieceId(Piece* piece) const;
 
 private:
-	template <class S> static void setObjectAddrs(S src, sizet size, vector<Object*>::iterator& dst);
+#ifndef OPENGLES
+	template <class T> void drawObjectDepths(const T& objs) const;
+#endif
+	template <class T> void drawObjects(const T& objs) const;
 	void setTiles(Tile* tils, uint16 yofs, bool show);
 	void setMidTiles();
 	void setPieces(Piece* pces, float rot, const Material* matl);
 	void setBgrid();
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
-	void rearangeMiddle(Com::Tile* mid, Com::Tile* buf, bool myTurn);
-	uint16 findEmptyMiddle(Com::Tile* mid, uint16 i, uint16 m);
+	uint16 findEmptyMiddle(const vector<Tile::Type>& mid, uint16 i, uint16 m);
 };
 
 inline Board::~Board() {
@@ -179,19 +175,19 @@ inline uint8 Board::compressTile(uint16 i) const {
 	return uint8(uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4));
 }
 
-inline Com::Tile Board::decompressTile(const uint8* src, uint16 i) {
-	return Com::Tile((src[i/2] >> (i % 2 * 4)) & 0xF);
+inline Tile::Type Board::decompressTile(const uint8* src, uint16 i) {
+	return Tile::Type((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
 inline PieceCol& Board::getPieces() {
 	return pieces;
 }
 
-inline Piece* Board::getOwnPieces(Com::Piece type) {
+inline Piece* Board::getOwnPieces(Piece::Type type) {
 	return getPieces(pieces.own(), ownPieceAmts, type);
 }
 
-inline Piece* Board::getEnePieces(Com::Piece type) {
+inline Piece* Board::getEnePieces(Piece::Type type) {
 	return getPieces(pieces.ene(), ownPieceAmts, type);
 }
 

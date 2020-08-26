@@ -9,7 +9,7 @@ if __name__ == '__main__':
 			if n < 65536:
 				port = n
 				break
-	
+
 	handler = server.SimpleHTTPRequestHandler
 	handler.extensions_map['.wasm'] = 'application/wasm'
 	with server.HTTPServer(("", port), handler) as httpd:

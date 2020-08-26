@@ -109,6 +109,8 @@ set(THRONES_SRC
 	"src/prog/board.h"
 	"src/prog/game.cpp"
 	"src/prog/game.h"
+	"src/prog/guiGen.cpp"
+	"src/prog/guiGen.h"
 	"src/prog/netcp.cpp"
 	"src/prog/netcp.h"
 	"src/prog/program.cpp"
@@ -117,15 +119,17 @@ set(THRONES_SRC
 	"src/prog/progs.h"
 	"src/prog/types.cpp"
 	"src/prog/types.h"
-	"src/server/common.h"
 	"src/server/server.cpp"
 	"src/server/server.h"
+	"src/utils/alias.h"
 	"src/utils/context.cpp"
 	"src/utils/context.h"
 	"src/utils/layouts.cpp"
 	"src/utils/layouts.h"
 	"src/utils/objects.cpp"
 	"src/utils/objects.h"
+	"src/utils/settings.cpp"
+	"src/utils/settings.h"
 	"src/utils/text.cpp"
 	"src/utils/text.h"
 	"src/utils/utils.cpp"
@@ -139,12 +143,12 @@ endif()
 list(APPEND THRONES_SRC ${ASSET_SHD})
 
 set(SERVER_SRC
-	"src/server/common.h"
 	"src/server/log.cpp"
 	"src/server/log.h"
 	"src/server/server.cpp"
 	"src/server/server.h"
 	"src/server/serverProg.cpp"
+	"src/utils/alias.h"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -155,21 +159,14 @@ set(OVEN_SRC
 	"src/oven/oven.cpp"
 	"src/oven/oven.h"
 	"src/oven/ovenProg.cpp"
+	"src/utils/alias.h"
 	"src/utils/text.cpp"
 	"src/utils/text.h")
 
-set(TLIB_SRC
-	"src/oven/oven.cpp"
-	"src/oven/oven.h"
-	"src/server/common.h"
-	"src/server/server.cpp"
-	"src/server/server.h"
-	"src/utils/text.cpp"
-	"src/utils/text.h"
-	"src/utils/utils.cpp"
-	"src/utils/utils.h")
-
 set(TESTS_SRC
+	"src/test/alias.cpp"
+	"src/test/fileSys.cpp"
+	"src/test/oven.cpp"
 	"src/test/server.cpp"
 	"src/test/tests.cpp"
 	"src/test/tests.h"
@@ -181,13 +178,16 @@ set(TESTS_SRC
 option(EXTERNAL "Save settings externally." OFF)
 option(OPENGLES "Build for OpenGL ES. (always on with Emscripten)" OFF)
 option(SERVICE "Build server without keyboard input." OFF)
+if((CMAKE_SYSTEM_NAME STREQUAL "Windows") OR (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+	option(WEBUTILS "Build the client with curl." ON)
+endif()
 
 set(VER_SDL "2.0.12" CACHE STRING "SDL2 version.")
 set(VER_IMG "2.0.5" CACHE STRING "SDL2_image version.")
 set(VER_TTF "2.0.15" CACHE STRING "SDL2_ttf version.")
 set(VER_GLEW "2.1.0" CACHE STRING "GLEW version.")
 set(VER_GLM "0.9.9.8" CACHE STRING "glm version.")
-set(VER_CURL "7.71.1" CACHE STRING "libcurl version.")
+set(VER_CURL "7.72.0" CACHE STRING "libcurl version.")
 set(DIR_LIB "${CMAKE_SOURCE_DIR}/lib")
 set(DIR_RSC "${CMAKE_SOURCE_DIR}/rsc")
 
@@ -215,6 +215,15 @@ function(downloadLib URL DST LIBDIR)
 		string(FIND "${FILE}" "-" FID)
 		string(SUBSTRING "${FILE}" 0 ${FID} FNAME)
 		file(COPY "/Volumes/${FNAME}/${FNAME}.framework" DESTINATION "${DST}")
+	endif()
+endfunction()
+
+function(compileLib URL DST LIBDIR CMD WDIR)
+	if(EXISTS "${LIBDIR}")
+		message(STATUS "Found ${LIBDIR}")
+	else()
+		downloadLib("${URL}" "${DST}" "${LIBDIR}")
+		execute_process(COMMAND ${CMD} WORKING_DIRECTORY "${WDIR}")
 	endif()
 endfunction()
 
@@ -251,7 +260,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		set(BIN_SDL "${DIR_SDL}/lib/${VMACHINE}")
 		set(BIN_IMG "${DIR_IMG}/lib/${VMACHINE}")
 		set(BIN_TTF "${DIR_TTF}/lib/${VMACHINE}")
-		set(BIN_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-winssl/bin")
+		set(BIN_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-schannel/bin")
 		set(LIB_SDL "${BIN_SDL}")
 		set(LIB_IMG "${BIN_IMG}")
 		set(LIB_TTF "${BIN_TTF}")
@@ -260,11 +269,11 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		else()
 			set(LIB_GLEW "${DIR_GLEW}/lib/Release/Win32")
 		endif()
-		set(LIB_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-winssl/lib")
+		set(LIB_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-schannel/lib")
 		set(INC_SDL "${DIR_SDL}/include")
 		set(INC_IMG "${DIR_IMG}/include")
 		set(INC_TTF "${DIR_TTF}/include")
-		set(INC_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-winssl/include")
+		set(INC_CURL "${DIR_CURL}/builds/libcurl-vc-${VMACHINE}-release-dll-ipv6-sspi-schannel/include")
 		set(URL_SDL "https://www.libsdl.org/release/SDL2-devel-${VER_SDL}-VC.zip")
 		set(URL_IMG "https://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-${VER_IMG}-VC.zip")
 		set(URL_TTF "https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-${VER_TTF}-VC.zip")
@@ -312,17 +321,18 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	downloadLib("${URL_IMG}" "${DIR_LIB}" "${DIR_IMG}")
 	downloadLib("${URL_TTF}" "${DIR_LIB}" "${DIR_TTF}")
 	downloadLib("${URL_GLEW}" "${DIR_LIB}" "${DIR_GLEW}")
-	if(MSVC)
-		if(NOT EXISTS "${DIR_CURL}")
-			downloadLib("${URL_CURL}" "${DIR_LIB}" "${DIR_CURL}")
-			execute_process(COMMAND nmake /f Makefile.vc mode=dll MACHINE=${VMACHINE} WORKING_DIRECTORY "${DIR_CURL}/winbuild")
-		endif()
-	else()
-		downloadLib("${URL_CURL}" "${DIR_LIB}" "${DIR_CURL}")
-	endif()
+	link_directories("${LIB_SDL}" "${LIB_IMG}" "${LIB_TTF}" "${LIB_GLEW}")
+	include_directories("${INC_SDL}" "${INC_IMG}" "${INC_TTF}" "${DIR_GLEW}/include")
 
-	link_directories("${LIB_SDL}" "${LIB_IMG}" "${LIB_TTF}" "${LIB_GLEW}" "${LIB_CURL}")
-	include_directories("${INC_SDL}" "${INC_IMG}" "${INC_TTF}" "${DIR_GLEW}/include" "${INC_CURL}")
+	if(WEBUTILS)
+		if(MSVC)
+			compileLib("${URL_CURL}" "${DIR_LIB}" "${DIR_CURL}" "nmake;/f;Makefile.vc;mode=dll;MACHINE=${VMACHINE}" "${DIR_CURL}/winbuild")
+		else()
+			downloadLib("${URL_CURL}" "${DIR_LIB}" "${DIR_CURL}")
+		endif()
+		link_directories("${LIB_CURL}")
+		include_directories("${INC_CURL}")
+	endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	downloadLib("https://www.libsdl.org/release/SDL2-${VER_SDL}.dmg" "${DIR_LIB}" "SDL2.framework")
 	downloadLib("https://www.libsdl.org/projects/SDL_image/release/SDL2_image-${VER_IMG}.dmg" "${DIR_LIB}" "SDL2_image.framework")
@@ -332,12 +342,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	find_library(LIB_IMG "SDL2_image" HINTS "${DIR_LIB}")
 	find_library(LIB_TTF "SDL2_ttf" HINTS "${DIR_LIB}")
 	find_library(LIB_OPENGL "OpenGL")
+	include_directories("${LIB_SDL}/Headers")	# XCode can't find the SDL2 headers
 elseif(NOT OPENGLES)
 	set(DIR_GLEW "${DIR_LIB}/glew-${VER_GLEW}")
-	if(NOT EXISTS "${DIR_GLEW}")
-		downloadLib("https://sourceforge.net/projects/glew/files/glew/${VER_GLEW}/glew-${VER_GLEW}.tgz" "${DIR_LIB}" "${DIR_GLEW}")
-		execute_process(COMMAND make glew.lib.static WORKING_DIRECTORY "${DIR_GLEW}")
-	endif()
+	compileLib("https://sourceforge.net/projects/glew/files/glew/${VER_GLEW}/glew-${VER_GLEW}.tgz" "${DIR_LIB}" "${DIR_GLEW}" "make;glew.lib.static" "${DIR_GLEW}")
 
 	link_directories("${DIR_GLEW}/lib")
 	include_directories("${DIR_GLEW}/include")
@@ -398,18 +406,14 @@ else()
 endif()
 
 if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
-	set(CXX_FLG_ANY "-Wall -Wextra -pedantic-errors -Wdouble-promotion -Wformat=2 -Wmissing-declarations -Wold-style-cast -Wshadow -Wunreachable-code -Wno-implicit-fallthrough -Wno-parentheses -Wno-switch")
+	set(CXX_FLG_ANY "-Wall -Wextra -pedantic-errors -Wdouble-promotion -Wformat=2 -Wmissing-declarations -Wold-style-cast -Wshadow -Wunreachable-code -Wno-implicit-fallthrough -Wno-switch")
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wcast-align=strict -Wduplicated-cond")
 	else()
 		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wcast-align -Wnull-dereference -Wover-aligned -Wshadow-all -Wno-unused-private-field")
 	endif()
-
 	if(OPENGLES)
 		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wno-unused-parameter")
-	endif()
-	if(ARCH)
-		set(CXX_FLG_ANY "${CXX_FLG_ANY} -m${ARCH}")
 	endif()
 
 	if(EMSCRIPTEN)
@@ -494,23 +498,32 @@ else()
 
 	target_link_libraries(${PROJECT_NAME} SDL2 SDL2_image SDL2_ttf)
 	if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-		target_link_libraries(${PROJECT_NAME} glew32s opengl32 libcurl ws2_32)
-	elseif(OPENGLES)
-		target_link_libraries(${PROJECT_NAME} GLESv2 curl)
+		target_link_libraries(${PROJECT_NAME} glew32s opengl32 ws2_32)
+		if(WEBUTILS)
+			target_link_libraries(${PROJECT_NAME} libcurl)
+			add_definitions(-DWEBUTILS)
+		endif()
 	else()
-		target_link_libraries(${PROJECT_NAME} GLEW GL curl)
+		if(OPENGLES)
+			target_link_libraries(${PROJECT_NAME} GLESv2)
+		else()
+			target_link_libraries(${PROJECT_NAME} GLEW GL)
+		endif()
+		if(WEBUTILS)
+			target_link_libraries(${PROJECT_NAME} curl)
+			add_definitions(-DWEBUTILS)
+		endif()
 	endif()
-	add_definitions(-DWEBUTILS)
 	setCommonTargetProperties(${PROJECT_NAME} "${EXE_DIR}")
 endif()
 
 # game data copier targets
 
-function(addDataCopierTarget TARGET_NAME TEXTRA DST OPT_AUD OPT_SHD OPT_IMG SINGLE_FILES)
+function(addDataCopierTarget TARGET_NAME TEXTRA DST OPT_SHD OPT_IMG SINGLE_FILES)
 	add_custom_target(${TARGET_NAME} ${TEXTRA} SOURCES ${DATA_SRC}
 						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${SINGLE_FILES} "${DST}"
-						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_AUD} "${DST}/audio.dat" ${ASSET_WAV}
+						COMMAND "${EXE_DIR}/${OVEN_NAME}" -a "${DST}/audio.dat" ${ASSET_WAV}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" -m "${DST}/materials.dat" ${ASSET_MTL}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" -o "${DST}/objects.dat" ${ASSET_OBJ}
 						COMMAND "${EXE_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST}/shaders.dat" ${ASSET_SHD}
@@ -520,11 +533,11 @@ function(addDataCopierTarget TARGET_NAME TEXTRA DST OPT_AUD OPT_SHD OPT_IMG SING
 endfunction()
 
 if(OPENGLES)
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-A" "-S" "-T" "${ASSET_DAT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "-T" "${ASSET_DAT}")
 else()
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-a" "-s" "-t" "${ASSET_DAT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t" "${ASSET_DAT}")
 endif()
-addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-A" "-S" "-T" "rsc/data/romanesque.ttf;rsc/data/merriweather.otf")
+addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "rsc/data/romanesque.ttf;rsc/data/merriweather.otf")
 
 # server program target
 
@@ -550,15 +563,19 @@ add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_LIB}/glm/copying.txt" "${LICN_DIR}/COPYING.glm.txt")
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libjpeg-9.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${BIN_CURL}/libcurl.dll" "${EXE_DIR}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libjpeg-9.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${EXE_DIR}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_SDL}/COPYING.txt" "${LICN_DIR}/COPYING.SDL.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_IMG}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_image.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_TTF}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_ttf.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_GLEW}/LICENSE.txt" "${LICN_DIR}/LICENSE.glew.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_IMG}/LICENSE.png.txt" "${LICN_DIR}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_TTF}/LICENSE.freetype.txt" "${LICN_DIR}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_TTF}/LICENSE.zlib.txt" "${LICN_DIR}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_CURL}/COPYING" "${LICN_DIR}/COPYING.curl.txt")
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_TTF}/LICENSE.zlib.txt" "${LICN_DIR}")
+	if(WEBUTILS)
+		add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
+							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_CURL}/libcurl.dll" "${EXE_DIR}"
+							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_CURL}/COPYING" "${LICN_DIR}/COPYING.curl.txt")
+	endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
 						COMMAND "${CMAKE_COMMAND}" -E make_directory "${FRAM_DIR}/${FRAM_SDL}" "${FRAM_DIR}/${FRAM_TTF}"
@@ -578,23 +595,21 @@ endif()
 
 # tests
 
-add_library(${TLIB_NAME} STATIC EXCLUDE_FROM_ALL ${TLIB_SRC})
-target_compile_definitions(${TLIB_NAME} PUBLIC AS_LIBRARY)
-target_link_libraries(${TLIB_NAME} SDL2)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	add_library(${TLIB_NAME} STATIC EXCLUDE_FROM_ALL ${THRONES_SRC})
+	target_compile_definitions(${TLIB_NAME} PUBLIC IS_TEST_LIBRARY)
+	target_link_libraries(${TLIB_NAME} SDL2 SDL2_image SDL2_ttf GLEW GL curl)
 
-enable_testing()
-add_executable(${TESTS_NAME} EXCLUDE_FROM_ALL ${TESTS_SRC})
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	target_link_libraries(${TESTS_NAME} ${TLIB_NAME} "${LIB_SDL}" "${LIB_IMG}")
-else()
-	target_link_libraries(${TESTS_NAME} ${TLIB_NAME} SDL2 SDL2_image)
+	enable_testing()
+	add_executable(${TESTS_NAME} EXCLUDE_FROM_ALL ${TESTS_SRC})
+	target_link_libraries(${TESTS_NAME} ${TLIB_NAME})
+	add_dependencies(${TESTS_NAME} ${TLIB_NAME})
+	add_test(NAME ${TESTS_NAME} COMMAND ${TESTS_NAME})
 endif()
-add_dependencies(${TESTS_NAME} ${TLIB_NAME})
-add_test(NAME ${TESTS_NAME} COMMAND ${TESTS_NAME})
 
 # prettyfiers
 
-set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC} ${TLIB_SRC} ${TESTS_SRC})
+set(ALL_SRC ${THRONES_SRC} ${DATA_SRC} ${SERVER_SRC} ${OVEN_SRC} ${TESTS_SRC})
 foreach(FSRC IN LISTS ALL_SRC)
 	get_filename_component(FGRP "${FSRC}" DIRECTORY)
 	string(REPLACE "/" ";" FGRP "${FGRP}")

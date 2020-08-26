@@ -1,16 +1,15 @@
+#include "audioSys.h"
+#include "fileSys.h"
 #include "windowSys.h"
+#include <iostream>
 
 AudioSys::AudioSys(WindowSys* win) :
 	alen(0)
 {
-#ifdef OPENGLES
-	SDL_AudioSpec spec = Sound::mobileSpec;
-#else
 	SDL_AudioSpec spec = Sound::defaultSpec;
-#endif
 	spec.callback = callback;
 	spec.userdata = win;
-	if (!(device = SDL_OpenAudioDevice(nullptr, SDL_FALSE, &spec, &aspec, SDL_AUDIO_ALLOW_ANY_CHANGE)))
+	if (device = SDL_OpenAudioDevice(nullptr, SDL_FALSE, &spec, &aspec, SDL_AUDIO_ALLOW_ANY_CHANGE); !device)
 		throw std::runtime_error("failed to initialize audio system");
 	if (aspec.freq != spec.freq)
 		std::cout << "audio frequency changed from " << spec.freq << " to " << aspec.freq << std::endl;

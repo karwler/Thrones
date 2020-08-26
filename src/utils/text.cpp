@@ -15,10 +15,10 @@ string filename(const string& path) {
 
 string readWord(const char*& pos) {
 	const char* end;
-	for (; isSpace(*pos); pos++);
-	for (end = pos; notSpace(*end); end++);
+	for (; isSpace(*pos); ++pos);
+	for (end = pos; notSpace(*end); ++end);
 
-	string str(pos, sizet(end - pos));
+	string str(pos, end);
 	pos = end;
 	return str;
 }
@@ -33,7 +33,7 @@ string strUnenclose(const char*& str) {
 	const char* pos = strchr(str, '"');
 	if (!pos)
 		return str += strlen(str);
-	pos++;
+	++pos;
 
 	string quote;
 	for (sizet len; *pos && *pos != '"'; pos += len) {
@@ -44,23 +44,23 @@ string strUnenclose(const char*& str) {
 				quote += ch;
 				pos += 2;
 			} else
-				pos++;
+				++pos;
 		}
 	}
 	str = *pos ? pos + 1 : pos;
 	return quote;
 }
 
-static inline int natCmpLetter(int a, int b) {
+static int natCmpLetter(int a, int b) {
 	if (a != b) {
 		int au = toupper(a), bu = toupper(b);
-		return au != bu ? ((au > bu) - (au < bu)) : ((a > b) - (a < b));
+		return au != bu ? au - bu : a - b;
 	}
 	return 0;
 }
 
-static inline int natCmpLeft(const char* a, const char* b) {
-	for (;; a++, b++) {
+static int natCmpLeft(const char* a, const char* b) {
+	for (;; ++a, ++b) {
 		bool nad = !isdigit(*a), nbd = !isdigit(*b);
 		if (nad && nbd)
 			return 0;
@@ -73,8 +73,8 @@ static inline int natCmpLeft(const char* a, const char* b) {
 	}
 }
 
-static inline int natCmpRight(const char* a, const char* b) {
-	for (int bias = 0;; a++, b++) {
+static int natCmpRight(const char* a, const char* b) {
+	for (int bias = 0;; ++a, ++b) {
 		bool nad = !isdigit(*a), nbd = !isdigit(*b);
 		if (nad && nbd)
 			return bias;
@@ -90,7 +90,7 @@ static inline int natCmpRight(const char* a, const char* b) {
 }
 
 int strnatcmp(const char* a, const char* b) {
-	for (;; a++, b++) {
+	for (;; ++a, ++b) {
 		char ca = *a, cb = *b;
 		for (; isSpace(ca); ca = *++a);
 		for (; isSpace(cb); cb = *++b);
@@ -126,17 +126,6 @@ vector<string> readTextLines(const string& text) {
 	return lines;
 }
 
-string readIniTitle(const string& line) {
-	sizet li = line.find_first_of('[');
-	sizet ri = line.find_last_of(']');
-	return li < ri && ri != string::npos ? trim(line.substr(li + 1, ri - li - 1)) : string();
-}
-
-pairStr readIniLine(const string& line) {
-	sizet id = line.find('=');
-	return id != string::npos ? pair(trim(line.substr(0, id)), trim(line.substr(id + 1))) : pairStr();
-}
-
 void createDirectories(const string& path) {
 	for (string::const_iterator end = std::find_if_not(path.begin(), path.end(), isDsep); end != path.end(); end = std::find_if_not(end, path.end(), isDsep)) {
 		end = std::find_if(end, path.end(), isDsep);
@@ -162,7 +151,7 @@ string wtos(const wchar* src) {
 	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
 	if (len <= 1)
 		return string();
-	len--;
+	--len;
 
 	string dst;
 	dst.resize(len);
@@ -180,11 +169,34 @@ wstring stow(const string& src) {
 	MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
 	return dst;
 }
+#endif
 
-void Arguments::setArgs(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
-	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
-		setArgs(argc, argv, wtos, flg, opt);
-		LocalFree(argv);
-	}
+// ARGUMENTS
+
+#ifdef _WIN32
+void Arguments::setArgs(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
+	setArgs(argc - 1, argv + 1, wtos, flg, opt);
 }
 #endif
+
+void Arguments::setArgs(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt) {
+	setArgs(argc - 1, argv + 1, [](const char* str) -> string { return str; }, flg, opt);
+}
+
+template <class C, class F>
+void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt) {
+	for (int i = 0; i < argc; ++i) {
+		if (char key; argv[i][0] == '-') {
+			for (int j = 1; (key = char(argv[i][j])); ++j) {
+				if (!argv[i][j+1] && i + 1 < argc && opt.count(key)) {
+					opts.emplace(key, conv(argv[++i]));
+					break;
+				}
+				if (flg.count(key))
+					flags.insert(key);
+			}
+		} else
+			vals.push_back(conv(argv[i] + (argv[i][0] == '\\' && (argv[i][1] == '-' || argv[i][1] == '\\'))));
+	}
+	vals.shrink_to_fit();
+}

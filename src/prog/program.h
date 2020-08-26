@@ -1,7 +1,11 @@
 #pragma once
 
 #include "game.h"
-#include "progs.h"
+#include "guiGen.h"
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#include <emscripten/fetch.h>
+#endif
 
 // handles the front-end
 class Program {
@@ -21,16 +25,21 @@ public:
 
 	Info info;
 	FrameTime ftimeMode;
-	string curConfig;
 private:
 	uptr<ProgState> state;
 	uptr<Netcp> netcp;
 	Game game;
+	GuiGen gui;
+#ifdef WEBUTILS
 	SDL_Thread* proc;
+#endif
 	string latestVersion;
+	string chatPrefix;
 	float ftimeSleep;
 
 	static constexpr float ftimeUpdateDelay = 0.5f;
+	static constexpr float transAnimTime = 0.5f;
+	static constexpr float pieceYDown = -2.f;
 
 public:
 	Program();
@@ -50,17 +59,19 @@ public:
 	void eventResetPort(Button* but);
 
 	// lobby menu
-	void eventOpenLobby(const uint8* data);
+	void eventOpenLobby(const uint8* data, const char* message = nullptr);
 	void eventHostRoomInput(Button* but = nullptr);
 	void eventHostRoomRequest(Button* but = nullptr);
 	void eventHostRoomReceive(const uint8* data);
 	void eventJoinRoomRequest(Button* but);
 	void eventJoinRoomReceive(const uint8* data);
-	void eventStartGame(Button* but = nullptr);
+	void eventSendMessage(Button* but);
+	void eventRecvMessage(const uint8* data);
 	void eventExitLobby(Button* but = nullptr);
 
 	// room menu
 	void eventOpenHostMenu(Button* but = nullptr);
+	void eventStartGame(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
 	void eventSwitchConfig(sizet id, const string& str);
 	void eventConfigDelete(Button* but = nullptr);
@@ -75,11 +86,13 @@ public:
 	void eventTileSliderUpdate(Button* but);
 	void eventMiddleSliderUpdate(Button* but);
 	void eventPieceSliderUpdate(Button* but);
+	void eventRecvConfig(const uint8* data);
+	void eventTransferHost(Button* but = nullptr);
+	void eventRecvHost(bool hasGuest);
 	void eventKickPlayer(Button* but = nullptr);
 	void eventPlayerHello(bool onJoin);
+	void eventRoomPlayerLeft();
 	void eventExitRoom(Button* but = nullptr);
-	void eventSendMessage(Button* but);
-	void eventRecvMessage(const uint8* data);
 	void eventChatOpen(Button* but = nullptr);
 	void eventChatClose(Button* but = nullptr);
 	void eventToggleChat(Button* but = nullptr);
@@ -88,7 +101,9 @@ public:
 	void eventFocusChatLabel(Button* but);
 
 	// game setup
-	void eventOpenSetup();
+	void eventStartUnique();
+	void eventStartUnique(const uint8* data);
+	void eventOpenSetup(string configName);
 	void eventOpenSetup(Button* but);
 	void eventIconSelect(Button* but);
 	void eventPlaceTile();
@@ -128,6 +143,7 @@ public:
 	void eventOpenSpawner(Button* but = nullptr);
 	void eventSpawnPiece(Button* but);
 	void eventSpawnPiece(BoardObject* obj, uint8 mBut = 0);
+	void eventClosePopupResetIcons(Button* but = nullptr);
 	void eventPieceStart(BoardObject* obj, uint8 mBut = 0);
 	void eventMove(BoardObject* obj, uint8 mBut);
 	void eventEngage(BoardObject* obj, uint8 mBut);
@@ -137,9 +153,7 @@ public:
 	void uninitGame();
 	void finishMatch(Record::Info win);
 	void eventPostFinishMatch(Button* but = nullptr);
-	void eventPostDisconnectGame(Button* but = nullptr);
-	void eventHostLeft(const uint8* data);
-	void eventPlayerLeft();
+	void eventGamePlayerLeft();
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
@@ -170,9 +184,17 @@ public:
 	void eventSetDeadzoneLE(Button* but);
 	void eventSetResolveFamily(sizet id, const string& str);
 	void eventSetFontRegular(Button* but);
+	void eventSetInvertWheel(Button* but);
+	void eventAddKeyBinding(Button* but);
+	void eventSetNewBinding(Button* but);
+	void eventDelKeyBinding(Button* but);
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
 	void eventOpenInfo(Button* but = nullptr);
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+	void eventOpenRules(Button* but = nullptr);
+	void eventOpenDocs(Button* but = nullptr);
+#endif
 
 	// other
 	void eventClosePopup(Button* but = nullptr);
@@ -186,14 +208,18 @@ public:
 	ProgState* getState();
 	Netcp* getNetcp();
 	Game* getGame();
+	GuiGen* getGui();
 	const string& getLatestVersion() const;
 
 private:
 	void sendRoomName(Com::Code code, const string& name);
+	void showLobbyError(const Com::Error& err);
+	void showGameError(const Com::Error& err);
 	void postConfigUpdate();
 	static void setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint16 oarea, uint16 narea, bool scale);
-	static void updateAmtSliders(Slider* sl, Com::Config& cfg, uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Com::Config::*counter)() const, string (*totstr)(const Com::Config&));
+	static void updateAmtSliders(Slider* sl, Config& cfg, uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Config::*counter)() const, string (*totstr)(const Config&));
 	void setSaveConfig(const string& name, bool save = true);
+	void openPopupSaveLoad(bool save);
 	void popuplateSetup(Setup& setup);
 	Piece* getUnplacedDragon();
 	void setShadowRes(uint16 newRes);
@@ -202,9 +228,14 @@ private:
 	template <class T> void setStandardSlider(LabelEdit* le, T& val);
 
 	void connect(bool client, const char* msg);
-	void setState(ProgState* newState);
-	BoardObject* pickBob(svec2& pos, Piece*& pce);
+	template <class T, class... A> void setState(A&&... args);
+	template <class T, class... A> void setStateWithChat(A&&... args);
+	void resetLayoutsWithChat();
+	tuple<BoardObject*, Piece*, svec2> pickBob();	// returns selected object, occupant, position
 
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+	void openDoc(const char* file) const;
+#endif
 #ifdef EMSCRIPTEN
 	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
 	static void fetchVersionFail(emscripten_fetch_t* fetch);
@@ -225,6 +256,10 @@ inline Netcp* Program::getNetcp() {
 
 inline Game* Program::getGame() {
 	return &game;
+}
+
+inline GuiGen* Program::getGui() {
+	return &gui;
 }
 
 inline const string& Program::getLatestVersion() const {

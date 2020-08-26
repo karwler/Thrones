@@ -101,7 +101,13 @@ static void testUniqueSort() {
 	assertRange(uniqueSort(vals), vector<int>({ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
 }
 
+static void testSortNames() {
+	umap<string, int> vals = { pair("a01", 0), pair("zb", 0), pair("a1", 0), pair("Zb", 0), pair("a10", 0) };
+	assertRange(sortNames(vals), vector<string>({ "a01", "a1", "a10", "Zb", "zb" }));
+}
+
 void testUtils() {
+	puts("Running Utils tests...");
 	testRect();
 	testDirection();
 	testBtom();
@@ -111,4 +117,5 @@ void testUtils() {
 	testDeltaSingle();
 	testSwapBits();
 	testUniqueSort();
+	testSortNames();
 }

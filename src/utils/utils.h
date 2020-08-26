@@ -1,36 +1,13 @@
 #pragma once
 
-// stuff that's used pretty much everywhere
+#include "text.h"
 #include "oven/oven.h"
-#include "server/server.h"
-#include <memory>
-#include <queue>
-
-// forward declarations and aliases
-class BoardObject;
-class Button;
-class Layout;
-class Program;
-class ProgMatch;
-class ProgState;
-class Scene;
-struct Settings;
-class ShaderGeometry;
-class ShaderGui;
-class WindowSys;
-
-template <class... T> using sptr = std::shared_ptr<T...>;
-template <class... T> using uptr = std::unique_ptr<T...>;
-
-using BCall = void (Program::*)(Button*);
-using GCall = void (Program::*)(BoardObject*, uint8);
-using CCall = void (Program::*)(sizet, const string&);
-
-// general wrappers
 
 enum class UserCode : int32 {
 	versionFetch
 };
+
+// general wrappers
 
 constexpr float PI = float(M_PI);
 
@@ -38,7 +15,7 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 #ifndef OPENGLES
 GLuint makeCubemap(GLsizei res, GLenum active);
 void loadCubemap(GLuint tex, GLsizei res, GLenum active);
-GLuint makeFramebufferNodraw(GLenum attach, GLuint tex);
+GLuint makeFramebufferDepth(GLuint tex);
 #endif
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
@@ -46,10 +23,12 @@ inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 }
 
 namespace glm {
+
 template <class T, qualifier Q>
 bool operator<(const vec<2, T, Q>& a, const vec<2, T, Q>& b) {
 	return a.y < b.y || (a.y == b.y && a.x < b.x);
 }
+
 }
 
 inline ivec2 mousePos() {
@@ -60,7 +39,7 @@ inline ivec2 mousePos() {
 
 inline void pushEvent(UserCode code, void* data1 = nullptr, void* data2 = nullptr) {
 	SDL_Event event;
-	event.user = { SDL_USEREVENT, 0, 0, int32(code), data1, data2 };
+	event.user = { SDL_USEREVENT, SDL_GetTicks(), 0, int32(code), data1, data2 };
 	SDL_PushEvent(&event);
 }
 
@@ -70,11 +49,28 @@ inline void glClearDepth(double d) {
 }
 #endif
 
+template <class T>
+void setPtrVec(vector<T*>& vec, vector<T*>&& set) {
+	for (T* it : vec)
+		delete it;
+	vec = std::move(set);
+}
+
 template <class T, class... A>
 vector<T>& uniqueSort(vector<T>& vec, A... sorter) {
 	std::sort(vec.begin(), vec.end(), sorter...);
 	vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
 	return vec;
+}
+
+template <class T>
+vector<string> sortNames(const umap<string, T>& vmap) {
+	vector<string> names(vmap.size());
+	vector<string>::iterator nit = names.begin();
+	for (auto& [name, vt] : vmap)
+		*nit++ = name;
+	std::sort(names.begin(), names.end(), strnatless);
+	return names;
 }
 
 // SDL_Rect wrapper
@@ -257,6 +253,7 @@ public:
 	Interactable& operator=(const Interactable&) = default;
 	Interactable& operator=(Interactable&&) = default;
 
+	virtual void drawTop() const {}
 	virtual void tick(float) {}
 	virtual void onClick(const ivec2&, uint8) {}
 	virtual void onHold(const ivec2&, uint8) {}
@@ -265,15 +262,21 @@ public:
 	virtual void onHover() {}
 	virtual void onUnhover() {}
 	virtual void onScroll(const ivec2&) {}
-	virtual void onKeypress(const SDL_KeyboardEvent&) {}
-	virtual void onKeyrelease(const SDL_KeyboardEvent&) {}
+	virtual void onKeyDown(const SDL_KeyboardEvent&) {}
+	virtual void onKeyUp(const SDL_KeyboardEvent&) {}
 	virtual void onText(const char*) {}
-	virtual void onJButton(uint8) {}
-	virtual void onJHat(uint8) {}
-	virtual void onJAxis(uint8) {}
-	virtual void onGButton(SDL_GameControllerButton) {}
-	virtual void onGAxis(SDL_GameControllerAxis) {}
+	virtual void onJButtonDown(uint8) {}
+	virtual void onJButtonUp(uint8) {}
+	virtual void onJHatDown(uint8, uint8) {}
+	virtual void onJHatUp(uint8, uint8) {}
+	virtual void onJAxisDown(uint8, bool) {}
+	virtual void onJAxisUp(uint8, bool) {}
+	virtual void onGButtonDown(SDL_GameControllerButton) {}
+	virtual void onGButtonUp(SDL_GameControllerButton) {}
+	virtual void onGAxisDown(SDL_GameControllerAxis, bool) {}
+	virtual void onGAxisUp(SDL_GameControllerAxis, bool) {}
 	virtual void onNavSelect(Direction dir);
+	virtual void onCancelCapture() {}	// should only be called by the Scene when resetting the capture
 };
 
 // geometry?
@@ -310,7 +313,7 @@ glm::vec<2, T, Q> swap(T x, T y, bool swap) {
 
 template <glm::length_t L, class T, glm::qualifier Q = glm::defaultp, std::enable_if_t<std::is_signed_v<T>, int> = 0>
 glm::vec<L, T, Q> deltaSingle(glm::vec<L, T, Q> v) {
-	for (glm::length_t i = 0; i < L; i++)
+	for (glm::length_t i = 0; i < L; ++i)
 		if (v[i])
 			v[i] = v[i] > T(0) ? T(1) : T(-1);
 	return v;

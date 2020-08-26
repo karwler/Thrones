@@ -7,8 +7,6 @@ Used libraries are libcurl, GLEW, GLM, SDL2, SDL2_image, SDL2_ttf and by extensi
 The CMakeLists.txt is written for CMake 3.10.2 with Clang, GCC or MSVC which need to support C++17.  
 
 CMake variables:  
-- ARCH : string = system default  
-  - can be set to 32 or 64 for Clang or GCC  
 - CMAKE_BUILD_TYPE : string = Release  
   - can be set to "Debug"  
 - EXTERNAL : bool = 0  
@@ -19,7 +17,9 @@ CMake variables:
   - use OpenGL ES  
 - SERVICE : bool = 0  
   - server program won't check keyboard input  
-- VER_CURL : string = 7.71.1  
+- WEBUTILS : bool = 1
+  - build the client with curl (only available for Linux and Windows)  
+- VER_CURL : string = 7.72.0  
   - libcurl version to download  
 - VER_GLEW : string = 2.1.0  
   - GLEW version to download  
@@ -58,7 +58,4 @@ The only supported compiler is MSVC. MinGW might also work, but hasn't been test
 
 
 ## TODO  
-- in emscripten there's an exception thrown somewhere  
-- buttons on android are too small  
-- windows server doesn't send rejections properly  
 - shadows aren't working properly on some systems  

@@ -1,13 +1,14 @@
 #pragma once
 
 #include "windowSys.h"
+#include "prog/program.h"
 
 // class that makes accessing stuff easier
 class World {
 public:
 	static inline Arguments args;
 private:
-	static inline WindowSys windowSys;		// the thing on top of which everything runs
+	static inline WindowSys windowSys;	// the thing on top of which everything runs
 
 public:
 	static WindowSys* window();
@@ -16,6 +17,7 @@ public:
 	static Game* game();
 	static InputSys* input();
 	static Netcp* netcp();
+	static GuiGen* pgui();
 	static Program* program();
 	static ProgState* state();
 	template <class T> static T* state();
@@ -25,14 +27,11 @@ public:
 #ifndef OPENGLES
 	static const ShaderDepth* depth();
 #endif
-	static const ShaderGui* gui();
+	static const ShaderGui* sgui();
 
-#ifdef _WIN32
-	static void setArgs(wchar* pCmdLine);
-#endif
-	static void setArgs(int argc, char** argv);
-
-	template <class F, class... A> static void prun(F func, A... argv);
+	template <class C> static void setArgs(int argc, const C* const* argv);
+	template <class F, class... A> static void prun(F func, A&&... argv);
+	template <class F, class... A> static void srun(F func, A&&... argv);
 	static void play(const string& name);
 };
 
@@ -58,6 +57,10 @@ inline InputSys* World::input() {
 
 inline Netcp* World::netcp() {
 	return windowSys.getProgram()->getNetcp();
+}
+
+inline GuiGen* World::pgui() {
+	return windowSys.getProgram()->getGui();
 }
 
 inline Program* World::program() {
@@ -91,27 +94,27 @@ inline const ShaderDepth* World::depth() {
 }
 #endif
 
-inline const ShaderGui* World::gui() {
+inline const ShaderGui* World::sgui() {
 	return windowSys.getGui();
 }
 
-#ifdef _WIN32
-inline void World::setArgs(wchar* pCmdLine) {
-	args.setArgs(pCmdLine, { Settings::argSetup }, { Settings::argExternal });
-}
+template <class C>
+void World::setArgs(int argc, const C* const* argv) {
+#ifdef NDEBUG
+	args.setArgs(argc, argv, {}, { Settings::argExternal });
+#else
+	args.setArgs(argc, argv, { Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
 #endif
-
-inline void World::setArgs(int argc, char** argv) {
-	args.setArgs(argc, argv, stos, { Settings::argSetup }, { Settings::argExternal });
 }
 
 template <class F, class... A>
-void World::prun(F func, A... argv) {
+void World::prun(F func, A&&... argv) {
 	if (func)
-		(program()->*func)(argv...);
+		(program()->*func)(std::forward<A>(argv)...);
 }
 
-inline void World::play(const string& name) {
-	if (windowSys.getAudio())
-		windowSys.getAudio()->play(name, windowSys.getSets()->avolume);
+template <class F, class... A>
+void World::srun(F func, A&&... argv) {
+	if (func)
+		(state()->*func)(std::forward<A>(argv)...);
 }

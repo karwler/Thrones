@@ -1,4 +1,7 @@
+#include "engine/inputSys.h"
+#include "engine/scene.h"
 #include "engine/world.h"
+#include "prog/progs.h"
 
 // SCROLL
 
@@ -33,7 +36,7 @@ void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
 void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Interactable* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
 	motion = vec2(0.f);	// get rid of scroll motion
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
-		World::scene()->capture = wgt;
+		World::scene()->setCapture(wgt);
 		if ((draggingSlider = barRect(listSize, pos, size, vert).contain(mPos))) {
 			if (int sp = sliderPos(listSize, pos, size, vert), ss = sliderSize(listSize, size, vert); outRange(mPos[vert], sp, sp + ss))	// if mouse outside of slider but inside bar
 				setSlider(mPos[vert] - ss / 2, listSize, pos, size, vert);
@@ -54,10 +57,13 @@ void ScrollBar::undrag(uint8 mBut, bool vert) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
 			motion = World::input()->getMouseMove() * swap(0, -1, !vert);
-		SDL_CaptureMouse(SDL_FALSE);
-		draggingSlider = false;
-		World::scene()->capture = nullptr;
+		World::scene()->setCapture(nullptr);	// should call cancelDrag through the captured widget
 	}
+}
+
+void ScrollBar::cancelDrag() {
+	SDL_CaptureMouse(SDL_FALSE);
+	draggingSlider = false;
 }
 
 void ScrollBar::scroll(const ivec2& wMov, const ivec2& listSize, const ivec2& size, bool vert) {
@@ -115,10 +121,10 @@ Quad::~Quad() {
 }
 
 void Quad::draw(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
-	glUniform4f(World::gui()->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
-	glUniform4fv(World::gui()->uvrc, 1, glm::value_ptr(uvrect));
-	glUniform1f(World::gui()->zloc, z);
-	glUniform4fv(World::gui()->color, 1, glm::value_ptr(color));
+	glUniform4f(World::sgui()->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
+	glUniform4fv(World::sgui()->uvrc, 1, glm::value_ptr(uvrect));
+	glUniform1f(World::sgui()->zloc, z);
+	glUniform4fv(World::sgui()->color, 1, glm::value_ptr(color));
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
 }
@@ -137,6 +143,11 @@ ivec2 Widget::position() const {
 
 ivec2 Widget::size() const {
 	return parent->wgtSize(index);
+}
+
+void Widget::setSize(const Size& size) {
+	relSize = size;
+	parent->onResize();
 }
 
 Rect Widget::frame() const {
@@ -211,6 +222,11 @@ void Button::drawTooltip() const {
 	Quad::draw(Rect(pos + tooltipMargin, tipTex.getRes()), vec4(1.f), tipTex, -1.f);
 }
 
+void Button::setTooltip(const Texture& tooltip) {
+	tipTex.close();
+	tipTex = tooltip;
+}
+
 // CHECK BOX
 
 CheckBox::CheckBox(Size size, bool checked, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
@@ -238,12 +254,13 @@ Rect CheckBox::boxRect() const {
 
 // SLIDER
 
-Slider::Slider(Size size, int value, int minimum, int maximum, int navStep, BCall finishCall, BCall updateCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
+Slider::Slider(Size size, int val, int minimum, int maximum, int navStep, BCall finishCall, BCall updateCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
 	Button(size, finishCall, updateCall, tooltip, dim, tex, clr),
-	val(value),
-	min(minimum),
-	max(maximum),
+	value(val),
+	vmin(minimum),
+	vmax(maximum),
 	keyStep(navStep),
+	oldVal(val),
 	diffSliderMouse(0)
 {}
 
@@ -256,10 +273,11 @@ void Slider::draw() const {
 
 void Slider::onHold(const ivec2& mPos, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || rcall)) {
-		World::scene()->capture = this;
-		if (int sp = sliderPos(); outRange(mPos.x, sp, sp + barSize))	// if mouse outside of slider
-			setSlider(mPos.x - barSize / 2);
+		World::scene()->setCapture(this);
+		if (int sp = sliderPos(), sw = size().y / sliderWidthFactor; outRange(mPos.x, sp, sp + sw))	// if mouse outside of slider
+			setSlider(mPos.x - sw / 2);
 		diffSliderMouse = mPos.x - sliderPos();	// get difference between mouse x and slider x
+		SDL_CaptureMouse(SDL_TRUE);
 	}
 }
 
@@ -269,125 +287,102 @@ void Slider::onDrag(const ivec2& mPos, const ivec2&) {
 
 void Slider::onUndrag(uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {	// if dragging slider stop dragging slider
-		World::scene()->capture = nullptr;
+		SDL_CaptureMouse(SDL_FALSE);
+		World::scene()->setCapture(nullptr, false);
 		World::prun(lcall, this);
 	}
 }
 
-void Slider::onKeypress(const SDL_KeyboardEvent& key) {
-	switch (key.keysym.scancode) {
-	case SDL_SCANCODE_UP: case SDL_SCANCODE_HOME:
-		val = min;
-		World::prun(rcall, this);
-		break;
-	case SDL_SCANCODE_DOWN: case SDL_SCANCODE_END:
-		val = max;
-		World::prun(rcall, this);
-		break;
-	case SDL_SCANCODE_LEFT:
-		if (val > min) {
-			setVal(val - keyStep);
-			World::prun(rcall, this);
-		}
-		break;
-	case SDL_SCANCODE_RIGHT:
-		if (val < max) {
-			setVal(val + keyStep);
-			World::prun(rcall, this);
-		}
-		break;
-	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
-		if (!key.repeat)
-			onUndrag(SDL_BUTTON_LEFT);
-	}
+void Slider::onKeyDown(const SDL_KeyboardEvent& key) {
+	World::input()->callBindings(key, [this](Binding::Type id) { onInput(id); });
 }
 
-void Slider::onJButton(uint8 but) {
-	switch (but) {
-	case InputSys::jbutA: case InputSys::jbutB:
+void Slider::onJButtonDown(uint8 but) {
+	World::input()->callBindings(JoystickButton(but), [this](Binding::Type id) { onInput(id); });
+}
+
+void Slider::onJHatDown(uint8 hat, uint8 val) {
+	World::input()->callBindings(AsgJoystick(hat, val), [this](Binding::Type id) { onInput(id); });
+}
+
+void Slider::onJAxisDown(uint8 axis, bool positive) {
+	World::input()->callBindings(AsgJoystick(JoystickAxis(axis), positive), [this](Binding::Type id) { onInput(id); });
+}
+
+void Slider::onGButtonDown(SDL_GameControllerButton but) {
+	World::input()->callBindings(but, [this](Binding::Type id) { onInput(id); });
+}
+
+void Slider::onGAxisDown(SDL_GameControllerAxis axis, bool positive) {
+	World::input()->callBindings(AsgGamepad(axis, positive), [this](Binding::Type id) { onInput(id); });
+}
+
+void Slider::onInput(Binding::Type bind) {
+	switch (bind) {
+	case Binding::Type::up: case Binding::Type::textHome:
+		value = vmin;
+		World::prun(rcall, this);
+		break;
+	case Binding::Type::down: case Binding::Type::textEnd:
+		value = vmax;
+		World::prun(rcall, this);
+		break;
+	case Binding::Type::left:
+		if (value > vmin) {
+			setVal(value - keyStep);
+			World::prun(rcall, this);
+		}
+		break;
+	case Binding::Type::right:
+		if (value < vmax) {
+			setVal(value + keyStep);
+			World::prun(rcall, this);
+		}
+		break;
+	case Binding::Type::confirm:
 		onUndrag(SDL_BUTTON_LEFT);
+		break;
+	case Binding::Type::cancel:
+		World::scene()->setCapture(nullptr);
 	}
 }
 
-void Slider::onJHat(uint8 hat) {
-	if (hat & SDL_HAT_LEFT) {
-		if (val > min) {
-			setVal(val - keyStep);
-			World::prun(rcall, this);
-		}
-	} else if (hat & SDL_HAT_UP) {
-		val = min;
-		World::prun(rcall, this);
-	}
-
-	if (hat & SDL_HAT_RIGHT) {
-		if (val < max) {
-			setVal(val + keyStep);
-			World::prun(rcall, this);
-		}
-	} else if (hat & SDL_HAT_DOWN) {
-		val = max;
-		World::prun(rcall, this);
-	}
+void Slider::onCancelCapture() {
+	value = oldVal;
+	SDL_CaptureMouse(SDL_FALSE);
+	World::prun(rcall, this);
 }
 
-void Slider::onGButton(SDL_GameControllerButton but) {
-	switch (but) {
-	case SDL_CONTROLLER_BUTTON_DPAD_UP:
-		val = min;
-		World::prun(rcall, this);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-		val = max;
-		World::prun(rcall, this);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
-		if (val > min) {
-			setVal(val - keyStep);
-			World::prun(rcall, this);
-		}
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
-		if (val < max) {
-			setVal(val + keyStep);
-			World::prun(rcall, this);
-		}
-		break;
-	case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_B:
-		onUndrag(SDL_BUTTON_LEFT);
-	}
-}
-
-void Slider::set(int value, int minimum, int maximum) {
-	min = minimum;
-	max = maximum;
-	setVal(value);
+void Slider::set(int val, int minimum, int maximum) {
+	vmin = minimum;
+	vmax = maximum;
+	setVal(val);
 }
 
 void Slider::setSlider(int xpos) {
-	setVal(min + int(std::round(float((xpos - position().x - size().y / 4) * (max - min)) / float(sliderLim()))));
+	setVal(vmin + int(std::round(float((xpos - position().x - size().y / barMarginFactor) * (vmax - vmin)) / float(sliderLim()))));
 	World::prun(rcall, this);
 }
 
 Rect Slider::barRect() const {
 	ivec2 siz = size();
 	int height = siz.y / 2;
-	return Rect(position() + siz.y / 4, ivec2(siz.x - height, height));
+	return Rect(position() + siz.y / barMarginFactor, ivec2(siz.x - height, height));
 }
 
 Rect Slider::sliderRect() const {
 	ivec2 pos = position(), siz = size();
-	return Rect(sliderPos(), pos.y, barSize, siz.y);
+	return Rect(sliderPos(), pos.y, siz.y / sliderWidthFactor, siz.y);
 }
 
 int Slider::sliderPos() const {
-	int lim = max - min;
-	return position().x + size().y / 4 + (lim ? (val - min) * sliderLim() / lim : sliderLim());
+	int lim = vmax - vmin;
+	return position().x + size().y / barMarginFactor + (lim ? (value - vmin) * sliderLim() / lim : sliderLim());
 }
 
 int Slider::sliderLim() const {
 	ivec2 siz = size();
-	return siz.x - siz.y / 2 - barSize;
+	return siz.x - siz.y / 2 - siz.y / sliderWidthFactor;
 }
 
 // LABEL
@@ -408,8 +403,10 @@ void Label::draw() const {
 	Rect frm = frame();
 	if (showBG)
 		Quad::draw(rbg, frm, color * dimFactor, bgTex);
-	if (textTex)
-		Quad::draw(textRect(), Rect(rbg.x + textMargin, rbg.y, rbg.w - textMargin * 2, rbg.h).intersect(frm), dimFactor, textTex);
+	if (textTex) {
+		int margin = rbg.h / textMarginFactor;
+		Quad::draw(textRect(), Rect(rbg.x + margin, rbg.y, rbg.w - margin * 2, rbg.h).intersect(frm), dimFactor, textTex);
+	}
 }
 
 void Label::onResize() {
@@ -443,7 +440,8 @@ ivec2 Label::textOfs(const ivec2& res, Alignment align, const ivec2& pos, const 
 }
 
 ivec2 Label::textPos() const {
-	return textOfs(textTex.getRes(), halign, position(), size(), textMargin);
+	ivec2 siz = size();
+	return textOfs(textTex.getRes(), halign, position(), siz, siz.y / textMarginFactor);
 }
 
 void Label::updateTextTex() {
@@ -453,7 +451,7 @@ void Label::updateTextTex() {
 
 // TEXT BOX
 
-TextBox::TextBox(Size size, int lineH, string lines, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, uint lineL, bool stickTop, bool bg, GLuint tex, const vec4& clr) :
+TextBox::TextBox(Size size, int lineH, string lines, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, uint16 lineL, bool stickTop, bool bg, GLuint tex, const vec4& clr) :
 	Label(size, std::move(lines), leftCall, rightCall, tooltip, dim, Alignment::left, bg, tex, clr),
 	alignTop(stickTop),
 	lineHeight(lineH),
@@ -469,7 +467,7 @@ void TextBox::draw() const {
 		Quad::draw(rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
 		Quad::draw(textRect(), rbg, dimFactor, textTex);
-	scroll.draw(rect(), textTex.getRes(), position(), size(), true);
+	scroll.draw(rbg, textTex.getRes(), rbg.pos(), rbg.size(), true);
 }
 
 void TextBox::tick(float dSec) {
@@ -497,17 +495,21 @@ void TextBox::onScroll(const ivec2& wMov) {
 	scroll.scroll(wMov, textTex.getRes(), size(), true);
 }
 
+void TextBox::onCancelCapture() {
+	scroll.cancelDrag();
+}
+
 bool TextBox::selectable() const {
 	return true;
 }
 
 ivec2 TextBox::textPos() const {
-	return textOfs(textTex.getRes(), halign, position(), size(), textMargin) - scroll.listPos;
+	return textOfs(textTex.getRes(), halign, position(), size(), lineHeight / textMarginFactor) - scroll.listPos;
 }
 
 void TextBox::updateTextTex() {
 	textTex.close();
-	textTex = World::fonts()->render(text.c_str(), lineHeight, uint(size().x - textMargin * 2 - ScrollBar::width));
+	textTex = World::fonts()->render(text.c_str(), lineHeight, uint(size().x - lineHeight / textMarginFactor * 2 - ScrollBar::width));
 }
 
 void TextBox::setText(string&& str) {
@@ -529,7 +531,7 @@ void TextBox::addLine(const string& line) {
 		sizet n = text.find('\n');
 		text.erase(0, n < text.length() ? n + 1 : n);
 	} else
-		lineCnt++;
+		++lineCnt;
 	if (!text.empty())
 		text += '\n';
 	text += line;
@@ -544,13 +546,13 @@ string TextBox::moveText() {
 }
 
 void TextBox::updateListPos() {
-	if (!alignTop)
-		scroll.listPos = scroll.listLim(textTex.getRes(), size());
+	if (ivec2 siz = size(); !alignTop && siz.x && siz.y)
+		scroll.listPos = scroll.listLim(textTex.getRes(), siz);
 }
 
 void TextBox::cutLines() {
-	if (lineCnt = uint(std::count(text.begin(), text.end(), '\n')); lineCnt > lineLim)
-		for (sizet i = 0; i < text.length(); i++)
+	if (lineCnt = std::count(text.begin(), text.end(), '\n'); lineCnt > lineLim)
+		for (sizet i = 0; i < text.length(); ++i)
 			if (text[i] == '\n' && --lineCnt <= lineLim) {
 				text.erase(0, i + 1);
 				break;
@@ -574,11 +576,12 @@ void Icon::draw() const {
 		Quad::draw(textRect(), frm, dimFactor, textTex);
 
 	if (selected) {
+		int olSize = std::min(rbg.w, rbg.h) / outlineFactor;
 		vec4 clr = colorLight * dimFactor;
-		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->texture(), -1.f);
-		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->texture(), -1.f);
-		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture(), -1.f);
-		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture(), -1.f);
+		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->texture());
+		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->texture());
+		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture());
+		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture());
 	}
 }
 
@@ -601,96 +604,130 @@ ComboBox::ComboBox(Size size, string curOpt, vector<string> opts, CCall optCall,
 
 void ComboBox::onClick(const ivec2& mPos, uint8 mBut) {
 	if (Button::onClick(mPos, mBut); mBut == SDL_BUTTON_LEFT && ocall)
-		World::scene()->setContext(new Context(mPos, options, ocall, position(), World::state()->lineHeight, this, size().x));
+		World::scene()->setContext(std::make_unique<Context>(mPos, options, ocall, position(), World::pgui()->getLineHeight(), this, size().x));
 }
 
 bool ComboBox::selectable() const {
 	return true;
 }
 
-void ComboBox::setText(const string& str) {
-	setCurOpt(uint(std::find(options.begin(), options.end(), str) - options.begin()));
+void ComboBox::setText(string&& str) {
+	setText(str);
 }
 
-void ComboBox::set(vector<string>&& opts, uint id) {
+void ComboBox::setText(const string& str) {
+	setCurOpt(std::find(options.begin(), options.end(), str) - options.begin());
+}
+
+void ComboBox::set(vector<string>&& opts, sizet id) {
 	options = std::move(opts);
 	setCurOpt(id);
 }
 
+void ComboBox::set(vector<string>&& opts, const string& name) {
+	options = std::move(opts);
+	setText(name);
+}
+
 // LABEL EDIT
 
-LabelEdit::LabelEdit(Size size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, const Texture& tooltip, float dim, uint lim, bool isChat, Label::Alignment align, bool bg, GLuint tex, const vec4& clr) :
+LabelEdit::LabelEdit(Size size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, const Texture& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, GLuint tex, const vec4& clr) :
 	Label(size, std::move(line), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
+	cpos(0),
 	oldText(text),
 	ecall(retCall),
 	ccall(cancCall),
+	chatMode(isChat),
 	limit(lim),
-	cpos(0),
-	textOfs(0),
-	chatMode(isChat)
+	textOfs(0)
 {
 	cutText();
 }
 
 void LabelEdit::drawTop() const {
-	ivec2 ps = position();
-	Quad::draw(Rect(caretPos() + ps.x + textMargin, ps.y, caretWidth, size().y), frame(), colorLight, World::scene()->texture(), -1.f);
+	ivec2 ps = position(), sz = size();
+	Quad::draw(Rect(caretPos() + ps.x + sz.y / textMarginFactor, ps.y, caretWidth, sz.y), frame(), colorLight, World::scene()->texture());
 }
 
 void LabelEdit::onClick(const ivec2&, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || ecall)) {
-		setCPos(uint(text.length()));
-		World::window()->setTextInput(this);
+		setCPos(uint16(text.length()));
+		World::window()->setTextCapture(true);
+		World::scene()->setCapture(this);
 	} else if (mBut == SDL_BUTTON_RIGHT)
 		World::prun(rcall, this);
 }
 
-void LabelEdit::onKeypress(const SDL_KeyboardEvent& key) {
-	switch (key.keysym.scancode) {
-	case SDL_SCANCODE_UP:	// move caret to start
+void LabelEdit::onKeyDown(const SDL_KeyboardEvent& key) {
+	World::input()->callBindings(key, [this, key](Binding::Type id) { onInput(id, key.keysym.mod, false); });
+}
+
+void LabelEdit::onJButtonDown(uint8 but) {
+	World::input()->callBindings(JoystickButton(but), [this](Binding::Type id) { onInput(id); });
+}
+
+void LabelEdit::onJHatDown(uint8 hat, uint8 val) {
+	World::input()->callBindings(AsgJoystick(hat, val), [this](Binding::Type id) { onInput(id); });
+}
+
+void LabelEdit::onJAxisDown(uint8 axis, bool positive) {
+	World::input()->callBindings(AsgJoystick(JoystickAxis(axis), positive), [this](Binding::Type id) { onInput(id); });
+}
+
+void LabelEdit::onGButtonDown(SDL_GameControllerButton but) {
+	World::input()->callBindings(but, [this](Binding::Type id) { onInput(id); });
+}
+
+void LabelEdit::onGAxisDown(SDL_GameControllerAxis axis, bool positive) {
+	World::input()->callBindings(AsgGamepad(axis, positive), [this](Binding::Type id) { onInput(id); });
+}
+
+void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
+	switch (bind) {
+	case Binding::Type::up:
 		setCPos(0);
 		break;
-	case SDL_SCANCODE_DOWN:	// move caret to end
-		setCPos(uint(text.length()));
+	case Binding::Type::down:
+		setCPos(uint16(text.length()));
 		break;
-	case SDL_SCANCODE_LEFT:	// move caret left
-		if (kmodAlt(key.keysym.mod))	// if holding alt skip word
+	case Binding::Type::left:
+		if (kmodAlt(mod))	// if holding alt skip word
 			setCPos(findWordStart());
-		else if (kmodCtrl(key.keysym.mod))	// if holding ctrl move to beginning
+		else if (kmodCtrl(mod))	// if holding ctrl move to beginning
 			setCPos(0);
 		else if (cpos)	// otherwise go left by one
 			setCPos(jumpCharB(cpos));
 		break;
-	case SDL_SCANCODE_RIGHT:	// move caret right
-		if (kmodAlt(key.keysym.mod))	// if holding alt skip word
+	case Binding::Type::right:
+		if (kmodAlt(mod))	// if holding alt skip word
 			setCPos(findWordEnd());
-		else if (kmodCtrl(key.keysym.mod))	// if holding ctrl go to end
-			setCPos(uint(text.length()));
+		else if (kmodCtrl(mod))	// if holding ctrl go to end
+			setCPos(uint16(text.length()));
 		else if (cpos < text.length())	// otherwise go right by one
 			setCPos(jumpCharF(cpos));
 		break;
-	case SDL_SCANCODE_BACKSPACE:	// delete left
-		if (kmodAlt(key.keysym.mod)) {	// if holding alt delete left word
-			uint id = findWordStart();
+	case Binding::Type::textBackspace:
+		if (kmodAlt(mod)) {	// if holding alt delete left word
+			uint16 id = findWordStart();
 			text.erase(id, cpos - id);
 			updateTextTex();
 			setCPos(id);
-		} else if (kmodCtrl(key.keysym.mod)) {	// if holding ctrl delete line to left
+		} else if (kmodCtrl(mod)) {	// if holding ctrl delete line to left
 			text.erase(0, cpos);
 			updateTextTex();
 			setCPos(0);
 		} else if (cpos) {	// otherwise delete left character
-			uint id = jumpCharB(cpos);
+			uint16 id = jumpCharB(cpos);
 			text.erase(id, cpos - id);
 			updateTextTex();
 			setCPos(id);
 		}
 		break;
-	case SDL_SCANCODE_DELETE:	// delete right character
-		if (kmodAlt(key.keysym.mod)) {	// if holding alt delete right word
+	case Binding::Type::textDelete:
+		if (kmodAlt(mod)) {	// if holding alt delete right word
 			text.erase(cpos, findWordEnd() - cpos);
 			updateTextTex();
-		} else if (kmodCtrl(key.keysym.mod)) {	// if holding ctrl delete line to right
+		} else if (kmodCtrl(mod)) {	// if holding ctrl delete line to right
 			text.erase(cpos, text.length() - cpos);
 			updateTextTex();
 		} else if (cpos < text.length()) {	// otherwise delete right character
@@ -698,96 +735,44 @@ void LabelEdit::onKeypress(const SDL_KeyboardEvent& key) {
 			updateTextTex();
 		}
 		break;
-	case SDL_SCANCODE_HOME:	// move caret to beginning
-		if (!key.repeat)
-			setCPos(0);
+	case Binding::Type::textHome:
+		setCPos(0);
 		break;
-	case SDL_SCANCODE_END:	// move caret to end
-		if (!key.repeat)
-			setCPos(uint(text.length()));
+	case Binding::Type::textEnd:
+		setCPos(uint16(text.length()));
 		break;
-	case SDL_SCANCODE_V:	// paste text
-		if (kmodCtrl(key.keysym.mod))
+	case Binding::Type::textPaste:
+		if (kmodCtrl(mod) || joypad)
 			if (char* str = SDL_GetClipboardText()) {
 				onText(str);
 				SDL_free(str);
 			}
 		break;
-	case SDL_SCANCODE_C:	// copy text
-		if (!key.repeat && kmodCtrl(key.keysym.mod))
+	case Binding::Type::textCopy:
+		if (kmodCtrl(mod) || joypad)
 			SDL_SetClipboardText(text.c_str());
 		break;
-	case SDL_SCANCODE_X:	// cut text
-		if (!key.repeat && kmodCtrl(key.keysym.mod)) {
+	case Binding::Type::textCut:
+		if (kmodCtrl(mod) || joypad) {
 			SDL_SetClipboardText(text.c_str());
-			setText(string());
+			text.clear();
+			onTextReset();
 		}
 		break;
-	case SDL_SCANCODE_Z:	// set text to old text
-		if (!key.repeat && kmodCtrl(key.keysym.mod))
-			setText(std::move(oldText));
-		break;
-	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
-		if (!key.repeat) {
-			confirm();
-			World::prun(ecall, this);
+	case Binding::Type::textRevert:
+		if (kmodCtrl(mod) || joypad) {
+			text = oldText;
+			onTextReset();
 		}
 		break;
-	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
-		if (!key.repeat) {
-			cancel();
-			World::prun(ccall, this);
-		}
-	}
-}
-
-void LabelEdit::onJButton(uint8 but) {
-	switch (but) {
-	case InputSys::jbutA:
+	case Binding::Type::confirm:
 		confirm();
 		World::prun(ecall, this);
 		break;
-	case InputSys::jbutB:
-		cancel();
-		World::prun(ccall, this);
-	}
-}
-
-void LabelEdit::onJHat(uint8 hat) {
-	if (hat & SDL_HAT_LEFT) {
-		if (cpos)
-			setCPos(jumpCharB(cpos));
-	} else if (hat & SDL_HAT_UP)
-		setCPos(0);
-
-	if (hat & SDL_HAT_RIGHT) {
-		if (cpos < text.length())
-			setCPos(jumpCharF(cpos));
-	} else if (hat & SDL_HAT_DOWN)
-		setCPos(uint(text.length()));
-}
-
-void LabelEdit::onGButton(SDL_GameControllerButton but) {
-	switch (but) {
-	case SDL_CONTROLLER_BUTTON_DPAD_UP:
-		setCPos(0);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-		setCPos(uint(text.length()));
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
-		if (cpos)
-			setCPos(jumpCharB(cpos));
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
-		if (cpos < text.length())
-			setCPos(jumpCharF(cpos));
-		break;
-	case SDL_CONTROLLER_BUTTON_A:
-		confirm();
-		World::prun(ecall, this);
-		break;
-	case SDL_CONTROLLER_BUTTON_B:
+	case Binding::Type::chat:
+		if (!chatMode)
+			break;
+	case Binding::Type::cancel:
 		cancel();
 		World::prun(ccall, this);
 	}
@@ -799,25 +784,34 @@ void LabelEdit::onText(const char* str) {
 		slen = cutLength(str, avail);
 	text.insert(cpos, str, slen);
 	updateTextTex();
-	setCPos(cpos + uint(slen));
+	setCPos(cpos + uint16(slen));
+}
+
+void LabelEdit::onCancelCapture() {
+	if (!chatMode) {
+		text = oldText;
+		updateTextTex();
+	}
+	textOfs = 0;
+	World::window()->setTextCapture(false);
 }
 
 void LabelEdit::setText(string&& str) {
-	oldText = std::move(text);
+	oldText = str;
 	text = std::move(str);
 	cutText();
 	onTextReset();
 }
 
 void LabelEdit::setText(const string& str) {
-	oldText = std::move(text);
+	oldText = str;
 	text = str.length() <= limit ? str : str.substr(0, cutLength(str.c_str(), limit));
 	onTextReset();
 }
 
 void LabelEdit::onTextReset() {
 	updateTextTex();
-	cpos = uint(text.length());
+	cpos = uint16(text.length());
 	textOfs = 0;
 }
 
@@ -826,7 +820,7 @@ sizet LabelEdit::cutLength(const char* str, sizet lim) {
 	if (str[i] >= 0)
 		return lim;
 
-	for (; i && str[i-1] < 0; i--);	// cut possible u8 char
+	for (; i && str[i-1] < 0; --i);	// cut possible u8 char
 	sizet end = i + u8clen(str[i]);
 	return end <= lim ? end : i;
 }
@@ -836,12 +830,15 @@ void LabelEdit::cutText() {
 		text.erase(cutLength(text.c_str(), limit));
 }
 
-void LabelEdit::setCPos(uint cp) {
+void LabelEdit::setCPos(uint16 cp) {
 	cpos = cp;
 	if (int cl = caretPos(); cl < 0)
 		textOfs -= cl;
-	else if (int ce = cl + caretWidth, sx = size().x - textMargin * 2; ce > sx)
-		textOfs -= ce - sx;
+	else {
+		ivec2 siz = size();
+		if (int ce = cl + caretWidth, sx = siz.x - siz.y / textMarginFactor * 2; ce > sx)
+			textOfs -= ce - sx;
+	}
 }
 
 ivec2 LabelEdit::textPos() const {
@@ -853,52 +850,153 @@ int LabelEdit::caretPos() const {
 }
 
 void LabelEdit::confirm() {
-	if (chatMode)
-		setText(string());
-	else
-		World::window()->setTextInput();
+	oldText = text;
+	if (chatMode) {
+		text.clear();
+		onTextReset();
+	} else {
+		World::window()->setTextCapture(false);
+		World::scene()->setCapture(nullptr, false);
+	}
 	textOfs = 0;
 	World::prun(lcall, this);
 }
 
 void LabelEdit::cancel() {
-	if (!chatMode) {
-		text = oldText;
-		updateTextTex();
-	}
-	textOfs = 0;
-	World::window()->setTextInput();
+	World::scene()->setCapture(nullptr);
 }
 
-uint LabelEdit::jumpCharB(uint i) {
+uint16 LabelEdit::jumpCharB(uint16 i) {
 	while (--i && (text[i] & 0xC0) == 0x80);
 	return i;
 }
 
-uint LabelEdit::jumpCharF(uint i) {
+uint16 LabelEdit::jumpCharF(uint16 i) {
 	while (++i < text.length() && (text[i] & 0xC0) == 0x80);
 	return i;
 }
 
-uint LabelEdit::findWordStart() {
-	uint i = cpos;
+uint16 LabelEdit::findWordStart() {
+	uint16 i = cpos;
 	if (i == text.length() && i)
-		i--;
+		--i;
 	else if (notSpace(text[i]) && i)
-		if (uint n = jumpCharB(i); isSpace(text[n]))	// skip if first letter of word
+		if (uint16 n = jumpCharB(i); isSpace(text[n]))	// skip if first letter of word
 			i = n;
-	for (; isSpace(text[i]) && i; i--);		// skip first spaces
-	for (; notSpace(text[i]) && i; i--);	// skip word
+	for (; isSpace(text[i]) && i; --i);		// skip first spaces
+	for (; notSpace(text[i]) && i; --i);	// skip word
 	return i ? i + 1 : i;			// correct position if necessary
 }
 
-uint LabelEdit::findWordEnd() {
-	uint i = cpos;
-	for (; isSpace(text[i]) && i < text.length(); i++);		// skip first spaces
-	for (; notSpace(text[i]) && i < text.length(); i++);	// skip word
+uint16 LabelEdit::findWordEnd() {
+	uint16 i = cpos;
+	for (; isSpace(text[i]) && i < text.length(); ++i);		// skip first spaces
+	for (; notSpace(text[i]) && i < text.length(); ++i);	// skip word
 	return i;
 }
 
 bool LabelEdit::selectable() const {
 	return true;
+}
+
+// KEY GETTER
+
+KeyGetter::KeyGetter(Size size, Accept atype, Binding::Type binding, sizet keyId, BCall exitCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Label(size, bindingText(atype, binding, keyId), exitCall, rightCall, tooltip, dim, align, bg, tex, clr),
+	accept(atype),
+	bind(binding),
+	kid(keyId)
+{}
+
+void KeyGetter::onClick(const ivec2&, uint8 mBut) {
+	if (mBut == SDL_BUTTON_LEFT) {
+		World::scene()->setCapture(this);
+		setText("...");
+	} else if (mBut == SDL_BUTTON_RIGHT) {
+		World::scene()->setCapture(nullptr);
+		World::prun(rcall, this);
+	}
+}
+
+void KeyGetter::onKeyDown(const SDL_KeyboardEvent& key) {
+	setBinding(Accept::keyboard, key.keysym.scancode);
+}
+
+void KeyGetter::onJButtonDown(uint8 but) {
+	setBinding(Accept::joystick, JoystickButton(but));
+}
+
+void KeyGetter::onJHatDown(uint8 hat, uint8 val) {
+	if (val != SDL_HAT_UP && val != SDL_HAT_RIGHT && val != SDL_HAT_DOWN && val != SDL_HAT_LEFT) {
+		if (val & SDL_HAT_RIGHT)
+			val = SDL_HAT_RIGHT;
+		else if (val & SDL_HAT_LEFT)
+			val = SDL_HAT_LEFT;
+	}
+	setBinding(Accept::joystick, AsgJoystick(hat, val));
+}
+
+void KeyGetter::onJAxisDown(uint8 axis, bool positive) {
+	setBinding(Accept::joystick, AsgJoystick(JoystickAxis(axis), positive));
+}
+
+void KeyGetter::onGButtonDown(SDL_GameControllerButton but) {
+	setBinding(Accept::gamepad, but);
+}
+
+void KeyGetter::onGAxisDown(SDL_GameControllerAxis axis, bool positive) {
+	setBinding(Accept::gamepad, AsgGamepad(axis, positive));
+}
+
+void KeyGetter::onCancelCapture() {
+	setText(bindingText(accept, bind, kid));
+}
+
+bool KeyGetter::selectable() const {
+	return true;
+}
+
+template <class T>
+void KeyGetter::setBinding(Accept expect, T key) {
+	if (accept != expect && accept != Accept::any)
+		return;
+
+	if (kid != SIZE_MAX) {	// edit an existing binding from the list
+		World::input()->setBinding(bind, kid, key);
+		World::scene()->setCapture(nullptr);
+		World::prun(lcall, this);
+	} else if (kid = World::input()->addBinding(bind, key); kid != SIZE_MAX) {	// accept should be any and it shouldn't be in the list yet
+		accept = expect;
+		World::scene()->setCapture(nullptr, false);
+		World::prun(lcall, this);
+	}
+}
+
+string KeyGetter::bindingText(Accept accept, Binding::Type bind, sizet kid) {
+	switch (accept) {
+	case Accept::keyboard:
+		return SDL_GetScancodeName(World::input()->getBinding(bind).keys[kid]);
+	case Accept::joystick:
+		switch (AsgJoystick aj = World::input()->getBinding(bind).joys[kid]; aj.getAsg()) {
+		case AsgJoystick::button:
+			return "Button " + toStr(aj.getJct());
+		case AsgJoystick::hat:
+			return "Hat " + toStr(aj.getJct()) + ' ' + hatNames.at(aj.getHvl());
+		case AsgJoystick::axisPos:
+			return "Axis +" + toStr(aj.getJct());
+		case AsgJoystick::axisNeg:
+			return "Axis -" + toStr(aj.getJct());
+		}
+		break;
+	case Accept::gamepad:
+		switch (AsgGamepad ag = World::input()->getBinding(bind).gpds[kid]; ag.getAsg()) {
+		case AsgGamepad::button:
+			return gbuttonNames[uint8(ag.getButton())];
+		case AsgGamepad::axisPos:
+			return '+' + string(gaxisNames[uint8(ag.getAxis())]);
+		case AsgGamepad::axisNeg:
+			return '-' + string(gaxisNames[uint8(ag.getAxis())]);
+		}
+	}
+	return string();
 }

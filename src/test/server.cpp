@@ -1,4 +1,5 @@
 #include "tests.h"
+#include "server/server.h"
 
 static void testWsKey() {
 	assertEqual(Com::encodeBase64(Com::digestSha1("dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11")), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
@@ -74,6 +75,7 @@ static void testBufferWrite() {
 }
 
 void testServer() {
+	puts("Running Server tests...");
 	testWsKey();
 	testReadCom();
 	testWriteCom();

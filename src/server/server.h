@@ -1,22 +1,48 @@
 #pragma once
 
-#include "utils/text.h"
+#include "utils/alias.h"
+#include <stdexcept>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
-#ifdef _WIN64
-using nsint = uint64;	// should be the same as SOCKET
-#elif defined(_WIN32)
-using nsint = uint;
+#ifdef _WIN32
+#define poll WSAPoll
+
+using nsint = SOCKET;
+using sendlen = int;
+using socklent = int;
 #else
 using nsint = int;
+using sendlen = ssize_t;
+using socklent = socklen_t;
 #endif
-struct addrinfo;
+
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET -1
+#endif
+
+#ifndef POLLRDHUP	// ignore if not present
+#define POLLRDHUP 0
+#endif
+
+constexpr short polleventsDisconnect = POLLERR | POLLHUP | POLLNVAL | POLLRDHUP;
 
 namespace Com {
 
-constexpr char commonVersion[] = "0.5.1";
+constexpr char commonVersion[] = "0.5.2";
 constexpr char defaultPort[] = "39741";
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
-constexpr uint8 roomNameLimit = 64;
+constexpr uint8 roomNameLimit = 63;
 constexpr uint wsHeadMin = 2;
 constexpr uint wsHeadMax = 2 + sizeof(uint64) + sizeof(uint32);
 
@@ -34,177 +60,76 @@ constexpr array<const char*, 1> compatibleVersions = {
 	commonVersion
 };
 
-enum class Tile : uint8 {
-	plains,
-	forest,
-	mountain,
-	water,
-	fortress,
-	empty
-};
-constexpr uint8 tileLim = uint8(Tile::fortress);
-
-constexpr array<const char*, uint8(Tile::empty)+1> tileNames = {
-	"plains",
-	"forest",
-	"mountain",
-	"water",
-	"fortress",
-	""
-};
-
-enum class Piece : uint8 {
-	rangers,
-	spearmen,
-	crossbowmen,
-	catapult,
-	trebuchet,
-	lancer,
-	warhorse,
-	elephant,
-	dragon,
-	throne
-};
-constexpr uint8 pieceMax = uint8(Piece::throne) + 1;
-
-constexpr array<const char*, pieceMax> pieceNames = {
-	"rangers",
-	"spearmen",
-	"crossbowmen",
-	"catapult",
-	"trebuchet",
-	"lancer",
-	"warhorse",
-	"elephant",
-	"dragon",
-	"throne"
-};
-
-enum class Family : uint8 {
-	any,
-	v4,
-	v6
-};
-
-static constexpr array<const char*, uint8(Family::v6)+1> familyNames = {
-	"any",
-	"IPv4",
-	"IPv6"
-};
-
 enum class Code : uint8 {
 	version,	// version info
 	full,		// server full
-	rlist,		// list all rooms (amount + flags + names)
+	rlist,		// list all rooms (pid + amount + flags + names)
 	rnew,		// create new room (room name)
-	cnrnew,		// confirm new room (message)
+	cnrnew,		// confirm new room (CncrnewCode)
 	rerase,		// delete a room (name info)
 	ropen,		// info whether a room can be accessed (not full + name)
+	glmessage,	// global message
 	join,		// player joins room (room name)
-	leave,		// guest leaves room
-	hgone,		// host left room (room list)
-	kick,		// kick player
+	leave,		// player leaves room
+	thost,		// transfer host
+	kick,		// kick player (if received, data is the same as with rlist)
 	hello,		// player has joined
-	cnjoin,		// confirm join	(yes/no + config)
+	cnjoin,		// confirm join	(yes/no + config if yes)
 	config,		// player sending game config
-	start,		// start setup phase (has first turn info)
+	start,		// start setup phase (first turn info + config)
 	setup,		// is the last ready signal (tile + piece amounts + piece info)
 	move,		// piece move (piece + position info)
 	kill,		// piece die (piece info)
 	breach,		// fortress state change (tile + breached or not info)
 	tile,		// tile type change (tile + type)
 	record,		// turn record data (info + last actor + protected pieces)
-	message,	// text
+	message,	// local message
 	wsconn = 'G'	// first letter of websocket handshake
 };
 
-// variable game properties (shall never be changed after loading)
-struct Config {
-	enum Option : uint16 {
-		victoryPoints = 0x1,
-		victoryPointsEquidistant = 0x2,
-		ports = 0x4,
-		rowBalancing = 0x8,
-		homefront = 0x10,
-		setPieceBattle = 0x20,
-		favorTotal = 0x40,
-		dragonLate = 0x80,
-		dragonStraight = 0x100
-	};
-
-	svec2 homeSize;		// neither width nor height shall exceed UINT8_MAX
-	uint8 battlePass;
-	Option opts;
-	uint16 victoryPointsNum;
-	uint16 setPieceBattleNum;
-	uint16 favorLimit;
-	array<uint16, tileLim> tileAmounts;
-	array<uint16, tileLim> middleAmounts;
-	array<uint16, pieceMax> pieceAmounts;
-	uint16 winThrone, winFortress;
-	uint16 capturers;	// bitmask of piece types that can capture fortresses
-
-	static constexpr char defaultName[] = "default";
-	static constexpr uint16 dataSize = sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceMax * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers);
-	static constexpr float boardWidth = 10.f;
-	static constexpr uint8 randomLimit = 100;
-	static constexpr svec2 minHomeSize = { 5, 2 };
-	static constexpr svec2 maxHomeSize = { 101, 50 };
-	static constexpr uint16 maxFavorMax = UINT16_MAX / 4;
-
-	Config();
-
-	Config& checkValues();
-	void toComData(uint8* data) const;
-	void fromComData(const uint8* data);
-	uint16 countTiles() const;
-	uint16 countMiddles() const;
-	uint16 countPieces() const;
-	uint16 countFreeTiles() const;
-	uint16 countFreeMiddles() const;
-	uint16 countFreePieces() const;
-
-	static uint16 floorAmounts(uint16 total, uint16* amts, uint16 limit, uint8 ei, uint16 floor = 0);
-	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
+enum class CncrnewCode : uint8 {
+	ok,
+	full,
+	taken,
+	length
 };
 
-inline uint16 Config::countTiles() const {
-	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), uint16(0));
-}
-
-inline uint16 Config::countMiddles() const {
-	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), uint16(0));
-}
-
-inline uint16 Config::countPieces() const {
-	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), uint16(0));
-}
-
-inline uint16 Config::countFreeTiles() const {
-	return homeSize.x * homeSize.y - countTiles();
-}
-
-inline uint16 Config::countFreeMiddles() const {
-	return homeSize.x / 2 - countMiddles();
-}
-
-inline uint16 Config::countFreePieces() const {
-	return homeSize.x * homeSize.y - countPieces();
-}
+const umap<Code, uint16> codeSizes = {
+	pair(Code::full, dataHeadSize),
+	pair(Code::cnrnew, dataHeadSize + uint16(sizeof(uint8))),
+	pair(Code::leave, dataHeadSize),
+	pair(Code::thost, dataHeadSize),
+	pair(Code::kick, dataHeadSize),
+	pair(Code::hello, dataHeadSize),
+	pair(Code::move, dataHeadSize + uint16(sizeof(uint16) * 2)),
+	pair(Code::kill, dataHeadSize + uint16(sizeof(uint16))),
+	pair(Code::breach, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8))),
+	pair(Code::tile, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8)))
+};
 
 // socket functions
-nsint bindSocket(const char* port, Family family);
+addrinfo* resolveAddress(const char* addr, const char* port, int family);
+nsint createSocket(int family, int reuseaddr, int nodelay = 1);
+nsint bindSocket(const char* port, int family);
 nsint acceptSocket(nsint fd);
-bool pollSocket(nsint fd);
+int noblockSocket(nsint fd, bool noblock);
 void closeSocket(nsint& fd);
 
+inline void closeSocketV(nsint fd) {
+#ifdef _WIN32
+	closesocket(fd);
+#else
+	close(fd);
+#endif
+}
+
 // universal functions
-string digestSha1(string str);
-string encodeBase64(const string& str);
 void sendWaitClose(nsint socket);
 void sendVersion(nsint socket, bool webs);
 void sendRejection(nsint server);
 void sendData(nsint socket, const uint8* data, uint len, bool webs);
+string digestSha1(string str);
+string encodeBase64(const string& str);
 
 inline uint16 read16(const void* data) {
 	return SDL_SwapBE16(readMem<uint16>(data));
@@ -234,49 +159,14 @@ inline string readText(const uint8* data) {
 	return string(reinterpret_cast<const char*>(data + dataHeadSize), read16(data + 1) - dataHeadSize);
 }
 
-inline string readName(const uint8* data) {
-	return string(reinterpret_cast<const char*>(data + 1), data[0]);
+inline string readName(const uint8* data, uint8 nmask = 0xFF) {
+	return string(reinterpret_cast<const char*>(data + 1), data[0] & nmask);
 }
 
-class Connector {
-private:
-	addrinfo* inf;
-	addrinfo* cur;
-	nsint fd;
-
-public:
-	Connector(const char* addr, const char* port, Family family);
-	~Connector();
-
-	nsint pollReady();
-private:
-	void nextAddr(addrinfo* nxt);
-};
-
-const umap<Code, uint16> codeSizes = {
-	pair(Code::full, dataHeadSize),
-	pair(Code::cnrnew, dataHeadSize + uint16(sizeof(uint8))),
-	pair(Code::leave, dataHeadSize),
-	pair(Code::kick, dataHeadSize),
-	pair(Code::hello, dataHeadSize),
-	pair(Code::config, dataHeadSize + Config::dataSize),
-	pair(Code::start, dataHeadSize + uint16(sizeof(uint8)) + Config::dataSize),
-	pair(Code::move, dataHeadSize + uint16(sizeof(uint16) * 2)),
-	pair(Code::kill, dataHeadSize + uint16(sizeof(uint16))),
-	pair(Code::breach, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8))),
-	pair(Code::tile, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8)))
-};
-
 // network error
-struct Error {
-	const string message;
-
-	Error(string&& msg);
+struct Error : std::runtime_error {
+	using std::runtime_error::runtime_error;
 };
-
-inline Error::Error(string&& msg) :
-	message(std::move(msg))
-{}
 
 // for sending/receiving network data (mustn't be used for both simultaneously)
 class Buffer {
@@ -292,17 +182,12 @@ public:
 private:
 	static constexpr uint sizeStep = 512;
 
-	uint8* data;
+	uptr<uint8[]> data;
 	uint size, dlim;
 
 public:
 	Buffer();
-	Buffer(const Buffer& b) = delete;
-	Buffer(Buffer&& b);
-	~Buffer();
 
-	Buffer& operator=(const Buffer& b) = delete;
-	Buffer& operator=(Buffer&& b);
 	uint8& operator[](uint i);
 	uint8 operator[](uint i) const;
 	const uint8* getData() const;
@@ -316,11 +201,17 @@ public:
 	uint allocate(Code code, uint16 dlen);
 	void push(uint8 val);
 	void push(uint16 val);
+	void push(uint32 val);
+	void push(uint64 val);
 	void push(initlist<uint8> lst);
 	void push(initlist<uint16> lst);
+	void push(initlist<uint32> lst);
+	void push(initlist<uint64> lst);
 	void push(const string& str);
 	uint write(uint8 val, uint pos);
 	uint write(uint16 val, uint pos);
+	uint write(uint32 val, uint pos);
+	uint write(uint64 val, uint pos);
 
 	void redirect(nsint socket, uint8* pos, bool sendWebs);	// doesn't clear data
 	void send(nsint socket, bool webs, bool clr = true);	// sends and clears all data
@@ -336,11 +227,11 @@ private:
 	void eraseFront(uint len);
 	void resize(uint lim, uint ofs = 0);
 	void unmask(const uint8* mask, uint ofs, uint end);
+	template <class T, class F> void pushNumber(T val, F writer);
+	template <class T, class F> void pushNumberList(initlist<T> lst, F writer);
+	template <class T> void pushRaw(const T& vec);
+	template <class T, class F> uint writeNumber(T val, uint pos, F writer);
 };
-
-inline Buffer::~Buffer() {
-	delete[] data;
-}
 
 inline uint8& Buffer::operator[](uint i) {
 	return data[i];
@@ -351,7 +242,7 @@ inline uint8 Buffer::operator[](uint i) const {
 }
 
 inline const uint8* Buffer::getData() const {
-	return data;
+	return data.get();
 }
 
 inline uint Buffer::getDlim() const {

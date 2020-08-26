@@ -1,44 +1,80 @@
+#include "inputSys.h"
+#include "scene.h"
 #include "world.h"
+#include "prog/progs.h"
 
 // CONTROLLER
 
-bool InputSys::Controller::open(int id) {
-	gamepad = SDL_IsGameController(id) ? SDL_GameControllerOpen(id) : nullptr;
-	joystick = gamepad ? SDL_GameControllerGetJoystick(gamepad) : SDL_JoystickOpen(id);
-	return gamepad || joystick;
+int16 Controller::axisValue(int16 value) {
+	return std::abs(int(value)) > int(World::sets()->deadzone) ? value : 0;
 }
 
-void InputSys::Controller::close() {
-	if (gamepad)
-		SDL_GameControllerClose(gamepad);
-	else if (joystick)
-		SDL_JoystickClose(joystick);
+optional<bool> Controller::axisDown(int16 val, uint8 id, bool* vrec) {
+	bool curOn = axisValue(val);
+	if (vrec[id] == curOn)
+		return std::nullopt;
+	vrec[id] = curOn;
+	return curOn;
 }
+
+// JOYSTICK
+
+Joystick::Joystick(SDL_Joystick* joy) :
+	ctr(joy),
+	hats(initRecord<uint8>(SDL_JoystickNumHats(joy), SDL_HAT_CENTERED)),
+	axes(initRecord<bool>(SDL_JoystickNumAxes(joy), false))
+{}
+
+template <class T>
+uptr<T[]> Joystick::initRecord(int num, T fill) {
+	if (num > 0) {
+		uptr<T[]> vals = std::make_unique<T[]>(num);
+		std::fill_n(vals.get(), num, fill);
+		return vals;
+	}
+	return nullptr;
+}
+
+void Joystick::close() {
+	SDL_JoystickClose(ctr);
+}
+
+uint8 Joystick::hatDown(uint8 val, uint8 id) {
+	uint8 prev = hats[id];
+	hats[id] = val;
+	return prev;
+}
+
+// GAMEPAD
+
+Gamepad::Gamepad(SDL_GameController* pad) :
+	ctr(pad),
+	axes{}
+{}
 
 // INPUT SYS
 
 InputSys::InputSys() :
 	mouseLast(false),
 	mouseMove(0),
-	moveTime(0),
-	lastJAxes{},
-	lastGAxes{},
-	lastJAxisOn(0),
-	lastGAxisOn(0)
+	moveTime(0)
 {
-	resetControllers();
+	for (uint8 i = 0; i < uint8(bindings.size()); ++i)
+		bindings[i].init(Binding::Type(i));
 }
 
 InputSys::~InputSys() {
-	for (Controller& it : controllers)
-		it.close();
+	for (auto& [id, joy] : joysticks)
+		joy.close();
+	for (auto& [id, pad] : gamepads)
+		pad.close();
 }
 
 void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, bool mouse) {
 	mouseLast = mouse;
 	mouseMove = ivec2(motion.xrel, motion.yrel);
 	moveTime = motion.timestamp;
-	if (!SDL_GetRelativeMouseMode() || World::scene()->capture || World::scene()->camera.moving)
+	if (World::scene()->camera.state != Camera::State::dragging)
 		World::scene()->onMouseMove(ivec2(motion.x, motion.y), mouseMove, motion.state);
 	else {
 		vec2 rot(glm::radians(float(motion.yrel) / 2.f), glm::radians(float(-motion.xrel) / 2.f));
@@ -53,9 +89,7 @@ void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, bool mou
 		World::scene()->onMouseDown(ivec2(button.x, button.y), button.button);
 		break;
 	case SDL_BUTTON_MIDDLE:
-#ifndef EMSCRIPTEN
-		SDL_SetRelativeMouseMode(SDL_TRUE);
-#endif
+		World::state()->eventStartCamera();
 		break;
 	case SDL_BUTTON_X1:
 		World::scene()->onXbutCancel();
@@ -72,12 +106,7 @@ void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, bool mouse
 		World::scene()->onMouseUp(ivec2(button.x, button.y), button.button);
 		break;
 	case SDL_BUTTON_MIDDLE:
-#ifdef EMSCRIPTEN
-		break;
-#else
-		SDL_SetRelativeMouseMode(SDL_FALSE);
-		simulateMouseMove();
-#endif
+		World::state()->eventStopCamera();
 	}
 }
 
@@ -87,229 +116,108 @@ void InputSys::eventMouseWheel(const SDL_MouseWheelEvent& wheel) {
 }
 
 void InputSys::eventKeyDown(const SDL_KeyboardEvent& key) {
-	if (World::scene()->capture)
-		World::scene()->capture->onKeypress(key);
-	else switch (key.keysym.scancode) {
-	case SDL_SCANCODE_UP:
-		World::scene()->navSelect(Direction::up, mouseLast);
-		break;
-	case SDL_SCANCODE_DOWN:
-		World::scene()->navSelect(Direction::down, mouseLast);
-		break;
-	case SDL_SCANCODE_LEFT:
-		World::scene()->navSelect(Direction::left, mouseLast);
-		break;
-	case SDL_SCANCODE_RIGHT:
-		World::scene()->navSelect(Direction::right, mouseLast);
-		break;
-	case SDL_SCANCODE_1: case SDL_SCANCODE_2: case SDL_SCANCODE_3: case SDL_SCANCODE_4: case SDL_SCANCODE_5: case SDL_SCANCODE_6: case SDL_SCANCODE_7: case SDL_SCANCODE_8: case SDL_SCANCODE_9: case SDL_SCANCODE_0:
-		if (!key.repeat)
-			World::state()->eventNumpress(uint8(key.keysym.scancode - SDL_SCANCODE_1));
-		break;
-	case SDL_SCANCODE_KP_1: case SDL_SCANCODE_KP_2: case SDL_SCANCODE_KP_3: case SDL_SCANCODE_KP_4: case SDL_SCANCODE_KP_5: case SDL_SCANCODE_KP_6: case SDL_SCANCODE_KP_7: case SDL_SCANCODE_KP_8: case SDL_SCANCODE_KP_9: case SDL_SCANCODE_KP_0:
-		if (!key.repeat)
-			World::state()->eventNumpress(uint8(key.keysym.scancode - SDL_SCANCODE_KP_1));
-		break;
-	case SDL_SCANCODE_SPACE:
-		if (!key.repeat)
-			World::state()->eventEndTurn();
-		break;
-	case SDL_SCANCODE_LALT:
-#ifndef EMSCRIPTEN
-		if (!key.repeat)
-			SDL_SetRelativeMouseMode(SDL_TRUE);
-#endif
-		break;
-	case SDL_SCANCODE_C:
-		if (!key.repeat)
-			World::state()->eventCameraReset();
-		break;
-	case SDL_SCANCODE_X:
-		if (!key.repeat)
-			World::state()->eventEngage();
-		break;
-	case SDL_SCANCODE_D:
-		if (!key.repeat)
-			World::state()->eventDestroy(Switch::on);
-		break;
-	case SDL_SCANCODE_S:
-		if (!key.repeat)
-			World::state()->eventSurrender();
-		break;
-	case SDL_SCANCODE_TAB:
-		if (!key.repeat)
-			World::program()->eventToggleChat();
-		break;
-	case SDL_SCANCODE_P:
-		if (!key.repeat)
-			World::program()->eventCycleFrameCounter();
-		break;
-	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
-		if (!key.repeat)
-			World::scene()->onConfirm();
-		break;
-	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
-		if (!key.repeat)
-			World::scene()->onCancel();
-	}
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onKeyDown(key);
+	else
+		checkInput(keymap, key.keysym.scancode, &Binding::bcall, key.repeat ? Binding::singles : Binding::holders);
 }
 
 void InputSys::eventKeyUp(const SDL_KeyboardEvent& key) {
-	if (World::scene()->capture)
-		World::scene()->capture->onKeyrelease(key);
-	else switch (key.keysym.scancode) {
-	case SDL_SCANCODE_LALT:
-#ifndef EMSCRIPTEN
-		if (!key.repeat) {
-			SDL_SetRelativeMouseMode(SDL_FALSE);
-			simulateMouseMove();
-		}
-#endif
-		break;
-	case SDL_SCANCODE_D:
-		if (!key.repeat)
-			World::state()->eventDestroy(Switch::off);
-	}
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onKeyUp(key);
+	else
+		checkInput(keymap, key.keysym.scancode, &Binding::ucall, key.repeat ? Binding::singles : Binding::holders);
 }
 
-void InputSys::eventJoystickButton(const SDL_JoyButtonEvent& jbutton) {
+void InputSys::eventJoystickButtonDown(const SDL_JoyButtonEvent& jbutton) {
 	if (SDL_GameControllerFromInstanceID(jbutton.which))	// don't execute if there can be a game controller event
 		return;
 
-	if (World::scene()->capture)
-		World::scene()->capture->onJButton(jbutton.button);
-	else switch (jbutton.button) {
-	case jbutL1:
-		World::state()->eventFavor(Favor::hasten);
-		break;
-	case jbutR1:
-		World::state()->eventFavor(Favor::assault);
-		break;
-	case jbutL2:
-		World::state()->eventFavor(Favor::conspire);
-		break;
-	case jbutR2:
-		World::state()->eventFavor(Favor::deceive);
-		break;
-	case jbutY:
-		World::state()->eventEndTurn();
-		break;
-	case jbutLS:
-		World::state()->eventCameraReset();
-		break;
-	case jbutX:
-		World::state()->eventEngage();
-		break;
-	case jbutStart:
-		World::state()->eventDestroy(Switch::toggle);
-		break;
-	case jbutGuide:
-		World::state()->eventSurrender();
-		break;
-	case jbutBack:
-		World::program()->eventToggleChat();
-		break;
-	case jbutRS:
-		World::program()->eventCycleFrameCounter();
-		break;
-	case jbutA:
-		World::scene()->onConfirm();
-		break;
-	case jbutB:
-		World::scene()->onCancel();
-	}
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onJButtonDown(jbutton.button);
+	else
+		checkInput(joymap, JoystickButton(jbutton.button), &Binding::bcall);
+}
+
+void InputSys::eventJoystickButtonUp(const SDL_JoyButtonEvent& jbutton) {
+	if (SDL_GameControllerFromInstanceID(jbutton.which))	// don't execute if there can be a game controller event
+		return;
+
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onJButtonUp(jbutton.button);
+	else
+		checkInput(joymap, JoystickButton(jbutton.button), &Binding::ucall);
 }
 
 void InputSys::eventJoystickHat(const SDL_JoyHatEvent& jhat) {
-	if (jhat.value == SDL_HAT_CENTERED || SDL_GameControllerFromInstanceID(jhat.which))
+	umap<SDL_JoystickID, Joystick>::iterator joy = joysticks.find(jhat.which);
+	if (joy == joysticks.end())
 		return;
 
-	if (World::scene()->capture)
-		World::scene()->capture->onJHat(jhat.value);
-	else {
-		if (jhat.value & SDL_HAT_UP)
-			World::scene()->navSelect(Direction::up, mouseLast);
-		if (jhat.value & SDL_HAT_DOWN)
-			World::scene()->navSelect(Direction::down, mouseLast);
-		if (jhat.value & SDL_HAT_LEFT)
-			World::scene()->navSelect(Direction::left, mouseLast);
-		if (jhat.value & SDL_HAT_RIGHT)
-			World::scene()->navSelect(Direction::right, mouseLast);
+	if (joy->second.hatDown(jhat.value, jhat.hat) != SDL_HAT_CENTERED) {	// release
+		if (World::scene()->getCapture())
+			World::scene()->getCapture()->onJHatUp(jhat.hat, jhat.value);
+		else
+			checkInput(joymap, AsgJoystick(jhat.hat, jhat.value), &Binding::ucall);
+	}
+	if (jhat.value != SDL_HAT_CENTERED) {	// press
+		if (World::scene()->getCapture())
+			World::scene()->getCapture()->onJHatDown(jhat.hat, jhat.value);
+		else
+			checkInput(joymap, AsgJoystick(jhat.hat, jhat.value), &Binding::bcall);
 	}
 }
 
 void InputSys::eventJoystickAxis(const SDL_JoyAxisEvent& jaxis) {
-	if (jaxis.axis >= joyAxisMax || SDL_GameControllerFromInstanceID(jaxis.which) || !axisDown(jaxis.value, jaxis.axis, lastJAxisOn, lastJAxes))
+	umap<SDL_JoystickID, Joystick>::iterator joy = joysticks.find(jaxis.which);
+	if (joy == joysticks.end())
+		return;
+	optional<bool> adown = joy->second.axisDown(jaxis.value, jaxis.axis);
+	if (!adown)
 		return;
 
-	if (World::scene()->capture)
-		World::scene()->capture->onJAxis(jaxis.axis);
+	if (*adown) {	// press
+		if (World::scene()->getCapture())
+			World::scene()->getCapture()->onJAxisDown(jaxis.axis, jaxis.value >= 0);
+		else
+			checkInput(joymap, AsgJoystick(JoystickAxis(jaxis.axis), jaxis.value >= 0), &Binding::bcall);
+	} else if (World::scene()->getCapture())	// release
+		World::scene()->getCapture()->onJAxisUp(jaxis.axis, jaxis.value >= 0);
+	else
+		checkInput(joymap, AsgJoystick(JoystickAxis(jaxis.axis), jaxis.value >= 0), &Binding::ucall);
 }
 
-void InputSys::eventGamepadButton(const SDL_ControllerButtonEvent& gbutton) {
-	if (World::scene()->capture)
-		World::scene()->capture->onGButton(SDL_GameControllerButton(gbutton.button));
-	else switch (gbutton.button) {
-	case SDL_CONTROLLER_BUTTON_DPAD_UP:
-		World::scene()->navSelect(Direction::up, mouseLast);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-		World::scene()->navSelect(Direction::down, mouseLast);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
-		World::scene()->navSelect(Direction::left, mouseLast);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
-		World::scene()->navSelect(Direction::right, mouseLast);
-		break;
-	case SDL_CONTROLLER_BUTTON_LEFTSHOULDER:
-		World::state()->eventFavor(Favor::hasten);
-		break;
-	case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER:
-		World::state()->eventFavor(Favor::assault);
-		break;
-	case SDL_CONTROLLER_BUTTON_Y:
-		World::state()->eventEndTurn();
-		break;
-	case SDL_CONTROLLER_BUTTON_LEFTSTICK:
-		World::state()->eventCameraReset();
-		break;
-	case SDL_CONTROLLER_BUTTON_X:
-		World::state()->eventEngage();
-		break;
-	case SDL_CONTROLLER_BUTTON_START:
-		World::state()->eventDestroy(Switch::toggle);
-		break;
-	case SDL_CONTROLLER_BUTTON_GUIDE:
-		World::state()->eventSurrender();
-		break;
-	case SDL_CONTROLLER_BUTTON_BACK:
-		World::program()->eventToggleChat();
-		break;
-	case SDL_CONTROLLER_BUTTON_RIGHTSTICK:
-		World::program()->eventCycleFrameCounter();
-		break;
-	case SDL_CONTROLLER_BUTTON_A:
-		World::scene()->onConfirm();
-		break;
-	case SDL_CONTROLLER_BUTTON_B:
-		World::scene()->onCancel();
-	}
+void InputSys::eventGamepadButtonDown(const SDL_ControllerButtonEvent& gbutton) {
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onGButtonDown(SDL_GameControllerButton(gbutton.button));
+	else
+		checkInput(padmap, SDL_GameControllerButton(gbutton.button), &Binding::bcall);
+}
+
+void InputSys::eventGamepadButtonUp(const SDL_ControllerButtonEvent& gbutton) {
+	if (World::scene()->getCapture())
+		World::scene()->getCapture()->onGButtonUp(SDL_GameControllerButton(gbutton.button));
+	else
+		checkInput(padmap, SDL_GameControllerButton(gbutton.button), &Binding::ucall);
 }
 
 void InputSys::eventGamepadAxis(const SDL_ControllerAxisEvent& gaxis) {
-	if (!axisDown(gaxis.value, gaxis.axis, lastGAxisOn, lastGAxes))
+	umap<SDL_JoystickID, Gamepad>::iterator pad = gamepads.find(gaxis.which);
+	if (pad == gamepads.end())
+		return;
+	optional<bool> adown = pad->second.axisDown(gaxis.value, gaxis.axis);
+	if (!adown)
 		return;
 
-	if (World::scene()->capture)
-		World::scene()->capture->onGAxis(SDL_GameControllerAxis(gaxis.axis));
-	else switch (gaxis.axis) {
-	case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
-		World::state()->eventFavor(Favor::conspire);
-		break;
-	case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-		World::state()->eventFavor(Favor::deceive);
-	}
+	if (*adown) {	// press
+		if (World::scene()->getCapture())
+			World::scene()->getCapture()->onGAxisDown(SDL_GameControllerAxis(gaxis.axis), gaxis.value >= 0);
+		else
+			checkInput(padmap, AsgGamepad(SDL_GameControllerAxis(gaxis.axis), gaxis.value >= 0), &Binding::bcall);
+	} else if (World::scene()->getCapture())	// release
+		World::scene()->getCapture()->onGAxisUp(SDL_GameControllerAxis(gaxis.axis), gaxis.value >= 0);
+	else
+		checkInput(padmap, AsgGamepad(SDL_GameControllerAxis(gaxis.axis), gaxis.value >= 0), &Binding::ucall);
 }
 
 void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin) {
@@ -318,7 +226,7 @@ void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin) {
 }
 
 void InputSys::eventFingerGesture(const SDL_MultiGestureEvent& ges) {
-	if (dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
+	if (World::scene()->camera.state != Camera::State::animating && dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
 		World::scene()->camera.zoom(int(ges.dDist * float(World::window()->getScreenView().y)));
 }
 
@@ -330,48 +238,216 @@ void InputSys::eventFingerDown(const SDL_TouchFingerEvent& fin) {
 void InputSys::eventFingerUp(const SDL_TouchFingerEvent& fin) {
 	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getScreenView());
 	eventMouseButtonUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, pos.x, pos.y }, false);
-	World::scene()->updateSelect(ivec2(-1));
+	World::scene()->deselect();	// deselect last Interactable because Scene::onMouseUp updates the select
 }
 
-void InputSys::tick(float dSec) {
-	if (World::scene()->capture)
-		return;
-
-	if (int16 ax = lastAxisValue(jaxisLX, SDL_CONTROLLER_AXIS_LEFTX), ay = lastAxisValue(jaxisLY, SDL_CONTROLLER_AXIS_LEFTY); ax || ay) {
-		vec2 rot(axisToFloat(-ay) * dSec, axisToFloat(ax) * dSec);
-		World::scene()->camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
-	}
-	if (int16 ax = lastAxisValue(jaxisRX, SDL_CONTROLLER_AXIS_RIGHTX), ay = lastAxisValue(jaxisRY, SDL_CONTROLLER_AXIS_RIGHTY); ax || ay)
-		World::state()->eventSecondaryAxis(ivec2(ax, ay), dSec);
-}
-
-void InputSys::resetControllers() {
-	for (Controller& it : controllers)
-		it.close();
-	controllers.clear();
-
-	for (int i = 0; i < SDL_NumJoysticks(); i++) {
-		if (Controller ctr; ctr.open(i))
-			controllers.push_back(ctr);
-		else
-			ctr.close();
-	}
-}
-
-bool InputSys::axisDown(int16 val, uint8 id, uint8& lastOn, int16* vrec) {
-	bool curOn = std::abs(int(val)) > int(World::sets()->deadzone);
-	vrec[id] = curOn ? val : 0;
-	uint8 flg = 1 << id;
-	if (curOn == bool(lastOn & flg))
-		return false;
-	lastOn = curOn ? lastOn | flg : lastOn & ~flg;
-	return curOn;
+void InputSys::eventMouseLeave() {
+	SDL_SetRelativeMouseMode(SDL_FALSE);
+	World::scene()->onMouseLeave();
 }
 
 void InputSys::simulateMouseMove() {
-	if (ivec2 pos; mouseLast) {
-		uint32 state = SDL_GetMouseState(&pos.x, &pos.y);
-		eventMouseMotion({ SDL_MOUSEMOTION, SDL_GetTicks(), 0, 0, state, pos.x, pos.y, 0, 0 }, mouseLast);
-	} else
-		eventMouseMotion({ SDL_FINGERMOTION, SDL_GetTicks(), 0, SDL_TOUCH_MOUSEID, 0, -1, -1, 0, 0 }, mouseLast);
+	if (ivec2 pos; mouseLast)
+		eventMouseMotion({ SDL_MOUSEMOTION, SDL_GetTicks(), 0, 0, SDL_GetMouseState(&pos.x, &pos.y), pos.x, pos.y, 0, 0 }, mouseLast);
+	else
+		eventMouseMotion({ SDL_FINGERMOTION, SDL_GetTicks(), 0, SDL_TOUCH_MOUSEID, 0, INT_MIN, INT_MIN, 0, 0 }, mouseLast);
+}
+
+template <class K, class T, class M>
+void InputSys::checkInput(const mumap<K, Binding::Type>& kmap, T key, M Binding::*call, Binding::Type lim) const {
+	for (auto [pos, end] = kmap.equal_range(key); pos != end; ++pos)
+		if (pos->second < lim)
+			World::srun(bindings[uint8(pos->second)].*call);
+}
+
+void InputSys::tick() {
+	if (!World::scene()->getCapture())	// handle key hold
+		for (uint8 i = uint8(Binding::holders); i < uint8(bindings.size()); ++i)
+			if (int16 amt = isPressed(bindings[i]))
+				World::srun(bindings[i].acall, Controller::axisToFloat(amt));
+}
+
+int16 InputSys::isPressed(const Binding& bind) const {
+	const uint8* kstate = SDL_GetKeyboardState(nullptr);
+	for (SDL_Scancode sc : bind.keys)
+		if (kstate[sc])
+			return INT16_MAX;
+
+	for (AsgJoystick aj : bind.joys)
+		switch (aj.getAsg()) {
+		case AsgJoystick::button:
+			for (auto& [id, joy] : joysticks)
+				if (SDL_JoystickGetButton(joy.getCtr(), aj.getJct()))
+					return INT16_MAX;
+			break;
+		case AsgJoystick::hat:
+			for (auto& [id, joy] : joysticks)
+				if (aj.getJct() < SDL_JoystickNumHats(joy.getCtr()) && SDL_JoystickGetHat(joy.getCtr(), aj.getJct()) == aj.getHvl())
+					return INT16_MAX;
+			break;
+		case AsgJoystick::axisPos:
+			if (int16 val = getAxis(aj.getJct()); val > 0)
+				return val;
+			break;
+		case AsgJoystick::axisNeg:
+			if (int16 val = getAxis(aj.getJct()); val < 0)
+				return -(val + 1);	// adjust for INT16_MIN
+		}
+
+	for (AsgGamepad ag : bind.gpds)
+		switch (ag.getAsg()) {
+		case AsgGamepad::button:
+			for (auto& [id, pad] : gamepads)
+				if (SDL_GameControllerGetButton(pad.getCtr(), ag.getButton()))
+					return INT16_MAX;
+			break;
+		case AsgGamepad::axisPos:
+			if (int16 val = getAxis(ag.getAxis()); val > 0)
+				return val;
+			break;
+		case AsgGamepad::axisNeg:
+			if (int16 val = getAxis(ag.getAxis()); val < 0)
+				return -(val + 1);	// adjust for INT16_MIN
+		}
+	return 0;
+}
+
+int16 InputSys::getAxis(uint8 jaxis) const {
+	for (auto& [id, joy] : joysticks)	// get first axis that isn't 0
+		if (int16 val = Controller::axisValue(SDL_JoystickGetAxis(joy.getCtr(), jaxis)))
+			return val;
+	return 0;
+}
+
+int16 InputSys::getAxis(SDL_GameControllerAxis gaxis) const {
+	for (auto& [id, pad] : gamepads)	// get first axis that isn't 0
+		if (int16 val = Controller::axisValue(SDL_GameControllerGetAxis(pad.getCtr(), gaxis)))
+			return val;
+	return 0;
+}
+
+vector<SDL_Joystick*> InputSys::listJoysticks() const {
+	vector<SDL_Joystick*> joys(joysticks.size() + gamepads.size());
+	sizet i = 0;
+	for (auto& [id, joy] : joysticks)
+		joys[i++] = joy.getCtr();
+	for (auto& [id, pad] : gamepads)
+		joys[i++] = SDL_GameControllerGetJoystick(pad.getCtr());
+	return joys;
+}
+
+void InputSys::addController(int id) {
+	if (SDL_GameController* pad = SDL_GameControllerOpen(id)) {
+		if (SDL_JoystickID jid = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)); jid < 0 || !gamepads.emplace(jid, pad).second)
+			SDL_GameControllerClose(pad);
+	} else if (SDL_Joystick* joy = SDL_JoystickOpen(id))
+		if (SDL_JoystickID jid = SDL_JoystickInstanceID(joy); jid < 0 || SDL_JoystickNumButtons(joy) <= 0 || !joysticks.emplace(jid, joy).second)	// might be something like an accelerometer
+			SDL_JoystickClose(joy);
+}
+
+void InputSys::delController(SDL_JoystickID id) {
+	if (!tryDelController(joysticks, id))
+		tryDelController(gamepads, id);
+}
+
+template <class T>
+bool InputSys::tryDelController(umap<SDL_JoystickID, T>& ctrls, SDL_JoystickID id) {
+	if (typename umap<SDL_JoystickID, T>::iterator it = ctrls.find(id); it != ctrls.end()) {
+		it->second.close();
+		ctrls.erase(it);
+		return true;
+	}
+	return false;
+}
+
+void InputSys::setBinding(Binding::Type bid, sizet kid, SDL_Scancode sc) {
+	setBinding(bid, keymap, sc, bindings[uint8(bid)].keys[kid]);
+}
+
+void InputSys::setBinding(Binding::Type bid, sizet kid, AsgJoystick aj) {
+	setBinding(bid, joymap, aj, bindings[uint8(bid)].joys[kid]);
+}
+
+void InputSys::setBinding(Binding::Type bid, sizet kid, AsgGamepad ag) {
+	setBinding(bid, padmap, ag, bindings[uint8(bid)].gpds[kid]);
+}
+
+template <class T, class M>
+void InputSys::setBinding(Binding::Type bid, mumap<T, Binding::Type>& kmap, T key, M& kref) {
+	typename mumap<T, Binding::Type>::node_type node = kmap.extract(findMapBind(bid, kref, kmap));
+	node.key() = key;
+	kmap.insert(std::move(node));
+	kref = key;
+}
+
+sizet InputSys::addBinding(Binding::Type bid, SDL_Scancode sc) {
+	return addBinding(bid, sc, keymap, &Binding::keys);
+}
+
+sizet InputSys::addBinding(Binding::Type bid, AsgJoystick aj) {
+	return addBinding(bid, aj, joymap, &Binding::joys);
+}
+
+sizet InputSys::addBinding(Binding::Type bid, AsgGamepad ag) {
+	return addBinding(bid, ag, padmap, &Binding::gpds);
+}
+
+template <class T, class M>
+sizet InputSys::addBinding(Binding::Type bid, T key, mumap<T, Binding::Type>& kmap, M bkey) {
+	if (std::none_of((bindings[uint8(bid)].*bkey).begin(), (bindings[uint8(bid)].*bkey).end(), [key](T k) -> bool { return k == key; })) {
+		kmap.emplace(key, bid);
+		(bindings[uint8(bid)].*bkey).push_back(key);
+		return (bindings[uint8(bid)].*bkey).size() - 1;
+	}
+	return SIZE_MAX;	// key already assigned to this binding
+}
+
+void InputSys::delBindingK(Binding::Type bid, sizet kid) {
+	delBinding(bid, kid, &Binding::keys, keymap);
+}
+
+void InputSys::delBindingJ(Binding::Type bid, sizet kid) {
+	delBinding(bid, kid, &Binding::joys, joymap);
+}
+
+void InputSys::delBindingG(Binding::Type bid, sizet kid) {
+	delBinding(bid, kid, &Binding::gpds, padmap);
+}
+
+template <class T, class M>
+void InputSys::delBinding(Binding::Type bid, sizet kid, M bkey, mumap<T, Binding::Type>& kmap) {
+	kmap.erase(findMapBind(bid, (bindings[uint8(bid)].*bkey)[kid], kmap));
+	(bindings[uint8(bid)].*bkey).erase((bindings[uint8(bid)].*bkey).begin() + kid);
+}
+
+template <class T>
+typename mumap<T, Binding::Type>::iterator InputSys::findMapBind(Binding::Type bid, T key, mumap<T, Binding::Type>& kmap) {
+	auto [pos, end] = kmap.equal_range(key);
+	return std::find_if(pos, end, [bid](const pair<const T, Binding::Type>& it) -> bool { return it.second == bid; });
+}
+
+void InputSys::clearBindings() {
+	for (Binding& it : bindings) {
+		it.keys.clear();
+		it.joys.clear();
+		it.gpds.clear();
+	}
+	keymap.clear();
+	joymap.clear();
+	padmap.clear();
+}
+
+void InputSys::resetBindings() {
+	keymap.clear();
+	joymap.clear();
+	padmap.clear();
+	for (uint8 i = 0; i < uint8(bindings.size()); ++i) {
+		bindings[i].reset(Binding::Type(i));
+		for (SDL_Scancode sc : bindings[i].keys)
+			keymap.emplace(sc, Binding::Type(i));
+		for (AsgJoystick aj : bindings[i].joys)
+			joymap.emplace(aj, Binding::Type(i));
+		for (AsgGamepad ag : bindings[i].gpds)
+			padmap.emplace(ag, Binding::Type(i));
+	}
 }

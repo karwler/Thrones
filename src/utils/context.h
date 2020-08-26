@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/widgets.h"
+#include "widgets.h"
 
 // context menu for right click or combo box
 class Context : public Interactable {
@@ -19,8 +19,8 @@ public:
 	Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner = nullptr, int width = 0);
 	virtual ~Context() override;
 
-	void draw() const;
 	void onMouseMove(const ivec2& mPos);
+	void draw() const;
 	virtual void tick(float dSec) override;
 	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
 	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
@@ -28,6 +28,7 @@ public:
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onScroll(const ivec2& wMov) override;
 	virtual void onNavSelect(Direction dir) override;
+	virtual void onCancelCapture() override;
 
 	void confirm();
 	Rect rect() const;

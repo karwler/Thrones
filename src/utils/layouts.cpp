@@ -1,3 +1,4 @@
+#include "engine/scene.h"
 #include "engine/world.h"
 
 // NAVIGATOR
@@ -39,10 +40,11 @@ void Navigator::navSelectOut(const vec3& pos, Direction dir) {
 
 Layout::Layout(Size size, vector<Widget*>&& children, bool vert, int space) :
 	Navigator(size),
+	widgets(std::move(children)),
 	spacing(space),
 	vertical(vert)
 {
-	initWidgets(std::move(children));
+	initWidgets();
 }
 
 void Layout::draw() const {
@@ -58,20 +60,21 @@ void Layout::tick(float dSec) {
 void Layout::onResize() {
 	// get amount of space for widgets with percent size and get sum of sizes
 	ivec2 wsiz = size();
-	int space = wsiz[vertical] - int(widgets.size() - 1) * spacing;
+	int totalSpacing = int(widgets.size() - 1) * spacing;
+	int space = wsiz[vertical] > totalSpacing ? wsiz[vertical] - totalSpacing : 0;
 	float total = 0;
 	for (Widget* it : widgets) {
-		if (it->relSize.usePix)
-			space -= it->relSize.pix;
+		if (it->getSize().usePix)
+			space -= it->getSize().pix <= space ? it->getSize().pix : space;
 		else
-			total += it->relSize.prc;
+			total += it->getSize().prc;
 	}
 
 	// calculate positions for each widget and set last poss element to end position of the last widget
 	ivec2 pos(0);
-	for (sizet i = 0; i < widgets.size(); i++) {
+	for (sizet i = 0; i < widgets.size(); ++i) {
 		positions[i] = pos;
-		pos[vertical] += (widgets[i]->relSize.usePix ? widgets[i]->relSize.pix : int(widgets[i]->relSize.prc * float(space) / total)) + spacing;
+		pos[vertical] += (widgets[i]->getSize().usePix ? widgets[i]->getSize().pix : int(widgets[i]->getSize().prc * float(space) / total)) + spacing;
 	}
 	positions.back() = swap(wsiz[!vertical], pos[vertical], !vertical);
 
@@ -90,45 +93,59 @@ bool Layout::selectable() const {
 	return !widgets.empty();
 }
 
-void Layout::initWidgets(vector<Widget*>&& wgts) {
-	clearWidgets();
-	widgets = std::move(wgts);
-	positions.resize(widgets.size() + 1);
-	for (sizet i = 0; i < widgets.size(); i++)
-		widgets[i]->setParent(this, i);
-}
-
 void Layout::setWidgets(vector<Widget*>&& wgts) {
-	initWidgets(std::move(wgts));
+	deselectWidgets();
+	setPtrVec(widgets, std::move(wgts));
+	initWidgets();
 	postInit();
+	World::scene()->updateSelect();
 }
 
 void Layout::insertWidget(sizet id, Widget* wgt) {
 	widgets.insert(widgets.begin() + pdift(id), wgt);
 	positions.emplace_back();
 	reinitWidgets(id);
+	World::scene()->updateSelect();
 }
 
 void Layout::deleteWidget(sizet id) {
-	if (World::scene()->capture == widgets[id])
-		World::scene()->capture = nullptr;
+	bool updateSelect = deselectWidget(widgets[id]);
 	delete widgets[id];
 	widgets.erase(widgets.begin() + pdift(id));
 	positions.pop_back();
 	reinitWidgets(id);
-	World::scene()->resetSelect();
+	if (updateSelect)
+		World::scene()->updateSelect();
 }
 
-void Layout::clearWidgets() {
-	for (Widget* it : widgets)
-		delete it;
-	widgets.clear();
+void Layout::initWidgets() {
+	positions.resize(widgets.size() + 1);
+	for (sizet i = 0; i < widgets.size(); ++i)
+		widgets[i]->setParent(this, i);
 }
 
 void Layout::reinitWidgets(sizet id) {
-	for (; id < widgets.size(); id++)
+	for (; id < widgets.size(); ++id)
 		widgets[id]->setParent(this, id);
 	postInit();
+}
+
+bool Layout::deselectWidget(Widget* wgt) {
+	if (World::scene()->getCapture() == wgt)
+		World::scene()->setCapture(nullptr);
+	if (World::scene()->getSelect() == wgt) {
+		World::scene()->deselect();
+		return true;
+	}
+	Layout* box = dynamic_cast<Layout*>(wgt);
+	return box && box->deselectWidgets();
+}
+
+bool Layout::deselectWidgets() const {
+	for (Widget* it : widgets)
+		if (deselectWidget(it))
+			return true;
+	return false;
 }
 
 void Layout::setSpacing(int space) {
@@ -183,7 +200,7 @@ void Layout::scanSequential(sizet id, int mid, Direction dir) {
 
 void Layout::scanPerpendicular(int mid, Direction dir) {
 	sizet id = 0;
-	for (int hori = dir.horizontal(); id < widgets.size() && (!widgets[id]->selectable() || (wgtPosition(id)[hori] + wgtSize(id)[hori] < mid)); id++);
+	for (int hori = dir.horizontal(); id < widgets.size() && (!widgets[id]->selectable() || (wgtPosition(id)[hori] + wgtSize(id)[hori] < mid)); ++id);
 	if (id == widgets.size())
 		while (--id < widgets.size() && !widgets[id]->selectable());
 
@@ -220,16 +237,22 @@ ivec2 RootLayout::size() const {
 	return World::window()->getGuiView();
 }
 
+void RootLayout::setSize(const Size& size) {
+	relSize = size;
+	onResize();
+}
+
 Rect RootLayout::frame() const {
 	return Rect(ivec2(0), World::window()->getGuiView());
 }
 
 // POPUP
 
-Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, int space, const vec4& color) :
+Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, int space, Widget* firstSelect, const vec4& color) :
 	RootLayout(size.first, std::move(children), vert, space, color),
 	kcall(okCall),
 	ccall(cancelCall),
+	defaultSelect(firstSelect),
 	sizeY(size.second)
 {}
 
@@ -252,7 +275,7 @@ ivec2 Popup::size() const {
 // OVERLAY
 
 Overlay::Overlay(const pair<Size, Size>& pos, const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, bool visible, bool interactive, int space, const vec4& color) :
-	Popup(size, std::move(children), okCall, cancelCall, vert, space, vec4(0.f)),
+	Popup(size, std::move(children), okCall, cancelCall, vert, space, nullptr, vec4(0.f)),
 	relPos(pos),
 	boxColor(color),
 	show(visible),
@@ -280,7 +303,7 @@ void Overlay::setShow(bool yes) {
 
 void ScrollArea::draw() const {
 	mvec2 vis = visibleWidgets();	// get index interval of items on screen and draw children
-	for (sizet i = vis.x; i < vis.y; i++)
+	for (sizet i = vis.x; i < vis.y; ++i)
 		widgets[i]->draw();
 	scroll.draw(frame(), listSize(), position(), size(), vertical);
 }
@@ -309,6 +332,7 @@ void ScrollArea::onUndrag(uint8 mBut) {
 
 void ScrollArea::onScroll(const ivec2& wMov) {
 	scroll.scroll(wMov, listSize(), size(), vertical);
+	World::scene()->updateSelect();
 }
 
 Rect ScrollArea::frame() const {
@@ -338,6 +362,10 @@ void ScrollArea::navSelectFrom(int mid, Direction dir) {
 	scrollToSelected();
 }
 
+void ScrollArea::onCancelCapture() {
+	scroll.cancelDrag();
+}
+
 void ScrollArea::scrollToSelected() {
 	for (Widget* child = dynamic_cast<Widget*>(World::scene()->getSelect()); child; child = child->getParent())
 		if (child->getParent() == this) {
@@ -354,8 +382,8 @@ mvec2 ScrollArea::visibleWidgets() const {
 	if (widgets.empty())	// nothing to draw
 		return ival;
 
-	for (; ival.x < widgets.size() && wgtREnd(ival.x) < scroll.listPos[vertical]; ival.x++);
+	for (; ival.x < widgets.size() && wgtREnd(ival.x) < scroll.listPos[vertical]; ++ival.x);
 	ival.y = ival.x + 1;	// last is one greater than the actual last index
-	for (int end = scroll.listPos[vertical] + size()[vertical]; ival.y < widgets.size() && wgtRPos(ival.y) <= end; ival.y++);
+	for (int end = scroll.listPos[vertical] + size()[vertical]; ival.y < widgets.size() && wgtRPos(ival.y) <= end; ++ival.y);
 	return ival;
 }

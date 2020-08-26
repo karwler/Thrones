@@ -1,147 +1,12 @@
-#include "common.h"
+#include "server.h"
+#include "utils/text.h"
+#include <iostream>
 
 namespace Com {
 
-// CONFIG
-
-Config::Config() :
-	homeSize(9, 4),
-	battlePass(randomLimit / 2),
-	opts(favorTotal | dragonStraight),
-	victoryPointsNum(21),
-	setPieceBattleNum(10),
-	favorLimit(1),
-	tileAmounts{ 14, 9, 5, 7 },
-	middleAmounts{ 1, 1, 1, 1 },
-	pieceAmounts{ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 },
-	winThrone(1),
-	winFortress(1),
-	capturers(1 << uint8(Piece::throne))
-{}
-
-Config& Config::checkValues() {
-	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
-	battlePass = std::min(battlePass, randomLimit);
-	favorLimit = std::min(favorLimit, maxFavorMax);
-
-	uint16 hsize = homeSize.x * homeSize.y, fort = hsize;
-	if (opts & rowBalancing) {
-		for (uint16& it : tileAmounts)
-			if (it < homeSize.y)
-				it = homeSize.y;
-		uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), homeSize.y);
-		fort -= ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
-	} else
-		fort -= floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1));
-
-	if ((opts & homefront) && fort > 1) {	// TODO: remove this
-		ceilAmounts(hsize - fort, hsize - 1, tileAmounts.data(), uint8(tileAmounts.size() - 1));
-		fort = 1;
-	} else for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
-		tileAmounts[i]++;
-		fort--;
-	}
-
-	uint16 mids = floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
-	uint16 mort = homeSize.x - mids * 2;
-	if (opts & victoryPoints) {
-		if ((opts & victoryPointsEquidistant) && !(homeSize.x % 2) && !mort)
-			mort = homeSize.x - floorAmounts(mids, middleAmounts.data(), mids - 2, uint8(middleAmounts.size() - 1)) * 2;
-		else if (!mort || ((opts & victoryPointsEquidistant) && (homeSize.x % 2 ? !(mort % 2) : mort % 2))) {
-			(*std::find_if(middleAmounts.rbegin(), middleAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
-			mort++;
-		}
-	}
-	victoryPointsNum = std::clamp(victoryPointsNum, uint16(1), uint16(UINT16_MAX - mort));
-
-	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, uint8(pieceAmounts.size() - 1));
-	if ((opts & homefront) && pieceAmounts[uint8(Piece::throne)] > 1) {	// TODO: remove this block
-		psize -= pieceAmounts[uint8(Piece::throne)] - 1;
-		pieceAmounts[uint8(Piece::throne)] = 1;
-	} else if (!psize)
-		psize = pieceAmounts[uint8(Piece::throne)] = 1;
-	if (!capturers)
-		capturers = 0x3FF;	// all pieces set
-
-	if (!(opts & victoryPoints)) {
-		uint16 capCnt = 0;
-		for (uint8 i = 0; i < Com::pieceMax; i++)
-			if (capturers & (1 << i))
-				capCnt += pieceAmounts[i];
-		winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
-
-		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(Piece::throne)]);
-		if (!(winFortress || winThrone))
-			if (winThrone = 1; !pieceAmounts[uint8(Piece::throne)]) {
-				if (psize == hsize)
-					(*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; }))--;
-				pieceAmounts[uint8(Piece::throne)]++;
-			}
-		setPieceBattleNum = std::max(std::max(setPieceBattleNum, winFortress), winThrone);
-	}
-	return *this;
-}
-
-uint16 Config::floorAmounts(uint16 total, uint16* amts, uint16 limit, uint8 ei, uint16 floor) {
-	for (uint8 i = ei; total > limit; i = i ? i - 1 : ei)
-		if (amts[i] > floor) {
-			amts[i]--;
-			total--;
-		}
-	return total;
-}
-
-uint16 Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
-	for (uint8 i = 0; total < floor; i = i < ei ? i + 1 : 0) {
-		amts[i]++;
-		total++;
-	}
-	return total;
-}
-
-void Config::toComData(uint8* data) const {
-	*data++ = uint8(homeSize.x);
-	*data++ = uint8(homeSize.y);
-	*data++ = battlePass;
-	write16(data, opts);
-	write16(data += sizeof(uint16), victoryPointsNum);
-	write16(data += sizeof(uint16), setPieceBattleNum);
-	write16(data += sizeof(uint16), favorLimit);
-
-	for (uint16 ta : tileAmounts)
-		write16(data += sizeof(uint16), ta);
-	for (uint16 ma : middleAmounts)
-		write16(data += sizeof(uint16), ma);
-	for (uint16 pa : pieceAmounts)
-		write16(data += sizeof(uint16), pa);
-	write16(data += sizeof(uint16), winThrone);
-	write16(data += sizeof(uint16), winFortress);
-	write16(data += sizeof(uint16), capturers);
-}
-
-void Config::fromComData(const uint8* data) {
-	homeSize.x = *data++;
-	homeSize.y = *data++;
-	battlePass = *data++;
-	opts = Option(read16(data));
-	victoryPointsNum = read16(data += sizeof(uint16));
-	setPieceBattleNum = read16(data += sizeof(uint16));
-	favorLimit = read16(data += sizeof(uint16));
-
-	for (uint16& ta : tileAmounts)
-		ta = read16(data += sizeof(uint16));
-	for (uint16& ma : middleAmounts)
-		ma = read16(data += sizeof(uint16));
-	for (uint16& pa : pieceAmounts)
-		pa = read16(data += sizeof(uint16));
-	winThrone = read16(data += sizeof(uint16));
-	winFortress = read16(data += sizeof(uint16));
-	capturers = read16(data += sizeof(uint16));
-}
-
 // SOCKET FUNCTIONS
 
-static addrinfo* resolveAddress(const char* addr, const char* port, Family family) {
+addrinfo* resolveAddress(const char* addr, const char* port, int family) {
 	addrinfo hints{};
 	addrinfo* info;
 #ifdef __ANDROID__
@@ -153,32 +18,32 @@ static addrinfo* resolveAddress(const char* addr, const char* port, Family famil
 #endif
 	if (!addr)
 		hints.ai_flags |= AI_PASSIVE;
-	hints.ai_family = family == Family::v4 ? AF_INET : family == Family::v6 ? AF_INET6 : AF_UNSPEC;
+	hints.ai_family = family;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 	return !getaddrinfo(addr, port, &hints, &info) ? info : nullptr;
 }
 
-static nsint createSocket(int family, int reuseaddr, int nodelay = 1) {
+nsint createSocket(int family, int reuseaddr, int nodelay) {
 	if (family != AF_INET && family != AF_INET6)
-		return nsint(-1);
+		return INVALID_SOCKET;
 
 	nsint fd = socket(family, SOCK_STREAM, IPPROTO_TCP);
-	if (fd != -1) {
+	if (fd != INVALID_SOCKET) {
 		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<char*>(&reuseaddr), sizeof(reuseaddr));
 		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&nodelay), sizeof(nodelay));
 	}
 	return fd;
 }
 
-nsint bindSocket(const char* port, Family family) {
+nsint bindSocket(const char* port, int family) {
 	addrinfo* inf = resolveAddress(nullptr, port, family);
 	if (!inf)
-		throw Error(msgBindFail);
+		throw Error(msgResolveFail);
 
-	nsint fd = nsint(-1);
+	nsint fd = INVALID_SOCKET;
 	for (addrinfo* it = inf; it; it = it->ai_next) {
-		if (fd = createSocket(it->ai_family, 1); fd == -1)
+		if (fd = createSocket(it->ai_family, 1); fd == INVALID_SOCKET)
 			continue;
 		if (bind(fd, it->ai_addr, socklent(it->ai_addrlen)) || listen(fd, 8))
 			closeSocket(fd);
@@ -186,31 +51,19 @@ nsint bindSocket(const char* port, Family family) {
 			break;
 	}
 	freeaddrinfo(inf);
-	if (fd == -1)
+	if (fd == INVALID_SOCKET)
 		throw Error(msgBindFail);
 	return fd;
 }
 
 nsint acceptSocket(nsint fd) {
 	nsint sock = accept(fd, nullptr, nullptr);
-	if (sock == -1)
+	if (sock == INVALID_SOCKET)
 		throw Error(msgAcceptFail);
 	return sock;
 }
 
-bool pollSocket(nsint fd) {
-	if (pollfd pfd = { fd, POLLIN | POLLRDHUP, 0 }; int rc = poll(&pfd, 1, 0)) {
-		if (rc < 0)
-			throw Error(msgPollFail);
-		if (pfd.revents & POLLIN)
-			return true;	// recv can handle disconnect
-		if (pfd.revents & polleventsDisconnect)
-			throw Error(msgConnectionLost);
-	}
-	return false;
-}
-
-static int doNoblockSocket(nsint fd, bool noblock) {
+int noblockSocket(nsint fd, bool noblock) {
 #ifdef _WIN32
 	u_long on = noblock;
 	return ioctlsocket(fd, FIONBIO, &on);
@@ -223,13 +76,6 @@ static int doNoblockSocket(nsint fd, bool noblock) {
 	return 0;
 #endif
 }
-
-#ifndef MSG_DONTWAIT
-static void noblockSocket(nsint fd, bool noblock) {
-	if (doNoblockSocket(fd, noblock))
-		throw Error(msgIoctlFail);
-}
-#endif
 
 static void sendNet(nsint fd, const void* data, uint size) {
 	if (send(fd, static_cast<const char*>(data), size, 0) != sendlen(size))
@@ -265,12 +111,8 @@ static long recvNow(nsint fd, void* data, uint size) {
 }
 
 void closeSocket(nsint& fd) {
-#ifdef _WIN32
-	closesocket(fd);
-#else
-	close(fd);
-#endif
-	fd = nsint(-1);
+	closeSocketV(fd);
+	fd = INVALID_SOCKET;
 }
 
 // UNIVERSAL FUNCTIONS
@@ -294,7 +136,7 @@ static uint32 blk(uint8* block, uint i) {
 
 static void sha1Transform(uint32* state, uint8* buffer) {
 	array<uint32, 5> scop = { state[0], state[1], state[2], state[3], state[4] };
-	for (uint i = 0; i < 80; i++) {
+	for (uint i = 0; i < 80; ++i) {
 		if (i < 16)
 			scop[4] += ((scop[1] & (scop[2] ^ scop[3])) ^ scop[3]) + blk0(buffer, i) + 0x5A827999 + rol(scop[0], 5);
 		else if (i < 20)
@@ -308,14 +150,14 @@ static void sha1Transform(uint32* state, uint8* buffer) {
 		scop[1] = rol(scop[1], 30);
 		std::rotate(scop.begin(), scop.end() - 1, scop.end());
 	}
-	for (uint i = 0; i < 5; i++)
+	for (uint i = 0; i < 5; ++i)
 		state[i] += scop[i];
 }
 
 static void sha1Update(uint32* state, uint32* count, uint8* buffer, uint8* data, uint32 len) {
 	uint32 j = count[0];
 	if (count[0] += len << 3; count[0] < j)
-		count[1]++;
+		++count[1];
 	count[1] += len >> 29;
 	j = (j >> 3) & 63;
 
@@ -336,11 +178,11 @@ string digestSha1(string str) {
 	uint32 state[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
 	uint32 count[2] = { 0, 0 };
 	uint8 buffer[64];
-	for (sizet i = 0; i < str.length(); i++)
+	for (sizet i = 0; i < str.length(); ++i)
 		sha1Update(state, count, buffer, reinterpret_cast<uint8*>(str.data()) + i, 1);
 
 	uint8 finalcount[8];
-	for (uint i = 0; i < 8; i++)
+	for (uint i = 0; i < 8; ++i)
 		finalcount[i] = (count[i<4] >> ((3 - (i & 3)) * 8)) & 255;
 
 	uint8 c = 0x80;
@@ -352,7 +194,7 @@ string digestSha1(string str) {
 	sha1Update(state, count, buffer, finalcount, 8);
 
 	str.resize(20);
-	for (sizet i = 0; i < str.length(); i++)
+	for (sizet i = 0; i < str.length(); ++i)
 		str[i] = char((state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
 	return str;
 }
@@ -370,19 +212,19 @@ string encodeBase64(const string& str) {
 			arr4[2] = uint8(((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6));
 			arr4[3] = arr3[2] & 0x3F;
 
-			for (i = 0; i < 4 ; i++)
+			for (i = 0; i < 4 ; ++i)
 				ret += b64charset[arr4[i]];
 			i = 0;
 		}
 	}
 	if (i) {
-		for (uint j = i; j < 3; j++)
+		for (uint j = i; j < 3; ++j)
 			arr3[j] = '\0';
 		arr4[0] = (arr3[0] & 0xFC) >> 2;
 		arr4[1] = uint8(((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4));
 		arr4[2] = uint8(((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6));
 
-		for (uint j = 0; j < i + 1; j++)
+		for (uint j = 0; j < i + 1; ++j)
 			ret += b64charset[arr4[j]];
 		while (i++ < 3)
 			ret += '=';
@@ -408,15 +250,14 @@ void sendVersion(nsint socket, bool webs) {
 }
 
 void sendRejection(nsint server) {
-	nsint tmps = nsint(-1);
+	nsint fd = INVALID_SOCKET;
 	try {
-		tmps = acceptSocket(server);
-		uint16 len = codeSizes.at(Code::full);
+		fd = acceptSocket(server);
 		uint8 data[dataHeadSize] = { uint8(Code::full) };
-		write16(data + 1, len);
-		sendNet(tmps, data, len);
+		write16(data + 1, dataHeadSize);
+		sendNet(fd, data, dataHeadSize);
 	} catch (const Error&) {}
-	closeSocket(tmps);
+	closeSocketV(fd);
 }
 
 void sendData(nsint socket, const uint8* data, uint len, bool webs) {
@@ -442,165 +283,127 @@ void sendData(nsint socket, const uint8* data, uint len, bool webs) {
 		sendNet(socket, data, len);
 }
 
-// CONNECTOR
-
-Connector::Connector(const char* addr, const char* port, Family family) :
-	inf(resolveAddress(addr, port, family)),
-	fd(nsint(-1))
-{
-	if (!inf)
-		throw Error(msgConnectionFail);
-	nextAddr(inf);
-}
-
-Connector::~Connector() {
-	if (fd != -1) {
-		doNoblockSocket(fd, false);
-		closeSocket(fd);
-	}
-	freeaddrinfo(inf);
-}
-
-nsint Connector::pollReady() {
-	pollfd pfd = { fd, POLLOUT | POLLRDHUP, 0 };
-	int rc = poll(&pfd, 1, 0);
-	if (!rc)
-		return nsint(-1);
-	if (rc < 0 || (pfd.revents & polleventsDisconnect)) {
-		doNoblockSocket(fd, false);
-		closeSocket(fd);
-		nextAddr(cur->ai_next);
-	} else if (pfd.revents & POLLOUT) {
-		if (!doNoblockSocket(fd, false)) {
-			nsint ret = fd;
-			fd = nsint(-1);
-			return ret;
-		}
-		closeSocket(fd);
-		nextAddr(cur->ai_next);
-	}
-	return nsint(-1);
-}
-
-void Connector::nextAddr(addrinfo* nxt) {
-	for (cur = nxt; cur; cur = cur->ai_next) {
-		if (fd = createSocket(cur->ai_family, 0); fd == -1)
-			continue;
-		if (doNoblockSocket(fd, true)) {
-			closeSocket(fd);
-			continue;
-		}
-
-#ifdef _WIN32
-		if (!connect(fd, cur->ai_addr, socklent(cur->ai_addrlen)) || WSAGetLastError() == WSAEWOULDBLOCK)
-#else
-		if (!connect(fd, cur->ai_addr, cur->ai_addrlen) || errno == EINPROGRESS)
-#endif
-			return;
-		doNoblockSocket(fd, false);
-		closeSocket(fd);
-	}
-	throw Error(msgConnectionFail);
-}
-
 // BUFFER
 
 Buffer::Buffer() :
-	data(new uint8[sizeStep]),
+	data(std::make_unique<uint8[]>(sizeStep)),
 	size(sizeStep),
 	dlim(0)
 {}
 
-Buffer::Buffer(Buffer&& b) :
-	data(b.data),
-	size(b.size),
-	dlim(b.dlim)
-{
-	b.data = nullptr;
-}
-
-Buffer& Buffer::operator=(Buffer&& b) {
-	delete[] data;
-	data = b.data;
-	size = b.size;
-	dlim = b.dlim;
-	b.data = nullptr;
-	return *this;
-}
-
 uint Buffer::pushHead(Code code, uint16 dlen) {
 	uint end = checkOver(dlim + dataHeadSize);
 	data[dlim] = uint8(code);
-	write16(data + dlim + 1, dlen);
+	write16(&data[dlim+1], dlen);
 	return dlim = end;
 }
 
 uint Buffer::allocate(Code code, uint16 dlen) {
 	uint end = checkOver(dlim + dlen);
 	data[dlim] = uint8(code);
-	write16(data + dlim + 1, dlen);
+	write16(&data[dlim+1], dlen);
 	uint ret = dlim + dataHeadSize;
 	dlim = end;
 	return ret;
 }
 
 void Buffer::push(uint8 val) {
-	checkOver(dlim + 1);
-	data[dlim++] = val;
+	pushNumber(val, [](uint8* d, uint8 v) { *d = v; });
 }
 
 void Buffer::push(uint16 val) {
-	uint end = checkOver(dlim + sizeof(val));
-	write16(data + dlim, val);
-	dlim = end;
+	pushNumber(val, write16);
 }
 
-void Buffer::push(initlist<uint8> lst) {
-	uint end = checkOver(dlim + uint(lst.size()));
-	std::copy(lst.begin(), lst.end(), data + dlim);
+void Buffer::push(uint32 val) {
+	pushNumber(val, write32);
+}
+
+void Buffer::push(uint64 val) {
+	pushNumber(val, write64);
+}
+
+template <class T, class F>
+void Buffer::pushNumber(T val, F writer) {
+	uint end = checkOver(dlim + sizeof(val));
+	writer(&data[dlim], val);
 	dlim = end;
 }
 
 void Buffer::push(initlist<uint16> lst) {
-	checkOver(dlim + uint(lst.size() * sizeof(uint16)));
-	for (uint16 n : lst) {
-		write16(data + dlim, n);
-		dlim += sizeof(uint16);
-	}
+	pushNumberList(lst, write16);
+}
+
+void Buffer::push(initlist<uint32> lst) {
+	pushNumberList(lst, write32);
+}
+
+void Buffer::push(initlist<uint64> lst) {
+	pushNumberList(lst, write64);
+}
+
+void Buffer::push(initlist<uint8> lst) {
+	pushRaw(lst);
 }
 
 void Buffer::push(const string& str) {
-	uint end = checkOver(dlim + uint(str.length()));
-	std::copy(str.begin(), str.end(), data + dlim);
+	pushRaw(str);
+}
+
+template <class T, class F>
+void Buffer::pushNumberList(initlist<T> lst, F writer) {
+	checkOver(dlim + uint(lst.size() * sizeof(T)));
+	for (T n : lst) {
+		writer(&data[dlim], n);
+		dlim += sizeof(T);
+	}
+}
+
+template <class T>
+void Buffer::pushRaw(const T& vec) {
+	uint end = checkOver(dlim + uint(vec.size()));
+	std::copy(vec.begin(), vec.end(), &data[dlim]);
 	dlim = end;
 }
 
 uint Buffer::write(uint8 val, uint pos) {
-	data[pos] = val;
-	return pos + sizeof(val);
+	return writeNumber(val, pos, [](uint8* d, uint8 v) { *d = v; });
 }
 
 uint Buffer::write(uint16 val, uint pos) {
-	write16(data + pos, val);
+	return writeNumber(val, pos, write16);
+}
+
+uint Buffer::write(uint32 val, uint pos) {
+	return writeNumber(val, pos, write32);
+}
+
+uint Buffer::write(uint64 val, uint pos) {
+	return writeNumber(val, pos, write64);
+}
+
+template <class T, class F>
+uint Buffer::writeNumber(T val, uint pos, F writer) {
+	writer(&data[pos], val);
 	return pos + sizeof(val);
 }
 
 void Buffer::redirect(nsint socket, uint8* pos, bool sendWebs) {
-	if (pos == data)	// no offset means no ws frame
-		sendData(socket, data, readLoadSize(false), sendWebs);	// send like normal
+	if (pos == data.get())	// no offset means no ws frame
+		sendData(socket, data.get(), readLoadSize(false), sendWebs);	// send like normal
 	else if (sendWebs) {
 		if (data[1] & 0x80) {
 			data[1] &= 0x7F;
-			std::copy(pos, data + dlim, pos - sizeof(uint32));	// should already be unmasked
+			std::copy(pos, &data[dlim], pos - sizeof(uint32));	// should already be unmasked
 			dlim -= sizeof(uint32);	// skip resize because there should be an erase right after this anyway
 		}
-		sendNet(socket, data, readLoadSize(true));	// reuse ws frame without mask
+		sendNet(socket, data.get(), readLoadSize(true));	// reuse ws frame without mask
 	} else
 		sendNet(socket, pos, read16(pos + 1));	// skip ws frame
 }
 
 void Buffer::send(nsint socket, bool webs, bool clr) {
-	if (sendData(socket, data, dlim, webs); clr)
+	if (sendData(socket, data.get(), dlim, webs); clr)
 		clear();
 }
 
@@ -612,13 +415,15 @@ uint8* Buffer::recv(nsint socket, bool webs) {
 
 bool Buffer::recvData(nsint socket) {
 #ifndef MSG_DONTWAIT
-	noblockSocket(socket, true);
+	if (noblockSocket(socket, true))
+		throw Error(msgIoctlFail);
 #endif
 	for (long len;; dlim += len) {
 		checkOver(dlim);	// allocate next block if full
-		if (len = recvNow(socket, data + dlim, size - dlim); len <= 0) {
+		if (len = recvNow(socket, &data[dlim], size - dlim); len <= 0) {
 #ifndef MSG_DONTWAIT
-			noblockSocket(socket, false);
+			if (noblockSocket(socket, false))
+				throw Error(msgIoctlFail);
 #endif
 			return len;
 		}
@@ -645,13 +450,13 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 			break;
 
 		string word = "\r\n\r\n";
-		uint8* rend = std::search(data, data + dlim, word.begin(), word.end());
-		if (rend == data + dlim)
+		uint8* rend = std::search(data.get(), &data[dlim], word.begin(), word.end());
+		if (rend == &data[dlim])
 			return Init::wait;
 
 		rend += pdift(word.length());
 		word = "Sec-WebSocket-Key:";
-		uint8* pos = std::search(data, rend, word.begin(), word.end());
+		uint8* pos = std::search(data.get(), rend, word.begin(), word.end());
 		if (pos == rend)
 			break;
 
@@ -663,7 +468,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 			"Connection: Upgrade\r\n"
 			"Sec-WebSocket-Accept: " + encodeBase64(digestSha1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n";
 		sendNet(socket, response.c_str(), uint(response.length()));
-		eraseFront(uint(rend - data));
+		eraseFront(uint(rend - data.get()));
 		webs = true;
 		return Init::cont; }
 	default:
@@ -684,17 +489,17 @@ bool Buffer::recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs) {
 		if (plen == 126) {
 			if (ofs += sizeof(uint16); dlim < ofs)
 				return false;
-			plen = read16(data + wsHeadMin);
+			plen = read16(&data[wsHeadMin]);
 		} else if (plen == 127) {
 			if (ofs += sizeof(uint64); dlim < ofs)
 				return false;
-			plen = uint(read64(data + wsHeadMin));
+			plen = uint(read64(&data[wsHeadMin]));
 		}
 
 		if (data[1] & 0x80) {
 			if (ofs += sizeof(uint32); dlim < ofs)
 				return false;
-			mask = data + ofs - sizeof(uint32);
+			mask = &data[ofs-sizeof(uint32)];
 		}
 
 		if (uint8 opc = data[0] & 0xF; opc != 2) {
@@ -722,21 +527,21 @@ uint8* Buffer::recvLoad(uint ofs, const uint8* mask) {
 		if (dlim < end)
 			return nullptr;
 		unmask(mask, ofs, end);
-	} else if (dlim < read16(data + ofs + 1))
+	} else if (dlim < read16(&data[ofs+1]))
 		return nullptr;
-	return data + ofs;
+	return &data[ofs];
 }
 
 void Buffer::resendWs(nsint socket, uint hsize, uint plen, const uint8* mask) {
 	uint end = hsize + plen;
-	for (checkOver(end); dlim < end; dlim += recvNet(socket, data + dlim, size - dlim));
+	for (checkOver(end); dlim < end; dlim += recvNet(socket, &data[dlim], size - dlim));
 
 	if (mask) {
 		data[1] &= 0x7F;
 		unmask(mask, hsize, end);
-		std::copy_n(data + hsize, plen, data + hsize - sizeof(uint32));
+		std::copy_n(&data[hsize], plen, &data[hsize-sizeof(uint32)]);
 	}
-	sendData(socket, data, end, false);
+	sendData(socket, data.get(), end, false);
 	eraseFront(end);
 }
 
@@ -751,7 +556,7 @@ uint Buffer::readLoadSize(bool webs) const {
 		if (data[1] & 0x80)
 			ofs += sizeof(uint32);
 	}
-	return ofs + read16(data + ofs + 1);
+	return ofs + read16(&data[ofs+1]);
 }
 
 uint Buffer::checkOver(uint end) {
@@ -761,23 +566,22 @@ uint Buffer::checkOver(uint end) {
 }
 
 void Buffer::eraseFront(uint len) {
-	if (dlim -= len; size - dlim <= sizeStep)	// if nlim == size - sizeStep then still keep the next block
-		std::copy_n(data + len, dlim, data);
+	if (dlim -= len; size - dlim <= sizeStep)	// if dlim == size - sizeStep then still keep the next block
+		std::copy_n(&data[len], dlim, data.get());
 	else
 		resize(dlim, len);
 }
 
 void Buffer::resize(uint lim, uint ofs) {
 	uint nsiz = (lim / sizeStep + 1) * sizeStep;
-	uint8* ndat = new uint8[nsiz];
-	std::copy_n(data + ofs, dlim, ndat);
-	delete[] data;
-	data = ndat;
+	uptr<uint8[]> ndat = std::make_unique<uint8[]>(nsiz);
+	std::copy_n(&data[ofs], dlim, ndat.get());
+	data = std::move(ndat);
 	size = nsiz;
 }
 
 void Buffer::unmask(const uint8* mask, uint ofs, uint end) {
-	for (uint i = ofs; i < end; i++)
+	for (uint i = ofs; i < end; ++i)
 		data[i] ^= mask[(i - ofs) % sizeof(uint32)];
 }
 

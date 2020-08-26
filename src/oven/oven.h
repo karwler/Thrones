@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/text.h"
+#include "utils/alias.h"
 #ifdef __APPLE__
 #ifdef OPENGLES
 #include <OpenGLES/ES3/gl.h>
@@ -10,9 +10,7 @@
 #elif defined(OPENGLES)
 #include <GLES3/gl3.h>
 #else
-#ifdef _WIN32
 #define GLEW_STATIC
-#endif
 #include <GL/glew.h>
 #endif
 #ifdef __APPLE__
@@ -30,8 +28,7 @@ constexpr uint textureHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint1
 constexpr int imgInitFull = IMG_INIT_JPG | IMG_INIT_PNG;
 
 struct Sound {
-	static constexpr SDL_AudioSpec defaultSpec = { 48000, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
-	static constexpr SDL_AudioSpec mobileSpec = { 44100, AUDIO_F32, 2, 0, 4096, 0, 0, nullptr, nullptr };
+	static constexpr SDL_AudioSpec defaultSpec = { 22050, AUDIO_S16, 1, 0, 4096, 0, 0, nullptr, nullptr };
 
 	uint8* data;
 	uint32 length;
@@ -68,3 +65,9 @@ struct Vertex {
 
 // other functions
 SDL_Surface* scaleSurface(SDL_Surface* img, int div);
+
+template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_signed_v<S>, int> = 0>
+U cycle(U pos, U siz, S mov) {
+	U rst = pos + U(mov % S(siz));
+	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
+}

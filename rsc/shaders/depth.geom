@@ -3,7 +3,7 @@
 uniform mat4 shadowMats[6];
 
 layout (triangles) in;
-layout (triangle_strip, max_vertices=18) out;
+layout (triangle_strip, max_vertices = 18) out;
 
 out vec4 fragPos;
 

@@ -1,9 +1,6 @@
 #pragma once
 
-#include "audioSys.h"
-#include "inputSys.h"
-#include "scene.h"
-#include "prog/program.h"
+#include "utils/widgets.h"
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
@@ -142,6 +139,7 @@ private:
 #else
 	static constexpr int imgInitFlags = IMG_INIT_PNG;
 #endif
+	static constexpr float minimumRatio = 1.4f;
 	static constexpr array<ivec2, 26> resolutions = {
 		ivec2(640, 360),
 		ivec2(768, 432),
@@ -174,34 +172,43 @@ private:
 	struct Loader {
 		static constexpr int logSize = 18;
 
+		enum class State : uint8 {
+			start,
+			audio,
+			objects,
+			textures,
+			program,
+			done
+		};
+
 		string logStr;
-		uint8 state;
+		State state;
 
 		Loader();
 
 		void addLine(const string& str, WindowSys* win);
 	};
 
-	uptr<AudioSys> audio;
-	uptr<InputSys> inputSys;
-	uptr<Program> program;
-	uptr<Scene> scene;
-	uptr<Settings> sets;
+	AudioSys* audio;
+	InputSys* inputSys;
+	Program* program;
+	Scene* scene;
+	Settings* sets;
 	SDL_Window* window;
 	SDL_GLContext context;
-	uptr<ShaderGeometry> geom;
+	ShaderGeometry* geom;
 #ifndef OPENGLES
-	uptr<ShaderDepth> depth;
+	ShaderDepth* depth;
 #endif
-	uptr<ShaderGui> gui;
-	uptr<FontSet> fonts;
+	ShaderGui* gui;
+	FontSet* fonts;
 	ivec2 screenView, guiView;
 	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 	uint8 cursorHeight;
 #ifdef EMSCRIPTEN
-	Loader* loader;
+	uptr<Loader> loader;
 	void (WindowSys::*loopFunc)();
 #endif
 
@@ -215,7 +222,7 @@ public:
 	vector<ivec2> windowSizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	void setTextInput(Interactable* capture = nullptr);
+	void setTextCapture(bool on);
 	void setScreen();
 	void setVsync(Settings::VSync vsync);
 	void setGamma(float gamma);
@@ -254,12 +261,12 @@ private:
 	void setWindowMode();
 	void updateView();
 	bool checkCurDisplay();
-	template <class T> static bool checkResolution(T& val, const vector<T>& modes);
+	template <class T> static void checkResolution(T& val, const vector<T>& modes);
 	int showError(const char* caption, const char* message);
 };
 
 inline WindowSys::Loader::Loader() :
-	state(0)
+	state(State::start)
 {}
 
 inline void WindowSys::close() {
@@ -279,41 +286,41 @@ inline uint8 WindowSys::getCursorHeight() const {
 }
 
 inline AudioSys* WindowSys::getAudio() {
-	return audio.get();
+	return audio;
 }
 
 inline FontSet* WindowSys::getFonts() {
-	return fonts.get();
+	return fonts;
 }
 
 inline InputSys* WindowSys::getInput() {
-	return inputSys.get();
+	return inputSys;
 }
 
 inline Program* WindowSys::getProgram() {
-	return program.get();
+	return program;
 }
 
 inline Scene* WindowSys::getScene() {
-	return scene.get();
+	return scene;
 }
 
 inline Settings* WindowSys::getSets() {
-	return sets.get();
+	return sets;
 }
 
 inline const ShaderGeometry* WindowSys::getGeom() const {
-	return geom.get();
+	return geom;
 }
 
 #ifndef OPENGLES
 inline const ShaderDepth* WindowSys::getDepth() const {
-	return depth.get();
+	return depth;
 }
 #endif
 
 inline const ShaderGui* WindowSys::getGui() const {
-	return gui.get();
+	return gui;
 }
 
 inline SDL_Window* WindowSys::getWindow() {
@@ -326,8 +333,4 @@ inline float WindowSys::getDeltaSec() const {
 
 inline int WindowSys::displayID() const {
 	return SDL_GetWindowDisplayIndex(window);
-}
-
-inline void WindowSys::reloadFont(bool regular) {
-	fonts = std::make_unique<FontSet>(sets->fontRegular = regular);
 }

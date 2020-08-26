@@ -1,4 +1,7 @@
+#include "engine/inputSys.h"
+#include "engine/scene.h"
 #include "engine/world.h"
+#include "prog/progs.h"
 #include <glm/gtc/matrix_inverse.hpp>
 
 // GMESH
@@ -9,7 +12,7 @@ Mesh::Mesh() :
 	shape(0)
 {}
 
-Mesh::Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 type) :
+Mesh::Mesh(const vector<Vertex>& vertices, const vector<GLushort>& elements, uint8 type) :
 	ecnt(uint16(elements.size())),
 	shape(type)
 {
@@ -21,11 +24,11 @@ Mesh::Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8
 	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(*vertices.data())), vertices.data(), GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, psiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
+	glVertexAttribPointer(Shader::vpos, decltype(Vertex::pos)::length(), GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
 	glEnableVertexAttribArray(Shader::normal);
-	glVertexAttribPointer(Shader::normal, nsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, nrm)));
+	glVertexAttribPointer(Shader::normal, decltype(Vertex::nrm)::length(), GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, nrm)));
 	glEnableVertexAttribArray(Shader::uvloc);
-	glVertexAttribPointer(Shader::uvloc, tsiz, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, tuv)));
+	glVertexAttribPointer(Shader::uvloc, decltype(Vertex::tuv)::length(), GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, tuv)));
 
 	glGenBuffers(1, &ebo);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -44,7 +47,7 @@ void Mesh::free() {
 
 // OBJECT
 
-Object::Object(const vec3& position, const vec3& rotation, const vec3& scale, const Mesh* model, const Material* material, GLuint texture, bool interactive, bool visible) :
+Object::Object(const vec3& position, const vec3& rotation, const vec3& scale, const Mesh* model, const Material* material, GLuint texture, bool visible, bool interactive) :
 	mesh(model),
 	matl(material),
 	tex(texture),
@@ -84,11 +87,11 @@ void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& 
 // GAME OBJECT
 
 BoardObject::BoardObject(const vec3& position, float rotation, float size, const Mesh* model, const Material* material, GLuint texture, bool visible, float alpha) :
-	Object(position, vec3(0.f, rotation, 0.f), vec3(size), model, material, texture, false, visible),
+	Object(position, vec3(0.f, rotation, 0.f), vec3(size), model, material, texture, visible),
+	alphaFactor(alpha),
 	hgcall(nullptr),
 	ulcall(nullptr),
 	urcall(nullptr),
-	alphaFactor(alpha),
 	diffuseFactor(1.f),
 	emission(EMI_NONE)
 {}
@@ -106,12 +109,12 @@ void BoardObject::draw() const {
 }
 
 #ifndef OPENGLES
-void BoardObject::drawTopMeshDepth(float ypos, const Mesh* tmesh) const {
-	glBindVertexArray(tmesh->getVao());
+void BoardObject::drawTopMeshDepth(float ypos) const {
 	mat4 model;
 	setTransform(model, vec3(World::state()->objectDragPos.x, ypos, World::state()->objectDragPos.y), getRot(), getScl());
+	glBindVertexArray(mesh->getVao());
 	glUniformMatrix4fv(World::depth()->model, 1, GL_FALSE, glm::value_ptr(model));
-	glDrawElements(tmesh->getShape(), tmesh->getEcnt(), Mesh::elemType, nullptr);
+	glDrawElements(mesh->getShape(), mesh->getEcnt(), Mesh::elemType, nullptr);
 }
 #endif
 
@@ -133,96 +136,86 @@ void BoardObject::onDrag(const ivec2& mPos, const ivec2&) {
 	World::state()->objectDragPos = vec2(isct.x, isct.z);
 }
 
-void BoardObject::onKeypress(const SDL_KeyboardEvent& key) {
-	switch (key.keysym.scancode) {
-	case SDL_SCANCODE_UP:
+void BoardObject::onKeyDown(const SDL_KeyboardEvent& key) {
+	World::input()->callBindings(key, [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onKeyUp(const SDL_KeyboardEvent& key) {
+	World::input()->callBindings(key, [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onJButtonDown(uint8 but) {
+	World::input()->callBindings(JoystickButton(but), [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onJButtonUp(uint8 but) {
+	World::input()->callBindings(JoystickButton(but), [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onJHatDown(uint8 hat, uint8 val) {
+	World::input()->callBindings(AsgJoystick(hat, val), [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onJHatUp(uint8 hat, uint8 val) {
+	World::input()->callBindings(AsgJoystick(hat, val), [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onJAxisDown(uint8 axis, bool positive) {
+	World::input()->callBindings(AsgJoystick(JoystickAxis(axis), positive), [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onJAxisUp(uint8 axis, bool positive) {
+	World::input()->callBindings(AsgJoystick(JoystickAxis(axis), positive), [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onGButtonDown(SDL_GameControllerButton but) {
+	World::input()->callBindings(but, [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onGButtonUp(SDL_GameControllerButton but) {
+	World::input()->callBindings(but, [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onGAxisDown(SDL_GameControllerAxis axis, bool positive) {
+	World::input()->callBindings(AsgGamepad(axis, positive), [this](Binding::Type id) { return onInputDown(id); });
+}
+
+void BoardObject::onGAxisUp(SDL_GameControllerAxis axis, bool positive) {
+	World::input()->callBindings(AsgGamepad(axis, positive), [this](Binding::Type id) { return onInputUp(id); });
+}
+
+void BoardObject::onInputDown(Binding::Type bind) {
+	switch (bind) {
+	case Binding::Type::up:
 		if (World::scene()->getSelect())
 			World::scene()->getSelect()->onNavSelect(Direction::up);
 		break;
-	case SDL_SCANCODE_DOWN:
+	case Binding::Type::down:
 		if (World::scene()->getSelect())
 			World::scene()->getSelect()->onNavSelect(Direction::down);
 		break;
-	case SDL_SCANCODE_LEFT:
+	case Binding::Type::left:
 		if (World::scene()->getSelect())
 			World::scene()->getSelect()->onNavSelect(Direction::left);
 		break;
-	case SDL_SCANCODE_RIGHT:
+	case Binding::Type::right:
 		if (World::scene()->getSelect())
 			World::scene()->getSelect()->onNavSelect(Direction::right);
 		break;
-	case SDL_SCANCODE_D:
-		if (!key.repeat)
-			World::state()->eventDestroy(Switch::on);
+	case Binding::Type::destroyHold: case Binding::Type::destroyToggle:
+		World::srun(World::input()->getBinding(bind).bcall);
 		break;
-	case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER:
-		if (!key.repeat)
-			onUndrag(SDL_BUTTON_LEFT);
-		break;
-	case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_TAB: case SDL_SCANCODE_AC_BACK:
-		if (!key.repeat)
-			cancelDrag();
+	case Binding::Type::cancel:
+		World::scene()->updateSelect(this);
+	case Binding::Type::confirm: case Binding::Type::engage:
+		onUndrag(leftDrag ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);
 	}
 }
 
-void BoardObject::onKeyrelease(const SDL_KeyboardEvent& key) {
-	switch (key.keysym.scancode) {
-	case SDL_SCANCODE_D:
-		if (!key.repeat)
-			World::state()->eventDestroy(Switch::off);
-	}
-}
-
-void BoardObject::onJButton(uint8 but) {
-	switch (but) {
-	case InputSys::jbutStart:
-		World::state()->eventDestroy(Switch::toggle);
-		break;
-	case InputSys::jbutA:
-		onUndrag(SDL_BUTTON_LEFT);
-		break;
-	case InputSys::jbutB:
-		cancelDrag();
-	}
-}
-
-void BoardObject::onJHat(uint8 hat) {
-	if ((hat & SDL_HAT_UP) && World::scene()->getSelect())
-		World::scene()->getSelect()->onNavSelect(Direction::up);
-	if ((hat & SDL_HAT_RIGHT) && World::scene()->getSelect())
-		World::scene()->getSelect()->onNavSelect(Direction::right);
-	if ((hat & SDL_HAT_DOWN) && World::scene()->getSelect())
-		World::scene()->getSelect()->onNavSelect(Direction::down);
-	if ((hat & SDL_HAT_LEFT) && World::scene()->getSelect())
-		World::scene()->getSelect()->onNavSelect(Direction::left);
-}
-
-void BoardObject::onGButton(SDL_GameControllerButton but) {
-	switch (but) {
-	case SDL_CONTROLLER_BUTTON_DPAD_UP:
-		if (World::scene()->getSelect())
-			World::scene()->getSelect()->onNavSelect(Direction::up);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-		if (World::scene()->getSelect())
-			World::scene()->getSelect()->onNavSelect(Direction::down);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
-		if (World::scene()->getSelect())
-			World::scene()->getSelect()->onNavSelect(Direction::left);
-		break;
-	case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
-		if (World::scene()->getSelect())
-			World::scene()->getSelect()->onNavSelect(Direction::right);
-		break;
-	case SDL_CONTROLLER_BUTTON_START:
-		World::state()->eventDestroy(Switch::toggle);
-		break;
-	case SDL_CONTROLLER_BUTTON_A:
-		onUndrag(SDL_BUTTON_LEFT);
-		break;
-	case SDL_CONTROLLER_BUTTON_B:
-		cancelDrag();
+void BoardObject::onInputUp(Binding::Type bind) {
+	switch (bind) {
+	case Binding::Type::destroyHold:
+		World::srun(World::input()->getBinding(bind).ucall);
 	}
 }
 
@@ -240,7 +233,7 @@ void BoardObject::onNavSelect(Direction dir) {
 			return;
 		}
 	}
-	if (ProgGame* pg = dynamic_cast<ProgGame*>(World::state()); pg && !World::scene()->capture)
+	if (ProgGame* pg = dynamic_cast<ProgGame*>(World::state()); pg && !World::scene()->getCapture())
 		pg->planeSwitch->navSelectOut(getPos(), dir);
 }
 
@@ -257,14 +250,19 @@ void BoardObject::setEmission(Emission emi) {
 // TILE
 
 Tile::Tile(const vec3& position, float size, bool visible) :
-	BoardObject(position, 0.f, size, World::scene()->mesh("tile"), World::scene()->material("empty"), World::scene()->texture(Com::tileNames[uint8(Com::Tile::empty)]), visible, 0.f),
-	type(Com::Tile::empty),
+	BoardObject(position, 0.f, size, World::scene()->mesh("tile"), World::scene()->material("empty"), World::scene()->texture(names[empty]), visible, 0.f),
+	type(empty),
 	breached(false)
 {}
 
 #ifndef OPENGLES
+void Tile::drawDepth() const {
+	if (type != empty)
+		Object::drawDepth();
+}
+
 void Tile::drawTopDepth() const {
-	drawTopMeshDepth(topYpos, mesh);
+	drawTopMeshDepth(topYpos);
 }
 #endif
 
@@ -274,10 +272,10 @@ void Tile::drawTop() const {
 
 void Tile::onHold(const ivec2& mPos, uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
-		if (mBut == SDL_BUTTON_LEFT ? ulcall : urcall) {
+		if (leftDrag = mBut == SDL_BUTTON_LEFT; leftDrag ? ulcall : urcall) {
 			show = false;
 			onDrag(mPos, ivec2());
-			World::scene()->capture = this;
+			World::scene()->setCapture(this);
 		}
 		World::prun(hgcall, this, mBut);
 	}
@@ -285,7 +283,7 @@ void Tile::onHold(const ivec2& mPos, uint8 mBut) {
 
 void Tile::onUndrag(uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
-		cancelDrag();
+		World::scene()->setCapture(nullptr);
 		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this, mBut);
 	}
 }
@@ -296,21 +294,20 @@ void Tile::onHover() {
 }
 
 void Tile::onUnhover() {
-	alphaFactor = type != Com::Tile::empty ? 1.f : 0.f;
+	alphaFactor = type != empty ? 1.f : 0.f;
 	setEmission(getEmission() & ~EMI_SEL);
 }
 
-void Tile::cancelDrag() {
+void Tile::onCancelCapture() {
 	show = true;
-	World::scene()->capture = nullptr;
 }
 
-void Tile::setType(Com::Tile newType) {
+void Tile::setType(Type newType) {
 	type = newType;
-	alphaFactor = type != Com::Tile::empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
+	alphaFactor = type != empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
 	mesh = World::scene()->mesh(pickMesh());
-	matl = World::scene()->material(type != Com::Tile::empty ? "tile" : "empty");
-	tex = World::scene()->texture(Com::tileNames[uint8(type)]);
+	matl = World::scene()->material(type != empty ? "tile" : "empty");
+	tex = World::scene()->texture(names[type]);
 }
 
 void Tile::setBreached(bool yes) {
@@ -322,7 +319,7 @@ void Tile::setBreached(bool yes) {
 void Tile::setInteractivity(Interact lvl, bool dim) {
 	rigid = lvl != Interact::ignore;
 	setEmission(dim || breached ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
-	ulcall = lvl == Interact::interact && type != Com::Tile::empty ? &Program::eventMoveTile : nullptr;
+	ulcall = lvl == Interact::interact && type != empty ? &Program::eventMoveTile : nullptr;
 }
 
 void Tile::setEmission(Emission emi) {
@@ -340,13 +337,13 @@ Piece::Piece(const vec3& position, float rotation, float size, const Material* m
 
 #ifndef OPENGLES
 void Piece::drawTopDepth() const {
-	if (drawTopSelf)
-		drawTopMeshDepth(selfTopYpos(World::scene()->getSelect()), mesh);
+	if (leftDrag)
+		drawTopMeshDepth(selfTopYpos(World::scene()->getSelect()));
 }
 #endif
 
 void Piece::drawTop() const {
-	if (drawTopSelf)
+	if (leftDrag)
 		drawTopMesh(selfTopYpos(World::scene()->getSelect()), mesh, Material(matl->color * moveColorFactor, matl->spec, matl->shine), tex);
 	else {
 		glDisable(GL_DEPTH_TEST);
@@ -358,12 +355,12 @@ void Piece::drawTop() const {
 void Piece::onHold(const ivec2& mPos, uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
 		if (mBut == SDL_BUTTON_LEFT ? ulcall : urcall) {
-			if (drawTopSelf = mBut == SDL_BUTTON_LEFT || !firingArea().first)
+			if (leftDrag = mBut == SDL_BUTTON_LEFT || !firingArea().first; leftDrag)
 				show = false;
 			else
 				SDL_ShowCursor(SDL_DISABLE);
 			onDrag(mPos, ivec2());
-			World::scene()->capture = this;
+			World::scene()->setCapture(this);
 		}
 		World::prun(hgcall, this, mBut);
 	}
@@ -371,7 +368,7 @@ void Piece::onHold(const ivec2& mPos, uint8 mBut) {
 
 void Piece::onUndrag(uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
-		cancelDrag();
+		World::scene()->setCapture(nullptr);
 		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this, mBut);
 	}
 }
@@ -390,15 +387,14 @@ void Piece::onUnhover() {
 	}
 }
 
-void Piece::cancelDrag() {
+void Piece::onCancelCapture() {
 	show = true;
 	SDL_ShowCursor(SDL_ENABLE);
-	World::scene()->capture = nullptr;
 }
 
-void Piece::setType(Com::Piece newType) {
+void Piece::setType(Type newType) {
 	type = newType;
-	mesh = World::scene()->mesh(Com::pieceNames[uint8(type)]);
+	mesh = World::scene()->mesh(names[type]);
 }
 
 void Piece::updatePos(svec2 bpos, bool forceRigid) {
@@ -423,16 +419,16 @@ void Piece::setInteractivity(bool on, bool dim, GCall holdCall, GCall leftCall, 
 	hgcall = holdCall;
 	ulcall = leftCall;
 	urcall = rightCall;
-	setEmission(dim ? getEmission() | BoardObject::EMI_DIM : getEmission() & ~BoardObject::EMI_DIM);
+	setEmission(dim ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
 }
 
 pair<uint8, uint8> Piece::firingArea() const {
 	switch (type) {
-	case Com::Piece::crossbowmen:
+	case crossbowmen:
 		return pair(1, 1);
-	case Com::Piece::catapult:
+	case catapult:
 		return pair(1, 2);
-	case Com::Piece::trebuchet:
+	case trebuchet:
 		return pair(3, 3);
 	}
 	return pair(0, 0);

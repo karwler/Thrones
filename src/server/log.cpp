@@ -1,7 +1,10 @@
 #include "log.h"
 #include <ctime>
 #ifdef _WIN32
+#include <windows.h>
 #include <filesystem>
+#else
+#include <dirent.h>
 #endif
 
 // DATE
@@ -24,21 +27,19 @@ DateTime DateTime::now() {
 
 // LOG
 
-void Log::start(bool logStd, const char* logDir) {
+void Log::start(bool logStd, const char* logDir, uint maxLogs) {
 	verbose = logStd;
-	if (logDir && *logDir) {
+	maxLogfiles = maxLogs;
+	if (logDir && *logDir && maxLogfiles) {
 		if (dir = logDir; !isDsep(dir.back()))
 			dir += '/';
 		createDirectories(dir);
-
-		for (string& it : readFile(dir + fileRecords))
-			files.push_back(std::move(it));
 		openFile(DateTime::now());
 	}
 }
 
 void Log::openFile(const DateTime& now) {
-	string name = "thrones_log_" + now.toString() + ".txt";
+	string name = filePrefix + now.toString() + ".txt";
 #ifdef _WIN32
 	if (lfile.open(std::filesystem::u8path(dir + name), std::ios::out | std::ios::binary); !lfile.good()) {
 #else
@@ -50,46 +51,35 @@ void Log::openFile(const DateTime& now) {
 	}
 	lastLog = now;
 
-	for (files.push_back(std::move(name)); files.size() > maxLogfiles; files.pop_front())
+	if (vector<string> files = listLogs(); files.size() > maxLogfiles)
+		for (sizet i = 0, todel = files.size() - maxLogfiles; i < todel; ++i)
 #ifdef _WIN32
-		_wremove(stow(dir + files.front()).c_str());
+			_wremove(stow(dir + files[i]).c_str());
 #else
-		remove((dir + files.front()).c_str());
+			remove((dir + files[i]).c_str());
 #endif
-#ifdef _WIN32
-	if (FILE* ofh = _wfopen(stow(dir + fileRecords).c_str(), L"wb")) {
-#else
-	if (FILE* ofh = fopen((dir + fileRecords).c_str(), defaultWriteMode)) {
-#endif
-		for (const string& it : files) {
-			fputs(it.c_str(), ofh);
-			fputs(linend, ofh);
-		}
-		fclose(ofh);
-	}
 }
 
-vector<string> Log::readFile(const string& path) {
-	string text;
+vector<string> Log::listLogs() const {
+	vector<string> entries;
 #ifdef _WIN32
-	if (FILE* ifh = _wfopen(stow(path).c_str(), L"rb")) {
-#else
-	if (FILE* ifh = fopen(path.c_str(), defaultReadMode)) {
-#endif
-		try {
-			if (fseek(ifh, 0, SEEK_END))
-				throw 0;
-			long len = ftell(ifh);
-			if (len == -1)
-				throw 0;
-			if (fseek(ifh, 0, SEEK_SET))
-				throw 0;
-
-			text.resize(len);
-			if (sizet red = fread(text.data(), sizeof(*text.data()), text.length(), ifh); red < text.length())
-				text.resize(red);
-		} catch (...) {}
-		fclose(ifh);
+	WIN32_FIND_DATAW data;
+	if (HANDLE hFind = FindFirstFileW(stow(dir + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
+		wstring wprefix = stow(filePrefix);
+		do {
+			if (data.dwFileAttributes == FILE_ATTRIBUTE_NORMAL && !_wcsnicmp(data.cFileName, wprefix.c_str(), wprefix.length()))
+				entries.push_back(wtos(data.cFileName));
+		} while (FindNextFileW(hFind, &data));
+		FindClose(hFind);
 	}
-	return readTextLines(text);
+#else
+	if (DIR* directory = opendir(dir.c_str())) {
+		while (dirent* entry = readdir(directory))
+			if (entry->d_type == DT_REG && !strncmp(entry->d_name, filePrefix, strlen(filePrefix)))
+				entries.emplace_back(entry->d_name);
+		closedir(directory);
+	}
+#endif
+	std::sort(entries.begin(), entries.end(), strnatless);
+	return entries;
 }

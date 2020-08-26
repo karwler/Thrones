@@ -19,7 +19,6 @@
 	<a href="#h1_0">1 Miscellaneous</a><br>
 	<a href="#h1_1" class="sindent">1.1 Dependencies</a><br>
 	<a href="#h1_2" class="sindent">1.2 UI</a><br>
-	<a href="#h1_3" class="sindent">1.3 Bindings</a><br>
 	<a href="#h2_0">2 Preferences</a><br>
 	<a href="#h2_1" class="sindent">2.1 Settings</a><br>
 	<a href="#h2_2" class="sindent">2.2 Configurations</a><br>
@@ -47,9 +46,8 @@
 	<h3>Linux</h3>
 	<ul>
 		<li>Linux 3.2.0 64-bit</li>
-		<li>OpenGL 3.3 (x86) or OpenGL ES 3.0 (ARM)</li>
+		<li>OpenGL 3.3 (x86/x86-64) or OpenGL ES 3.0 (ARM)</li>
 		<li>FreeType</li>
-		<li>GLEW 2.1.0</li>
 		<li>libcurl</li>
 		<li>libjpeg (OpenGL ES)</li>
 		<li>libpng</li>
@@ -70,305 +68,19 @@
 	</ul>
 
 	<h2 id="h1_2">1.2 UI</h2>
-	<p>Widgets that can be interacted with or have tooltips are highlighted when the user hovers the mouse cursor over them. The "Escape" or "Back" key always perform a given menu's "exit" action, while "Return" performs a popup's "confirm" action.</p>
+	<p>Widgets that can be interacted with or have tooltips are highlighted when the user hovers the mouse cursor over them. The "Escape" and "Back" keys always perform a given menu's "exit" action. "Return" and "Enter" perform a popup's or selection's "confirm" action.</p>
 	<h3>Checkbox</h3>
 	<p>Can be toggled with either the left or the right mouse button.</p>
 	<h3>Scroll area</h3>
 	<p>Can be scrolled with either a scroll bar on the right, the mouse wheel or by left click holding and dragging inside the area.</p>
 	<h3>Slider</h3>
 	<p>Most sliders' changes will be fully applied only once the dragging is done.</p>
-	<h3>Text edit</h3>
-	<p>Possible editing actions are:</p>
-	<table class="listing">
-		<tr>
-			<td>Left</td>
-			<td>move cursor one character to the left</td>
-		</tr>
-		<tr>
-			<td>Alt + Left</td>
-			<td>move cursor to the start of a word</td>
-		</tr>
-		<tr>
-			<td>Ctrl + Left</td>
-			<td>move cursor to the start</td>
-		</tr>
-		<tr>
-			<td>Right</td>
-			<td>move cursor one character to the right</td>
-		</tr>
-		<tr>
-			<td>Alt + Left</td>
-			<td>move cursor to the end of a word</td>
-		</tr>
-		<tr>
-			<td>Ctrl + Left</td>
-			<td>move cursor to the end</td>
-		</tr>
-		<tr>
-			<td>Backspace</td>
-			<td>delete previous character</td>
-		</tr>
-		<tr>
-			<td>Alt + Backspace</td>
-			<td>delete to the start of a word</td>
-		</tr>
-		<tr>
-			<td>Ctrl + Backspace</td>
-			<td>delete to the start</td>
-		</tr>
-		<tr>
-			<td>Delete</td>
-			<td>delete current character</td>
-		</tr>
-		<tr>
-			<td>Alt + Delete</td>
-			<td>delete to the end of a word</td>
-		</tr>
-		<tr>
-			<td>Ctrl + Delete</td>
-			<td>delete to the end</td>
-		</tr>
-		<tr>
-			<td>Home</td>
-			<td>move cursor to the start</td>
-		</tr>
-		<tr>
-			<td>End</td>
-			<td>move cursor to the end</td>
-		</tr>
-		<tr>
-			<td>Ctrl + V</td>
-			<td>insert clipboard text at cursor's position</td>
-		</tr>
-		<tr>
-			<td>Ctrl + C</td>
-			<td>copy entire text to clipboard</td>
-		</tr>
-		<tr>
-			<td>Ctrl + X</td>
-			<td>cut entire text to clipboard</td>
-		</tr>
-		<tr>
-			<td>Ctrl + Z</td>
-			<td>set text to the original text</td>
-		</tr>
-		<tr>
-			<td>Return or Enter</td>
-			<td>confirm new text and stop editing</td>
-		</tr>
-		<tr>
-			<td>Escape or Tab or Back</td>
-			<td>set text to the original text and stop editing</td>
-		</tr>
-	</table>
-
-	<h2 id="h1_3">1.3 Bindings</h2>
-	<table class="listing">
-		<tr>
-			<th>Binding</th>
-			<th>Keyboard</th>
-			<th>DirectInput</th>
-			<th>XInput</th>
-			<th>Other</th>
-		</tr>
-		<tr>
-			<td class="title">General</td>
-		</tr>
-		<tr>
-			<td>Confirm</td>
-			<td>Return</td>
-			<td>2</td>
-			<td>A</td>
-			<td>Mouse Left</td>
-		</tr>
-		<tr>
-			<td>Cancel</td>
-			<td>Escape</td>
-			<td>1</td>
-			<td>B</td>
-			<td>Mouse X1, Phone Back</td>
-		</tr>
-		<tr>
-			<td>Next Menu</td>
-			<td>Space</td>
-			<td>0</td>
-			<td>Y</td>
-			<td>Mouse X2</td>
-		</tr>
-		<tr>
-			<td>Up</td>
-			<td>Arrow Up</td>
-			<td>Hat Up</td>
-			<td>D-pad Up</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Down</td>
-			<td>Arrow Down</td>
-			<td>Hat Down</td>
-			<td>D-pad Down</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Left</td>
-			<td>Arrow Left</td>
-			<td>Hat Left</td>
-			<td>D-pad Left</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Right</td>
-			<td>Arrow Right</td>
-			<td>Hat Right</td>
-			<td>D-pad Right</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Rotate Camera</td>
-			<td>Left Alt + Mouse Move</td>
-			<td>0, 1</td>
-			<td>Left Stick</td>
-			<td>Mouse Middle, Two Finger Drag</td>
-		</tr>
-		<tr>
-			<td>Center Camera</td>
-			<td>C</td>
-			<td>10</td>
-			<td>LS</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Frame Counter</td>
-			<td>P</td>
-			<td>11</td>
-			<td>RS</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Chat</td>
-			<td>Tab</td>
-			<td>8</td>
-			<td>Back</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Scroll</td>
-			<td></td>
-			<td>2, 3</td>
-			<td>Right Stick</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td class="title">Setup</td>
-		</tr>
-		<tr>
-			<td>Select Tile/Piece</td>
-			<td>1 - 0</td>
-			<td>4/6, 5/7</td>
-			<td>LB/LT, RB/RT</td>
-			<td>Mouse Wheel</td>
-		</tr>
-		<tr>
-			<td>Place/Move Tile/Piece</td>
-			<td>Return</td>
-			<td>2</td>
-			<td>A</td>
-			<td>Mouse Left</td>
-		</tr>
-		<tr>
-			<td>Remove Tile/Piece</td>
-			<td>X</td>
-			<td>3</td>
-			<td>X</td>
-			<td>Mouse Right</td>
-		</tr>
-		<tr>
-			<td>Next Stage</td>
-			<td>Space</td>
-			<td>0</td>
-			<td>Y</td>
-			<td>Mouse X2</td>
-		</tr>
-		<tr>
-			<td>Previous Stage</td>
-			<td>Escape</td>
-			<td>1</td>
-			<td>B</td>
-			<td>Mouse X1</td>
-		</tr>
-		<tr>
-			<td class="title">Match</td>
-		</tr>
-		<tr>
-			<td>Move Piece</td>
-			<td>Return</td>
-			<td>2</td>
-			<td>A</td>
-			<td>Mouse Left</td>
-		</tr>
-		<tr>
-			<td>Attack/Fire</td>
-			<td>X</td>
-			<td>3</td>
-			<td>X</td>
-			<td>Mouse Right</td>
-		</tr>
-		<tr>
-			<td>Favor Hasten</td>
-			<td>1</td>
-			<td>4</td>
-			<td>LB</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Favor Assault</td>
-			<td>2</td>
-			<td>6</td>
-			<td>RB</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Favor Conspire</td>
-			<td>3</td>
-			<td>5</td>
-			<td>LT</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Favor Deceive</td>
-			<td>4</td>
-			<td>7</td>
-			<td>RT</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>Destroy Forest</td>
-			<td>D</td>
-			<td>9</td>
-			<td>Start</td>
-			<td></td>
-		</tr>
-		<tr>
-			<td>End Turn</td>
-			<td>Space</td>
-			<td>0</td>
-			<td>Y</td>
-			<td>Mouse X2</td>
-		</tr>
-		<tr>
-			<td>Surrender</td>
-			<td>S</td>
-			<td>12</td>
-			<td>Guide</td>
-			<td></td>
-		</tr>
-	</table>
 
 	<h1 id="h2_0">2 Preferences</h1>
 	<p>
 		All preferences are stored in INI files.<br>
 		If the game was built for Android or with the "EXTERNAL" define, it'll default to saving preferences outside of the game's directory.<br>
-		The locations are:
+		These external locations are:
 	</p>
 	<table class="listing">
 		<tr>
@@ -398,6 +110,10 @@
 			<td>macOS</td>
 			<td>Thrones.app/Contents/Resources</td>
 		</tr>
+		<tr>
+			<td>Web</td>
+			<td>Indexed DB /data</td>
+		</tr>
 	</table>
 	<p>Either behavior can be explicitly set by running the game with the "-e 0|1" option:</p>
 	<table class="listing">
@@ -412,7 +128,7 @@
 	</table>
 
 	<h2 id="h2_1">2.1 Settings</h2>
-	<p>Game client settings are stored in "settings.ini" and can be edited in the main menu and in the "Settings" menu.</p>
+	<p>Game client settings are stored in "setting.ini" and can be edited in the "Settings" menu.</p>
 	<h3>Address</h3>
 	<p>The server's address to connect to when clicking "Connect".</p>
 	<h3>Port</h3>
@@ -500,6 +216,194 @@
 	</table>
 	<h3>Regular font</h3>
 	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
+	<h3>Key bindings</h3>
+	<p>A table of all key bindings. The first column lists keyboard bindings, the second lists joystick bindings and the third lists gamepad bindings. A binding can be edited by left clicking the field or deleted by right clicking it. The plus buttons on the right can be used to add new key bindings.</p>
+	<table class="listing">
+		<tr>
+			<td>Up</td>
+			<td>Move the selection/cursor up. When editing text, jump to the start.</td>
+		</tr>
+		<tr>
+			<td>Down</td>
+			<td>Move the selection/cursor down. When editing text, it can be used in combination with Alt to jump to the next word end or with Ctrl to jump to the end.</td>
+		</tr>
+		<tr>
+			<td>Left</td>
+			<td>Move the selection/cursor left. When editing text, jump to the end.</td>
+		</tr>
+		<tr>
+			<td>Right</td>
+			<td>Move the selection/cursor right. When editing text, it can be used in combination with Alt to jump to the previous word start or with Ctrl to jump to the start.</td>
+		</tr>
+		<tr>
+			<td>Text backspace</td>
+			<td>Delete the left character when editing text. It can be used in combination with Alt to delete to the left word start or with Ctrl to delete everything to the left.</td>
+		</tr>
+		<tr>
+			<td>Text delete</td>
+			<td>Delete the right character when editing text. It can be used in combination with Alt to delete to the right word end or with Ctrl to delete everything to the right.</td>
+		</tr>
+		<tr>
+			<td>Text home</td>
+			<td>Move the cursor to the start when editing text.</td>
+		</tr>
+		<tr>
+			<td>Text end</td>
+			<td>Move the cursor to the end when editing text.</td>
+		</tr>
+		<tr>
+			<td>Text paste</td>
+			<td>Paste text from the clipboard when editing text. Must be used in combination with Ctrl when using a keyboard.</td>
+		</tr>
+		<tr>
+			<td>Text copy</td>
+			<td>Copy all to clipboard when editing text. Must be used in combination with Ctrl when using a keyboard.</td>
+		</tr>
+		<tr>
+			<td>Text cut</td>
+			<td>Cut all to clipboard when editing text. Must be used in combination with Ctrl when using a keyboard.</td>
+		</tr>
+		<tr>
+			<td>Text revert</td>
+			<td>Revert to the original when editing text. Must be used in combination with Ctrl when using a keyboard.</td>
+		</tr>
+		<tr>
+			<td>Confirm</td>
+			<td>Perform the current confirm action.</td>
+		</tr>
+		<tr>
+			<td>Cancel</td>
+			<td>Perform the current abort action.</td>
+		</tr>
+		<tr>
+			<td>Finish</td>
+			<td>Use the finish button.</td>
+		</tr>
+		<tr>
+			<td>Hasten</td>
+			<td>Toggle the hasten icon.</td>
+		</tr>
+		<tr>
+			<td>Assault</td>
+			<td>Toggle the assault icon.</td>
+		</tr>
+		<tr>
+			<td>Conspire</td>
+			<td>Toggle the conspire icon.</td>
+		</tr>
+		<tr>
+			<td>Deceive</td>
+			<td>Toggle the deceive icon.</td>
+		</tr>
+		<tr>
+			<td>Move camera</td>
+			<td>Toggle moving the camera with the mouse.</td>
+		</tr>
+		<tr>
+			<td>Reset camera</td>
+			<td>Reset the camera position.</td>
+		</tr>
+		<tr>
+			<td>Engage</td>
+			<td>Toggle the engage button.</td>
+		</tr>
+		<tr>
+			<td>Delete</td>
+			<td>Delete a tile or piece.</td>
+		</tr>
+		<tr>
+			<td>Destroy hold</td>
+			<td>Turn the destroy button on or off.</td>
+		</tr>
+		<tr>
+			<td>Destroy toggle</td>
+			<td>Toggle the destroy button.</td>
+		</tr>
+		<tr>
+			<td>Surrender</td>
+			<td>Use the surrender button.</td>
+		</tr>
+		<tr>
+			<td>Chat</td>
+			<td>Toggle the chat overlay.</td>
+		</tr>
+		<tr>
+			<td>Frame counter</td>
+			<td>Cycle through the frame counter overlay's modes. Those being frames per second, tick duration in ms and off.</td>
+		</tr>
+		<tr>
+			<td>Select next</td>
+			<td>Select the next icon.</td>
+		</tr>
+		<tr>
+			<td>Select prev</td>
+			<td>Select the previous icon.</td>
+		</tr>
+		<tr>
+			<td>Select 0</td>
+			<td>Select the first icon.</td>
+		</tr>
+		<tr>
+			<td>Select 1</td>
+			<td>Select the second icon.</td>
+		</tr>
+		<tr>
+			<td>Select 2</td>
+			<td>Select the third icon.</td>
+		</tr>
+		<tr>
+			<td>Select 3</td>
+			<td>Select the fourth icon.</td>
+		</tr>
+		<tr>
+			<td>Select 4</td>
+			<td>Select the fifth icon.</td>
+		</tr>
+		<tr>
+			<td>Select 5</td>
+			<td>Select the sixth icon.</td>
+		</tr>
+		<tr>
+			<td>Select 6</td>
+			<td>Select the seventh icon.</td>
+		</tr>
+		<tr>
+			<td>Select 7</td>
+			<td>Select the eighth icon.</td>
+		</tr>
+		<tr>
+			<td>Select 8</td>
+			<td>Select the ninth icon.</td>
+		</tr>
+		<tr>
+			<td>Select 9</td>
+			<td>Select the tenth icon.</td>
+		</tr>
+		<tr>
+			<td>Camera up</td>
+			<td>Move the camera up.</td>
+		</tr>
+		<tr>
+			<td>Camera down</td>
+			<td>Move the camera down.</td>
+		</tr>
+		<tr>
+			<td>Camera left</td>
+			<td>Move the camera left.</td>
+		</tr>
+		<tr>
+			<td>Camera right</td>
+			<td>Move the camera right.</td>
+		</tr>
+		<tr>
+			<td>Scroll up</td>
+			<td>Scroll the current menu's main list up.</td>
+		</tr>
+		<tr>
+			<td>Scroll down</td>
+			<td>Scroll the current menu's main list down.</td>
+		</tr>
+	</table>
 
 	<h2 id="h2_2">2.2 Configurations</h2>
 	<p>Game configurations are stored in "game.ini" and can be edited in the "Host" menu or when hosting a room on a server.</p>
@@ -517,7 +421,7 @@
 	<table class="listing">
 		<tr>
 			<td>width</td>
-			<td>Is equal to the number of tile columns of the board. The minimum is 5 because each row has to have at least one of each tile's type plus a possible fortress and the maximum is 101.</td>
+			<td>Is equal to the number of tile columns of the board. The minimum is 5 and the maximum is 101.</td>
 		</tr>
 		<tr>
 			<td>height</td>
@@ -527,13 +431,19 @@
 	<h3>Battle win chance</h3>
 	<p>Probability of winning a battle.</p>
 	<h3>Fate's favor maximum</h3>
-	<p>Can be set to a value in the range of 0 to 255. Its effect is described by "Fate's favor total".</p>
+	<p>Can be set to a value in the range of 0 to 16383. Its effect is described by "Fate's favor total".</p>
 	<h3>Fate's favor total</h3>
 	<p>If enabled, "Favor maximum" will be the limit of how many times each player can use each type of fate's favor in one match. If disabled, "Favor maximum" will be the limit of how many of each type of fate's favor each player can stock up.</p>
+	<h3>First turn engage</h3>
+	<p>Controls whether players can attack or fire during their first turn.</p>
+	<h3>Terrain rules</h3>
+	<p>Controls whether to use terrain related rules. This setting doesn't affect the breaching of tiles or rules inherent to the pieces' movement range.</p>
 	<h3>Dragon place late</h3>
 	<p>If enabled, dragons don't have to be placed during setup and can be placed later on homeland fortresses during the match.</p>
 	<h3>Dragon move straight</h3>
 	<p>If enabled, a dragon can only move in a straight line. Otherwise one move's steps will be treated separately and the dragon will use the shortest path to a destination.</p>
+	<h3>Capturers</h3>
+	<p>A list of pieces which will be able to capture a fortress. If the list is empty, it'll be filled with all piece types.</p>
 	<h3>Homeland tiles</h3>
 	<p>A list of the amounts of each player's homeland tiles. The minimum amount for each tile type other than a fortress is the homeland height and the maximum of each is the number of remaining free tiles. Sliders' ranges are set accordingly. The amount of fortresses is set to the amount of the remaining free tiles on a homeland. The number of fortresses is limited to "homeland_height * 2 + board_width - 2" and when exceeded, other tile amounts will be increased with the priority being the order of the listed tile types.</p>
 	<h3>Fortresses captured</h3>
@@ -544,12 +454,10 @@
 	<p>A list of the amounts of each piece type per player. The total amount of pieces is limited to the range of 1 to the homeland tile count. If there's 0 pieces, the amount of thrones will be set to 1. The sliders work like the tile amount sliders.</p>
 	<h3>Thrones killed</h3>
 	<p>The number of enemy thrones that need to be killed in order to win. This number is limited to the number of a player's thrones. If both winning conditions are set to 0, this one will be set to 1. If the amount of thrones is set to 0, it'll be incremented and if the piece limit has been reached, one other piece amount will be decremented in turn, the priority being the reverse order of the listed piece types.</p>
-	<h3>Capturers</h3>
-	<p>A list of piece names which will be able to capture a fortress. If the list is empty, it'll be filled with all piece types.</p>
 
 	<h2 id="h2_3">2.3 Setups</h2>
 	<p>
-		Game setups are stored in "setup.ini" and can be edited, saved and loaded in the "Host -&gt; Setup" menu or during the in-game setup phase. The offline editor works the same as setting up a game online, except any checks for proper tile placement and such will be ignored.<br>
+		Game setups are stored in "setup.ini" and can be edited, saved and loaded in the "Host -&gt; Setup" menu or during the in-game setup phase. The offline editor works the same as setting up a game online, except any checks for proper tile and piece placement will be ignored.<br>
 		When loading a setup, it only overwrites the current tiles/pieces of each stage when the loaded setup's corresponding stages' tile/piece data is present.<br>
 		The same setup can be loaded for different configurations, but some tiles and pieces may not get placed due to exceeding limits.
 	</p>
@@ -608,6 +516,10 @@
 			<td>-l &lt;directory&gt;</td>
 			<td>write output to log files in the specified directory</td>
 		</tr>
+		<tr>
+			<td>-m &lt;number&gt;</td>
+			<td>set the maximum number of kept log files (default is 8)</td>
+		</tr>
 	</table>
 
 	<h1 id="h4_0">4 Game</h1>
@@ -617,9 +529,9 @@
 	<p>
 		The setup stage is a sequence of three phases of placing homeland tiles, middle row tiles and pieces.<br>
 		Tiles/pieces can be placed by selecting an icon in the bottom panel and left click holding on a free tile and optionally dragging the cursor across other occupied tiles to replace them. A type can be selected by pressing the icon, using the mouse wheel or pressing a number key.<br>
-		It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and possibly dragging the cursor onto other ones.<br>
-		Fortress tiles will be places automatically, where no tiles were placed.<br>
-		After the setup the host program determines the first player, the middle row tiles will be rearranged if necessary and the match starts.
+		It's possible to drag a tile/piece with the left mouse button and place it somewhere else or switch places with another. Tiles/pieces can be removed by using the "Delete" button or right click holding on them and optionally dragging the cursor across other ones.<br>
+		Fortress tiles will be placed automatically, where no tiles were placed.<br>
+		After the setup the middle row tiles will be rearranged if necessary and the match starts.
 	</p>
 	<h3>Buttons</h3>
 	<table class="listing">
@@ -663,9 +575,9 @@
 
 	<h2 id="h4_2">4.2 Match</h2>
 	<p>
-		Pieces can be moved by dragging them with the left mouse button and whether they'll move or switch depends on the destination.<br>
-		Pieces can attack of fire by dragging them with the right mouse button or using the "Engage" button.<br>
-		A turn ends by pressing the according button button or when the limit of actions has been reached.<br>
+		Pieces can be moved by dragging them with the left mouse button.<br>
+		Pieces can attack or fire by dragging them with the right mouse button or using the "Engage" button.<br>
+		A turn ends by pressing the according button or when the limit of actions has been reached.<br>
 	</p>
 	<h3>Buttons</h3>
 	<table class="listing">
@@ -674,7 +586,7 @@
 			<td>Exit the game.</td>
 		</tr>
 		<tr>
-			<td>Quit</td>
+			<td>Surrender</td>
 			<td>Surrender to the opponent. If playing on a multi-room server, this button will just finish the match, rather than abort it and exit the room.</td>
 		</tr>
 		<tr>
@@ -696,6 +608,18 @@
 		<tr>
 			<td>Finish</td>
 			<td>End the turn. Disabled for the first action of a turn.</td>
+		</tr>
+		<tr>
+			<td>Establish</td>
+			<td>Establish a farm or city.</td>
+		</tr>
+		<tr>
+			<td>Rebuild</td>
+			<td>Rebuild a breached/destroyed fortress/farm.</td>
+		</tr>
+		<tr>
+			<td>Spawn</td>
+			<td>Respawn a piece on the according tile.</td>
 		</tr>
 		<tr>
 			<td>Fate's favor icons</td>

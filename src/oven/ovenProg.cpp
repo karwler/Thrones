@@ -1,4 +1,6 @@
 #include "oven.h"
+#include "utils/text.h"
+#include <iostream>
 
 #ifndef GL_BGR
 #define GL_BGR 0x80E0
@@ -9,7 +11,6 @@
 
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
-constexpr char argAudioM = 'A';
 constexpr char argMaterial = 'm';
 constexpr char argObject = 'o';
 constexpr char argShader = 's';
@@ -51,32 +52,17 @@ uint* Element::end() {
 
 struct Blueprint {
 	string name;
-	vector<uint16> elems;
+	vector<GLushort> elems;
 	vector<Vertex> data;
 
-	Blueprint(Blueprint&& bpr);
 	Blueprint(string&& capt);
 
-	Blueprint& operator=(Blueprint&& bpr);
 	bool empty() const;
 };
-
-Blueprint::Blueprint(Blueprint&& bpr) :
-	name(std::move(bpr.name)),
-	elems(std::move(bpr.elems)),
-	data(std::move(bpr.data))
-{}
 
 Blueprint::Blueprint(string&& capt) :
 	name(std::move(capt))
 {}
-
-Blueprint& Blueprint::operator=(Blueprint&& bpr) {
-	name = std::move(bpr.name);
-	elems = std::move(bpr.elems);
-	data = std::move(bpr.data);
-	return *this;
-}
 
 bool Blueprint::empty() const {
 	return elems.empty() || data.empty();
@@ -100,12 +86,34 @@ Image::Image(string&& fname, vector<uint8>&& pdata, uint16 itype, uint16 ptype) 
 	pformat(ptype)
 {}
 
+// UTILITY
+
+template <class T = string>
+T loadFile(const string& path) {
+	T data;
+#ifdef _WIN32
+	if (FILE* ifh = _wfopen(stow(path).c_str(), L"rb")) {
+#else
+	if (FILE* ifh = fopen(path.c_str(), defaultReadMode)) {
+#endif
+		if (!fseek(ifh, 0, SEEK_END))
+			if (long len = ftell(ifh); len != -1)
+				if (!fseek(ifh, 0, SEEK_SET)) {
+					data.resize(len);
+					if (sizet red = fread(data.data(), sizeof(*data.data()), data.size(), ifh); red < data.size())
+						data.resize(red);
+				}
+		fclose(ifh);
+	}
+	return data;
+}
+
 // AUDIOS
 
-static void loadWav(const char* file, vector<pair<string, Sound>>& auds, bool regular) {
+static void loadWav(const char* file, vector<pair<string, Sound>>& auds) {
 	Sound sound;
 	if (SDL_AudioSpec spec; SDL_LoadWAV(file, &spec, &sound.data, &sound.length)) {
-		if (sound.set(spec); sound.convert(regular ? Sound::defaultSpec : Sound::mobileSpec))
+		if (sound.set(spec); sound.convert(Sound::defaultSpec))
 			auds.emplace_back(filename(delExt(file)), sound);
 		else {
 			sound.free();
@@ -202,32 +210,31 @@ static uint resolveObjId(int id, uint size) {
 	return 0;
 }
 
-static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, uint16>>& elems, Blueprint& obj) {
+static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, GLushort>>& elems, Blueprint& obj) {
 	array<uint, 3> sizes = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
 	array<Element, 3> face;
 	uint v = 0, e = 0;
-
 	for (char* end; *str && v < face.size();) {
 		if (int n = int(strtol(str, &end, 0)); end != str) {
 			face[v][e] = resolveObjId(n, sizes[e]);
 			str = end;
-			e++;
+			++e;
 		} else if (*str == '/')
 			face[v][e++] = 0;
 
 		if (e && (*str != '/' || e >= sizes.size())) {
 			std::fill(face[v].begin() + e, face[v].end(), 0);
 			e = 0;
-			v++;
+			++v;
 		}
 		if (*str)
-			str++;
+			++str;
 	}
 	if (v < uint(face.size()))
 		return;
 
 	std::swap(face[1], face[2]);	// model is CW, need CCW
-	for (v = 0; v < uint(face.size()); v++) {
+	for (v = 0; v < uint(face.size()); ++v) {
 		if (!face[v].n) {
 			vec3 normal = glm::normalize(glm::cross(verts[face[cycle(v, uint(face.size()), int8(-1))][0]] - verts[face[v][0]], verts[face[cycle(v, uint(face.size()), int8(-2))][0]] - verts[face[v][0]]));
 			if (vector<vec3>::iterator it = std::find(norms.begin(), norms.end(), normal); it == norms.end()) {
@@ -238,7 +245,7 @@ static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, v
 		}
 
 		if (vector<pair<Element, uint16>>::iterator ei = std::find_if(elems.begin(), elems.end(), [&face, v](const pair<Element, uint16>& it) -> bool { return it.first.p == face[v].p && it.first.t == face[v].t && it.first.n == face[v].n; }); ei == elems.end()) {
-			obj.elems.push_back(uint16(obj.data.size()));
+			obj.elems.push_back(GLushort(obj.data.size()));
 			obj.data.emplace_back(verts[face[v].p], norms[face[v].n], vec2(tuvs[face[v].t].x, 1.f - tuvs[face[v].t].y));
 			elems.emplace_back(face[v], obj.elems.back());
 		} else
@@ -255,7 +262,7 @@ static void loadObj(const char* file, vector<Blueprint>& bprs) {
 	vector<vec3> verts = { vec3(0.f) };
 	vector<vec2> tuvs = { vec2(0.f, 1.f) };
 	vector<vec3> norms = { vec3(0.f) };
-	vector<pair<Element, uint16>> elems;	// mapping of current object's face ids to blueprint elements
+	vector<pair<Element, GLushort>> elems;	// mapping of current object's face ids to blueprint elements
 	bprs.emplace_back(filename(delExt(file)));
 
 	for (const string& line : lines) {
@@ -316,10 +323,10 @@ static bool checkSpace(char c) {
 	return isSpace(c) && c != '\n';
 }
 
-static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool gles) {
+static void loadGlsl(const char* file, vector<pairStr>& srcs, bool gles) {
 	string text = trim(loadFile(file));
 	bool keepLF = false;
-	for (sizet i = 0; i < text.length(); i++) {
+	for (sizet i = 0; i < text.length(); ++i) {
 		if (checkSpace(text[i])) {
 			sizet e = i;
 			while (checkSpace(text[++e]));
@@ -327,7 +334,7 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool 
 			if (checkText(text[i-1]) && checkText(text[i]))
 				text.insert(i, 1, ' ');
 			else
-				i--;
+				--i;
 		} else if (text[i] == '\n') {
 			if (keepLF)
 				keepLF = false;
@@ -338,11 +345,11 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool 
 		else if (text[i] == '/') {
 			if (text[i+1] == '/') {
 				text.erase(i, text.find_first_of('\n', i + 2) - i);
-				i--;
+				--i;
 			} else if (text[i+1] == '*') {
 				sizet e = text.find("*/", i);
 				text.erase(i, e != string::npos ? e - i + 2 : e);
-				i--;
+				--i;
 			}
 		}
 	}
@@ -358,7 +365,7 @@ static void loadGlsl(const char* file, vector<pair<string, string>>& srcs, bool 
 		srcs.emplace_back(filename(file), std::move(text));
 }
 
-static void writeShaders(const char* file, vector<pair<string, string>>& srcs) {
+static void writeShaders(const char* file, vector<pairStr>& srcs) {
 	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
 	if (!ofh) {
 		std::cerr << "error: couldn't write " << file << std::endl;
@@ -452,7 +459,7 @@ static void loadImg(const char* file, vector<Image>& imgs, bool regular) {
 	}
 
 	if (renew) {
-		data.resize(sizet(img->pitch * img->h));
+		data.resize(uint(img->pitch) * uint(img->h));
 		SDL_RWops* dw = SDL_RWFromMem(data.data(), int(data.size()));
 		if (bpp == 3 ? IMG_SaveJPG_RW(img, dw, SDL_FALSE, 100) : IMG_SavePNG_RW(img, dw, SDL_FALSE)) {	// png don't work with 3 byte pixels
 			SDL_RWclose(dw);
@@ -514,23 +521,21 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	if (Arguments arg(argc, argv, {}, { argAudio, argAudioM, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
+	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
 		std::cout << "no input files" << linend << messageUsage << std::endl;
 	else if (const char* dest = arg.getOpt(argAudio))
-		process(dest, arg.getVals(), loadWav, writeAudios, true);
-	else if (dest = arg.getOpt(argAudioM))
-		process(dest, arg.getVals(), loadWav, writeAudios, false);
-	else if (dest = arg.getOpt(argMaterial))
+		process(dest, arg.getVals(), loadWav, writeAudios);
+	else if (dest = arg.getOpt(argMaterial); dest)
 		process(dest, arg.getVals(), loadMtl, writeMaterials);
-	else if (dest = arg.getOpt(argObject))
+	else if (dest = arg.getOpt(argObject); dest)
 		process(dest, arg.getVals(), loadObj, writeObjects);
-	else if (dest = arg.getOpt(argShader))
+	else if (dest = arg.getOpt(argShader); dest)
 		process(dest, arg.getVals(), loadGlsl, writeShaders, false);
-	else if (dest = arg.getOpt(argShaderE))
+	else if (dest = arg.getOpt(argShaderE); dest)
 		process(dest, arg.getVals(), loadGlsl, writeShaders, true);
-	else if (dest = arg.getOpt(argTexture))
+	else if (dest = arg.getOpt(argTexture); dest)
 		process(dest, arg.getVals(), loadImg, writeImages, true);
-	else if (dest = arg.getOpt(argTextureR))
+	else if (dest = arg.getOpt(argTextureR); dest)
 		process(dest, arg.getVals(), loadImg, writeImages, false);
 	else
 		std::cout << "error: invalid mode" << linend << messageUsage << std::endl;

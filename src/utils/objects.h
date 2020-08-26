@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oven/oven.h"
+#include "settings.h"
 #include "utils.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -9,18 +9,15 @@
 class Mesh {
 public:
 	static constexpr GLenum elemType = GL_UNSIGNED_SHORT;
-private:
-	static constexpr uint psiz = 3, pofs = 0;
-	static constexpr uint nsiz = 3, nofs = 3;
-	static constexpr uint tsiz = 2, tofs = 6;
 
+private:
 	GLuint vao, vbo, ebo;
 	uint16 ecnt;	// number of elements
 	uint8 shape;	// GLenum for how to handle elements
 
 public:
 	Mesh();
-	Mesh(const vector<Vertex>& vertices, const vector<uint16>& elements, uint8 type = GL_TRIANGLES);
+	Mesh(const vector<Vertex>& vertices, const vector<GLushort>& elements, uint8 type = GL_TRIANGLES);
 
 	void free();
 	GLuint getVao() const;
@@ -46,8 +43,8 @@ public:
 	const Mesh* mesh;
 	const Material* matl;
 	GLuint tex;
-	bool show;		// if drawn
-	bool rigid;		// if affected by raycast
+	bool show;
+	bool rigid;
 private:
 	vec3 pos, scl;
 	quat rot;
@@ -58,18 +55,17 @@ public:
 	Object() = default;
 	Object(const Object&) = default;
 	Object(Object&&) = default;
-	Object(const vec3& position, const vec3& rotation = vec3(0.f), const vec3& scale = vec3(1.f), const Mesh* model = nullptr, const Material* material = nullptr, GLuint texture = 0, bool interactive = false, bool visible = true);
+	Object(const vec3& position, const vec3& rotation = vec3(0.f), const vec3& scale = vec3(1.f), const Mesh* model = nullptr, const Material* material = nullptr, GLuint texture = 0, bool visible = true, bool interactive = false);
 	virtual ~Object() override = default;
 
 	Object& operator=(const Object&) = default;
 	Object& operator=(Object&&) = default;
 
 #ifndef OPENGLES
-	void drawDepth() const;
+	virtual void drawDepth() const;
 	virtual void drawTopDepth() const {}
 #endif
-	virtual void draw() const;
-	virtual void drawTop() const {}
+	void draw() const;
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -131,8 +127,8 @@ public:
 		EMI_HIGH = 4
 	};
 
-	GCall hgcall, ulcall, urcall;
 	float alphaFactor;
+	GCall hgcall, ulcall, urcall;
 
 	static constexpr float noEngageAlpha = 0.6f;
 protected:
@@ -142,6 +138,8 @@ protected:
 private:
 	float diffuseFactor;
 	Emission emission;
+protected:
+	bool leftDrag;
 
 public:
 	BoardObject() = default;
@@ -153,24 +151,33 @@ public:
 	BoardObject& operator=(const BoardObject&) = default;
 	BoardObject& operator=(BoardObject&&) = default;
 
-	virtual void draw() const override;
+	void draw() const;
 	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
-	virtual void onKeypress(const SDL_KeyboardEvent& key) override;
-	virtual void onKeyrelease(const SDL_KeyboardEvent& key) override;
-	virtual void onJButton(uint8 but) override;
-	virtual void onJHat(uint8 hat) override;
-	virtual void onGButton(SDL_GameControllerButton but) override;
+	virtual void onKeyDown(const SDL_KeyboardEvent& key) override;
+	virtual void onKeyUp(const SDL_KeyboardEvent& key) override;
+	virtual void onJButtonDown(uint8 but) override;
+	virtual void onJButtonUp(uint8 but) override;
+	virtual void onJHatDown(uint8 hat, uint8 val) override;
+	virtual void onJHatUp(uint8 hat, uint8 val) override;
+	virtual void onJAxisDown(uint8 axis, bool positive) override;
+	virtual void onJAxisUp(uint8 axis, bool positive) override;
+	virtual void onGButtonDown(SDL_GameControllerButton but) override;
+	virtual void onGButtonUp(SDL_GameControllerButton but) override;
+	virtual void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
+	virtual void onGAxisUp(SDL_GameControllerAxis axis, bool positive) override;
 	virtual void onNavSelect(Direction dir) override;
-	virtual void cancelDrag() {}
 	void startKeyDrag(uint8 mBut);
 
 	Emission getEmission() const;
 	virtual void setEmission(Emission emi);
 protected:
 #ifndef OPENGLES
-	void drawTopMeshDepth(float ypos, const Mesh* tmesh) const;
+	void drawTopMeshDepth(float ypos) const;
 #endif
 	void drawTopMesh(float ypos, const Mesh* tmesh, const Material& tmatl, GLuint ttexture) const;
+private:
+	void onInputDown(Binding::Type bind);
+	void onInputUp(Binding::Type bind);
 };
 
 inline BoardObject::Emission BoardObject::getEmission() const {
@@ -180,14 +187,33 @@ inline BoardObject::Emission BoardObject::getEmission() const {
 // piece of terrain
 class Tile : public BoardObject {
 public:
+	enum Type : uint8 {
+		plains,
+		forest,
+		mountain,
+		water,
+		fortress,
+		empty
+	};
+	static constexpr array<const char*, empty+1> names = {
+		"plains",
+		"forest",
+		"mountain",
+		"water",
+		"fortress",
+		""
+	};
+
 	enum class Interact : uint8 {
 		ignore,
 		recognize,
 		interact
 	};
 
+	static constexpr uint8 lim = fortress;
+
 private:
-	Com::Tile type;
+	Type type;
 	bool breached;	// only for fortress
 
 public:
@@ -201,6 +227,7 @@ public:
 	Tile& operator=(Tile&&) = default;
 
 #ifndef OPENGLES
+	virtual void drawDepth() const override;
 	virtual void drawTopDepth() const override;
 #endif
 	virtual void drawTop() const override;
@@ -208,10 +235,10 @@ public:
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
-	virtual void cancelDrag() override;
+	virtual void onCancelCapture() override;
 
-	Com::Tile getType() const;
-	void setType(Com::Tile newType);
+	Type getType() const;
+	void setType(Type newType);
 	bool isBreachedFortress() const;
 	bool isUnbreachedFortress() const;
 	bool getBreached() const;
@@ -223,19 +250,19 @@ private:
 };
 
 inline const char* Tile::pickMesh() {
-	return type != Com::Tile::fortress ? "tile" : breached ? "breached" : "fortress";
+	return type != fortress ? "tile" : breached ? "breached" : "fortress";
 }
 
-inline Com::Tile Tile::getType() const {
+inline Tile::Type Tile::getType() const {
 	return type;
 }
 
 inline bool Tile::isBreachedFortress() const {
-	return type == Com::Tile::fortress && breached;
+	return type == fortress && breached;
 }
 
 inline bool Tile::isUnbreachedFortress() const {
-	return type == Com::Tile::fortress && !breached;
+	return type == fortress && !breached;
 }
 
 inline bool Tile::getBreached() const {
@@ -245,10 +272,36 @@ inline bool Tile::getBreached() const {
 // player on tiles
 class Piece : public BoardObject {
 public:
+	enum Type : uint8 {
+		rangers,
+		spearmen,
+		crossbowmen,
+		catapult,
+		trebuchet,
+		lancer,
+		warhorse,
+		elephant,
+		dragon,
+		throne
+	};
+	static constexpr array<const char*, throne+1> names = {
+		"rangers",
+		"spearmen",
+		"crossbowmen",
+		"catapult",
+		"trebuchet",
+		"lancer",
+		"warhorse",
+		"elephant",
+		"dragon",
+		"throne"
+	};
+
+	static constexpr uint8 lim = throne + 1;
+
 	uint16 lastFortress;	// index of last visited fortress (only relevant to throne)
 private:
-	Com::Piece type;
-	bool drawTopSelf;
+	Type type;
 
 public:
 	Piece() = default;
@@ -268,29 +321,24 @@ public:
 	virtual void onUndrag(uint8 mBut) override;
 	virtual void onHover() override;
 	virtual void onUnhover() override;
-	virtual void cancelDrag() override;
+	virtual void onCancelCapture() override;
 
-	Com::Piece getType() const;
-	void setType(Com::Piece newType);
+	Type getType() const;
+	void setType(Type newType);
 	pair<uint8, uint8> firingArea() const;	// 0 if non-firing piece
 	void setActive(bool on);
 	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool forceRigid = false);
-	bool getDrawTopSelf() const;
 	void setInteractivity(bool on, bool dim, GCall holdCall, GCall leftCall, GCall rightCall);
 private:
 	float selfTopYpos(const Interactable* occupant) const;
 };
 
-inline Com::Piece Piece::getType() const {
+inline Piece::Type Piece::getType() const {
 	return type;
 }
 
 inline void Piece::setActive(bool on) {
 	show = rigid = on;
-}
-
-inline bool Piece::getDrawTopSelf() const {
-	return drawTopSelf;
 }
 
 inline float Piece::selfTopYpos(const Interactable* occupant) const {

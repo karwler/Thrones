@@ -36,7 +36,7 @@ out vec4 fragColor;
 
 float calcShadowHard() {
 	vec3 fragToLight = fragPos - light.pos;
-	return length(fragToLight) -  0.05 > texture(depthMap, fragToLight).r * farPlane ? 0.0 : 1.0;
+	return length(fragToLight) - 0.05 > texture(depthMap, fragToLight).r * farPlane ? 0.0 : 1.0;
 }
 
 float calcShadowSoft() {

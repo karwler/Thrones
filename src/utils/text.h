@@ -1,77 +1,6 @@
 #pragma once
 
-#if !(defined(_DEBUG) || defined(DEBUG)) && !defined(NDEBUG)
-#define NDEBUG
-#elif defined(_DEBUG) && !defined(DEBUG)
-#define DEBUG
-#endif
-#ifdef DEBUG
-#define MALLOC_CHECK_ 2
-#endif
-#if (defined(__ANDROID__) || defined(EMSCRIPTEN)) && !defined(OPENGLES)
-#define OPENGLES
-#endif
-
-#ifndef __ANDROID__
-#define SDL_MAIN_HANDLED
-#endif
-#if defined(__ANDROID__) || defined(_WIN32)
-#include <SDL.h>
-#else
-#include <SDL2/SDL.h>
-#endif
-#include <glm/glm.hpp>
-#include <algorithm>
-#include <array>
-#include <iostream>
-#include <numeric>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
-using uchar = unsigned char;
-using ushort = unsigned short;
-using uint = unsigned int;
-using ulong = unsigned long;
-using ullong = unsigned long long;
-using llong = long long;
-using ldouble = long double;
-using wchar = wchar_t;
-
-using int8 = int8_t;
-using uint8 = uint8_t;
-using int16 = int16_t;
-using uint16 = uint16_t;
-using int32 = int32_t;
-using uint32 = uint32_t;
-using int64 = int64_t;
-using uint64 = uint64_t;
-using sizet = size_t;
-using pdift = ptrdiff_t;
-
-using std::array;
-using std::pair;
-using std::string;
-using std::tuple;
-using std::wstring;
-using std::vector;
-
-template <class T> using initlist = std::initializer_list<T>;
-template <class... T> using umap = std::unordered_map<T...>;
-template <class... T> using uset = std::unordered_set<T...>;
-using pairStr = pair<string, string>;
-
-using glm::mat3;
-using glm::mat4;
-using glm::quat;
-using glm::vec2;
-using glm::vec3;
-using glm::vec4;
-using glm::ivec2;
-using glm::uvec4;
-using svec2 = glm::vec<2, uint16, glm::defaultp>;
-using mvec2 = glm::vec<2, sizet, glm::defaultp>;
+#include "alias.h"
 
 #ifdef _WIN32
 constexpr char linend[] = "\r\n";
@@ -90,27 +19,13 @@ string strUnenclose(const char*& str);
 int strnatcmp(const char* a, const char* b);	// natural string compare
 uint8 u8clen(char c);
 vector<string> readTextLines(const string& text);
-string readIniTitle(const string& line);
-pairStr readIniLine(const string& line);
 void createDirectories(const string& path);
-
-template <class T>
-T readMem(const void* data) {
-	T val;
-	std::copy_n(static_cast<const uint8*>(data), sizeof(T), reinterpret_cast<uint8*>(&val));
-	return val;
-}
-
-template <class T>
-void* writeMem(void* data, const T& val) {
-	return std::copy_n(reinterpret_cast<const uint8*>(&val), sizeof(T), static_cast<uint8*>(data));
-}
 
 inline bool strnatless(const string& a, const string& b) {
 	return strnatcmp(a.c_str(), b.c_str()) < 0;
 }
 
-inline int strcicmp(const char* a, const char* b) {	// case insensitive string compare
+inline int strcicmp(const char* a, const char* b) {
 #ifdef _WIN32
 	return _stricmp(a, b);
 #else
@@ -122,7 +37,7 @@ inline int strcicmp(const string& a, const char* b) {
 	return strcicmp(a.c_str(), b);
 }
 
-inline int strncicmp(const char* a, const char* b, sizet n) {	// case insensitive string compare
+inline int strncicmp(const char* a, const char* b, sizet n) {
 #ifdef _WIN32
 	return _strnicmp(a, b, n);
 #else
@@ -163,20 +78,6 @@ inline string trim(const string& str) {
 inline string delExt(const string& path) {
 	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
 	return it != path.rend() ? *it == '.' && it + 1 != path.rend() && !isDsep(it[1]) ? string(path.begin(), it.base() - 1) : path : string();
-}
-
-template <class T = string>
-T loadFile(const string& file) {
-	T data;
-	if (SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode)) {
-		if (int64 len = SDL_RWsize(ifh); len != -1) {
-			data.resize(sizet(len));
-			if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
-				data.resize(read);
-		}
-		SDL_RWclose(ifh);
-	}
-	return data;
 }
 
 template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
@@ -256,10 +157,6 @@ wstring stow(const string& str);
 #endif
 SDL_DisplayMode strToDisp(const string& str);
 
-inline string stos(const char* str) {	// dummy function for Arguments::setArgs
-	return str;
-}
-
 template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
 string toStr(T num) {
 	return std::to_string(num);
@@ -290,6 +187,12 @@ template <class T, sizet N>
 T strToEnum(const array<const char*, N>& names, const string& str, T defaultValue = T(N)) {
 	typename array<const char*, N>::const_iterator p = std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !strcicmp(it, str.c_str()); });
 	return p != names.end() ? T(p - names.begin()) : defaultValue;
+}
+
+template <class T>
+T strToVal(const umap<T, const char*>& names, const string& str, T defaultValue = T(0)) {
+	typename umap<T, const char*>::const_iterator it = std::find_if(names.begin(), names.end(), [str](const pair<T, const char*>& nit) -> bool { return !strcicmp(nit.second, str.c_str()); });
+	return it != names.end() ? it->first : defaultValue;
 }
 
 inline long sstol(const char* str, int base = 0) {
@@ -343,7 +246,7 @@ inline double sstod(const string& str) {
 template <class T, class F, class... A>
 T readNumber(const char*& pos, F strtox, A... args) {
 	T num = T(0);
-	for (char* end; *pos; pos++)
+	for (char* end; *pos; ++pos)
 		if (num = T(strtox(pos, &end, args...)); pos != end) {
 			pos = end;
 			break;
@@ -354,8 +257,8 @@ T readNumber(const char*& pos, F strtox, A... args) {
 template <class T, class F, class... A>
 T stoxv(const char* str, F strtox, typename T::value_type fill, A... args) {
 	T vec(fill);
-	for (glm::length_t i = 0; *str && i < vec.length();)
-		vec[i++] = readNumber<typename T::value_type>(str, strtox, args...);
+	for (glm::length_t i = 0; *str && i < vec.length(); ++i)
+		vec[i] = readNumber<typename T::value_type>(str, strtox, args...);
 	return vec;
 }
 
@@ -372,30 +275,14 @@ T stoiv(const char* str, F strtox, typename T::value_type fill = typename T::val
 template <glm::length_t L, class T, glm::qualifier Q, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
 string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
 	string str;
-	for (glm::length_t i = 0; i < L - 1; i++)
+	for (glm::length_t i = 0; i < L - 1; ++i)
 		str += toStr(v[i]) + sep;
 	return str + toStr(v[L-1]);
 }
 
-template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_signed_v<S>, int> = 0>
-U cycle(U pos, U siz, S mov) {
-	U rst = pos + U(mov % S(siz));
-	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
-}
-
 template <class T, std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
 uint8 numDigits(T num, uint8 base = 10) {
-	return uint8(log(float(num)) / log(float(base))) + 1;
-}
-
-template <class T>
-vector<string> sortNames(const umap<string, T>& vmap) {
-	vector<string> names(vmap.size());
-	vector<string>::iterator nit = names.begin();
-	for (auto& [name, vt] : vmap)
-		*nit++ = name;
-	std::sort(names.begin(), names.end(), strnatless);
-	return names;
+	return num ? log(num) / log(base) + 1 : 1;
 }
 
 // command line arguments
@@ -408,51 +295,30 @@ private:
 public:
 	Arguments() = default;
 #ifdef _WIN32
-	Arguments(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
 	Arguments(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt);
 #endif
 	Arguments(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt);
 
-#ifdef _WIN32
-	void setArgs(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt);
-#endif
-	template <class C, class F> void setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt);
-
 	const vector<string>& getVals() const;
 	bool hasFlag(char key) const;
 	const char* getOpt(char key) const;
+
+#ifdef _WIN32
+	void setArgs(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt);
+#endif
+	void setArgs(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt);
+private:
+	template <class C, class F> void setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt);
 };
 
 #ifdef _WIN32
-inline Arguments::Arguments(const wchar* pCmdLine, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(pCmdLine, flg, opt);
-}
-
 inline Arguments::Arguments(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc - 1, argv + 1, wtos, flg, opt);
+	setArgs(argc, argv, flg, opt);
 }
 #endif
 
 inline Arguments::Arguments(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc - 1, argv + 1, stos, flg, opt);
-}
-
-template <class C, class F>
-void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt) {
-	for (int i = 0; i < argc; i++) {
-		if (char key; argv[i][0] == '-') {
-			for (int j = 1; key = char(argv[i][j]); j++) {
-				if (!argv[i][j+1] && i + 1 < argc && opt.count(key)) {
-					opts.emplace(key, conv(argv[++i]));
-					break;
-				}
-				if (flg.count(key))
-					flags.insert(key);
-			}
-		} else
-			vals.push_back(conv(argv[i] + (argv[i][0] == '\\' && (argv[i][1] == '-' || argv[i][1] == '\\'))));
-	}
-	vals.shrink_to_fit();
+	setArgs(argc, argv, flg, opt);
 }
 
 inline const vector<string>& Arguments::getVals() const {

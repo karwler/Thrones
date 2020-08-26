@@ -26,15 +26,15 @@ GLuint makeCubemap(GLsizei res, GLenum active) {
 void loadCubemap(GLuint tex, GLsizei res, GLenum active) {
 	glActiveTexture(active);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, tex);
-	for (uint i = 0; i < 6; i++)
+	for (uint i = 0; i < 6; ++i)
 		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, res, res, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
 }
 
-GLuint makeFramebufferNodraw(GLenum attach, GLuint tex) {
+GLuint makeFramebufferDepth(GLuint tex) {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glFramebufferTexture(GL_FRAMEBUFFER, attach, tex, 0);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tex, 0);
 	glDrawBuffer(GL_NONE);
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);	// necessary in case shadows are disabled

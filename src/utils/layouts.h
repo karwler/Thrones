@@ -39,7 +39,7 @@ public:
 	virtual void navSelectNext(sizet id, int mid, Direction dir);
 	virtual Interactable* findFirstSelectable() const override;
 
-	Widget* getWidget(sizet id) const;
+	template <class T = Widget> T* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
 	void setWidgets(vector<Widget*>&& wgts);
 	void insertWidget(sizet id, Widget* wgt);
@@ -48,25 +48,26 @@ public:
 	bool getVertical() const;
 	virtual ivec2 wgtPosition(sizet id) const;
 	virtual ivec2 wgtSize(sizet id) const;
-
 protected:
-	void initWidgets(vector<Widget*>&& wgts);
-	void reinitWidgets(sizet id);
 	virtual ivec2 listSize() const;
 
-	void navSelectWidget(sizet id, int mid, Direction dir);
 private:
+	void initWidgets();
+	void reinitWidgets(sizet id);
+	static bool deselectWidget(Widget* wgt);
+	bool deselectWidgets() const;
+	void navSelectWidget(sizet id, int mid, Direction dir);
 	void scanSequential(sizet id, int mid, Direction dir);
 	void scanPerpendicular(int mid, Direction dir);
-	void clearWidgets();
 };
 
 inline Layout::~Layout() {
-	clearWidgets();
+	setPtrVec(widgets, {});
 }
 
-inline Widget* Layout::getWidget(sizet id) const {
-	return widgets[id];
+template <class T>
+T* Layout::getWidget(sizet id) const {
+	return static_cast<T*>(widgets[id]);
 }
 
 inline const vector<Widget*>& Layout::getWidgets() const {
@@ -92,6 +93,7 @@ public:
 	virtual void draw() const override;
 	virtual ivec2 position() const override;
 	virtual ivec2 size() const override;
+	virtual void setSize(const Size& size) override;
 	virtual Rect frame() const override;
 };
 
@@ -99,6 +101,7 @@ public:
 class Popup : public RootLayout {
 public:
 	BCall kcall, ccall;	// gets called on enter/escape press
+	Widget* defaultSelect;	// nav select to this if nothing selected (popup is not navigable if this is nullptr)
 protected:
 	Size sizeY;			// use Widget's relSize as width
 
@@ -106,7 +109,7 @@ protected:
 	static constexpr vec4 colorBackground = { 0.42f, 0.05f, 0.f, 1.f };
 
 public:
-	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, const vec4& color = uniformBgColor);
+	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, Widget* firstSelect = nullptr, const vec4& color = uniformBgColor);
 	virtual ~Popup() override = default;
 
 	virtual void draw() const override;
@@ -160,6 +163,7 @@ public:
 	virtual void onNavSelect(Direction dir) override;
 	virtual void navSelectNext(sizet id, int mid, Direction dir) override;
 	virtual void navSelectFrom(int mid, Direction dir) override;
+	virtual void onCancelCapture() override;
 
 	virtual Rect frame() const override;
 	virtual ivec2 wgtPosition(sizet id) const override;

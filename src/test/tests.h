@@ -1,10 +1,16 @@
-#include "../utils/utils.h"
+#include "engine/fileSys.h"
+#include <iostream>
 
 extern int testResult;
 
+void testAlias();
+void testFileSys();
+void testOven();
 void testServer();
 void testText();
 void testUtils();
+
+bool operator!=(const IniLine& a, const IniLine& b);
 
 template <class A, class B, class C, class D>
 bool operator!=(const pair<A, B>& l, const pair<C, D>& r) {
@@ -29,7 +35,7 @@ std::ostream& operator<<(std::ostream& s, const glm::vec<L, T, Q>& v) {
 	s << '(';
 	if constexpr (L == 1)
 		return s << v[0] << ')';
-	for (glm::length_t i = 0; i < L - 1; i++)
+	for (glm::length_t i = 0; i < L - 1; ++i)
 		s << v[i] << ' ';
 	return s << v[L-1] << ')';
 }
@@ -42,11 +48,15 @@ inline std::ostream& operator<<(std::ostream& s, const SDL_DisplayMode& m) {
 	return s << '(' << m.w << ' ' << m.h << ' ' << m.refresh_rate << ' ' << m.format << ' ' << m.driverdata << ')';
 }
 
+inline std::ostream& operator<<(std::ostream& s, const IniLine& l) {
+	return s << "(\"" << l.type << "\" \"" << l.prp << "\" \"" << l.key << "\" \"" << l.val << "\")";
+}
+
 template <class T, class C = typename T::value_type>
 void printRange(T beg, T end, const char* msg) {
 	std::cerr << msg << ": ";
 	if (beg != end) {
-		for (; beg != end - 1; beg++)
+		for (; beg != end - 1; ++beg)
 			std::cout << static_cast<C>(*beg) << ' ';
 		std::cout << static_cast<C>(*beg);
 	}

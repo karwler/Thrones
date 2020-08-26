@@ -1,14 +1,30 @@
 #pragma once
 
-#include "utils/utils.h"
+#include "server/server.h"
+
+// tries to connect to a server
+class Connector {
+private:
+	addrinfo* inf;
+	addrinfo* cur;
+	pollfd sock;
+
+public:
+	Connector(const char* addr, const char* port, int family);
+	~Connector();
+
+	nsint pollReady();
+private:
+	void nextAddr(addrinfo* nxt);
+};
 
 // handles networking (for joining/hosting rooms on a remote sever)
 class Netcp {
 protected:
 	void (Netcp::*tickproc)();
 	Com::Buffer recvb;
-	uptr<Com::Connector> connector;
-	nsint socket;
+	uptr<Connector> connector;
+	pollfd sock;
 	bool webs;
 
 public:
@@ -30,14 +46,15 @@ public:
 protected:
 	void tickValidate();
 	void tickDiscard() {}
+	static bool pollSocket(pollfd& sock);
 };
 
 inline void Netcp::sendData(Com::Buffer& sendb) {
-	sendb.send(socket, webs);
+	sendb.send(sock.fd, webs);
 }
 
 inline void Netcp::sendData(const vector<uint8>& vec) {
-	Com::sendData(socket, vec.data(), uint(vec.size()), webs);
+	Com::sendData(sock.fd, vec.data(), uint(vec.size()), webs);
 }
 
 inline void Netcp::setTickproc(void (Netcp::*func)()) {
@@ -47,7 +64,7 @@ inline void Netcp::setTickproc(void (Netcp::*func)()) {
 // for running one room on self as server
 class NetcpHost : public Netcp {
 private:
-	nsint server;
+	pollfd serv;
 
 public:
 	NetcpHost();
@@ -59,5 +76,5 @@ public:
 };
 
 inline NetcpHost::NetcpHost() :
-	server(nsint(-1))
+	serv{ INVALID_SOCKET, POLLIN | POLLRDHUP, 0 }
 {}

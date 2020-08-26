@@ -1,25 +1,32 @@
 #pragma once
 
-#include "engine/fileSys.h"
+#include "prog/types.h"
 #include "utils/context.h"
 #include "utils/layouts.h"
+#include <queue>
 
 // additional data for rendering objects
 class Camera {
 public:
+	enum class State : uint8 {
+		stationary,	// nothing's happening
+		animating,	// in an animation
+		dragging	// user is moving it
+	};
+
 	static constexpr float fov = 35.f;
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
 	static constexpr float pmaxSetup = -PI / 2.f + PI / 10.f, pmaxMatch = -PI / 2.f + PI / 20.f;
 	static constexpr float ymaxSetup = PI / 6.f, ymaxMatch = PI * 2.f;
-	static constexpr vec3 posSetup = { Com::Config::boardWidth / 2.f, 9.f, Com::Config::boardWidth / 2.f + 9.f };
-	static constexpr vec3 posMatch = { Com::Config::boardWidth / 2.f, 12.f, Com::Config::boardWidth / 2.f + 10.f };
-	static constexpr vec3 latSetup = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 2.5f };
-	static constexpr vec3 latMatch = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f + 1.f };
+	static constexpr vec3 posSetup = { Config::boardWidth / 2.f, 9.f, Config::boardWidth / 2.f + 9.f };
+	static constexpr vec3 posMatch = { Config::boardWidth / 2.f, 12.f, Config::boardWidth / 2.f + 10.f };
+	static constexpr vec3 latSetup = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 2.5f };
+	static constexpr vec3 latMatch = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 1.f };
 	static constexpr vec3 up = { 0.f, 1.f, 0.f };
-	static constexpr vec3 center = { Com::Config::boardWidth / 2.f, 0.f, Com::Config::boardWidth / 2.f };
+	static constexpr vec3 center = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f };
 
-	bool moving;		// whether the camera is currently moving (animation)
+	State state;
 	float pmax, ymax;
 private:
 	vec2 prot;			// pitch and yaw record of position relative to lat
@@ -63,6 +70,7 @@ inline float Camera::calcYaw(const vec3& pos, float dist) {
 	return std::acos(pos.z / dist) * (pos.x >= 0.f ? 1.f : -1.f);
 }
 
+// single light information
 class Light {
 public:
 	GLuint depthMap, depthFrame;
@@ -97,20 +105,14 @@ struct ClickStamp {
 
 // defines change of object properties at a time
 struct Keyframe {
-	enum Change : uint8 {
-		CHG_NONE = 0,
-		CHG_POS = 1,
-		CHG_ROT = 2,
-		CHG_SCL = 4,
-		CHG_LAT = CHG_SCL
+	optional<vec3> pos;
+	union {
+		optional<vec3> scl, lat;
 	};
-
-	vec3 pos, scl;	// scl = lat if applied to camera
-	quat rot;
+	optional<quat> rot;
 	float time;		// time difference between this and previous keyframe
-	Change change;	// what members get affected
 
-	Keyframe(float timeOfs, Change changes, const vec3& position = vec3(), const quat& rotation = quat(), const vec3& scale = vec3());
+	Keyframe(float timeOfs, const optional<vec3>& position = std::nullopt, const optional<quat>& rotation = std::nullopt, const optional<vec3>& scale = std::nullopt);
 };
 
 // a sequence of keyframes applied to an object
@@ -134,18 +136,17 @@ public:
 };
 
 inline bool Animation::operator==(const Animation& ani) const {
-	return useObject == ani.useObject && (useObject ? object == ani.object : camera == ani.camera);
+	return useObject == ani.useObject && object == ani.object;
 }
 
 // handles more back-end UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
 	Camera camera;
-	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 private:
 	Interactable* select;	// currently selected widget/object
 	Interactable* firstSelect;
-	vector<Object*> objects;
+	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
 	vector<Overlay*> overlays;
@@ -154,7 +155,6 @@ private:
 	umap<string, Mesh> meshes;
 	umap<string, Material> matls;
 	umap<string, Texture> texes;
-	void (Scene::*shadowFunc)();
 	Light light;
 	ClickStamp cstamp;	// data about last mouse click
 
@@ -190,35 +190,31 @@ public:
 	void reloadShader();
 	Interactable* getSelect() const;
 	Interactable* getFirstSelect() const;
-	void setObjects(vector<Object*>&& objs);
+	Interactable* getCapture() const;
+	void setCapture(Interactable* inter, bool reset = true);
 	void resetLayouts();
 	RootLayout* getLayout();
 	Popup* getPopup();
 	vector<Overlay*>& getOverlays();
-	void setPopup(Popup* newPopup, Widget* newCapture = nullptr);
-	void setPopup(const pair<Popup*, Widget*>& popcap);
+	void setPopup(uptr<Popup>&& newPopup, Widget* newCapture = nullptr);
 	Context* getContext();
-	void setContext(Context* newContext);
+	void setContext(uptr<Context>&& newContext);
 	void addAnimation(Animation&& anim);
 	void delegateStamp(Interactable* inter);
 	bool cursorInClickRange(const ivec2& mPos) const;
 	vec3 pickerRay(const ivec2& mPos) const;
 	vec3 rayXZIsct(const vec3& ray) const;
 
-	void navSelect(Direction dir, bool& mouseLast);
-	void resetSelect();
+	void navSelect(Direction dir);
 	void updateSelect();
 	void updateSelect(Interactable* sel);
 	void updateSelect(const ivec2& mPos);
+	void deselect();
 private:
-	void unselect();
 	Interactable* getSelected(const ivec2& mPos);
 	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea(Interactable* inter) const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
-
-	void renderShadows();
-	void renderDummy() {}
 };
 
 inline Interactable* Scene::getSelect() const {
@@ -229,8 +225,8 @@ inline Interactable* Scene::getFirstSelect() const {
 	return firstSelect;
 }
 
-inline void Scene::setObjects(vector<Object*>&& objs) {
-	objects = std::move(objs);
+inline Interactable* Scene::getCapture() const {
+	return capture;
 }
 
 inline RootLayout* Scene::getLayout() {
@@ -239,10 +235,6 @@ inline RootLayout* Scene::getLayout() {
 
 inline Popup* Scene::getPopup() {
 	return popup.get();
-}
-
-inline void Scene::setPopup(const pair<Popup*, Widget*>& popcap) {
-	setPopup(popcap.first, popcap.second);
 }
 
 inline vector<Overlay*>& Scene::getOverlays() {

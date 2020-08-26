@@ -1,3 +1,4 @@
+#include "engine/scene.h"
 #include "engine/world.h"
 
 // INTERACTABLE
@@ -17,9 +18,9 @@ Context::Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall
 	tex(World::scene()->texture())
 {
 	items.resize(txts.size());
-	for (sizet i = 0; i < txts.size(); i++) {
+	for (sizet i = 0; i < txts.size(); ++i) {
 		items[i] = pair(World::fonts()->render(txts[i].c_str(), lineH), txts[i]);
-		if (int w = items[i].first.getRes().x + Label::textMargin * 2 + ScrollBar::width; w > size.x)
+		if (int w = items[i].first.getRes().x + lineHeight / Label::textMarginFactor * 2 + ScrollBar::width; w > size.x)
 			size.x = w;
 	}
 	position = ivec2(calcPos(pos.x, size.x, World::window()->getGuiView().x), calcPos(pos.y, size.y, World::window()->getGuiView().y));
@@ -37,7 +38,7 @@ void Context::draw() const {
 		Quad::draw(Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed, tex, -1.f);
 
 	mvec2 i = listSize.y <= size.y ? mvec2(0, items.size()) : mvec2(scroll.listPos.y / lineHeight, (size.y + scroll.listPos.y + lineHeight - 1) / lineHeight);
-	for (ivec2 pos(rct.x + Label::textMargin, rct.y + int(i.x) * lineHeight - scroll.listPos.y); i.x < i.y; i.x++, pos.y += lineHeight)
+	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + int(i.x) * lineHeight - scroll.listPos.y); i.x < i.y; ++i.x, pos.y += lineHeight)
 		Quad::draw(Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first, -1.f);
 	scroll.draw(listSize, position, size, true, -1.f);
 }
@@ -81,6 +82,10 @@ void Context::onNavSelect(Direction dir) {
 		if (int y = itemPos(selected); y < 0)
 			scroll.moveListPos(ivec2(0, y), listSize, size);
 	}
+}
+
+void Context::onCancelCapture() {
+	scroll.cancelDrag();
 }
 
 void Context::confirm() {

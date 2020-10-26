@@ -470,6 +470,21 @@ void WindowSys::destroyWindow() {
 
 void WindowSys::handleEvent(const SDL_Event& event) {
 	switch (event.type) {
+	case SDL_QUIT: case SDL_APP_TERMINATING:
+		close();
+		break;
+	case SDL_WINDOWEVENT:
+		eventWindow(event.window);
+		break;
+	case SDL_KEYDOWN:
+		inputSys->eventKeyDown(event.key);
+		break;
+	case SDL_KEYUP:
+		inputSys->eventKeyUp(event.key);
+		break;
+	case SDL_TEXTINPUT:
+		scene->onText(event.text.text);
+		break;
 	case SDL_MOUSEMOTION:
 		inputSys->eventMouseMotion(event.motion);
 		break;
@@ -482,26 +497,11 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_MOUSEWHEEL:
 		inputSys->eventMouseWheel(event.wheel);
 		break;
-	case SDL_FINGERMOTION:
-		inputSys->eventFingerMove(event.tfinger);
+	case SDL_JOYAXISMOTION:
+		inputSys->eventJoystickAxis(event.jaxis);
 		break;
-	case SDL_MULTIGESTURE:
-		inputSys->eventFingerGesture(event.mgesture);
-		break;
-	case SDL_FINGERDOWN:
-		inputSys->eventFingerDown(event.tfinger);
-		break;
-	case SDL_FINGERUP:
-		inputSys->eventFingerUp(event.tfinger);
-		break;
-	case SDL_KEYDOWN:
-		inputSys->eventKeyDown(event.key);
-		break;
-	case SDL_KEYUP:
-		inputSys->eventKeyUp(event.key);
-		break;
-	case SDL_TEXTINPUT:
-		scene->onText(event.text.text);
+	case SDL_JOYHATMOTION:
+		inputSys->eventJoystickHat(event.jhat);
 		break;
 	case SDL_JOYBUTTONDOWN:
 		inputSys->eventJoystickButtonDown(event.jbutton);
@@ -509,11 +509,14 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_JOYBUTTONUP:
 		inputSys->eventJoystickButtonUp(event.jbutton);
 		break;
-	case SDL_JOYHATMOTION:
-		inputSys->eventJoystickHat(event.jhat);
+	case SDL_JOYDEVICEADDED:
+		inputSys->addController(event.jdevice.which);
 		break;
-	case SDL_JOYAXISMOTION:
-		inputSys->eventJoystickAxis(event.jaxis);
+	case SDL_JOYDEVICEREMOVED:
+		inputSys->delController(event.jdevice.which);
+		break;
+	case SDL_CONTROLLERAXISMOTION:
+		inputSys->eventGamepadAxis(event.caxis);
 		break;
 	case SDL_CONTROLLERBUTTONDOWN:
 		inputSys->eventGamepadButtonDown(event.cbutton);
@@ -521,27 +524,24 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_CONTROLLERBUTTONUP:
 		inputSys->eventGamepadButtonUp(event.cbutton);
 		break;
-	case SDL_CONTROLLERAXISMOTION:
-		inputSys->eventGamepadAxis(event.caxis);
+	case SDL_FINGERDOWN:
+		inputSys->eventFingerDown(event.tfinger);
+		break;
+	case SDL_FINGERUP:
+		inputSys->eventFingerUp(event.tfinger);
+		break;
+	case SDL_FINGERMOTION:
+		inputSys->eventFingerMove(event.tfinger);
+		break;
+	case SDL_MULTIGESTURE:
+		inputSys->eventFingerGesture(event.mgesture);
 		break;
 	case SDL_DROPTEXT:
 		scene->onText(event.drop.file);
 		SDL_free(event.drop.file);
 		break;
-	case SDL_WINDOWEVENT:
-		eventWindow(event.window);
-		break;
-	case SDL_JOYDEVICEADDED:
-		inputSys->addController(event.jdevice.which);
-		break;
-	case SDL_JOYDEVICEREMOVED:
-		inputSys->delController(event.jdevice.which);
-		break;
 	case SDL_USEREVENT:
 		program->eventUser(event.user);
-		break;
-	case SDL_QUIT: case SDL_APP_TERMINATING:
-		close();
 	}
 }
 

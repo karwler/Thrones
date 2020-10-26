@@ -13,6 +13,8 @@ CMake variables:
   - store preferences externally by default  
 - LIBDROID : bool = 0  
   - download libraries for Android Studio  
+- NATIVE : bool = 0
+  - build for the current CPU (only available for Clang and GCC)  
 - OPENGLES : bool = 0  
   - use OpenGL ES  
 - SERVICE : bool = 0  

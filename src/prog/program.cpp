@@ -6,8 +6,22 @@
 #include "engine/world.h"
 #include <iostream>
 #include <regex>
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 #include <curl/curl.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#elif !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#include <dlfcn.h>
+#endif
+
+// PROGRAM WEB FETCH DATA
+
+#ifndef __ANDROID__
+Program::WebFetchData::WebFetchData(string link, string rver) :
+	url(std::move(link)),
+	regex(std::move(rver))
+{}
 #endif
 
 // PROGRAM
@@ -15,14 +29,15 @@
 Program::Program() :
 	info(INF_NONE),
 	ftimeMode(FrameTime::none),
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	proc(nullptr),
+	curlVersion("not found"),
 #endif
 	ftimeSleep(ftimeUpdateDelay)
 {}
 
 Program::~Program() {
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	if (proc)
 		SDL_DetachThread(proc);
 #endif
@@ -34,44 +49,43 @@ void Program::start() {
 	eventOpenMainMenu();
 
 #ifdef EMSCRIPTEN
-	if (!(World::sets()->versionLookup.first.empty() || World::sets()->versionLookup.second.empty())) {
+	if (!(World::sets()->versionLookupUrl.empty() || World::sets()->versionLookupRegex.empty())) {
 		emscripten_fetch_attr_t attr;
 		emscripten_fetch_attr_init(&attr);
 		std::copy_n("GET", 4, attr.requestMethod);
-		attr.userData = new char[World::sets()->versionLookup.second.length()+1];
-		std::copy_n(World::sets()->versionLookup.second.c_str(), World::sets()->versionLookup.second.length() + 1, static_cast<char*>(attr.userData));
-		attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+		attr.userData = new WebFetchData(string(), World::sets()->versionLookupRegex));
 		attr.onsuccess = fetchVersionSucceed;
 		attr.onerror = fetchVersionFail;
-		emscripten_fetch(&attr, World::sets()->versionLookup.first.c_str());
+		attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+		emscripten_fetch(&attr, World::sets()->versionLookupUrl.c_str());
 	}
-#elif defined(WEBUTILS)
-	if (!(World::sets()->versionLookup.first.empty() || World::sets()->versionLookup.second.empty()))
-		proc = SDL_CreateThread(fetchVersion, "", new pairStr(World::sets()->versionLookup));
+#elif !defined(__ANDROID__)
+	if (!(World::sets()->versionLookupUrl.empty() || World::sets()->versionLookupRegex.empty()))
+		proc = SDL_CreateThread(fetchVersion, "", new WebFetchData(World::sets()->versionLookupUrl, World::sets()->versionLookupRegex));
 #endif
 }
 
 void Program::eventUser(const SDL_UserEvent& user) {
 	switch (UserCode(user.code)) {
-	case UserCode::versionFetch: {
-#ifdef WEBUTILS
-		int rc;
-		SDL_WaitThread(proc, &rc);
-		proc = nullptr;
+	case UserCode::versionFetch:
+		if (WebFetchData* wfd = static_cast<WebFetchData*>(user.data1)) {
+#ifdef EMSCRIPTEN
+			if (wfd->error.empty()) {
+#elif !defined(__ANDROID__)
+			int rc;
+			SDL_WaitThread(proc, &rc);
+			proc = nullptr;
+			if (rc == EXIT_SUCCESS && wfd->error.empty()) {
+				curlVersion = std::move(wfd->libVersion);
 #endif
-		if (user.data1) {
-			string* ver = static_cast<string*>(user.data1);
-			latestVersion = std::move(*ver);
-			if (ProgMenu* pm = dynamic_cast<ProgMenu*>(state.get()))
-				pm->versionNotif->setText(latestVersion);
-			delete ver;
-		} else
-#ifdef WEBUTILS
-			std::cerr << "version fetch failed: " << curl_easy_strerror(CURLcode(rc)) << std::endl;
-#else
-			std::cerr << "version fetch failed" << std::endl;
-#endif
-		break; }
+				latestVersion = std::move(wfd->progVersion);
+				if (ProgMenu* pm = dynamic_cast<ProgMenu*>(state.get()))
+					pm->versionNotif->setText(latestVersion);
+			} else
+				std::cerr << "version fetch failed: " << wfd->error << std::endl;
+			delete wfd;
+		}
+		break;
 	default:
 		std::cerr << "unknown user event code: " << user.code << std::endl;
 	}
@@ -279,7 +293,7 @@ void Program::eventHostServer(Button*) {
 	connect(false, "Waiting for player...");
 }
 
-void Program::eventSwitchConfig(sizet, const string& str) {
+void Program::eventSwitchConfig(uint, const string& str) {
 	setSaveConfig(str, false);
 }
 
@@ -1154,30 +1168,30 @@ void Program::eventSetDisplay(Button* but) {
 	eventSaveSettings();
 }
 
-void Program::eventSetScreen(sizet id, const string&) {
+void Program::eventSetScreen(uint id, const string&) {
 	World::sets()->screen = Settings::Screen(id);
 	World::window()->setScreen();
 	eventSaveSettings();
 }
 
-void Program::eventSetWindowSize(sizet, const string& str) {
+void Program::eventSetWindowSize(uint, const string& str) {
 	World::sets()->size = stoiv<ivec2>(str.c_str(), strtoul);
 	World::window()->setScreen();
 	eventSaveSettings();
 }
 
-void Program::eventSetWindowMode(sizet, const string& str) {
+void Program::eventSetWindowMode(uint, const string& str) {
 	World::sets()->mode = gui.fstrToDisp(static_cast<ProgSettings*>(state.get())->getPixelformats(), str);
 	World::window()->setScreen();
 	eventSaveSettings();
 }
 
-void Program::eventSetVsync(sizet id, const string&) {
+void Program::eventSetVsync(uint id, const string&) {
 	World::window()->setVsync(Settings::VSync(id - 1));
 	eventSaveSettings();
 }
 
-void Program::eventSetSamples(sizet, const string& str) {
+void Program::eventSetSamples(uint, const string& str) {
 	World::sets()->msamples = uint8(sstoul(str));
 	eventSaveSettings();
 }
@@ -1249,12 +1263,12 @@ void Program::eventSetVolumeLE(Button* but) {
 	setStandardSlider(static_cast<LabelEdit*>(but), World::sets()->avolume);
 }
 
-void Program::eventSetColorAlly(sizet id, const string&) {
+void Program::eventSetColorAlly(uint id, const string&) {
 	World::sets()->colorAlly = Settings::Color(id);
 	setColorPieces(World::sets()->colorAlly, game.board.getPieces().own(), game.board.getPieces().ene());
 }
 
-void Program::eventSetColorEnemy(sizet id, const string&) {
+void Program::eventSetColorEnemy(uint id, const string&) {
 	World::sets()->colorEnemy = Settings::Color(id);
 	setColorPieces(World::sets()->colorEnemy, game.board.getPieces().ene(), game.board.getPieces().end());
 }
@@ -1302,13 +1316,13 @@ void Program::eventSetDeadzoneLE(Button* but) {
 	setStandardSlider(static_cast<LabelEdit*>(but), World::sets()->deadzone);
 }
 
-void Program::eventSetResolveFamily(sizet id, const string&) {
+void Program::eventSetResolveFamily(uint id, const string&) {
 	World::sets()->resolveFamily = Settings::Family(id);
 	eventSaveSettings();
 }
 
-void Program::eventSetFontRegular(Button* but) {
-	World::window()->reloadFont(static_cast<CheckBox*>(but)->on);
+void Program::eventSetFont(uint, const string& str) {
+	World::sets()->font = World::fonts()->init(str);
 	resetLayoutsWithChat();
 	eventSaveSettings();
 }
@@ -1389,8 +1403,10 @@ void Program::eventOpenDocs(Button*) {
 }
 
 void Program::openDoc(const char* file) const {
-	string path = FileSys::docPath(file);
-#ifdef _WIN32
+	string path = FileSys::docPath() + file;
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+	if (int rc = SDL_OpenURL(path.c_str()))
+#elif defined(_WIN32)
 	if (iptrt rc = iptrt(ShellExecuteW(nullptr, L"open", stow(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL)); rc <= 32)
 #elif defined(__APPLE__)
 	if (int rc = system(("open " + path).c_str()))
@@ -1482,40 +1498,100 @@ tuple<BoardObject*, Piece*, svec2> Program::pickBob() {
 
 #ifdef EMSCRIPTEN
 void Program::fetchVersionSucceed(emscripten_fetch_t* fetch) {
-	pushFetchedVersion(string(static_cast<const char*>(fetch->data), fetch->numBytes), static_cast<char*>(fetch->userData));
-	delete[] static_cast<char*>(fetch->userData);
+	pushFetchedVersion(string(static_cast<const char*>(fetch->data), fetch->numBytes), static_cast<WebFetchData*>(fetch->userData));
 	emscripten_fetch_close(fetch);
 }
 
 void Program::fetchVersionFail(emscripten_fetch_t* fetch) {
-	pushEvent(UserCode::versionFetch);
-	delete[] static_cast<char*>(fetch->userData);
+	WebFetchData* wfd = static_cast<WebFetchData*>(fetch->userData);
+	wfd->error = toStr(fetch->status);
+	pushEvent(UserCode::versionFetch, wfd);
 	emscripten_fetch_close(fetch);
 }
-#elif defined(WEBUTILS)
+#elif !defined(__ANDROID__)
 int Program::fetchVersion(void* data) {
-	pairStr* ver = static_cast<pairStr*>(data);
-	CURL* curl = curl_easy_init();
-	if (!curl) {
-		pushEvent(UserCode::versionFetch);
-		delete ver;
-		return CURLE_FAILED_INIT;
+	WebFetchData* wfd = static_cast<WebFetchData*>(data);
+	CURL* curl = nullptr;
+	void (*easy_cleanup)(CURL*);
+#ifdef _WIN32
+	HMODULE lib = LoadLibraryW(L"libcurl.dll");
+	FARPROC (__stdcall* const libsym)(HMODULE, const char*) = GetProcAddress;
+	string (*const liberror)() = lastErrorMessage;
+	BOOL (__stdcall* const libclose)(HMODULE) = FreeLibrary;
+#else
+	void* lib = dlopen("libcurl.so", RTLD_NOW);
+	void* (*const libsym)(void*, const char*) = dlsym;
+	char* (*const liberror)() = dlerror;
+	int (*const libclose)(void*) = dlclose;
+#endif
+	int rc = EXIT_SUCCESS;
+
+	try {
+		if (!lib)
+			throw liberror();
+		CURL* (*easy_init)() = reinterpret_cast<CURL* (*)()>(libsym(lib, "curl_easy_init"));
+		if (!easy_init)
+			throw liberror();
+		if (easy_cleanup = reinterpret_cast<void (*)(CURL*)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
+			throw liberror();
+		CURLcode (*easy_setopt)(CURL*, CURLoption, void*) = reinterpret_cast<CURLcode (*)(CURL*, CURLoption, void*)>(libsym(lib, "curl_easy_setopt"));
+		if (!easy_setopt)
+			throw liberror();
+		CURLcode (*easy_perform)(CURL*) = reinterpret_cast<CURLcode (*)(CURL*)>(libsym(lib, "curl_easy_perform"));
+		if (!easy_perform)
+			throw liberror();
+		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<const char* (*)(CURLcode)>(libsym(lib, "curl_easy_strerror"));
+
+		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<curl_version_info_data* (*)(CURLversion)>(libsym(lib, "curl_version_info"))) {
+			const curl_version_info_data* cinf = version_info(CURLVERSION_NOW);
+			string clver;
+			if (cinf->features & CURL_VERSION_IPV6)
+				clver += " IPv6,";
+#if CURL_AT_LEAST_VERSION(7, 10, 0)
+			if (cinf->features & CURL_VERSION_SSL)
+				clver += " SSL,";
+			if (cinf->features & CURL_VERSION_LIBZ)
+				clver += " libz,";
+#endif
+#if CURL_AT_LEAST_VERSION(7, 33, 0)
+			if (cinf->features & CURL_VERSION_HTTP2)
+				clver += " HTTP2,";
+#endif
+#if CURL_AT_LEAST_VERSION(7, 66, 0)
+			if (cinf->features & CURL_VERSION_HTTP3)
+				clver += " HTTP3,";
+#endif
+#if CURL_AT_LEAST_VERSION(7, 72, 0)
+			if (cinf->features & CURL_VERSION_UNICODE)
+				clver += " Unicode,";
+#endif
+			wfd->libVersion = clver.empty() ? cinf->version : cinf->version + string(" with") + clver.substr(0, clver.length() - 1);
+		}
+
+		if (curl = easy_init(); !curl)
+			throw "couldn't initialize curl";
+		string html;
+		easy_setopt(curl, CURLOPT_URL, wfd->url.data());
+		easy_setopt(curl, CURLOPT_FOLLOWLOCATION, reinterpret_cast<void*>(1));
+		easy_setopt(curl, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(writeText));
+		easy_setopt(curl, CURLOPT_WRITEDATA, &html);
+		if (CURLcode code = easy_perform(curl); code != CURLE_OK)
+			throw easy_strerror ? easy_strerror(code) : "couldn't fetch page";
+		pushFetchedVersion(html, wfd);
+	} catch (const string& err) {
+		wfd->error = err;
+		pushEvent(UserCode::versionFetch, wfd);
+		rc = EXIT_FAILURE;
+	} catch (const char* err) {
+		wfd->error = err ? err : "unknown error";
+		pushEvent(UserCode::versionFetch, wfd);
+		rc = EXIT_FAILURE;
 	}
-
-	string html;
-	curl_easy_setopt(curl, CURLOPT_URL, ver->first.c_str());
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeText);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html);
-	CURLcode code = curl_easy_perform(curl);
-	curl_easy_cleanup(curl);
-
-	if (code == CURLE_OK)
-		pushFetchedVersion(html, ver->second);
-	else
-		pushEvent(UserCode::versionFetch);
-	delete ver;
-	return code;
+	if (curl)
+		easy_cleanup(curl);
+	if (lib)
+		libclose(lib);
+	return rc;
 }
 
 sizet Program::writeText(char* ptr, sizet size, sizet nmemb, void* userdata) {
@@ -1524,13 +1600,16 @@ sizet Program::writeText(char* ptr, sizet size, sizet nmemb, void* userdata) {
 	return len;
 }
 #endif
-void Program::pushFetchedVersion(const string& html, const string& rver) {
-	if (std::smatch sm; std::regex_search(html, sm, std::regex(rver, std::regex_constants::ECMAScript | std::regex_constants::icase)) && sm.size() >= 2) {
+#ifndef __ANDROID__
+void Program::pushFetchedVersion(const string& html, WebFetchData* wfd) {
+	if (std::smatch sm; std::regex_search(html, sm, std::regex(wfd->regex, std::regex_constants::ECMAScript | std::regex_constants::icase)) && sm.size() >= 2) {
 		string latest = sm[1];
 		uvec4 cur = stoiv<uvec4>(Com::commonVersion, strtoul), web = stoiv<uvec4>(latest.c_str(), strtoul);
 		glm::length_t i = 0;
 		for (; i < uvec4::length() - 1 && cur[i] == web[i]; ++i);
-		pushEvent(UserCode::versionFetch, cur[i] >= web[i] ? new string() : new string("New version " + latest + " available"));
-	} else
-		pushEvent(UserCode::versionFetch);
+		if (cur[i] < web[i])
+			wfd->progVersion = "New version " + latest + " available";
+	}
+	pushEvent(UserCode::versionFetch, wfd);
 }
+#endif

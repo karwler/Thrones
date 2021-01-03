@@ -1,20 +1,6 @@
 #include "tests.h"
 #include "server/server.h"
 
-static void testFilename() {
-	assertEqual(filename(""), "");
-	assertEqual(filename("/"), "");
-	assertEqual(filename("//"), "");
-	assertEqual(filename("/home"), "home");
-	assertEqual(filename("//home"), "home");
-	assertEqual(filename("/home/"), "home");
-	assertEqual(filename("/home//"), "home");
-	assertEqual(filename("home/file"), "file");
-	assertEqual(filename("home//file"), "file");
-	assertEqual(filename("home/file/"), "file");
-	assertEqual(filename("home/file//"), "file");
-}
-
 static void testReadWordM() {
 	const char* str = "the quick\tbrown  fox\r\njumps\rover\v\vthe \tlazy\n dog";
 	const char* words[] = { "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog" };
@@ -59,29 +45,29 @@ static void testReadTextLines() {
 }
 
 static void testStrcicmp() {
-	assertEqual(strcicmp("bob", "bob"), 0);
-	assertEqual(strcicmp("bob", "Bob"), 0);
-	assertEqual(strcicmp("bobs", "Bob"), 's');
-	assertEqual(strcicmp("bob", "Bobs"), -'s');
+	assertEqual(SDL_strcasecmp("bob", "bob"), 0);
+	assertEqual(SDL_strcasecmp("bob", "Bob"), 0);
+	assertEqual(SDL_strcasecmp("bobs", "Bob"), 's');
+	assertEqual(SDL_strcasecmp("bob", "Bobs"), -'s');
 }
 
 static void testStrncicmp() {
-	assertEqual(strncicmp("a", "b", 0), 0);
-	assertEqual(strncicmp("boa", "bob", 2), 0);
-	assertEqual(strncicmp("boa", "Bob", 2), 0);
-	assertEqual(strncicmp("boa", "Bob", 4), 'a' - 'b');
-	assertEqual(strncicmp("bobs", "Bob", 4), 's');
-	assertEqual(strncicmp("bob", "Bobs", 4), -'s');
+	assertEqual(SDL_strncasecmp("a", "b", 0), 0);
+	assertEqual(SDL_strncasecmp("boa", "bob", 2), 0);
+	assertEqual(SDL_strncasecmp("boa", "Bob", 2), 0);
+	assertEqual(SDL_strncasecmp("boa", "Bob", 4), 'a' - 'b');
+	assertEqual(SDL_strncasecmp("bobs", "Bob", 4), 's');
+	assertEqual(SDL_strncasecmp("bob", "Bobs", 4), -'s');
 }
 
 static void testStrnatcmp() {
 	assertEqual(strnatcmp("home", "home"), 0);
-	assertEqual(strnatcmp("home", "Home"), 1);
-	assertEqual(strnatcmp("ahome", "Bhome"), -1);
-	assertEqual(strnatcmp("home1", "Home10"), 1);
-	assertEqual(strnatcmp("Home1", "homeA"), -1);
-	assertEqual(strnatcmp("home1b", "Home10a"), 1);
-	assertEqual(strnatcmp("Home1b", "homeAa"), -1);
+	assertGreater(strnatcmp("home", "Home"), 0);
+	assertLess(strnatcmp("ahome", "Bhome"), 0);
+	assertGreater(strnatcmp("home1", "Home10"), 0);
+	assertLess(strnatcmp("Home1", "homeA"), 0);
+	assertGreater(strnatcmp("home1b", "Home10a"), 0);
+	assertLess(strnatcmp("Home1b", "homeAa"), 0);
 }
 
 static void testIsSpace() {
@@ -140,6 +126,36 @@ static void testDelExt() {
 	assertEqual(delExt("dir/a.o"), "dir/a");
 	assertEqual(delExt("dir//a.o"), "dir//a");
 	assertEqual(delExt("/dir/a.o"), "/dir/a");
+}
+
+static void testFilename() {
+	assertEqual(filename(""), "");
+	assertEqual(filename("/"), "");
+	assertEqual(filename("//"), "");
+	assertEqual(filename("/home"), "home");
+	assertEqual(filename("//home"), "home");
+	assertEqual(filename("/home/"), "home");
+	assertEqual(filename("/home//"), "home");
+	assertEqual(filename("home/file"), "file");
+	assertEqual(filename("home//file"), "file");
+	assertEqual(filename("home/file/"), "file");
+	assertEqual(filename("home/file//"), "file");
+	assertEqual(filename("home//file//"), "file");
+}
+
+static void testParentPath() {
+	assertEqual(parentPath(""), "");
+	assertEqual(parentPath("/"), "/");
+	assertEqual(parentPath("//"), "/");
+	assertEqual(parentPath("/home"), "/");
+	assertEqual(parentPath("//home"), "//");
+	assertEqual(parentPath("/home/"), "/");
+	assertEqual(parentPath("/home//"), "/");
+	assertEqual(parentPath("home/file"), "home/");
+	assertEqual(parentPath("home//file"), "home//");
+	assertEqual(parentPath("home/file/"), "home/");
+	assertEqual(parentPath("home/file//"), "home/");
+	assertEqual(parentPath("home//file//"), "home//");
 }
 
 static void testStrToDisp() {
@@ -253,7 +269,6 @@ static void testArguments() {
 
 void testText() {
 	puts("Running Text tests...");
-	testFilename();
 	testReadWordM();
 	testStrEnclose();
 	testStrUnenclose();
@@ -267,6 +282,8 @@ void testText() {
 	testFirstUpper();
 	testTrim();
 	testDelExt();
+	testFilename();
+	testParentPath();
 	testStrToDisp();
 	testToStr();
 	testStob();

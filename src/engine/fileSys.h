@@ -73,7 +73,7 @@ private:
 	static constexpr char iniKeywordChatLines[] = "chat_lines";
 	static constexpr char iniKeywordDeadzone[] = "deadzone";
 	static constexpr char iniKeywordResolveFamily[] = "resolve_family";
-	static constexpr char iniKeywordFontRegular[] = "font_regular";
+	static constexpr char iniKeywordFont[] = "font";
 	static constexpr char iniKeywordInvertWheel[] = "invert_wheel";
 	static constexpr char iniKeywordVersionLookup[] = "version_lookup";
 	static constexpr char iniKeywordAddress[] = "address";
@@ -106,7 +106,7 @@ private:
 	static constexpr char iniKeywordWinThrone[] = "win_thrones";
 	static constexpr char iniKeywordCapturers[] = "capturers";
 
-	static inline string dirData, dirConfig, dirDoc;
+	static inline string dirBase, dirConfig;
 
 public:
 	static void init(const Arguments& args);
@@ -117,6 +117,7 @@ public:
 	static void saveConfigs(const umap<string, Config>& confs);
 	static umap<string, Setup> loadSetups();
 	static void saveSetups(const umap<string, Setup>& sets);
+	static vector<string> listFonts();
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
 	static umap<string, Mesh> loadObjects();	// geometry shader must be in use
@@ -128,8 +129,12 @@ public:
 #ifdef EMSCRIPTEN
 	static bool canRead();
 #endif
-	static string docPath(const char* file);
-	static string dataPath(const char* file);
+	static string dataPath();
+	static string fontPath();
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+	static string docPath();
+	static string windowIconPath();
+#endif
 private:
 	static string configPath(const char* file);
 
@@ -137,7 +142,7 @@ private:
 	static void readShadows(const char* str, Settings& sets);
 	static void readColors(const char* str, Settings& sets);
 	static void readScales(const char* str, Settings& sets);
-	static void readVersionLookup(const char* str, pairStr& vl);
+	static void readVersionLookup(const char* str, Settings& sets);
 	static void readBinding(void* inputSys, IniLine& il);
 
 	static void readVictoryPoints(const char* str, Config* cfg);
@@ -153,13 +158,39 @@ private:
 	template <class T, class F> static string strJoin(const vector<T>& vec, F conv, char sep = ' ');
 };
 
-inline string FileSys::docPath(const char* file) {
-	return dirDoc + file;
+inline string FileSys::dataPath() {
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(EMSCRIPTEN)
+	return dirBase;
+#else
+	return dirBase + "share/";
+#endif
 }
 
-inline string FileSys::dataPath(const char* file) {
-	return dirData + file;
+inline string FileSys::fontPath() {
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(EMSCRIPTEN)
+	return dirBase + "fonts/";
+#else
+	return dirBase + "share/fonts/";
+#endif
 }
+
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+inline string FileSys::docPath() {
+#if defined(_WIN32) || defined(__APPLE__)
+	return dirBase + "doc/";
+#else
+	return dirBase + "share/doc/";
+#endif
+}
+
+inline string FileSys::windowIconPath() {
+#if defined(__APPLE__) || defined(APPIMAGE)
+	return dirBase + "thrones.png";
+#else
+	return dirBase + "share/thrones.png";
+#endif
+}
+#endif
 
 inline string FileSys::configPath(const char* file) {
 	return dirConfig + file;

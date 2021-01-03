@@ -2,55 +2,55 @@ import os
 import re
 import sys
 
-def readlin(fpath):
+def readlin(fpath: str) -> list[str]:
 	with open(fpath, 'r') as fh:
 		return fh.readlines()
 
-def writelin(fpath, lines):
+def writelin(fpath: str, lines: list[str]) -> None:
 	with open(fpath, 'w') as fh:
 		fh.writelines(lines)
 
-def findSubstr(lines, sub, pos = 0):
+def findSubstr(lines: list[str], sub: str, pos: int = 0) -> int:
 	pat = re.compile(sub)
 	for i in range(pos, len(lines)):
 		if pat.search(lines[i]):
 			return i
 	raise Exception('failed to find ' + sub)
 
-def findReplace(lines, cond, regs, repl, pos = 0):
+def findReplace(lines: list[str], cond: str, regs: str, repl: str, pos: int = 0) -> None:
 	lid = findSubstr(lines, cond, pos)
 	lines[lid] = re.sub(regs, repl, lines[lid])
 
-def incCode(lines, regs, form, inc):
+def incCode(lines: list[str], regs: str, form: str, inc: int) -> None:
 	lid = findSubstr(lines, 'versionCode')
 	code = int(re.search(r'\d+', lines[lid]).group(0)) + inc
 	lines[lid] = re.sub(regs, form.format(code), lines[lid])
 
-def setVersion(fpath):
+def setVersion(fpath: str) -> None:
 	lines = readlin(fpath)
 	findReplace(lines, r'char\s*commonVersion\[.*\]\s*=', '".*"', '"' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
-def setGradle(fpath, inc):
+def setGradle(fpath: str, inc: int) -> None:
 	lines = readlin(fpath)
 	incCode(lines, r'\d', '{}', inc)
 	findReplace(lines, 'versionName', '".*"', '"' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
-def setAndroid(fpath, inc):
+def setAndroid(fpath: str, inc: int) -> None:
 	lines = readlin(fpath)
 	incCode(lines, 'versionCode=".*?"', 'versionCode="{}"', inc)
 	findReplace(lines, 'versionName', 'versionName=".*?"', 'versionName="' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
-def setInfo(fpath):
+def setInfo(fpath: str) -> None:
 	lines = readlin(fpath)
 	rstr = '<string>.*</string>'
 	lid = findSubstr(lines, '<key>CFBundleVersion</key>')
 	findReplace(lines, rstr, rstr, '<string>' + sys.argv[1] + '</string>', lid + 1)
 	writelin(fpath, lines)
 
-def setResource(fpath):
+def setResource(fpath: str) -> None:
 	lines = readlin(fpath)
 	rver = sys.argv[1].replace('.', ',')
 	rnum = re.compile(r'\d+,\d+,\d+,\d+')
@@ -62,14 +62,9 @@ def setResource(fpath):
 	findReplace(lines, '"ProductVersion"', rstr, ', "' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
-def setDesktop(fpath):
-	lines = readlin(fpath)
-	findReplace(lines, 'Version\s*=', '=.*', '=' + sys.argv[1])
-	writelin(fpath, lines)
-
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
-		print("usage: " + os.path.basename(__file__) + " <new version> <code increment = 1>")
+		print('usage:', os.path.basename(__file__), '<new version> <code increment = 1>')
 		quit()
 	inc = 1 if len(sys.argv) < 3 else int(sys.argv[2])
 
@@ -80,6 +75,5 @@ if __name__ == '__main__':
 		setInfo('rsc/Info.plist')
 		setResource('rsc/server.rc')
 		setResource('rsc/thrones.rc')
-		setDesktop('rsc/thrones.desktop')
 	except Exception as e:
 		print(e)

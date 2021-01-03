@@ -4,6 +4,11 @@
 #include <iostream>
 #ifdef EMSCRIPTEN
 #include <emscripten.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
 #endif
 
 // INI LINE
@@ -49,7 +54,7 @@ void FileSys::init(const Arguments& args) {
 	if (const char* path = SDL_AndroidGetExternalStoragePath())
 		dirConfig = path + string("/");
 #elif defined(EMSCRIPTEN)
-	dirData = "/";
+	dirBase = "/";
 	dirConfig = "/data/";
 	EM_ASM(
 		FS.mkdir('/data');
@@ -61,28 +66,23 @@ void FileSys::init(const Arguments& args) {
 	);
 #else
 	if (char* path = SDL_GetBasePath()) {
-#ifdef __APPLE__
-		dirData = path;
-		dirDoc = path + string("../../doc/");
-#else
-		dirData = path + string("data/");
-		dirDoc = path + string("doc/");
+		dirBase = path;
 #ifdef _WIN32
-		std::replace(dirData.begin(), dirData.end(), '\\', '/');
-		std::replace(dirDoc.begin(), dirDoc.end(), '\\', '/');
-#endif
+		std::replace(dirBase.begin(), dirBase.end(), '\\', '/');
+#elif !defined(__APPLE__)
+		dirBase = parentPath(dirBase);
 #endif
 		SDL_free(path);
 	}
 
 #ifdef EXTERNAL
-	if (const char* eopt = args.getOpt(Settings::argExternal); eopt ? stob(eopt) : true) {
+	if (const char* eopt = args.getOpt(Settings::argExternal); !eopt || stob(eopt)) {
 #else
-	if (const char* eopt = args.getOpt(Settings::argExternal); eopt ? stob(eopt) : false) {
+	if (const char* eopt = args.getOpt(Settings::argExternal); eopt && stob(eopt)) {
 #endif
 #ifdef _WIN32
 		if (const wchar* path = _wgetenv(L"AppData")) {
-			dirConfig = wtos(path) + string("/Thrones/");
+			dirConfig = cwtos(path) + "/Thrones/";
 			std::replace(dirConfig.begin(), dirConfig.end(), '\\', '/');
 		}
 #elif defined(__APPLE__)
@@ -94,7 +94,7 @@ void FileSys::init(const Arguments& args) {
 #endif
 		createDirectories(dirConfig);
 	} else
-		dirConfig = dirData;
+		dirConfig = dirBase;
 #endif
 }
 
@@ -122,61 +122,59 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 
 	Settings& sets = *static_cast<Settings*>(settings);
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
-	if (!strcicmp(il.prp, iniKeywordDisplay))
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDisplay))
 		sets.display = uint8(std::min(sstoul(il.val), ulong(SDL_GetNumVideoDisplays())));
 	else
 #endif
 #ifndef __ANDROID__
-	if (!strcicmp(il.prp, iniKeywordScreen))
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordScreen))
 		sets.screen = strToEnum(Settings::screenNames, il.val, Settings::defaultScreen);
-	else if (!strcicmp(il.prp, iniKeywordSize))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSize))
 		sets.size = stoiv<ivec2>(il.val.c_str(), strtoul);
-	else if (!strcicmp(il.prp, iniKeywordMode))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMode))
 		sets.mode = strToDisp(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVersionLookup))
+		readVersionLookup(il.val.c_str(), sets);
 	else
 #endif
 #ifndef OPENGLES
-	if (!strcicmp(il.prp, iniKeywordMsamples))
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMsamples))
 		sets.msamples = uint8(std::min(sstoul(il.val), 8ul));
-	else if (!strcicmp(il.prp, iniKeywordShadows))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordShadows))
 		readShadows(il.val.c_str(), sets);
 	else
 #endif
-	if (!strcicmp(il.prp, iniKeywordTexScale))
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTexScale))
 		sets.texScale = uint8(std::clamp(sstoul(il.val), 1ul, 100ul));
-	else if (!strcicmp(il.prp, iniKeywordVsync))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVsync))
 		sets.vsync = strToEnum(Settings::vsyncNames, il.val, Settings::defaultVSync + 1) - 1;
-	else if (!strcicmp(il.prp, iniKeywordGamma))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordGamma))
 		sets.gamma = std::clamp(sstof(il.val), 0.f, Settings::gammaMax);
-	else if (!strcicmp(il.prp, iniKeywordAVolume))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAVolume))
 		sets.avolume = uint8(std::min(sstoul(il.val), ulong(SDL_MIX_MAXVOLUME)));
-	else if (!strcicmp(il.prp, iniKeywordColors))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordColors))
 		readColors(il.val.c_str(), sets);
-	else if (!strcicmp(il.prp, iniKeywordScales))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordScales))
 		readScales(il.val.c_str(), sets);
-	else if (!strcicmp(il.prp, iniKeywordAutoVictoryPoints))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAutoVictoryPoints))
 		sets.autoVictoryPoints = stob(il.val);
-	else if (!strcicmp(il.prp, iniKeywordTooltips))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTooltips))
 		sets.tooltips = stob(il.val);
-	else if (!strcicmp(il.prp, iniKeywordChatLines))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordChatLines))
 		sets.chatLines = uint16(std::min(stoul(il.val), ulong(Settings::chatLinesMax)));
-	else if (!strcicmp(il.prp, iniKeywordDeadzone))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDeadzone))
 		sets.deadzone = uint16(std::clamp(stoul(il.val), ulong(Settings::deadzoneLimit.x), ulong(Settings::deadzoneLimit.y)));
-	else if (!strcicmp(il.prp, iniKeywordResolveFamily))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordResolveFamily))
 		sets.resolveFamily = strToEnum(Settings::familyNames, il.val, Settings::defaultFamily);
-	else if (!strcicmp(il.prp, iniKeywordFontRegular))
-		sets.fontRegular = stob(il.val);
-	else if (!strcicmp(il.prp, iniKeywordInvertWheel))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFont))
+		sets.font = il.val;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordInvertWheel))
 		sets.invertWheel = stob(il.val);
-#if defined(WEBUTILS) || defined(EMSCRIPTEN)
-	else if (!strcicmp(il.prp, iniKeywordVersionLookup))
-		readVersionLookup(il.val.c_str(), sets.versionLookup);
-#endif
-	else if (!strcicmp(il.prp, iniKeywordAddress))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAddress))
 		sets.address = std::move(il.val);
-	else if (!strcicmp(il.prp, iniKeywordPort))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPort))
 		sets.port = std::move(il.val);
-	else if (!strcicmp(il.prp, iniKeywordLastConfig))
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordLastConfig))
 		sets.lastConfig = std::move(il.val);
 }
 
@@ -199,11 +197,11 @@ void FileSys::readScales(const char* str, Settings& sets) {
 		sets.scalePieces = stob(word);
 }
 
-void FileSys::readVersionLookup(const char* str, pairStr& vl) {
-	if (vl.first = strUnenclose(str); vl.first.empty())
-		vl.first = Settings::defaultVersionLocation;
-	if (vl.second = strUnenclose(str); vl.second.empty())
-		vl.second = Settings::defaultVersionRegex;
+void FileSys::readVersionLookup(const char* str, Settings& sets) {
+	if (sets.versionLookupUrl = strUnenclose(str); sets.versionLookupUrl.empty())
+		sets.versionLookupUrl = Settings::defaultVersionLocation;
+	if (sets.versionLookupRegex = strUnenclose(str); sets.versionLookupRegex.empty())
+		sets.versionLookupRegex = Settings::defaultVersionRegex;
 }
 
 void FileSys::readBinding(void* inputSys, IniLine& il) {
@@ -215,11 +213,11 @@ void FileSys::readBinding(void* inputSys, IniLine& il) {
 
 	InputSys* input = static_cast<InputSys*>(inputSys);
 	const char* pos = il.val.c_str();
-	if (!strcicmp(il.key, iniKeyKey)) {
+	if (!SDL_strcasecmp(il.key.c_str(), iniKeyKey)) {
 		while (*pos)
 			if (SDL_Scancode cde = SDL_GetScancodeFromName(strUnenclose(pos).c_str()); cde != SDL_SCANCODE_UNKNOWN)
 				input->addBinding(bid, cde);
-	} else if (!strcicmp(il.key, iniKeyJoy)) {
+	} else if (!SDL_strcasecmp(il.key.c_str(), iniKeyJoy)) {
 		while (*pos) {
 			for (; isSpace(*pos); ++pos);
 			switch (*pos++) {
@@ -240,7 +238,7 @@ void FileSys::readBinding(void* inputSys, IniLine& il) {
 				--pos;
 			}
 		}
-	} else if (!strcicmp(il.key, iniKeyGpd))
+	} else if (!SDL_strcasecmp(il.key.c_str(), iniKeyGpd))
 		while (*pos) {
 			for (; isSpace(*pos); ++pos);
 			switch (*pos++) {
@@ -271,6 +269,7 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(text, iniKeywordScreen, Settings::screenNames[uint8(sets.screen)]);
 	IniLine::write(text, iniKeywordSize, toStr(sets.size));
 	IniLine::write(text, iniKeywordMode, toStr(sets.mode.w) + ' ' + toStr(sets.mode.h) + ' ' + toStr(sets.mode.refresh_rate) + ' ' + toStr(sets.mode.format));
+	IniLine::write(text, iniKeywordVersionLookup, strEnclose(sets.versionLookupUrl) + ' ' + strEnclose(sets.versionLookupRegex));
 #endif
 #ifndef OPENGLES
 	IniLine::write(text, iniKeywordMsamples, toStr(sets.msamples));
@@ -287,11 +286,8 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(text, iniKeywordChatLines, toStr(sets.chatLines));
 	IniLine::write(text, iniKeywordDeadzone, toStr(sets.deadzone));
 	IniLine::write(text, iniKeywordResolveFamily, Settings::familyNames[uint8(sets.resolveFamily)]);
-	IniLine::write(text, iniKeywordFontRegular, btos(sets.fontRegular));
+	IniLine::write(text, iniKeywordFont, sets.font);
 	IniLine::write(text, iniKeywordInvertWheel, btos(sets.invertWheel));
-#if defined(WEBUTILS) || defined(EMSCRIPTEN)
-	IniLine::write(text, iniKeywordVersionLookup, strEnclose(sets.versionLookup.first) + ' ' + strEnclose(sets.versionLookup.second));
-#endif
 	IniLine::write(text, iniKeywordAddress, sets.address);
 	IniLine::write(text, iniKeywordPort, sets.port);
 	IniLine::write(text, iniKeywordLastConfig, sets.lastConfig);
@@ -344,45 +340,45 @@ umap<string, Config> FileSys::loadConfigs() {
 		case IniLine::prpVal:
 			if (!cit)
 				break;
-			if (!strcicmp(il.prp, iniKeywordVictoryPoints))
+			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVictoryPoints))
 				readVictoryPoints(il.val.c_str(), cit);
-			else if (!strcicmp(il.prp, iniKeywordPorts))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPorts))
 				cit->opts = stob(il.val) ? cit->opts | Config::ports : cit->opts & ~Config::ports;
-			else if (!strcicmp(il.prp, iniKeywordRowBalancing))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordRowBalancing))
 				cit->opts = stob(il.val) ? cit->opts | Config::rowBalancing : cit->opts & ~Config::rowBalancing;
-			else if (!strcicmp(il.prp, iniKeywordHomefront))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordHomefront))
 				cit->opts = stob(il.val) ? cit->opts | Config::homefront : cit->opts & ~Config::homefront;
-			else if (!strcicmp(il.prp, iniKeywordSetPieceBattle))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSetPieceBattle))
 				readSetPieceBattle(il.val.c_str(), cit);
-			else if (!strcicmp(il.prp, iniKeywordBoardSize))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBoardSize))
 				cit->homeSize = stoiv<svec2>(il.val.c_str(), strtol);
-			else if (!strcicmp(il.prp, iniKeywordBattlePass))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBattlePass))
 				cit->battlePass = uint8(sstol(il.val));
-			else if (!strcicmp(il.prp, iniKeywordFavorLimit))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFavorLimit))
 				readFavorLimit(il.val.c_str(), cit);
-			else if (!strcicmp(il.prp, iniKeywordFirstTurnEngage))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFirstTurnEngage))
 				cit->opts = stob(il.val) ? cit->opts | Config::firstTurnEngage : cit->opts & ~Config::firstTurnEngage;
-			else if (!strcicmp(il.prp, iniKeywordTerrainRules))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTerrainRules))
 				cit->opts = stob(il.val) ? cit->opts | Config::terrainRules : cit->opts & ~Config::terrainRules;
-			else if (!strcicmp(il.prp, iniKeywordDragonLate))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonLate))
 				cit->opts = stob(il.val) ? cit->opts | Config::dragonLate : cit->opts & ~Config::dragonLate;
-			else if (!strcicmp(il.prp, iniKeywordDragonStraight))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonStraight))
 				cit->opts = stob(il.val) ? cit->opts | Config::dragonStraight : cit->opts & ~Config::dragonStraight;
-			else if (!strcicmp(il.prp, iniKeywordWinFortress))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinFortress))
 				cit->winFortress = uint16(sstol(il.val));
-			else if (!strcicmp(il.prp, iniKeywordWinThrone))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinThrone))
 				cit->winThrone = uint16(sstol(il.val));
-			else if (!strcicmp(il.prp, iniKeywordCapturers))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordCapturers))
 				cit->capturers = readCapturers(il.val);
 			break;
 		case IniLine::prpKeyVal:
 			if (!cit)
 				break;
-			if (!strcicmp(il.prp, iniKeywordTile))
+			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile))
 				readAmount(il, Tile::names, cit->tileAmounts);
-			else if (!strcicmp(il.prp, iniKeywordMiddle))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle))
 				readAmount(il, Tile::names, cit->middleAmounts);
-			else if (!strcicmp(il.prp, iniKeywordPiece))
+			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
 				readAmount(il, Piece::names, cit->pieceAmounts);
 		}
 	return !confs.empty() ? confs : umap<string, Config>{ pair(Config::defaultName, Config()) };
@@ -475,13 +471,13 @@ umap<string, Setup> FileSys::loadSetups() {
 		if (il.type == IniLine::title)
 			sit = sets.emplace(std::move(il.prp), Setup()).first;
 		else if (il.type == IniLine::prpKeyVal && !sets.empty()) {
-			if (!strcicmp(il.prp, iniKeywordTile)) {
+			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile)) {
 				if (Tile::Type t = strToEnum<Tile::Type>(Tile::names, il.val); t < Tile::fortress)
 					sit->second.tiles.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
-			} else if (!strcicmp(il.prp, iniKeywordMiddle)) {
+			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle)) {
 				if (Tile::Type t = strToEnum<Tile::Type>(Tile::names, il.val); t < Tile::fortress)
 					sit->second.mids.emplace_back(uint16(sstoul(il.key)), t);
-			} else if (!strcicmp(il.prp, iniKeywordPiece))
+			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
 				if (Piece::Type t = strToEnum<Piece::Type>(Piece::names, il.val); t <= Piece::throne)
 					sit->second.pieces.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
 		}
@@ -504,8 +500,46 @@ void FileSys::saveSetups(const umap<string, Setup>& sets) {
 	writeFile(configPath(fileSetups), text);
 }
 
+vector<string> FileSys::listFonts() {
+#if defined(__ANDROID__) || defined(EMSCRIPTEN)
+	return { Settings::defaultFont, "Merriweather" };
+#else
+	vector<string> entries;
+#ifdef _WIN32
+	WIN32_FIND_DATAW data;
+	HANDLE hFind = FindFirstFileW(sstow(fontPath() + '*').c_str(), &data);
+	if (hFind == INVALID_HANDLE_VALUE)
+		return entries;
+
+	do {
+		if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)))
+			entries.push_back(cwtos(data.cFileName));
+	} while (FindNextFileW(hFind, &data));
+	FindClose(hFind);
+#else
+	DIR* directory = opendir(fontPath().c_str());
+	if (!directory)
+		return entries;
+
+	while (dirent* entry = readdir(directory))
+		if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, ".."))
+			switch (entry->d_type) {
+			case DT_REG:
+				entries.emplace_back(entry->d_name);
+				break;
+			case DT_LNK:
+				if (struct stat info; !stat(entry->d_name, &info) && S_ISREG(info.st_mode))
+					entries.emplace_back(entry->d_name);
+			}
+	closedir(directory);
+#endif
+	std::sort(entries.begin(), entries.end(), strnatless);
+	return entries;
+#endif
+}
+
 umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
-	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileAudios).c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileAudios).c_str(), defaultReadMode);
 	if (!ifh) {
 		std::cerr << "failed to load sounds" << std::endl;
 		return {};
@@ -541,7 +575,7 @@ umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
 }
 
 umap<string, Material> FileSys::loadMaterials() {
-	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileMaterials).c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileMaterials).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load materials");
 
@@ -566,7 +600,7 @@ umap<string, Material> FileSys::loadMaterials() {
 }
 
 umap<string, Mesh> FileSys::loadObjects() {
-	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileObjects).c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileObjects).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load objects");
 
@@ -593,7 +627,7 @@ umap<string, Mesh> FileSys::loadObjects() {
 }
 
 umap<string, string> FileSys::loadShaders() {
-	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileShaders).c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileShaders).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load shaders");
 
@@ -623,7 +657,7 @@ umap<string, Texture> FileSys::loadTextures(int scale) {
 }
 
 void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum), int scale) {
-	SDL_RWops* ifh = SDL_RWFromFile(dataPath(fileTextures).c_str(), defaultReadMode);
+	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileTextures).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load textures");
 

@@ -5,12 +5,14 @@
 #include <sys/stat.h>
 #endif
 
-string filename(const string& path) {
-	if (path.empty() || std::all_of(path.begin(), path.end(), isDsep))
-		return string();
-
+string parentPath(const string& path) {
 	string::const_reverse_iterator end = std::find_if_not(path.rbegin(), path.rend(), isDsep);
-	return string(std::find_if(end, path.rend(), isDsep).base(), end.base());
+	string::const_iterator fin = std::find_if(end, path.rend(), isDsep).base();
+#ifdef _WIN32
+	return string(path.begin(), fin);
+#else
+	return string(path.begin(), isDsep(*fin) ? fin + 1 : fin);
+#endif
 }
 
 string readWord(const char*& pos) {
@@ -130,7 +132,7 @@ void createDirectories(const string& path) {
 	for (string::const_iterator end = std::find_if_not(path.begin(), path.end(), isDsep); end != path.end(); end = std::find_if_not(end, path.end(), isDsep)) {
 		end = std::find_if(end, path.end(), isDsep);
 #ifdef _WIN32
-		CreateDirectoryW(stow(string(path.begin(), end)).c_str(), nullptr);
+		CreateDirectoryW(sstow(string(path.begin(), end)).c_str(), nullptr);
 #else
 		mkdir(string(path.begin(), end).c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 #endif
@@ -147,27 +149,48 @@ SDL_DisplayMode strToDisp(const string& str) {
 }
 
 #ifdef _WIN32
-string wtos(const wchar* src) {
-	int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
-	if (len <= 1)
-		return string();
-	--len;
-
+string cwtos(const wchar* src) {
 	string dst;
-	dst.resize(len);
-	WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
+	if (int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr) - 1; len > 0) {
+		dst.resize(len);
+		WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
+	}
 	return dst;
 }
 
-wstring stow(const string& src) {
-	int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0);
-	if (len <= 0)
-		return wstring();
-
-	wstring dst;
-	dst.resize(len);
-	MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
+string swtos(const wstring& src) {
+	string dst;
+	if (int len = WideCharToMultiByte(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0, nullptr, nullptr); len > 0) {
+		dst.resize(len);
+		WideCharToMultiByte(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len, nullptr, nullptr);
+	}
 	return dst;
+}
+
+wstring cstow(const char* src) {
+	wstring dst;
+	if (int len = MultiByteToWideChar(CP_UTF8, 0, src, -1, nullptr, 0) - 1; len > 0) {
+		dst.resize(len);
+		MultiByteToWideChar(CP_UTF8, 0, src, -1, dst.data(), len);
+	}
+	return dst;
+}
+
+wstring sstow(const string& src) {
+	wstring dst;
+	if (int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0); len > 0) {
+		dst.resize(len);
+		MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
+	}
+	return dst;
+}
+
+string lastErrorMessage() {
+	wchar* buff = nullptr;
+	string msg = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, GetLastError(), 0, reinterpret_cast<LPWSTR>(&buff), 0, nullptr) ? cwtos(buff) : string();
+	if (buff)
+		LocalFree(buff);
+	return trim(msg);
 }
 #endif
 
@@ -175,7 +198,7 @@ wstring stow(const string& src) {
 
 #ifdef _WIN32
 void Arguments::setArgs(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc - 1, argv + 1, wtos, flg, opt);
+	setArgs(argc - 1, argv + 1, cwtos, flg, opt);
 }
 #endif
 

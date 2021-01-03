@@ -92,7 +92,7 @@ template <class T = string>
 T loadFile(const string& path) {
 	T data;
 #ifdef _WIN32
-	if (FILE* ifh = _wfopen(stow(path).c_str(), L"rb")) {
+	if (FILE* ifh = _wfopen(sstow(path).c_str(), L"rb")) {
 #else
 	if (FILE* ifh = fopen(path.c_str(), defaultReadMode)) {
 #endif
@@ -160,7 +160,7 @@ static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
 	mtls.emplace_back();
 
 	for (const string& line : lines) {
-		if (sizet len = strlen(mtlKeywordNewmtl); !strncicmp(line, mtlKeywordNewmtl, len)) {
+		if (sizet len = strlen(mtlKeywordNewmtl); !SDL_strncasecmp(line.c_str(), mtlKeywordNewmtl, len)) {
 			if (pair<string, Material> next(trim(line.substr(len)), Material()); mtls.back().first.empty())
 				mtls.back() = std::move(next);
 			else
@@ -511,7 +511,7 @@ void process(const char* dest, const vector<string>& files, F loader, void (*wri
 		std::cout << "nothing to write for " << dest << std::endl;
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
 int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {

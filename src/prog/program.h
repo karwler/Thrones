@@ -30,8 +30,9 @@ private:
 	uptr<Netcp> netcp;
 	Game game;
 	GuiGen gui;
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 	SDL_Thread* proc;
+	string curlVersion;
 #endif
 	string latestVersion;
 	string chatPrefix;
@@ -40,6 +41,18 @@ private:
 	static constexpr float ftimeUpdateDelay = 0.5f;
 	static constexpr float transAnimTime = 0.5f;
 	static constexpr float pieceYDown = -2.f;
+
+#ifndef __ANDROID__
+	struct WebFetchData {
+		string url;
+		string regex;
+		string libVersion;
+		string progVersion;
+		string error;
+
+		WebFetchData(string link, string rver);
+	};
+#endif
 
 public:
 	Program();
@@ -73,7 +86,7 @@ public:
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventStartGame(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
-	void eventSwitchConfig(sizet id, const string& str);
+	void eventSwitchConfig(uint id, const string& str);
 	void eventConfigDelete(Button* but = nullptr);
 	void eventConfigCopyInput(Button* but = nullptr);
 	void eventConfigCopy(Button* but = nullptr);
@@ -158,11 +171,11 @@ public:
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
 	void eventSetDisplay(Button* but);
-	void eventSetScreen(sizet id, const string& str);
-	void eventSetWindowSize(sizet id, const string& str);
-	void eventSetWindowMode(sizet id, const string& str);
-	void eventSetVsync(sizet id, const string& str);
-	void eventSetSamples(sizet id, const string& str);
+	void eventSetScreen(uint id, const string& str);
+	void eventSetWindowSize(uint id, const string& str);
+	void eventSetWindowMode(uint id, const string& str);
+	void eventSetVsync(uint id, const string& str);
+	void eventSetSamples(uint id, const string& str);
 	void eventSetTexturesScaleSL(Button* but);
 	void eventSetTextureScaleLE(Button* but);
 	void eventSetShadowResSL(Button* but);
@@ -172,8 +185,8 @@ public:
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);
 	void eventSetVolumeLE(Button* but);
-	void eventSetColorAlly(sizet id, const string& str);
-	void eventSetColorEnemy(sizet id, const string& str);
+	void eventSetColorAlly(uint id, const string& str);
+	void eventSetColorEnemy(uint id, const string& str);
 	void eventSetScaleTiles(Button* but);
 	void eventSetScalePieces(Button* but);
 	void eventSetAutoVictoryPoints(Button* but);
@@ -182,8 +195,8 @@ public:
 	void eventSetChatLineLimitLE(Button* but);
 	void eventSetDeadzoneSL(Button* but);
 	void eventSetDeadzoneLE(Button* but);
-	void eventSetResolveFamily(sizet id, const string& str);
-	void eventSetFontRegular(Button* but);
+	void eventSetResolveFamily(uint id, const string& str);
+	void eventSetFont(uint id, const string& str);
 	void eventSetInvertWheel(Button* but);
 	void eventAddKeyBinding(Button* but);
 	void eventSetNewBinding(Button* but);
@@ -210,6 +223,9 @@ public:
 	Game* getGame();
 	GuiGen* getGui();
 	const string& getLatestVersion() const;
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+	const string& getCurlVersion() const;
+#endif
 
 private:
 	void sendRoomName(Com::Code code, const string& name);
@@ -233,17 +249,17 @@ private:
 	void resetLayoutsWithChat();
 	tuple<BoardObject*, Piece*, svec2> pickBob();	// returns selected object, occupant, position
 
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
-	void openDoc(const char* file) const;
-#endif
 #ifdef EMSCRIPTEN
 	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
 	static void fetchVersionFail(emscripten_fetch_t* fetch);
-#elif defined(WEBUTILS)
+#elif !defined(__ANDROID__)
+	void openDoc(const char* file) const;
 	static int fetchVersion(void* data);
 	static sizet writeText(char* ptr, sizet size, sizet nmemb, void* userdata);
 #endif
-	static void pushFetchedVersion(const string& html, const string& rver);
+#ifndef __ANDROID__
+	static void pushFetchedVersion(const string& html, WebFetchData* wfd);
+#endif
 };
 
 inline ProgState* Program::getState() {
@@ -265,3 +281,9 @@ inline GuiGen* Program::getGui() {
 inline const string& Program::getLatestVersion() const {
 	return latestVersion;
 }
+
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+inline const string& Program::getCurlVersion() const {
+	return curlVersion;
+}
+#endif

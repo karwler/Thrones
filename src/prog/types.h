@@ -3,7 +3,7 @@
 #include "utils/objects.h"
 #include <numeric>
 
-constexpr array<uint16 (* const)(uint16, svec2), 8> adjacentIndex = {
+constexpr array<uint16 (*const)(uint16, svec2), 8> adjacentIndex = {
 	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x ? id - lim.x - 1 : UINT16_MAX; },							// left up
 	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x ? id - lim.x : UINT16_MAX; },											// up
 	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x != lim.x - 1 ? id - lim.x + 1 : UINT16_MAX; },				// right up

@@ -67,7 +67,47 @@ template <class A, class B>
 void assertEqualImpl(const A& res, const B& exp, const char* name) {
 	if (res != exp) {
 		testResult = EXIT_FAILURE;
-		std::cerr << name << ':' << linend << "result: " << res << linend << "expect: " << exp << linend << std::endl;
+		std::cerr << name << ':' << linend << "result: " << res << " == " << exp << linend << std::endl;
+	}
+}
+
+template <class A, class B>
+void assertNotEqualImpl(const A& res, const B& exp, const char* name) {
+	if (res == exp) {
+		testResult = EXIT_FAILURE;
+		std::cerr << name << ':' << linend << "result: " << res << " != " << exp << linend << std::endl;
+	}
+}
+
+template <class A, class B>
+void assertLessImpl(const A& res, const B& exp, const char* name) {
+	if (res >= exp) {
+		testResult = EXIT_FAILURE;
+		std::cerr << name << ':' << linend << "result: " << res << " < " << exp << linend << std::endl;
+	}
+}
+
+template <class A, class B>
+void assertLessEqualImpl(const A& res, const B& exp, const char* name) {
+	if (res > exp) {
+		testResult = EXIT_FAILURE;
+		std::cerr << name << ':' << linend << "result: " << res << " <= " << exp << linend << std::endl;
+	}
+}
+
+template <class A, class B>
+void assertGreaterImpl(const A& res, const B& exp, const char* name) {
+	if (res <= exp) {
+		testResult = EXIT_FAILURE;
+		std::cerr << name << ':' << linend << "result: " << res << " > " << exp << linend << std::endl;
+	}
+}
+
+template <class A, class B>
+void assertGreaterEqualImpl(const A& res, const B& exp, const char* name) {
+	if (res < exp) {
+		testResult = EXIT_FAILURE;
+		std::cerr << name << ':' << linend << "result: " << res << " >= " << exp << linend << std::endl;
 	}
 }
 
@@ -94,6 +134,11 @@ void assertMemoryImpl(const T* res, const T* exp, sizet cnt, const char* name) {
 }
 
 #define assertEqual(res, exp) assertEqualImpl(res, exp, __func__)
+#define assertNotEqual(res, exp) assertNotEqualImpl(res, exp, __func__)
+#define assertLess(res, exp) assertLessImpl(res, exp, __func__)
+#define assertLessEqual(res, exp) assertLessEqualImpl(res, exp, __func__)
+#define assertGreater(res, exp) assertGreaterImpl(res, exp, __func__)
+#define assertGreaterEqual(res, exp) assertGreaterEqualImpl(res, exp, __func__)
 #define assertTrue(res) assertEqual(res, true)
 #define assertFalse(res) assertEqual(res, false)
 #define assertRange(res, exp) assertRangeImpl(res, exp, __func__)

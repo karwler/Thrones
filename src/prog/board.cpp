@@ -330,7 +330,7 @@ BoardObject* Board::findObject(const vec3& isct) {
 
 void Board::collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*)) {
 	tcol.insert(pos);
-	for (uint16 (* const mov)(uint16, svec2) : adjacentIndex) {
+	for (uint16 (*const mov)(uint16, svec2) : adjacentIndex) {
 		uint16 p = pos;
 		for (uint16 i = 0; i < dlim; ++i)
 			if (uint16 ni = mov(p, boardLimit()); ni < tiles.getSize())
@@ -353,7 +353,7 @@ void Board::collectTilesByType(uset<uint16>& tcol, uint16 pos, bool (*stepable)(
 
 void Board::collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Tile::Type type, bool (*stepable)(uint16, void*)) {
 	tcol.insert(pos);
-	for (uint16 (* const mov)(uint16, svec2) : adjacentIndex)
+	for (uint16 (*const mov)(uint16, svec2) : adjacentIndex)
 		if (uint16 ni = mov(pos, boardLimit()); ni < tiles.getSize() && tiles[ni].getType() == type && !tcol.count(ni) && stepable(ni, this))
 			collectAdjacentTilesByType(tcol, ni, type, stepable);
 }
@@ -633,15 +633,15 @@ bool Board::checkThroneWin(Piece* pcs, const array<uint16, Piece::lim>& amts) {
 	return false;
 }
 
-bool Board::checkFortressWin() {
-	if (uint16 cnt = config.winFortress)										// if there's a fortress quota
-		for (Tile* tit = tiles.ene(); tit != tiles.mid(); ++tit)				// iterate enemy tiles
-			if (Piece* pit = pieces.own(); tit->getType() == Tile::fortress)	// if tile is an enemy fortress
-				for (uint8 pi = 0; pi < Piece::lim; pit += ownPieceAmts[pi++])	// iterate piece types
-					if (config.capturers & (1 << pi))							// if the piece type is a capturer
-						for (uint16 i = 0; i < ownPieceAmts[pi]; ++i)			// iterate board.getPieces() of that type
+bool Board::checkFortressWin(const Tile* tit, const Piece* pit, const array<uint16, Piece::lim>& amts) {
+	if (uint16 cnt = config.winFortress)									// if there's a fortress quota
+		for (const Tile* tend = tit + tiles.getHome(); tit != tend; ++tit)	// iterate homeland tiles
+			if (tit->getType() == Tile::fortress)							// if tile is an enemy fortress
+				for (uint8 pi = 0; pi < Piece::lim; pit += amts[pi++])		// iterate piece types
+					if (config.capturers & (1 << pi))						// if the piece type is a capturer
+						for (uint16 i = 0; i < amts[pi]; ++i)				// iterate board.getPieces() of that type
 							if (tileId(tit) == posToId(ptog(pit[i].getPos())) && !--cnt)	// if such a piece is on the fortress
-								return true;									// decrement fortress counter and win if 0
+								return true;								// decrement fortress counter and win if 0
 	return false;
 }
 

@@ -15,7 +15,7 @@
 #endif
 #ifdef __APPLE__
 #include <SDL2_image/SDL_image.h>
-#elif defined(__ANDROID__) || defined(_WIN32)
+#elif defined(__ANDROID__) || defined(_WIN32) || defined(APPIMAGE)
 #include <SDL_image.h>
 #else
 #include <SDL2/SDL_image.h>

@@ -39,7 +39,7 @@ constexpr short polleventsDisconnect = POLLERR | POLLHUP | POLLNVAL | POLLRDHUP;
 
 namespace Com {
 
-constexpr char commonVersion[] = "0.5.2";
+constexpr char commonVersion[] = "0.5.3";
 constexpr char defaultPort[] = "39741";
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
 constexpr uint8 roomNameLimit = 63;

@@ -1,7 +1,8 @@
+#include "engine/fileSys.h"
 #include "engine/inputSys.h"
 #include "engine/scene.h"
 #include "engine/world.h"
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 #include <curl/curl.h>
 #endif
 
@@ -809,6 +810,9 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 	vector<string> winsiz(sizes.size()), dmodes(modes.size());
 	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), [](ivec2 size) -> string { return toStr(size, rv2iSeparator); });
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
+	vector<string> fonts = FileSys::listFonts();
+	for (string& it : fonts)
+		it = firstUpper(delExt(it));
 
 	// setting buttons, labels and action fields for labels
 	initlist<const char*> txs = {
@@ -838,7 +842,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		"Chat line limit",
 		"Deadzone",
 		"Resolve family",
-		"Regular font",
+		"Font",
 		"Invert mouse wheel"
 	};
 	initlist<const char*>::iterator itxs = txs.begin();
@@ -937,7 +941,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		new ComboBox(1.f, Settings::familyNames[uint8(World::sets()->resolveFamily)], vector<string>(Settings::familyNames.begin(), Settings::familyNames.end()), &Program::eventSetResolveFamily, nullptr, nullptr, makeTooltip("What family to use for resolving a host address"))
 	}, {
 		new Label(descLength, *itxs++),
-		new CheckBox(lineHeight, World::sets()->fontRegular, &Program::eventSetFontRegular, &Program::eventSetFontRegular, makeTooltip("Use the standard Romanesque or Merriweather to support more characters"))
+		new ComboBox(1.f, World::sets()->font, fonts, &Program::eventSetFont, nullptr, nullptr, makeTooltip("UI font"))
 	}, {
 		new Label(descLength, *itxs++),
 		new CheckBox(lineHeight, World::sets()->invertWheel, &Program::eventSetInvertWheel, &Program::eventSetInvertWheel, makeTooltip("Invert the mouse wheel motion"))
@@ -1067,7 +1071,7 @@ uptr<RootLayout> GuiGen::makeInfo(Interactable*& selected, ScrollArea*& content)
 		"SDL",
 		"SDL_image",
 		"SDL_ttf",
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		"Curl",
 #endif
 		"Logical cores",	// system
@@ -1207,36 +1211,11 @@ void GuiGen::appendProgram(vector<Widget*>& lines, int width, initlist<const cha
 	SDL_IMAGE_VERSION(&icver)
 	const SDL_version* tlver = TTF_Linked_Version();
 	SDL_TTF_VERSION(&tcver)
-#ifdef WEBUTILS
-	const curl_version_info_data* cinf = curl_version_info(CURLVERSION_NOW);
-	string clver;
-	if (cinf->features & CURL_VERSION_IPV6)
-		clver += " IPv6,";
-#if CURL_AT_LEAST_VERSION(7, 10, 0)
-	if (cinf->features & CURL_VERSION_SSL)
-		clver += " SSL,";
-	if (cinf->features & CURL_VERSION_LIBZ)
-		clver += " libz,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 33, 0)
-	if (cinf->features & CURL_VERSION_HTTP2)
-		clver += " HTTP2,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 66, 0)
-	if (cinf->features & CURL_VERSION_HTTP3)
-		clver += " HTTP3,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 72, 0)
-	if (cinf->features & CURL_VERSION_UNICODE)
-		clver += " Unicode,";
-#endif
-	clver = clver.empty() ? cinf->version : cinf->version + string(" with") + clver.substr(0, clver.length() - 1);
-#endif
 	array<string, 4> compVers = {
 		versionText(bver),
 		versionText(icver),
 		versionText(tcver),
-#ifdef WEBUTILS
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 		LIBCURL_VERSION
 #endif
 	};
@@ -1270,8 +1249,8 @@ void GuiGen::appendProgram(vector<Widget*>& lines, int width, initlist<const cha
 		new Layout(lineHeight, { new Label(width, *args++), new Label(slv.length, std::move(slv.text)), new Label(1.f, SDL_GetRevision()), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, versionText(*ilver)), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, versionText(*tlver)), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
-#ifdef WEBUTILS
-		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, std::move(clver)), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
+#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, World::program()->getCurlVersion()), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 #endif
 		new Widget(lineHeight)
 	});
@@ -1359,12 +1338,12 @@ void GuiGen::appendPower(vector<Widget*>& lines, int width, initlist<const char*
 	};
 	int secs, pct;
 	SDL_PowerState power = SDL_GetPowerInfo(&secs, &pct);
-	Text tprc(pct >= 0 ? toStr(pct) + '%' : World::sets()->fontRegular ? "inf" : u8"\u221E", lineHeight);
+	Text tprc(pct >= 0 ? toStr(pct) + '%' : World::fonts()->hasGlyph(0x221E) ? "\u221E" : "inf", lineHeight);
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, *titles++),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, powerNames[power]) }, false, lineSpacing),
-		new Layout(lineHeight, { new Label(width, *args++), new Label(tprc.length, std::move(tprc.text)), new Label(1.f, secs >= 0 ? toStr(secs) + 's' : World::sets()->fontRegular ? "inf" : u8"\u221E") }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, *args++), new Label(tprc.length, std::move(tprc.text)), new Label(1.f, secs >= 0 ? toStr(secs) + 's' : World::fonts()->hasGlyph(0x221E) ? "\u221E" : "inf") }, false, lineSpacing),
 		new Widget(lineHeight)
 	});
 }

@@ -4,7 +4,7 @@
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
-#if defined(__ANDROID__) || defined(_WIN32)
+#if defined(__ANDROID__) || defined(_WIN32) || defined(APPIMAGE)
 #include <SDL_ttf.h>
 #else
 #include <SDL2/SDL_ttf.h>
@@ -77,8 +77,6 @@ public:
 // loads different font sizes from one font and handles basic log display
 class FontSet {
 private:
-	static constexpr char fileFont[] = "romanesque.ttf";
-	static constexpr char fileFontAlt[] = "merriweather.otf";
 	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
 	static constexpr int fontTestHeight = 100;
 	static constexpr float fallbackScale = 0.9f;
@@ -93,15 +91,18 @@ private:
 	float heightScale;	// for scaling down font size to fit requested height
 
 public:
-	FontSet(bool regular);
 	~FontSet();
 
+	string init(string name);	// returns name or a chosen fallback name
 	void clear();
 	int length(const char* text, int height);
+	bool hasGlyph(uint16 ch);
 	Texture render(const char* text, int height);
 	Texture render(const char* text, int height, uint length);
 
 private:
+	TTF_Font* load(const string& name);
+	TTF_Font* findFile(const string& name, const vector<string>& available);
 	TTF_Font* getFont(int height);
 };
 
@@ -122,7 +123,6 @@ class WindowSys {
 public:
 	static constexpr char title[] = "Thrones";
 private:
-	static constexpr char fileIcon[] = "thrones.png";
 	static constexpr char fileCursor[] = "cursor.png";
 	static constexpr char fileGeometryVert[] = "geometry.vert";
 	static constexpr char fileGeometryFrag[] = "geometry.frag";
@@ -228,7 +228,6 @@ public:
 	void setGamma(float gamma);
 	void resetSettings();
 	void reloadGeom();
-	void reloadFont(bool regular);
 
 	AudioSys* getAudio();
 	FontSet* getFonts();
@@ -262,7 +261,6 @@ private:
 	void updateView();
 	bool checkCurDisplay();
 	template <class T> static void checkResolution(T& val, const vector<T>& modes);
-	int showError(const char* caption, const char* message);
 };
 
 inline WindowSys::Loader::Loader() :

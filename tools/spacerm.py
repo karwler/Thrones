@@ -1,21 +1,21 @@
 import os
 import re
 
-def stripFile(fpath):
+def stripFile(fpath: str) -> None:
 	with open(fpath, 'r') as fh:
 		orit = fh.read()
-	
+
 	txt = orit.strip() + os.linesep
 	txt = re.sub(r'[ \t]+\r?\n', os.linesep, txt, flags = re.M)
 	txt = re.sub(r' {2,}', ' ', txt, flags = re.M)
 	txt = re.sub(r'([ \t]*\r?\n){3,}', os.linesep + os.linesep, txt, flags = re.M)
-	
+
 	if txt != orit:
 		print(fpath)
 		with open(fpath, 'w') as fh:
 			fh.write(txt)
 
-def stripDir(dpath, *exclude):
+def stripDir(dpath: str, *exclude: str) -> None:
 	for root, dirs, files in os.walk(dpath):
 		for ft in files:
 			fpath = os.path.join(root, ft)

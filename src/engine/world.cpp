@@ -8,8 +8,13 @@ void World::play(const string& name) {
 
 #ifndef IS_TEST_LIBRARY
 #ifdef _WIN32
+#ifdef __MINGW32__
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+	if (int argc; LPWSTR* argv = CommandLineToArgvW(cstow(lpCmdLine).c_str(), &argc)) {
+#else
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
 	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
+#endif
 		World::setArgs(argc, argv);
 		LocalFree(argv);
 	}

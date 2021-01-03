@@ -126,15 +126,38 @@ ShaderGui::ShaderGui(const string& srcVert, const string& srcFrag) :
 
 // FONT SET
 
-FontSet::FontSet(bool regular) :
-	fontData(FileSys::loadFile(FileSys::dataPath(regular ? fileFont : fileFontAlt)))
-{
-	TTF_Font* tmp = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight);
-	if (!tmp)
-		throw std::runtime_error(TTF_GetError());
+string FontSet::init(string name) {
+	clear();
+	TTF_Font* tmp = load(name);	// just in case it's an absolute path
+	if (!tmp) {
+		vector<string> available = FileSys::listFonts();
+		if (tmp = findFile(name, available); !tmp) {
+			name = firstUpper(Settings::defaultFont);
+			if (tmp = findFile(name, available); !tmp) {
+				for (const string& it : FileSys::listFonts())
+					if (tmp = load(it); tmp) {
+						name = firstUpper(delExt(it));
+						break;
+					}
+				if (!tmp)
+					throw std::runtime_error(string("failed to find a font:") + linend + TTF_GetError());
+			}
+		}
+	}
 	int size;	// get approximate height scale factor
 	heightScale = !TTF_SizeUTF8(tmp, fontTestString, nullptr, &size) ? float(fontTestHeight) / float(size) : fallbackScale;
 	TTF_CloseFont(tmp);
+	return name;
+}
+
+TTF_Font* FontSet::findFile(const string& name, const vector<string>& available) {
+	vector<string>::const_iterator it = std::find_if(available.begin(), available.end(), [name](const string& ent) -> bool { return !SDL_strcasecmp(name.c_str(), delExt(ent).c_str()); });
+	return it != available.end() ? load(*it) : nullptr;
+}
+
+TTF_Font* FontSet::load(const string& name) {
+	fontData = FileSys::loadFile(FileSys::fontPath() + name);
+	return TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight);
 }
 
 void FontSet::clear() {
@@ -161,6 +184,18 @@ int FontSet::length(const char* text, int height) {
 	if (TTF_Font* font = getFont(height))
 		TTF_SizeUTF8(font, text, &len, nullptr);
 	return len;
+}
+
+bool FontSet::hasGlyph(uint16 ch) {
+	if (!fonts.empty())
+		return TTF_GlyphIsProvided(fonts.begin()->second, ch);
+
+	if (TTF_Font* tmp = TTF_OpenFontRW(SDL_RWFromMem(fontData.data(), int(fontData.size())), SDL_TRUE, fontTestHeight)) {
+		bool yes = TTF_GlyphIsProvided(tmp, ch);
+		TTF_CloseFont(tmp);
+		return yes;
+	}
+	return false;
 }
 
 // LOADER
@@ -214,10 +249,14 @@ int WindowSys::start(const Arguments& args) {
 		for (; run; exec());
 #endif
 	} catch (const std::runtime_error& e) {
-		rc = showError("Error", e.what());
+		std::cerr << e.what() << std::endl;
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", e.what(), window);
+		rc = EXIT_FAILURE;
 #ifdef NDEBUG
 	} catch (...) {
-		rc = showError("Error", "unknown error");
+		std::cerr << "unknown error" << std::endl;
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", "unknown error", window);
+		rc = EXIT_FAILURE;
 #endif
 	}
 	delete program;
@@ -276,7 +315,6 @@ void WindowSys::init(const Arguments& args) {
 #else
 	SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
 #endif
-	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
 	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
@@ -326,7 +364,8 @@ void WindowSys::load(Loader* loader) {
 #endif
 		inputSys = new InputSys;
 		sets = new Settings(FileSys::loadSettings(inputSys));
-		fonts = new FontSet(sets->fontRegular);
+		fonts = new FontSet();
+		sets->font = fonts->init(sets->font);
 		createWindow();
 		loader->addLine("loading audio", this);
 		break;
@@ -407,12 +446,12 @@ void WindowSys::createWindow() {
 	// load icons
 #ifndef __ANDROID__
 #ifndef EMSCRIPTEN
-	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileIcon).c_str())) {
+	if (SDL_Surface* icon = IMG_Load(FileSys::windowIconPath().c_str())) {
 		SDL_SetWindowIcon(window, icon);
 		SDL_FreeSurface(icon);
 	}
 #endif
-	if (SDL_Surface* icon = IMG_Load(FileSys::dataPath(fileCursor).c_str())) {
+	if (SDL_Surface* icon = IMG_Load((FileSys::dataPath() + fileCursor).c_str())) {
 		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
 			cursorHeight = uint8(icon->h);
 			SDL_SetCursor(cursor);
@@ -427,7 +466,8 @@ void WindowSys::createWindow() {
 	setSwapInterval();
 #if !defined(OPENGLES) && !defined(__APPLE__)
 	glewExperimental = GL_TRUE;
-	glewInit();
+	if (GLenum err = glewInit(); err != GLEW_OK)
+		throw std::runtime_error(string("failed to initialize OpenGL extensions:") + linend + reinterpret_cast<const char*>(glewGetErrorString(err)));
 #endif
 	updateView();
 
@@ -652,7 +692,7 @@ void WindowSys::resetSettings() {
 	scene->reloadTextures();
 	scene->resetShadows();
 	scene->reloadShader();
-	reloadFont(sets->fontRegular);
+	sets->font = fonts->init(sets->font);
 	checkCurDisplay();
 	setSwapInterval();
 	SDL_SetWindowBrightness(window, sets->gamma);
@@ -663,11 +703,6 @@ void WindowSys::reloadGeom() {
 	delete geom;
 	umap<string, string> sources = FileSys::loadShaders();
 	geom = new ShaderGeometry(sources.at(fileGeometryVert), sources.at(fileGeometryFrag), sets);
-}
-
-void WindowSys::reloadFont(bool regular) {
-	delete fonts;
-	fonts = new FontSet(sets->fontRegular = regular);
 }
 
 bool WindowSys::checkCurDisplay() {
@@ -712,10 +747,4 @@ vector<SDL_DisplayMode> WindowSys::displayModes() const {
 		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode) && float(mode.w) / float(mode.h) >= minimumRatio)
 			mods.push_back(mode);
 	return uniqueSort(mods);
-}
-
-int WindowSys::showError(const char* caption, const char* message) {
-	std::cerr << message << std::endl;
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, message, window);
-	return EXIT_FAILURE;
 }

@@ -165,7 +165,7 @@ void Record::addProtect(Piece* piece, bool strong) {
 Action Record::actionsExhausted() const {
 	uint8 moves = 0, swaps = 0;
 	for (auto [pce, act] : actors) {
-		moves += moves < 2 && bool(act & ACT_MOVE);
+		moves += bool(act & ACT_MOVE);
 		swaps += !swaps && bool(act & ACT_SWAP) && pce->getType() != Piece::warhorse;
 		if (moves + swaps >= 2)
 			return ACT_MS;
@@ -190,7 +190,7 @@ vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, svec2 size, bool (*
 	vector<Adjacent> grid(area);
 	for (uint16 i = 0; i < area; ++i)
 		if (grid[i].cnt = 0; stepable(i, data) || i == src)	// ignore rules for starting point cause it can be a blocking piece
-			for (uint16 (* const mov)(uint16, svec2) : adjacentIndex)
+			for (uint16 (*const mov)(uint16, svec2) : adjacentIndex)
 				if (uint16 ni = mov(i, size); ni < area && stepable(ni, data))
 					grid[i].adj[grid[i].cnt++] = ni;
 	vector<bool> visited(area, false);

@@ -305,6 +305,7 @@ struct Settings {
 	static constexpr char defaultAddress[] = "94.16.112.206";
 	static constexpr char defaultVersionLocation[] = "https://github.com/karwler/Thrones/releases";
 	static constexpr char defaultVersionRegex[] = R"r(<a\s+href="/karwler/Thrones/releases/tag/v(\d+\.\d+\.\d+(\.\d+)?)">)r";
+	static constexpr char defaultFont[] = "Romanesque";
 	static constexpr Screen defaultScreen = Screen::window;
 	static constexpr VSync defaultVSync = VSync::synchronized;
 	static constexpr uint16 shadowResMax = 1 << 14;
@@ -324,7 +325,9 @@ struct Settings {
 	string address;
 	string port;
 	string lastConfig;
-	pairStr versionLookup;
+	string versionLookupUrl;
+	string versionLookupRegex;
+	string font;
 	SDL_DisplayMode mode;
 	ivec2 size;
 	float gamma;
@@ -343,7 +346,6 @@ struct Settings {
 	bool autoVictoryPoints;
 	bool tooltips;
 	Family resolveFamily;
-	bool fontRegular;
 	bool invertWheel;
 
 	Settings();

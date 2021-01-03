@@ -488,10 +488,12 @@ static int cleanup(const vector<pollfd>& pfds, int rc) {
 	return rc;
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
 int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
+#endif
+#ifndef _WIN32
 	signal(SIGQUIT, eventExit);
 #endif
 	signal(SIGINT, eventExit);

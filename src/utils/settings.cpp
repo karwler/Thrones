@@ -432,7 +432,9 @@ Settings::Settings() :
 	address(defaultAddress),
 	port(Com::defaultPort),
 	lastConfig(Config::defaultName),
-	versionLookup(defaultVersionLocation, defaultVersionRegex),
+	versionLookupUrl(defaultVersionLocation),
+	versionLookupRegex(defaultVersionRegex),
+	font(defaultFont),
 	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
 	size(1280, 720),
 	gamma(1.f),
@@ -461,7 +463,6 @@ Settings::Settings() :
 	autoVictoryPoints(true),
 	tooltips(true),
 	resolveFamily(defaultFamily),
-	fontRegular(true),
 	invertWheel(false)
 {}
 

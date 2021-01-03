@@ -15,7 +15,7 @@
 #ifndef __ANDROID__
 #define SDL_MAIN_HANDLED
 #endif
-#if defined(__ANDROID__) || defined(_WIN32) || defined(__APPLE__)
+#if defined(__ANDROID__) || defined(_WIN32) || defined(__APPLE__) || defined(APPIMAGE)
 #include <SDL.h>
 #else
 #include <SDL2/SDL.h>
@@ -99,7 +99,7 @@ class WindowSys;
 
 using BCall = void (Program::*)(Button*);
 using GCall = void (Program::*)(BoardObject*, uint8);
-using CCall = void (Program::*)(sizet, const string&);
+using CCall = void (Program::*)(uint, const string&);
 using SBCall = void (ProgState::*)();
 using SACall = void (ProgState::*)(float);
 

@@ -330,11 +330,11 @@ bool Game::checkPointsWin() {
 }
 
 bool Game::checkWin() {
-	if (board.checkThroneWin(board.getPieces().own(), board.ownPieceAmts)) {	// no need to check if enemy throne has occupied own fortress
+	if (board.checkThroneWin(board.getPieces().own(), board.ownPieceAmts) || board.checkFortressWin(board.getTiles().own(), board.getPieces().ene(), board.enePieceAmts)) {
 		doWin(Record::loose);
 		return true;
 	}
-	if (board.checkThroneWin(board.getPieces().ene(), board.enePieceAmts) || board.checkFortressWin()) {
+	if (board.checkThroneWin(board.getPieces().ene(), board.enePieceAmts) || board.checkFortressWin(board.getTiles().ene(), board.getPieces().own(), board.ownPieceAmts)) {
 		doWin(Record::win);
 		return true;
 	}
@@ -556,34 +556,34 @@ std::default_random_engine Game::createRandomEngine() {
 
 #ifdef DEBUG
 void Game::processCommand(const char* cmd) {
-	if (string key = readWord(cmd); !strcicmp(key, "m")) {
+	if (string key = readWord(cmd); !SDL_strcasecmp(key.c_str(), "m")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPieceId(cmd), true);
-	} else if (!strcicmp(key, "move")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "move")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPiecePos(cmd), true);
-	} else if (!strcicmp(key, "s")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "s")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPieceId(cmd), false);
-	} else if (!strcicmp(key, "swap")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "swap")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPiecePos(cmd), false);
-	} else if (!strcicmp(key, "switch")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "switch")) {
 		while (*cmd)
 			if (Piece* a = readCommandPieceId(cmd), *b = readCommandPieceId(cmd); a && b) {
 				svec2 pos = board.ptog(b->getPos());
 				placePiece(b, board.ptog(a->getPos()));
 				placePiece(a, pos);
 			}
-	} else if (!strcicmp(key, "k")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "k")) {
 		while (*cmd)
 			if (Piece* pce = readCommandPieceId(cmd))
 				removePiece(pce);
-	} else if (!strcicmp(key, "kill")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "kill")) {
 		while (*cmd)
 			if (Piece* pce = readCommandPiecePos(cmd))
 				removePiece(pce);
-	} else if (!strcicmp(key, "killall")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "killall")) {
 		while (*cmd) {
 			bool own = readCommandPref(cmd);
 			if (Piece::Type type = strToEnum<Piece::Type>(Piece::names, readWord(cmd)); type <= Piece::throne) {
@@ -592,15 +592,15 @@ void Game::processCommand(const char* cmd) {
 					removePiece(pces + i);
 			}
 		}
-	} else if (!strcicmp(key, "c")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "c")) {
 		while (*cmd)
 			if (auto [id, name] = readCommandTileId(cmd); id < board.getTiles().getSize())
 				readCommandChange(id, name.c_str());
-	} else if (!strcicmp(key, "change")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "change")) {
 		while (*cmd)
 			if (auto [pos, name] = readCommandTilePos(cmd); inRange(pos, svec2(0), board.boardLimit()))
 				readCommandChange(board.posToId(pos), name.c_str());
-	} else if (!strcicmp(key, "changeall")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "changeall")) {
 		while (*cmd) {
 			svec2 pos = readCommandVec(cmd), end = readCommandVec(cmd);
 			for (svec2::length_type i = 0; i < svec2::length(); ++i)
@@ -613,11 +613,11 @@ void Game::processCommand(const char* cmd) {
 						changeTile(tile, type, board.findTileTop(tile));
 					}
 		}
-	} else if (!strcicmp(key, "b")) {
+	} else if (!SDL_strcasecmp(key.c_str(), "b")) {
 		while (*cmd)
 			if (auto [id, yes] = readCommandTileId(cmd); id < board.getTiles().getSize())
 				breachTile(&board.getTiles()[id], stob(yes));
-	} else if (!strcicmp(key, "breach"))
+	} else if (!SDL_strcasecmp(key.c_str(), "breach"))
 		while (*cmd)
 			if (auto [pos, yes] = readCommandTilePos(cmd); inRange(pos, svec2(0), board.boardLimit()))
 				breachTile(board.getTile(pos), stob(yes));

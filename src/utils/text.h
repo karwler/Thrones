@@ -12,6 +12,7 @@ constexpr char defaultWriteMode[] = "wb";
 
 // utility
 
+string parentPath(const string& path);
 string filename(const string& path);
 string readWord(const char*& pos);
 string strEnclose(string str);
@@ -23,30 +24,6 @@ void createDirectories(const string& path);
 
 inline bool strnatless(const string& a, const string& b) {
 	return strnatcmp(a.c_str(), b.c_str()) < 0;
-}
-
-inline int strcicmp(const char* a, const char* b) {
-#ifdef _WIN32
-	return _stricmp(a, b);
-#else
-	return strcasecmp(a, b);
-#endif
-}
-
-inline int strcicmp(const string& a, const char* b) {
-	return strcicmp(a.c_str(), b);
-}
-
-inline int strncicmp(const char* a, const char* b, sizet n) {
-#ifdef _WIN32
-	return _strnicmp(a, b, n);
-#else
-	return strncasecmp(a, b, n);
-#endif
-}
-
-inline int strncicmp(const string& a, const char* b, sizet n) {
-	return strncicmp(a.c_str(), b, n);
 }
 
 inline bool isDsep(char c) {
@@ -78,6 +55,11 @@ inline string trim(const string& str) {
 inline string delExt(const string& path) {
 	string::const_reverse_iterator it = std::find_if(path.rbegin(), path.rend(), [](char c) -> bool { return c == '.' || isDsep(c); });
 	return it != path.rend() ? *it == '.' && it + 1 != path.rend() && !isDsep(it[1]) ? string(path.begin(), it.base() - 1) : path : string();
+}
+
+inline string filename(const string& path) {
+	string::const_reverse_iterator end = std::find_if_not(path.rbegin(), path.rend(), isDsep);
+	return string(std::find_if(end, path.rend(), isDsep).base(), end.base());
 }
 
 template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
@@ -152,8 +134,11 @@ constexpr T operator^=(T& a, T b) {
 // conversions
 
 #ifdef _WIN32
-string wtos(const wchar* wstr);
-wstring stow(const string& str);
+string cwtos(const wchar* wstr);
+string swtos(const wstring& wstr);
+wstring cstow(const char* str);
+wstring sstow(const string& str);
+string lastErrorMessage();
 #endif
 SDL_DisplayMode strToDisp(const string& str);
 
@@ -176,7 +161,7 @@ string toStr(T num) {
 }
 
 inline bool stob(const string& str) {
-	return !strncicmp(str, "true", 4) || !strncicmp(str, "on", 2) || !strncicmp(str, "y", 1) || std::any_of(str.begin(), str.end(), [](char c) -> bool { return c >= '1' && c <= '9'; });
+	return !SDL_strncasecmp(str.c_str(), "true", 4) || !SDL_strncasecmp(str.c_str(), "on", 2) || !SDL_strncasecmp(str.c_str(), "y", 1) || std::any_of(str.begin(), str.end(), [](char c) -> bool { return c >= '1' && c <= '9'; });
 }
 
 inline const char* btos(bool b) {
@@ -185,13 +170,13 @@ inline const char* btos(bool b) {
 
 template <class T, sizet N>
 T strToEnum(const array<const char*, N>& names, const string& str, T defaultValue = T(N)) {
-	typename array<const char*, N>::const_iterator p = std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !strcicmp(it, str.c_str()); });
+	typename array<const char*, N>::const_iterator p = std::find_if(names.begin(), names.end(), [str](const char* it) -> bool { return !SDL_strcasecmp(it, str.c_str()); });
 	return p != names.end() ? T(p - names.begin()) : defaultValue;
 }
 
 template <class T>
 T strToVal(const umap<T, const char*>& names, const string& str, T defaultValue = T(0)) {
-	typename umap<T, const char*>::const_iterator it = std::find_if(names.begin(), names.end(), [str](const pair<T, const char*>& nit) -> bool { return !strcicmp(nit.second, str.c_str()); });
+	typename umap<T, const char*>::const_iterator it = std::find_if(names.begin(), names.end(), [str](const pair<T, const char*>& nit) -> bool { return !SDL_strcasecmp(nit.second, str.c_str()); });
 	return it != names.end() ? it->first : defaultValue;
 }
 

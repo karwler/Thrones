@@ -112,7 +112,7 @@ public:
 	uset<uint16> collectMoveTiles(const Piece* piece, const Record& erec, Favor favor, bool single = false);
 	uset<uint16> collectEngageTiles(const Piece* piece);
 	bool checkThroneWin(Piece* pcs, const array<uint16, Piece::lim>& amts);
-	bool checkFortressWin();
+	bool checkFortressWin(const Tile* tit, const Piece* pit, const array<uint16, Piece::lim>& amts);
 	Record::Info countVictoryPoints(uint16& own, uint16& ene, const Record& erec);
 
 	svec2 boardLimit() const;

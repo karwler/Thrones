@@ -198,17 +198,17 @@ string lastErrorMessage() {
 
 #ifdef _WIN32
 void Arguments::setArgs(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc - 1, argv + 1, cwtos, flg, opt);
+	setArgs(argc, argv, cwtos, flg, opt);
 }
 #endif
 
 void Arguments::setArgs(int argc, const char* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc - 1, argv + 1, [](const char* str) -> string { return str; }, flg, opt);
+	setArgs(argc, argv, [](const char* str) -> string { return str; }, flg, opt);
 }
 
 template <class C, class F>
 void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt) {
-	for (int i = 0; i < argc; ++i) {
+	for (int i = 1; i < argc; ++i) {
 		if (char key; argv[i][0] == '-') {
 			for (int j = 1; (key = char(argv[i][j])); ++j) {
 				if (!argv[i][j+1] && i + 1 < argc && opt.count(key)) {

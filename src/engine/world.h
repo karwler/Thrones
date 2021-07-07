@@ -32,7 +32,6 @@ public:
 	template <class C> static void setArgs(int argc, const C* const* argv);
 	template <class F, class... A> static void prun(F func, A&&... argv);
 	template <class F, class... A> static void srun(F func, A&&... argv);
-	static void play(const string& name);
 };
 
 inline WindowSys* World::window() {
@@ -73,7 +72,7 @@ inline ProgState* World::state() {
 
 template <class T>
 T* World::state() {
-	return static_cast<T*>(windowSys.getProgram()->getState());
+	return windowSys.getProgram()->getState<T>();
 }
 
 inline Scene* World::scene() {
@@ -96,15 +95,6 @@ inline const ShaderDepth* World::depth() {
 
 inline const ShaderGui* World::sgui() {
 	return windowSys.getGui();
-}
-
-template <class C>
-void World::setArgs(int argc, const C* const* argv) {
-#ifdef NDEBUG
-	args.setArgs(argc, argv, {}, { Settings::argExternal });
-#else
-	args.setArgs(argc, argv, { Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
-#endif
 }
 
 template <class F, class... A>

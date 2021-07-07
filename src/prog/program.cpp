@@ -1,9 +1,10 @@
+#include "engine/world.h"
+#include "board.h"
 #include "netcp.h"
 #include "progs.h"
 #include "engine/fileSys.h"
 #include "engine/inputSys.h"
 #include "engine/scene.h"
-#include "engine/world.h"
 #include <iostream>
 #include <regex>
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
@@ -27,13 +28,7 @@ Program::WebFetchData::WebFetchData(string link, string rver) :
 // PROGRAM
 
 Program::Program() :
-	info(INF_NONE),
-	ftimeMode(FrameTime::none),
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
-	proc(nullptr),
-	curlVersion("not found"),
-#endif
-	ftimeSleep(ftimeUpdateDelay)
+	game(World::audio(), this, World::scene())
 {}
 
 Program::~Program() {
@@ -41,11 +36,13 @@ Program::~Program() {
 	if (proc)
 		SDL_DetachThread(proc);
 #endif
+	delete netcp;
+	delete state;
 }
 
 void Program::start() {
 	gui.resize();
-	game.board.initObjects(Config(), false, World::sets(), World::scene());	// doesn't need to be here but I like having the game board in the background
+	game.board->initObjects(Config(), false, World::sets(), World::scene());	// doesn't need to be here but I like having the game board in the background
 	eventOpenMainMenu();
 
 #ifdef EMSCRIPTEN
@@ -79,7 +76,7 @@ void Program::eventUser(const SDL_UserEvent& user) {
 				curlVersion = std::move(wfd->libVersion);
 #endif
 				latestVersion = std::move(wfd->progVersion);
-				if (ProgMenu* pm = dynamic_cast<ProgMenu*>(state.get()))
+				if (ProgMenu* pm = dynamic_cast<ProgMenu*>(state))
 					pm->versionNotif->setText(latestVersion);
 			} else
 				std::cerr << "version fetch failed: " << wfd->error << std::endl;
@@ -87,7 +84,7 @@ void Program::eventUser(const SDL_UserEvent& user) {
 		}
 		break;
 	default:
-		std::cerr << "unknown user event code: " << user.code << std::endl;
+		throw std::runtime_error("Invalid user event code: " + toStr(user.code));
 	}
 }
 
@@ -96,7 +93,7 @@ void Program::tick(float dSec) {
 		if (netcp)
 			netcp->tick();
 	} catch (const Com::Error& err) {
-		dynamic_cast<ProgGame*>(state.get()) ? showGameError(err) : showLobbyError(err);
+		dynamic_cast<ProgGame*>(state) ? showGameError(err) : showLobbyError(err);
 	}
 
 	if (ftimeMode != FrameTime::none)
@@ -178,7 +175,7 @@ void Program::eventHostRoomRequest(Button*) {
 			throw "Waiting for files to sync";
 #endif
 		const string& name = World::scene()->getPopup()->getWidget<LabelEdit>(1)->getText();
-		if (static_cast<ProgLobby*>(state.get())->hasRoom(name))
+		if (static_cast<ProgLobby*>(state)->hasRoom(name))
 			throw "Name taken";
 		sendRoomName(Com::Code::rnew, name);
 	} catch (const char* err) {
@@ -210,7 +207,7 @@ void Program::eventJoinRoomRequest(Button* but) {
 
 void Program::eventJoinRoomReceive(const uint8* data) {
 	if (*data)
-		setState<ProgRoom>(game.board.config.fromComData(data + 1));
+		setState<ProgRoom>(game.board->config.fromComData(data + 1));
 	else
 		gui.openPopupMessage("Failed to join room", &Program::eventClosePopup);
 }
@@ -225,8 +222,8 @@ void Program::sendRoomName(Com::Code code, const string& name) {
 }
 
 void Program::eventSendMessage(Button* but) {
-	Com::Code code = dynamic_cast<ProgLobby*>(state.get()) ? Com::Code::glmessage : Com::Code::message;
-	bool inGame = dynamic_cast<ProgGame*>(state.get());
+	Com::Code code = dynamic_cast<ProgLobby*>(state) ? Com::Code::glmessage : Com::Code::message;
+	bool inGame = dynamic_cast<ProgGame*>(state);
 	const string& msg = static_cast<LabelEdit*>(but)->getOldText();
 	but->getParent()->getWidget<TextBox>(but->getIndex() - 1)->addLine(chatPrefix + msg);
 	try {
@@ -239,7 +236,7 @@ void Program::eventSendMessage(Button* but) {
 			netcp->sendData(data);
 		}
 #ifdef DEBUG
-		if (World::args.hasFlag(Settings::argConsole) && dynamic_cast<ProgMatch*>(state.get()) && !msg.empty() && msg[0] == '/')
+		if (World::args.hasFlag(Settings::argConsole) && dynamic_cast<ProgMatch*>(state) && !msg.empty() && msg[0] == '/')
 			game.processCommand(msg.c_str() + 1);
 #endif
 	} catch (const Com::Error& err) {
@@ -265,7 +262,8 @@ void Program::eventExitLobby(Button*) {
 }
 
 void Program::showLobbyError(const Com::Error& err) {
-	netcp.reset();
+	delete netcp;
+	netcp = nullptr;
 	gui.openPopupMessage(err.what(), &Program::eventOpenMainMenu);
 }
 
@@ -289,7 +287,7 @@ void Program::eventStartGame(Button*) {
 }
 
 void Program::eventHostServer(Button*) {
-	FileSys::saveConfigs(static_cast<ProgRoom*>(state.get())->confs);
+	FileSys::saveConfigs(static_cast<ProgRoom*>(state)->confs);
 	connect(false, "Waiting for player...");
 }
 
@@ -298,7 +296,7 @@ void Program::eventSwitchConfig(uint, const string& str) {
 }
 
 void Program::eventConfigDelete(Button*) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	vector<string> names = sortNames(pr->confs);
 	vector<string>::iterator nit = std::find(names.begin(), names.end(), pr->configName->getText());
 	pr->confs.erase(pr->configName->getText());
@@ -306,11 +304,11 @@ void Program::eventConfigDelete(Button*) {
 }
 
 void Program::eventConfigCopyInput(Button*) {
-	gui.openPopupInput("Name:", static_cast<ProgRoom*>(state.get())->configName->getText(), &Program::eventConfigCopy, Config::maxNameLength);
+	gui.openPopupInput("Name:", static_cast<ProgRoom*>(state)->configName->getText(), &Program::eventConfigCopy, Config::maxNameLength);
 }
 
 void Program::eventConfigCopy(Button*) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	const string& name = World::scene()->getPopup()->getWidget<LabelEdit>(1)->getText();
 	pr->confs.insert_or_assign(name, pr->confs[pr->configName->getText()]);
 	if (info & INF_HOST)
@@ -325,7 +323,7 @@ void Program::eventConfigNewInput(Button*) {
 }
 
 void Program::eventConfigNew(Button*) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	const string& name = World::scene()->getPopup()->getWidget<LabelEdit>(1)->getText();
 	pr->confs.insert_or_assign(name, Config());
 	setSaveConfig(name);
@@ -333,7 +331,7 @@ void Program::eventConfigNew(Button*) {
 }
 
 void Program::setSaveConfig(const string& name, bool save) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	Config& cfg = pr->confs[name];
 	cfg.checkValues();
 	if (save)
@@ -347,12 +345,12 @@ void Program::setSaveConfig(const string& name, bool save) {
 }
 
 void Program::eventUpdateConfig(Button*) {
-	ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+	ProgRoom* ph = static_cast<ProgRoom*>(state);
 	Config& cfg = ph->confs[ph->configName->getText()];
 	svec2 newHome = glm::clamp(svec2(uint16(sstol(ph->wio.width->getText())), uint16(sstol(ph->wio.height->getText()))), Config::minHomeSize, Config::maxHomeSize);
-	setConfigAmounts(cfg.tileAmounts.data(), ph->wio.tiles.data(), Tile::lim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scaleTiles);
-	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), Tile::lim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
-	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), Piece::lim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
+	setConfigAmounts(cfg.tileAmounts.data(), ph->wio.tiles.data(), tileLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scaleTiles);
+	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), tileLim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
+	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), pieceLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
 	cfg.homeSize = newHome;
 	cfg.opts = ph->wio.victoryPoints->on ? cfg.opts | Config::victoryPoints : cfg.opts & ~Config::victoryPoints;
 	cfg.victoryPointsNum = uint16(sstol(ph->wio.victoryPointsNum->getText()));
@@ -372,7 +370,7 @@ void Program::eventUpdateConfig(Button*) {
 	cfg.winThrone = uint16(sstol(ph->wio.winThrone->getText()));
 	cfg.winFortress = uint16(sstol(ph->wio.winFortress->getText()));
 	cfg.capturers = 0;
-	for (uint8 i = 0; i < Piece::lim; ++i)
+	for (uint8 i = 0; i < pieceLim; ++i)
 		cfg.capturers |= uint16(ph->wio.capturers[i]->selected) << i;
 	cfg.checkValues();
 	ph->updateConfigWidgets(cfg);
@@ -386,7 +384,7 @@ void Program::eventUpdateConfigI(Button* but) {
 
 void Program::eventUpdateConfigV(Button* but) {
 	if (World::sets()->autoVictoryPoints) {
-		ProgRoom* ph = static_cast<ProgRoom*>(state.get());
+		ProgRoom* ph = static_cast<ProgRoom*>(state);
 		Config& cfg = ph->confs[ph->configName->getText()];
 		uint16 tils = cfg.countTiles(), mids = cfg.countMiddles();
 		const char* num;
@@ -403,8 +401,8 @@ void Program::eventUpdateConfigV(Button* but) {
 				Config::ceilAmounts(mids, must, cfg.middleAmounts.data(), uint8(cfg.middleAmounts.size() - 1));
 			num = "1";
 		}
-		ProgRoom::setAmtSliders(cfg, cfg.tileAmounts.data(), ph->wio.tiles.data(), ph->wio.tileFortress, Tile::lim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, &GuiGen::tileFortressString);
-		ProgRoom::setAmtSliders(cfg, cfg.middleAmounts.data(), ph->wio.middles.data(), ph->wio.middleFortress, Tile::lim, 0, &Config::countFreeMiddles, &GuiGen::middleFortressString);
+		ProgRoom::setAmtSliders(cfg, cfg.tileAmounts.data(), ph->wio.tiles.data(), ph->wio.tileFortress, tileLim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, &GuiGen::tileFortressString);
+		ProgRoom::setAmtSliders(cfg, cfg.middleAmounts.data(), ph->wio.middles.data(), ph->wio.middleFortress, tileLim, 0, &Config::countFreeMiddles, &GuiGen::middleFortressString);
 		ph->wio.winThrone->setText(num);
 		ph->wio.winFortress->setText(num);
 	}
@@ -412,7 +410,7 @@ void Program::eventUpdateConfigV(Button* but) {
 }
 
 void Program::eventUpdateReset(Button*) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	Config& cfg = pr->confs[pr->configName->getText()];
 	cfg = Config();
 	pr->updateConfigWidgets(cfg);
@@ -420,7 +418,7 @@ void Program::eventUpdateReset(Button*) {
 }
 
 void Program::postConfigUpdate() {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	try {
 		if ((info & (INF_UNIQ | INF_GUEST_WAITING)) == INF_GUEST_WAITING)	// only send if is host on remote server with guest
 			game.sendConfig();
@@ -436,27 +434,27 @@ void Program::setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint1
 }
 
 void Program::eventTileSliderUpdate(Button* but) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	Config& cfg = pr->confs[pr->configName->getText()];
-	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.tileAmounts.data(), pr->wio.tiles.data(), pr->wio.tileFortress, Tile::lim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, GuiGen::tileFortressString);
+	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.tileAmounts.data(), pr->wio.tiles.data(), pr->wio.tileFortress, tileLim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, GuiGen::tileFortressString);
 }
 
 void Program::eventMiddleSliderUpdate(Button* but) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	Config& cfg = pr->confs[pr->configName->getText()];
-	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.middleAmounts.data(), pr->wio.middles.data(), pr->wio.middleFortress, Tile::lim, 0, &Config::countFreeMiddles, GuiGen::middleFortressString);
+	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.middleAmounts.data(), pr->wio.middles.data(), pr->wio.middleFortress, tileLim, 0, &Config::countFreeMiddles, GuiGen::middleFortressString);
 }
 
 void Program::eventPieceSliderUpdate(Button* but) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	Config& cfg = pr->confs[pr->configName->getText()];
-	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.pieceAmounts.data(), pr->wio.pieces.data(), pr->wio.pieceTotal, Piece::lim, 0, &Config::countFreePieces, GuiGen::pieceTotalString);
+	updateAmtSliders(static_cast<Slider*>(but), cfg, cfg.pieceAmounts.data(), pr->wio.pieces.data(), pr->wio.pieceTotal, pieceLim, 0, &Config::countFreePieces, GuiGen::pieceTotalString);
 }
 
 void Program::eventRecvConfig(const uint8* data) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
-	pr->configName->set({ game.board.config.fromComData(data) }, 0);
-	pr->updateConfigWidgets(game.board.config);
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
+	pr->configName->set({ game.board->config.fromComData(data) }, 0);
+	pr->updateConfigWidgets(game.board->config);
 }
 
 void Program::updateAmtSliders(Slider* sl, Config& cfg, uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Config::*counter)() const, string (*totstr)(const Config&)) {
@@ -479,7 +477,7 @@ void Program::eventTransferHost(Button*) {
 
 void Program::eventRecvHost(bool hasGuest) {
 	info = hasGuest ? info | INF_HOST | INF_GUEST_WAITING : (info | INF_HOST) & ~INF_GUEST_WAITING;
-	static_cast<ProgRoom*>(state.get())->setStartConfig();
+	static_cast<ProgRoom*>(state)->setStartConfig();
 	resetLayoutsWithChat();
 }
 
@@ -492,7 +490,7 @@ void Program::eventKickPlayer(Button*) {
 }
 
 void Program::eventPlayerHello(bool onJoin) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
 	game.sendConfig(onJoin);
 	pr->updateStartButton();
 	pr->toggleChatEmbedShow(true);
@@ -500,8 +498,8 @@ void Program::eventPlayerHello(bool onJoin) {
 
 void Program::eventRoomPlayerLeft() {
 	if (info & INF_HOST) {
-		World::program()->info &= ~Program::INF_GUEST_WAITING;
-		World::state<ProgRoom>()->updateStartButton();
+		info &= ~Program::INF_GUEST_WAITING;
+		static_cast<ProgRoom*>(state)->updateStartButton();
 	} else
 		eventRecvHost(false);
 }
@@ -560,53 +558,53 @@ void Program::eventStartUnique(const uint8* data) {
 }
 
 void Program::eventOpenSetup(string configName) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
-	const Config& cfg = info & INF_HOST ? pr->confs[pr->configName->getText()] : game.board.config;
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
+	const Config& cfg = info & INF_HOST ? pr->confs[pr->configName->getText()] : game.board->config;
 #ifdef NDEBUG
-	game.board.initObjects(cfg, true, World::sets(), World::scene());
+	game.board->initObjects(cfg, true, World::sets(), World::scene());
 #else
-	World::args.hasFlag(Settings::argSetup) ? game.board.initDummyObjects(cfg, World::sets(), World::scene()) : game.board.initObjects(cfg, true, World::sets(), World::scene());
+	World::args.hasFlag(Settings::argSetup) ? game.board->initDummyObjects(cfg, World::sets(), World::scene()) : game.board->initObjects(cfg, true, World::sets(), World::scene());
 #endif
 	netcp->setTickproc(&Netcp::tickGame);
 	info &= ~INF_GUEST_WAITING;
 	setStateWithChat<ProgSetup>(std::move(configName));
 
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	ps->setStage(ProgSetup::Stage::tiles);
-	ps->rcvMidBuffer.resize(game.board.config.homeSize.x);
+	ps->rcvMidBuffer.resize(game.board->config.homeSize.x);
 	ps->piecePicksLeft = 0;
-	if ((game.board.config.opts & Config::setPieceBattle) && game.board.config.setPieceBattleNum < game.board.config.countPieces()) {
-		game.board.ownPieceAmts.fill(0);
-		ps->piecePicksLeft = game.board.config.setPieceBattleNum;
-		if (game.board.config.winThrone) {
-			game.board.ownPieceAmts[Piece::throne] += game.board.config.winThrone;
-			ps->piecePicksLeft -= game.board.config.winThrone;
+	if ((game.board->config.opts & Config::setPieceBattle) && game.board->config.setPieceBattleNum < game.board->config.countPieces()) {
+		game.board->ownPieceAmts.fill(0);
+		ps->piecePicksLeft = game.board->config.setPieceBattleNum;
+		if (game.board->config.winThrone) {
+			game.board->ownPieceAmts[uint8(PieceType::throne)] += game.board->config.winThrone;
+			ps->piecePicksLeft -= game.board->config.winThrone;
 		} else {
-			uint16 caps = game.board.config.winFortress;
-			for (uint8 i = Piece::throne; i < Piece::lim && caps; --i)
-				if (game.board.config.capturers & (1 << i)) {
-					uint16 diff = std::min(caps, uint16(game.board.config.pieceAmounts[i] - game.board.ownPieceAmts[i]));
-					game.board.ownPieceAmts[i] += diff;
+			uint16 caps = game.board->config.winFortress;
+			for (uint8 i = uint8(PieceType::throne); i < pieceLim && caps; --i)
+				if (game.board->config.capturers & (1 << i)) {
+					uint16 diff = std::min(caps, uint16(game.board->config.pieceAmounts[i] - game.board->ownPieceAmts[i]));
+					game.board->ownPieceAmts[i] += diff;
 					ps->piecePicksLeft -= diff;
 					caps -= diff;
 				}
 		}
 	} else
-		game.board.ownPieceAmts = game.board.config.pieceAmounts;
+		game.board->ownPieceAmts = game.board->config.pieceAmounts;
 
 	if (ps->piecePicksLeft)
 		gui.openPopupPiecePicker(ps->piecePicksLeft);
 	else
-		game.board.initOwnPieces();
+		game.board->initOwnPieces();
 }
 
 void Program::eventOpenSetup(Button*) {
-	ProgRoom* pr = static_cast<ProgRoom*>(state.get());
-	game.board.initObjects(pr->confs[pr->configName->getText()], false, World::sets(), World::scene());
-	game.board.ownPieceAmts = game.board.config.pieceAmounts;
-	game.board.initOwnPieces();
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
+	game.board->initObjects(pr->confs[pr->configName->getText()], false, World::sets(), World::scene());
+	game.board->ownPieceAmts = game.board->config.pieceAmounts;
+	game.board->initOwnPieces();
 	setState<ProgSetup>(pr->configName->getText());
-	static_cast<ProgSetup*>(state.get())->setStage(ProgSetup::Stage::tiles);
+	static_cast<ProgSetup*>(state)->setStage(ProgSetup::Stage::tiles);
 }
 
 void Program::eventIconSelect(Button* but) {
@@ -614,20 +612,20 @@ void Program::eventIconSelect(Button* but) {
 }
 
 void Program::eventPlaceTile() {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	uint8 type = ps->getSelected();
 	if (Tile* tile = dynamic_cast<Tile*>(World::scene()->getSelect()); ps->getCount(type) && tile) {
-		if (tile->getType() < Tile::fortress)
+		if (tile->getType() < TileType::fortress)
 			ps->incdecIcon(uint8(tile->getType()), true);
 
-		tile->setType(Tile::Type(type));
+		tile->setType(TileType(type));
 		tile->setInteractivity(Tile::Interact::interact);
 		ps->incdecIcon(type, false);
 	}
 }
 
 void Program::eventPlacePiece() {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	uint8 type = ps->getSelected();
 	if (auto [bob, occupant, pos] = pickBob(); ps->getCount(type) && bob) {
 		if (occupant) {
@@ -635,15 +633,15 @@ void Program::eventPlacePiece() {
 			ps->incdecIcon(uint8(occupant->getType()), true);
 		}
 
-		Piece* pieces = game.board.getOwnPieces(Piece::Type(type));
-		std::find_if(pieces, pieces + game.board.ownPieceAmts[type], [](Piece& it) -> bool { return !it.show; })->updatePos(pos, true);
+		Piece* pieces = game.board->getOwnPieces(PieceType(type));
+		std::find_if(pieces, pieces + game.board->ownPieceAmts[type], [](Piece& it) -> bool { return !it.show; })->updatePos(pos, true);
 		ps->incdecIcon(type, false);
 	}
 }
 
 void Program::eventMoveTile(BoardObject* obj, uint8) {
 	if (Tile* src = static_cast<Tile*>(obj); Tile* dst = dynamic_cast<Tile*>(World::scene()->getSelect())) {
-		Tile::Type desType = dst->getType();
+		TileType desType = dst->getType();
 		dst->setType(src->getType());
 		dst->setInteractivity(Tile::Interact::interact);
 		src->setType(desType);
@@ -661,33 +659,33 @@ void Program::eventMovePiece(BoardObject* obj, uint8) {
 }
 
 void Program::eventClearTile() {
-	if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect()); til && til->getType() != Tile::empty) {
-		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(til->getType()), true);
-		til->setType(Tile::empty);
+	if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect()); til && til->getType() != TileType::empty) {
+		static_cast<ProgSetup*>(state)->incdecIcon(uint8(til->getType()), true);
+		til->setType(TileType::empty);
 		til->setInteractivity(Tile::Interact::interact);
 	}
 }
 
 void Program::eventClearPiece() {
 	if (auto [bob, pce, pos] = pickBob(); pce) {
-		static_cast<ProgSetup*>(state.get())->incdecIcon(uint8(pce->getType()), true);
+		static_cast<ProgSetup*>(state)->incdecIcon(uint8(pce->getType()), true);
 		pce->updatePos();
 	}
 }
 
 void Program::eventSetupNext(Button*) {
 	try {
-		ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+		ProgSetup* ps = static_cast<ProgSetup*>(state);
 		if (netcp)		// only run checks in an actual game
 			switch (ps->getStage()) {
 			case ProgSetup::Stage::tiles:
-				game.board.checkOwnTiles();
+				game.board->checkOwnTiles();
 				break;
 			case ProgSetup::Stage::middles:
-				game.board.checkMidTiles();
+				game.board->checkMidTiles();
 				break;
 			case ProgSetup::Stage::pieces:
-				game.board.checkOwnPieces();
+				game.board->checkOwnPieces();
 			}
 		switch (ps->setStage(ps->getStage() + 1); ps->getStage()) {
 		case ProgSetup::Stage::preparation:
@@ -712,9 +710,9 @@ void Program::eventSetupNext(Button*) {
 }
 
 void Program::eventSetupBack(Button*) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	if (ps->getStage() == ProgSetup::Stage::middles)
-		game.board.takeOutFortress();
+		game.board->takeOutFortress();
 	ps->setStage(ProgSetup::Stage(uint8(ps->getStage()) - 1));
 }
 
@@ -731,127 +729,127 @@ void Program::openPopupSaveLoad(bool save) {
 	if (!FileSys::canRead())
 		return gui.openPopupMessage("Waiting for files to sync", &Program::eventClosePopup);
 #endif
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	ps->setups = FileSys::loadSetups();
 	gui.openPopupSaveLoad(ps->setups, save);
 }
 
 void Program::eventSetupPickPiece(Button* but) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	uint8 type = uint8(but->getParent()->getIndex() * but->getParent()->getWidgets().size() + but->getIndex());
-	if (++game.board.ownPieceAmts[type]; --ps->piecePicksLeft) {
+	if (++game.board->ownPieceAmts[type]; --ps->piecePicksLeft) {
 		but->getParent()->getParent()->getParent()->getParent()->getWidget<Label>(0)->setText(GuiGen::msgPickPiece + toStr(ps->piecePicksLeft) + ')');
-		if (game.board.config.pieceAmounts[type] == game.board.ownPieceAmts[type]) {
+		if (game.board->config.pieceAmounts[type] == game.board->ownPieceAmts[type]) {
 			Icon* ico = static_cast<Icon*>(but);
 			ico->setDim(GuiGen::defaultDim);
 			ico->lcall = nullptr;
 		}
 	} else {
-		game.board.initOwnPieces();
+		game.board->initOwnPieces();
 		eventClosePopup();
 	}
 }
 
 void Program::eventSetupNew(Button* but) {
 	const string& name = (dynamic_cast<LabelEdit*>(but) ? static_cast<LabelEdit*>(but) : but->getParent()->getWidget<LabelEdit>(but->getIndex() - 1))->getText();
-	popuplateSetup(static_cast<ProgSetup*>(state.get())->setups.insert_or_assign(name, Setup()).first->second);
+	popuplateSetup(static_cast<ProgSetup*>(state)->setups.insert_or_assign(name, Setup()).first->second);
 }
 
 void Program::eventSetupSave(Button* but) {
-	umap<string, Setup>& setups = static_cast<ProgSetup*>(state.get())->setups;
+	umap<string, Setup>& setups = static_cast<ProgSetup*>(state)->setups;
 	Setup& stp = setups.find(static_cast<Label*>(but)->getText())->second;
 	stp.clear();
 	popuplateSetup(stp);
 }
 
 void Program::popuplateSetup(Setup& setup) {
-	for (Tile* it = game.board.getTiles().own(); it != game.board.getTiles().end(); ++it)
-		if (it->getType() < Tile::fortress) {
-			svec2 pos = game.board.ptog(it->getPos());
-			setup.tiles.emplace_back(svec2(pos.x, pos.y - game.board.config.homeSize.y - 1), it->getType());
+	for (Tile* it = game.board->getTiles().own(); it != game.board->getTiles().end(); ++it)
+		if (it->getType() < TileType::fortress) {
+			svec2 pos = game.board->ptog(it->getPos());
+			setup.tiles.emplace_back(svec2(pos.x, pos.y - game.board->config.homeSize.y - 1), it->getType());
 		}
-	for (Tile* it = game.board.getTiles().mid(); it != game.board.getTiles().own(); ++it)
-		if (it->getType() < Tile::fortress)
-			setup.mids.emplace_back(uint16(it - game.board.getTiles().mid()), it->getType());
-	for (Piece* it = game.board.getPieces().own(); it != game.board.getPieces().ene(); ++it)
-		if (game.board.pieceOnBoard(it)) {
-			svec2 pos = game.board.ptog(it->getPos());
-			setup.pieces.emplace_back(svec2(pos.x, pos.y - game.board.config.homeSize.y - 1), it->getType());
+	for (Tile* it = game.board->getTiles().mid(); it != game.board->getTiles().own(); ++it)
+		if (it->getType() < TileType::fortress)
+			setup.mids.emplace_back(uint16(it - game.board->getTiles().mid()), it->getType());
+	for (Piece* it = game.board->getPieces().own(); it != game.board->getPieces().ene(); ++it)
+		if (game.board->pieceOnBoard(it)) {
+			svec2 pos = game.board->ptog(it->getPos());
+			setup.pieces.emplace_back(svec2(pos.x, pos.y - game.board->config.homeSize.y - 1), it->getType());
 		}
-	FileSys::saveSetups(static_cast<ProgSetup*>(state.get())->setups);
+	FileSys::saveSetups(static_cast<ProgSetup*>(state)->setups);
 	eventClosePopup();
 }
 
 void Program::eventSetupLoad(Button* but) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	Setup& stp = ps->setups.find(static_cast<Label*>(but)->getText())->second;
 	if (!stp.tiles.empty()) {
-		for (Tile* it = game.board.getTiles().own(); it != game.board.getTiles().end(); ++it)
-			it->setType(Tile::empty);
+		for (Tile* it = game.board->getTiles().own(); it != game.board->getTiles().end(); ++it)
+			it->setType(TileType::empty);
 
-		array<uint16, Tile::lim> cnt = game.board.config.tileAmounts;
+		array<uint16, tileLim> cnt = game.board->config.tileAmounts;
 		for (auto [pos, type] : stp.tiles)
-			if (pos.x < game.board.config.homeSize.x && pos.y < game.board.config.homeSize.y && cnt[uint8(type)]) {
+			if (pos.x < game.board->config.homeSize.x && pos.y < game.board->config.homeSize.y && cnt[uint8(type)]) {
 				--cnt[uint8(type)];
-				game.board.getTile(svec2(pos.x, pos.y + game.board.config.homeSize.y + 1))->setType(type);
+				game.board->getTile(svec2(pos.x, pos.y + game.board->config.homeSize.y + 1))->setType(type);
 			}
 	}
 	if (!stp.mids.empty()) {
-		for (Tile* it = game.board.getTiles().mid(); it != game.board.getTiles().own(); ++it)
-			it->setType(Tile::empty);
+		for (Tile* it = game.board->getTiles().mid(); it != game.board->getTiles().own(); ++it)
+			it->setType(TileType::empty);
 
-		array<uint16, Tile::lim> cnt = game.board.config.middleAmounts;
+		array<uint16, tileLim> cnt = game.board->config.middleAmounts;
 		for (auto [pos, type] : stp.mids)
-			if (pos < game.board.config.homeSize.x && cnt[uint8(type)]) {
+			if (pos < game.board->config.homeSize.x && cnt[uint8(type)]) {
 				--cnt[uint8(type)];
-				game.board.getTiles().mid(pos)->setType(type);
+				game.board->getTiles().mid(pos)->setType(type);
 			}
 	}
 	if (!stp.pieces.empty()) {
-		for (Piece* it = game.board.getPieces().own(); it != game.board.getPieces().ene(); ++it)
+		for (Piece* it = game.board->getPieces().own(); it != game.board->getPieces().ene(); ++it)
 			it->updatePos();
 
-		array<uint16, Piece::lim> cnt = game.board.ownPieceAmts;
+		array<uint16, pieceLim> cnt = game.board->ownPieceAmts;
 		for (auto [pos, type] : stp.pieces)
-			if (pos.x < game.board.config.homeSize.x && pos.y < game.board.config.homeSize.y && cnt[uint8(type)]) {
+			if (pos.x < game.board->config.homeSize.x && pos.y < game.board->config.homeSize.y && cnt[uint8(type)]) {
 				--cnt[uint8(type)];
-				Piece* pieces = game.board.getOwnPieces(type);
-				std::find_if(pieces, pieces + game.board.ownPieceAmts[uint8(type)], [](Piece& pce) -> bool { return !pce.show; })->updatePos(svec2(pos.x, pos.y + game.board.config.homeSize.y + 1), true);
+				Piece* pieces = game.board->getOwnPieces(type);
+				std::find_if(pieces, pieces + game.board->ownPieceAmts[uint8(type)], [](Piece& pce) -> bool { return !pce.show; })->updatePos(svec2(pos.x, pos.y + game.board->config.homeSize.y + 1), true);
 			}
 	}
 	ps->setStage(ProgSetup::Stage::tiles);
 }
 
 void Program::eventSetupDelete(Button* but) {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	ps->setups.erase(static_cast<Label*>(but)->getText());
 	FileSys::saveSetups(ps->setups);
 	but->getParent()->deleteWidget(but->getIndex());
 }
 
 void Program::eventShowConfig(Button*) {
-	ProgGame* pg = static_cast<ProgGame*>(state.get());
-	gui.openPopupConfig(pg->configName, game.board.config, pg->configList, dynamic_cast<ProgMatch*>(pg));
+	ProgGame* pg = static_cast<ProgGame*>(state);
+	gui.openPopupConfig(pg->configName, game.board->config, pg->configList, dynamic_cast<ProgMatch*>(pg));
 }
 
 void Program::eventCloseConfigList(Button*) {
-	static_cast<ProgGame*>(state.get())->configList = nullptr;
+	static_cast<ProgGame*>(state)->configList = nullptr;
 	eventClosePopup();
 }
 
 void Program::eventSwitchGameButtons(Button*) {
-	ProgGame* pg = static_cast<ProgGame*>(state.get());
+	ProgGame* pg = static_cast<ProgGame*>(state);
 	pg->bswapIcon->selected = !pg->bswapIcon->selected;
 }
 
 // GAME MATCH
 
 void Program::eventOpenMatch() {
-	ProgSetup* ps = static_cast<ProgSetup*>(state.get());
-	game.board.prepareMatch(game.getMyTurn(), ps->rcvMidBuffer.data());
+	ProgSetup* ps = static_cast<ProgSetup*>(state);
+	game.board->prepareMatch(game.getMyTurn(), ps->rcvMidBuffer.data());
 	setStateWithChat<ProgMatch>(std::move(ps->configName));
 	game.prepareTurn(false);
-	World::scene()->addAnimation(Animation(game.board.getScreen(), std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(game.board.getScreen()->getPos().x, Board::screenYDown, game.board.getScreen()->getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
+	World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYDown, game.board->getScreen()->getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
 	World::scene()->addAnimation(Animation(&World::scene()->camera, std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
 	World::scene()->camera.pmax = Camera::pmaxMatch;
 	World::scene()->camera.ymax = Camera::ymaxMatch;
@@ -859,7 +857,7 @@ void Program::eventOpenMatch() {
 
 void Program::eventEndTurn(Button*) {
 	try {
-		game.finishFavor(Favor::none, static_cast<ProgMatch*>(state.get())->favorIconSelect());	// in case assault FF has been used
+		game.finishFavor(Favor::none, static_cast<ProgMatch*>(state)->favorIconSelect());	// in case assault FF has been used
 		if (!game.checkPointsWin())
 			game.endTurn();
 	} catch (const Com::Error& err) {
@@ -869,7 +867,7 @@ void Program::eventEndTurn(Button*) {
 
 void Program::eventPickFavor(Button* but) {
 	uint8 fid = uint8(but->getIndex() - 1);
-	if (++game.favorsCount[fid]; game.board.config.opts & Config::favorTotal)
+	if (++game.favorsCount[fid]; game.board->config.opts & Config::favorTotal)
 		--game.favorsLeft[fid];
 
 	if (--game.availableFF) {
@@ -877,14 +875,14 @@ void Program::eventPickFavor(Button* but) {
 			but->setDim(GuiGen::defaultDim);
 			but->lcall = nullptr;
 		}
-	} else if (eventClosePopup(); ProgMatch* pm = dynamic_cast<ProgMatch*>(state.get()))
+	} else if (eventClosePopup(); ProgMatch* pm = dynamic_cast<ProgMatch*>(state))
 		pm->updateIcons();
 	else
 		eventSetupNext();
 }
 
 void Program::eventSelectFavor(Button* but) {
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	pm->setIcons(Favor(std::find(pm->getFavorIcons().begin(), pm->getFavorIcons().end(), but) - pm->getFavorIcons().begin()));
 }
 
@@ -894,7 +892,7 @@ void Program::eventSwitchDestroy(Button*) {
 
 void Program::eventKillDestroy(Button*) {
 	try {
-		game.changeTile(game.board.getTile(game.board.ptog(game.board.getPxpad()->getPos())), Tile::plains);
+		game.changeTile(game.board->getTile(game.board->ptog(game.board->getPxpad()->getPos())), TileType::plains);
 		eventCancelDestroy();
 	} catch (const Com::Error& err) {
 		showGameError(err);
@@ -902,18 +900,18 @@ void Program::eventKillDestroy(Button*) {
 }
 
 void Program::eventCancelDestroy(Button*) {
-	game.board.setPxpadPos(nullptr);
+	game.board->setPxpadPos(nullptr);
 	eventClosePopup();
 }
 
 void Program::eventClickPlaceDragon(Button* but) {
 	static_cast<Icon*>(but)->selected = true;
-	Tile* til = game.board.getTiles().own();
-	for (; til != game.board.getTiles().end() && til->getType() != Tile::fortress; ++til);
-	Piece* pce = game.board.findOccupant(til);
+	Tile* til = game.board->getTiles().own();
+	for (; til != game.board->getTiles().end() && til->getType() != TileType::fortress; ++til);
+	Piece* pce = game.board->findOccupant(til);
 	World::scene()->updateSelect(pce ? static_cast<BoardObject*>(pce) : static_cast<BoardObject*>(til));
 	getUnplacedDragon()->onHold(ivec2(0), SDL_BUTTON_LEFT);	// like startKeyDrag but with a different position
-	World::state()->objectDragPos = vec2(til->getPos().x, til->getPos().z);
+	state->objectDragPos = vec2(til->getPos().x, til->getPos().z);
 }
 
 void Program::eventHoldPlaceDragon(Button* but) {
@@ -933,25 +931,25 @@ void Program::eventPlaceDragon(BoardObject* obj, uint8) {
 }
 
 Piece* Program::getUnplacedDragon() {
-	Piece* pce = game.board.getOwnPieces(Piece::dragon);
-	for (; pce->getType() == Piece::dragon && pce->show; ++pce);
+	Piece* pce = game.board->getOwnPieces(PieceType::dragon);
+	for (; pce->getType() == PieceType::dragon && pce->show; ++pce);
 	pce->hgcall = nullptr;
 	pce->ulcall = pce->urcall = &Program::eventPlaceDragon;
 	return pce;
 }
 
 void Program::eventEstablish(Button* but) {
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	if (!pm->selectHomefrontIcon(static_cast<Icon*>(but)))
 		return;
 
-	switch (std::count_if(game.board.getOwnPieces(Piece::throne), game.board.getPieces().ene(), [](Piece& it) -> bool { return it.show; })) {
+	switch (std::count_if(game.board->getOwnPieces(PieceType::throne), game.board->getPieces().ene(), [](Piece& it) -> bool { return it.show; })) {
 	case 0:
-		gui.openPopupMessage("No " + string(Piece::names[Piece::throne]) + " for establishing", &Program::eventClosePopupResetIcons);
+		gui.openPopupMessage("No " + string(pieceNames[uint8(PieceType::throne)]) + " for establishing", &Program::eventClosePopupResetIcons);
 		break;
 	case 1:
 		try {
-			game.establishTile(std::find_if(game.board.getOwnPieces(Piece::throne), game.board.getPieces().ene(), [](Piece& it) -> bool { return it.show; }), false);
+			game.establishTile(std::find_if(game.board->getOwnPieces(PieceType::throne), game.board->getPieces().ene(), [](Piece& it) -> bool { return it.show; }), false);
 		} catch (const string& err) {
 			gui.openPopupMessage(err, &Program::eventClosePopup);
 		} catch (const Com::Error& err) {
@@ -959,7 +957,7 @@ void Program::eventEstablish(Button* but) {
 		}
 		break;
 	default:
-		game.board.selectEstablishers();
+		game.board->selectEstablishers();
 	}
 }
 
@@ -974,23 +972,23 @@ void Program::eventEstablish(BoardObject* obj, uint8) {
 }
 
 void Program::eventRebuildTile(Button* but) {
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	if (!pm->selectHomefrontIcon(static_cast<Icon*>(but)))
 		return;
 
-	switch (std::count_if(game.board.getOwnPieces(Piece::throne), game.board.getPieces().ene(), [this](Piece& it) -> bool { return game.board.tileRebuildable(&it); })) {
+	switch (std::count_if(game.board->getOwnPieces(PieceType::throne), game.board->getPieces().ene(), [this](Piece& it) -> bool { return game.board->tileRebuildable(&it); })) {
 	case 0:
 		gui.openPopupMessage("Can't rebuild", &Program::eventClosePopupResetIcons);
 		break;
 	case 1:
 		try {
-			game.rebuildTile(std::find_if(game.board.getOwnPieces(Piece::throne), game.board.getPieces().ene(), [this](Piece& it) -> bool { return game.board.tileRebuildable(&it); }), false);
+			game.rebuildTile(std::find_if(game.board->getOwnPieces(PieceType::throne), game.board->getPieces().ene(), [this](Piece& it) -> bool { return game.board->tileRebuildable(&it); }), false);
 		} catch (const Com::Error& err) {
 			showGameError(err);
 		}
 		break;
 	default:
-		game.board.selectRebuilders();
+		game.board->selectRebuilders();
 	}
 }
 
@@ -1003,62 +1001,62 @@ void Program::eventRebuildTile(BoardObject* obj, uint8) {
 }
 
 void Program::eventOpenSpawner(Button* but) {
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	if (pm->selectHomefrontIcon(static_cast<Icon*>(but)))
 		gui.openPopupSpawner();
 }
 
 void Program::eventSpawnPiece(Button* but) {
-	Piece::Type type = Piece::Type(but->getParent()->getIndex() * but->getParent()->getWidgets().size() + but->getIndex());
-	uint forts = uint(std::count_if(game.board.getTiles().own(), game.board.getTiles().end(), [](const Tile& it) -> bool { return it.isUnbreachedFortress(); }));
-	if (type == Piece::lancer || type == Piece::rangers || type == Piece::spearmen || type == Piece::catapult || type == Piece::elephant || forts == 1) {
+	PieceType type = PieceType(but->getParent()->getIndex() * but->getParent()->getWidgets().size() + but->getIndex());
+	uint forts = uint(std::count_if(game.board->getTiles().own(), game.board->getTiles().end(), [](const Tile& it) -> bool { return it.isUnbreachedFortress(); }));
+	if (type == PieceType::lancer || type == PieceType::rangers || type == PieceType::spearmen || type == PieceType::catapult || type == PieceType::elephant || forts == 1) {
 		try {
-			game.spawnPiece(type, game.board.findSpawnableTile(type), false);
+			game.spawnPiece(type, game.board->findSpawnableTile(type), false);
 		} catch (const Com::Error& err) {
 			showGameError(err);
 		}
 	} else {
-		static_cast<ProgMatch*>(state.get())->spawning = type;
-		game.board.selectSpawners();
+		static_cast<ProgMatch*>(state)->spawning = type;
+		game.board->selectSpawners();
 	}
 	eventClosePopup();
 }
 
 void Program::eventSpawnPiece(BoardObject* obj, uint8) {
 	try {
-		game.spawnPiece(static_cast<ProgMatch*>(state.get())->spawning, static_cast<Tile*>(obj), true);
+		game.spawnPiece(static_cast<ProgMatch*>(state)->spawning, static_cast<Tile*>(obj), true);
 	} catch (const Com::Error& err) {
 		showGameError(err);
 	}
 }
 
 void Program::eventClosePopupResetIcons(Button*) {
-	static_cast<ProgMatch*>(state.get())->updateIcons();
+	static_cast<ProgMatch*>(state)->updateIcons();
 	eventClosePopup();
 }
 
 void Program::eventPieceStart(BoardObject* obj, uint8 mBut) {
-	ProgMatch* pm = static_cast<ProgMatch*>(state.get());
+	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	Piece* pce = static_cast<Piece*>(obj);
-	game.board.setPxpadPos(pm->getDestroyIcon()->selected ? pce : nullptr);
-	mBut == SDL_BUTTON_LEFT ? game.board.highlightMoveTiles(pce, game.getEneRec(), pm->favorIconSelect()) : game.board.highlightEngageTiles(pce);
+	game.board->setPxpadPos(pm->getDestroyIcon()->selected ? pce : nullptr);
+	mBut == SDL_BUTTON_LEFT ? game.board->highlightMoveTiles(pce, game.getEneRec(), pm->favorIconSelect()) : game.board->highlightEngageTiles(pce);
 }
 
 void Program::eventMove(BoardObject* obj, uint8) {
-	game.board.highlightMoveTiles(nullptr, game.getEneRec(), static_cast<ProgMatch*>(state.get())->favorIconSelect());
+	game.board->highlightMoveTiles(nullptr, game.getEneRec(), static_cast<ProgMatch*>(state)->favorIconSelect());
 	try {
 		if (auto [bob, pce, pos] = pickBob(); bob)
 			game.pieceMove(static_cast<Piece*>(obj), pos, pce, true);
 	} catch (const string& err) {
-		if (game.board.setPxpadPos(nullptr); !err.empty())
-			static_cast<ProgGame*>(state.get())->message->setText(err);
+		if (game.board->setPxpadPos(nullptr); !err.empty())
+			static_cast<ProgGame*>(state)->message->setText(err);
 	} catch (const Com::Error& err) {
 		showGameError(err);
 	}
 }
 
 void Program::eventEngage(BoardObject* obj, uint8) {
-	game.board.highlightEngageTiles(nullptr);
+	game.board->highlightEngageTiles(nullptr);
 	try {
 		if (auto [bob, pce, pos] = pickBob(); bob) {
 			if (Piece* actor = static_cast<Piece*>(obj); actor->firingArea().first)
@@ -1067,8 +1065,8 @@ void Program::eventEngage(BoardObject* obj, uint8) {
 				game.pieceMove(actor, pos, pce, false);
 		}
 	} catch (const string& err) {
-		if (game.board.setPxpadPos(nullptr); !err.empty())
-			static_cast<ProgGame*>(state.get())->message->setText(err);
+		if (game.board->setPxpadPos(nullptr); !err.empty())
+			static_cast<ProgGame*>(state)->message->setText(err);
 	} catch (const Com::Error& err) {
 		showGameError(err);
 	}
@@ -1096,12 +1094,12 @@ void Program::eventSurrender(Button*) {
 }
 
 void Program::uninitGame() {
-	game.board.uninitObjects();
-	if (dynamic_cast<ProgMatch*>(state.get())) {
-		World::scene()->addAnimation(Animation(game.board.getScreen(), std::queue<Keyframe>({ Keyframe(0.f, std::nullopt, std::nullopt, vec3(1.f)), Keyframe(transAnimTime, vec3(game.board.getScreen()->getPos().x, Board::screenYUp, game.board.getScreen()->getPos().z)) })));
+	game.board->uninitObjects();
+	if (dynamic_cast<ProgMatch*>(state)) {
+		World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(0.f, std::nullopt, std::nullopt, vec3(1.f)), Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYUp, game.board->getScreen()->getPos().z)) })));
 		World::scene()->addAnimation(Animation(&World::scene()->camera, std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posSetup, std::nullopt, Camera::latSetup) })));
-		for (Piece& it : game.board.getPieces())
-			if (it.getPos().z <= game.board.getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
+		for (Piece& it : game.board->getPieces())
+			if (it.getPos().z <= game.board->getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
 				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(it.getPos().x, pieceYDown, it.getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
 		World::scene()->camera.pmax = Camera::pmaxSetup;
 		World::scene()->camera.ymax = Camera::ymaxSetup;
@@ -1128,7 +1126,7 @@ void Program::eventPostFinishMatch(Button*) {
 			setStateWithChat<ProgRoom>();
 		} else {
 			netcp->sendData(Com::Code::hello);
-			setStateWithChat<ProgRoom>(std::move(static_cast<ProgGame*>(state.get())->configName));
+			setStateWithChat<ProgRoom>(std::move(static_cast<ProgGame*>(state)->configName));
 		}
 		if (info & INF_GUEST_WAITING)
 			eventPlayerHello(false);
@@ -1146,12 +1144,13 @@ void Program::eventGamePlayerLeft() {
 	bool host = info & INF_HOST;
 	info = (info | INF_HOST) & ~INF_GUEST_WAITING;
 	netcp->setTickproc(&Netcp::tickLobby);
-	host ? setStateWithChat<ProgRoom>() : setStateWithChat<ProgRoom>(std::move(static_cast<ProgGame*>(state.get())->configName));
+	host ? setStateWithChat<ProgRoom>() : setStateWithChat<ProgRoom>(std::move(static_cast<ProgGame*>(state)->configName));
 	gui.openPopupMessage(host ? "Player left" : "Host left", &Program::eventClosePopup);
 }
 
 void Program::showGameError(const Com::Error& err) {
-	netcp.reset();
+	delete netcp;
+	netcp = nullptr;
 	uninitGame();
 	gui.openPopupMessage(err.what(), (info & (INF_HOST | INF_UNIQ)) == (INF_HOST | INF_UNIQ) ? &Program::eventOpenHostMenu : &Program::eventOpenMainMenu);
 }
@@ -1181,7 +1180,7 @@ void Program::eventSetWindowSize(uint, const string& str) {
 }
 
 void Program::eventSetWindowMode(uint, const string& str) {
-	World::sets()->mode = gui.fstrToDisp(static_cast<ProgSettings*>(state.get())->getPixelformats(), str);
+	World::sets()->mode = gui.fstrToDisp(static_cast<ProgSettings*>(state)->getPixelformats(), str);
 	World::window()->setScreen();
 	eventSaveSettings();
 }
@@ -1265,12 +1264,12 @@ void Program::eventSetVolumeLE(Button* but) {
 
 void Program::eventSetColorAlly(uint id, const string&) {
 	World::sets()->colorAlly = Settings::Color(id);
-	setColorPieces(World::sets()->colorAlly, game.board.getPieces().own(), game.board.getPieces().ene());
+	setColorPieces(World::sets()->colorAlly, game.board->getPieces().own(), game.board->getPieces().ene());
 }
 
 void Program::eventSetColorEnemy(uint id, const string&) {
 	World::sets()->colorEnemy = Settings::Color(id);
-	setColorPieces(World::sets()->colorEnemy, game.board.getPieces().ene(), game.board.getPieces().end());
+	setColorPieces(World::sets()->colorEnemy, game.board->getPieces().ene(), game.board->getPieces().end());
 }
 
 void Program::setColorPieces(Settings::Color clr, Piece* pos, Piece* end) {
@@ -1333,11 +1332,11 @@ void Program::eventSetInvertWheel(Button* but) {
 }
 
 void Program::eventAddKeyBinding(Button* but) {
-	gui.openPopupKeyGetter(Binding::Type(but->getParent()->getParent()->getIndex() - static_cast<ProgSettings*>(state.get())->bindingsStart));
+	gui.openPopupKeyGetter(Binding::Type(but->getParent()->getParent()->getIndex() - static_cast<ProgSettings*>(state)->bindingsStart));
 }
 
 void Program::eventSetNewBinding(Button* but) {
-	ProgSettings* ps = static_cast<ProgSettings*>(state.get());
+	ProgSettings* ps = static_cast<ProgSettings*>(state);
 	KeyGetter* kg = static_cast<KeyGetter*>(but);
 	Layout* lin = ps->content->getWidget<Layout>(ps->bindingsStart + sizet(kg->bind));
 	Layout* lst = lin->getWidget<Layout>(uint8(kg->accept) + 1);
@@ -1350,13 +1349,13 @@ void Program::eventSetNewBinding(Button* but) {
 void Program::eventDelKeyBinding(Button* but) {
 	KeyGetter* kg = static_cast<KeyGetter*>(but);
 	switch (kg->accept) {
-	case KeyGetter::Accept::keyboard:
+	case Binding::Accept::keyboard:
 		World::input()->delBindingK(kg->bind, kg->kid);
 		break;
-	case KeyGetter::Accept::joystick:
+	case Binding::Accept::joystick:
 		World::input()->delBindingJ(kg->bind, kg->kid);
 		break;
-	case KeyGetter::Accept::gamepad:
+	case Binding::Accept::gamepad:
 		World::input()->delBindingG(kg->bind, kg->kid);
 	}
 	but->getParent()->deleteWidget(but->getIndex());
@@ -1440,12 +1439,15 @@ void Program::eventClearLabel(Button* but) {
 }
 
 void Program::connect(bool client, const char* msg) {
+	if (netcp)	// shouldn't happen, but just in case
+		return;
 	try {
-		netcp = client ? std::make_unique<Netcp>() : std::make_unique<NetcpHost>();
-		netcp->connect();
+		netcp = client ? new Netcp(this) : new NetcpHost(this);
+		netcp->connect(World::sets());
 		gui.openPopupMessage(msg, &Program::eventConnectCancel, "Cancel");
 	} catch (const Com::Error& err) {
-		netcp.reset();
+		delete netcp;
+		netcp = nullptr;
 		gui.openPopupMessage(err.what(), &Program::eventClosePopup);
 	}
 }
@@ -1453,7 +1455,8 @@ void Program::connect(bool client, const char* msg) {
 void Program::disconnect() {
 	if (netcp) {
 		netcp->disconnect();
-		netcp.reset();
+		delete netcp;
+		netcp = nullptr;
 	}
 }
 
@@ -1472,7 +1475,8 @@ void Program::eventCycleFrameCounter() {
 
 template <class T, class... A>
 void Program::setState(A&&... args) {
-	state = std::make_unique<T>(std::forward<A>(args)...);
+	delete state;
+	state = new T(std::forward<A>(args)...);
 	World::scene()->resetLayouts();
 	ftimeSleep = ftimeUpdateDelay;	// because the frame time counter gets updated in resetLayouts
 }
@@ -1491,9 +1495,9 @@ void Program::resetLayoutsWithChat() {
 	ftimeSleep = ftimeUpdateDelay;
 }
 
-tuple<BoardObject*, Piece*, svec2> Program::pickBob() {
+tuple<BoardObject*, Piece*, svec2> Program::pickBob() const {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getSelect());
-	return tuple(bob, dynamic_cast<Piece*>(bob), bob ? game.board.ptog(bob->getPos()) : svec2(UINT16_MAX));
+	return tuple(bob, dynamic_cast<Piece*>(bob), bob ? game.board->ptog(bob->getPos()) : svec2(UINT16_MAX));
 }
 
 #ifdef EMSCRIPTEN

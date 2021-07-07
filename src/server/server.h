@@ -183,7 +183,8 @@ private:
 	static constexpr uint sizeStep = 512;
 
 	uptr<uint8[]> data;
-	uint size, dlim;
+	uint size = sizeStep;
+	uint dlim = 0;
 
 public:
 	Buffer();
@@ -232,6 +233,10 @@ private:
 	template <class T> void pushRaw(const T& vec);
 	template <class T, class F> uint writeNumber(T val, uint pos, F writer);
 };
+
+inline Buffer::Buffer() :
+	data(std::make_unique<uint8[]>(sizeStep))
+{}
 
 inline uint8& Buffer::operator[](uint i) {
 	return data[i];

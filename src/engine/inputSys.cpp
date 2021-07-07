@@ -45,20 +45,9 @@ uint8 Joystick::hatDown(uint8 val, uint8 id) {
 	return prev;
 }
 
-// GAMEPAD
-
-Gamepad::Gamepad(SDL_GameController* pad) :
-	ctr(pad),
-	axes{}
-{}
-
 // INPUT SYS
 
-InputSys::InputSys() :
-	mouseLast(false),
-	mouseMove(0),
-	moveTime(0)
-{
+InputSys::InputSys() {
 	for (uint8 i = 0; i < uint8(bindings.size()); ++i)
 		bindings[i].init(Binding::Type(i));
 }

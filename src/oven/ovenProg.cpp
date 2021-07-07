@@ -97,12 +97,11 @@ T loadFile(const string& path) {
 	if (FILE* ifh = fopen(path.c_str(), defaultReadMode)) {
 #endif
 		if (!fseek(ifh, 0, SEEK_END))
-			if (long len = ftell(ifh); len != -1)
-				if (!fseek(ifh, 0, SEEK_SET)) {
-					data.resize(len);
-					if (sizet red = fread(data.data(), sizeof(*data.data()), data.size(), ifh); red < data.size())
-						data.resize(red);
-				}
+			if (long len = ftell(ifh); len != -1 && !fseek(ifh, 0, SEEK_SET)) {
+				data.resize(len);
+				if (sizet red = fread(data.data(), sizeof(*data.data()), data.size(), ifh); red < data.size())
+					data.resize(red);
+			}
 		fclose(ifh);
 	}
 	return data;

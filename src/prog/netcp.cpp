@@ -1,14 +1,13 @@
 #include "netcp.h"
+#include "program.h"
 #include "progs.h"
-#include "engine/world.h"
 #include <iostream>
 using namespace Com;
 
 // CONNECTOR
 
 Connector::Connector(const char* addr, const char* port, int family) :
-	inf(resolveAddress(addr, port, family)),
-	sock{ INVALID_SOCKET, POLLOUT, 0 }
+	inf(resolveAddress(addr, port, family))
 {
 	if (!inf)
 		throw Error(msgConnectionFail);
@@ -66,19 +65,13 @@ void Connector::nextAddr(addrinfo* nxt) {
 
 // GUEST
 
-Netcp::Netcp() :
-	tickproc(nullptr),
-	sock{ INVALID_SOCKET, POLLIN | POLLRDHUP, 0 },
-	webs(false)
-{}
-
 Netcp::~Netcp() {
 	if (sock.fd != INVALID_SOCKET)
 		closeSocket(sock.fd);
 }
 
-void Netcp::connect() {
-	connector = std::make_unique<Connector>(World::sets()->address.c_str(), World::sets()->port.c_str(), World::sets()->getFamily());
+void Netcp::connect(const Settings* sets) {
+	connector = std::make_unique<Connector>(sets->address.c_str(), sets->port.c_str(), sets->getFamily());
 	tickproc = &Netcp::tickConnect;
 }
 
@@ -94,19 +87,21 @@ void Netcp::tick() {
 	(this->*tickproc)();
 }
 
-void Netcp::tickConnect() {
+bool Netcp::tickConnect() {
 	if (nsint fd = connector->pollReady(); fd != INVALID_SOCKET) {
 		connector.reset();
 		sock.fd = fd;
 		sendVersion(sock.fd, webs);
 		tickproc = &Netcp::tickWait;
 	}
+	return false;
 }
 
-void Netcp::tickWait() {
+bool Netcp::tickWait() {
 	if (!pollSocket(sock))
-		return;
-	bool final = recvb.recvData(sock.fd);
+		return false;
+
+	bool fin = recvb.recvData(sock.fd);
 	for (uint8* data; (data = recvb.recv(sock.fd, webs)); recvb.clearCur(webs))
 		switch (Code(data[0])) {
 		case Code::version:
@@ -114,137 +109,147 @@ void Netcp::tickWait() {
 		case Code::full:
 			throw Error("Server full");
 		case Code::rlist:
-			World::program()->eventOpenLobby(data + dataHeadSize);
+			prog->eventOpenLobby(data + dataHeadSize);
 			break;
 		case Code::start:
-			World::program()->eventStartUnique(data + dataHeadSize);
+			prog->eventStartUnique(data + dataHeadSize);
 			break;
 		default:
 			throw Error("Invalid response: " + toStr(*data));
 		}
-	if (final)
+	if (fin)
 		throw Error(msgConnectionLost);
+	return false;
 }
 
-void Netcp::tickLobby() {
+bool Netcp::tickLobby() {
 	if (!pollSocket(sock))
-		return;
-	bool final = recvb.recvData(sock.fd);
+		return false;
+
+	bool fin = recvb.recvData(sock.fd);
 	for (uint8* data; (data = recvb.recv(sock.fd, webs)); recvb.clearCur(webs))
 		switch (Code(data[0])) {
 		case Code::rlist:
-			World::program()->eventOpenLobby(data + dataHeadSize);
+			prog->eventOpenLobby(data + dataHeadSize);
 			break;
 		case Code::rnew:
-			World::state<ProgLobby>()->addRoom(readName(data + dataHeadSize));
+			prog->getState<ProgLobby>()->addRoom(readName(data + dataHeadSize));
 			break;
 		case Code::cnrnew:
-			World::program()->eventHostRoomReceive(data + dataHeadSize);
+			prog->eventHostRoomReceive(data + dataHeadSize);
 			break;
 		case Code::rerase:
-			World::state<ProgLobby>()->delRoom(readName(data + dataHeadSize));
+			prog->getState<ProgLobby>()->delRoom(readName(data + dataHeadSize));
 			break;
 		case Code::ropen:
-			World::state<ProgLobby>()->openRoom(readName(data + dataHeadSize + 1), data[dataHeadSize]);
+			prog->getState<ProgLobby>()->openRoom(readName(data + dataHeadSize + 1), data[dataHeadSize]);
 			break;
 		case Code::leave:
-			World::program()->eventRoomPlayerLeft();
+			prog->eventRoomPlayerLeft();
 			break;
 		case Code::thost:
-			World::program()->eventRecvHost(true);
+			prog->eventRecvHost(true);
 			break;
 		case Code::kick:
-			World::program()->eventOpenLobby(data + dataHeadSize, "You got kicked");
+			prog->eventOpenLobby(data + dataHeadSize, "You got kicked");
 			break;
 		case Code::hello:
-			World::program()->info |= Program::INF_GUEST_WAITING;
-			World::program()->eventPlayerHello(true);
+			prog->info |= Program::INF_GUEST_WAITING;
+			prog->eventPlayerHello(true);
 			break;
 		case Code::cnjoin:
-			World::program()->eventJoinRoomReceive(data + dataHeadSize);
+			prog->eventJoinRoomReceive(data + dataHeadSize);
 			break;
 		case Code::config:
-			World::program()->eventRecvConfig(data + dataHeadSize);
+			prog->eventRecvConfig(data + dataHeadSize);
 			break;
 		case Code::start:
-			World::game()->recvStart(data + dataHeadSize);
+			prog->getGame()->recvStart(data + dataHeadSize);
 			break;
 		case Code::message: case Code::glmessage:
-			World::program()->eventRecvMessage(data);
+			prog->eventRecvMessage(data);
 			break;
 		default:
 			throw Error("Invalid net code " + toStr(data[0]) + " of size " + toStr(read16(data + 1)));
 		}
-	if (final)
+	if (fin)
 		throw Error(msgConnectionLost);
+	return false;
 }
 
-void Netcp::tickGame() {
+bool Netcp::tickGame() {
 	if (!pollSocket(sock))
-		return;
-	bool final = recvb.recvData(sock.fd);
+		return false;
+
+	bool fin = recvb.recvData(sock.fd);
 	for (uint8* data; (data = recvb.recv(sock.fd, webs)); recvb.clearCur(webs))
 		switch (Code(data[0])) {
 		case Code::rlist:
-			World::program()->uninitGame();
-			World::program()->eventOpenLobby(data + dataHeadSize);
+			prog->uninitGame();
+			prog->eventOpenLobby(data + dataHeadSize);
 			break;
 		case Code::leave:
-			World::program()->eventGamePlayerLeft();
+			prog->eventGamePlayerLeft();
 			break;
 		case Code::hello:
-			World::program()->info |= Program::INF_GUEST_WAITING;
+			prog->info |= Program::INF_GUEST_WAITING;
 			break;
 		case Code::setup:
-			World::game()->recvSetup(data + dataHeadSize);
+			prog->getGame()->recvSetup(data + dataHeadSize);
 			break;
 		case Code::move:
-			World::game()->recvMove(data + dataHeadSize);
+			prog->getGame()->recvMove(data + dataHeadSize);
 			break;
 		case Code::kill:
-			World::game()->recvKill(data + dataHeadSize);
+			prog->getGame()->recvKill(data + dataHeadSize);
 			break;
 		case Code::breach:
-			World::game()->recvBreach(data + dataHeadSize);
+			prog->getGame()->recvBreach(data + dataHeadSize);
 			break;
 		case Code::tile:
-			World::game()->recvTile(data + dataHeadSize);
+			prog->getGame()->recvTile(data + dataHeadSize);
 			break;
 		case Code::record:
-			if (World::game()->recvRecord(data + dataHeadSize); !World::netcp())	// it's possible that this instance gets deleted
-				return;
+			if (prog->getGame()->recvRecord(data + dataHeadSize))	// it's possible that this instance gets deleted
+				return true;
 			break;
 		case Code::message:
-			World::program()->eventRecvMessage(data);
+			prog->eventRecvMessage(data);
 			break;
 		default:
 			throw Error("Invalid net code " + toStr(data[0]) + " of size " + toStr(read16(data + 1)));
 		}
-	if (final)
+	if (fin)
 		throw Error(msgConnectionLost);
+	return false;
 }
 
-void Netcp::tickValidate() {
+bool Netcp::tickValidate() {
 	if (!pollSocket(sock))
-		return;
-	for (bool final = recvb.recvData(sock.fd);;)
+		return false;
+
+	for (bool fin = recvb.recvData(sock.fd);;)
 		switch (recvb.recvConn(sock.fd, webs)) {
 		case Buffer::Init::wait:
-			if (final)
+			if (fin)
 				throw Error(msgConnectionLost);
-			return;
+			return false;
 		case Buffer::Init::connect:
-			if (final)
+			if (fin)
 				throw Error(msgConnectionLost);
-			World::program()->eventStartUnique();
-			break;
+			prog->eventStartUnique();
+			return false;
 		case Buffer::Init::version:
 			sendVersion(sock.fd, webs);
 		case Buffer::Init::error:
 			closeSocket(sock.fd);
 			tickproc = &Netcp::tickDiscard;
-			return;
+			return false;
 		}
+}
+
+bool Netcp::tickDiscard() {
+	return false;
 }
 
 bool Netcp::pollSocket(pollfd& sock) {
@@ -272,8 +277,8 @@ NetcpHost::~NetcpHost() {
 		closeSocket(serv.fd);
 }
 
-void NetcpHost::connect() {
-	serv.fd = bindSocket(World::sets()->port.c_str(), World::sets()->getFamily());
+void NetcpHost::connect(const Settings* sets) {
+	serv.fd = bindSocket(sets->port.c_str(), sets->getFamily());
 	tickproc = &NetcpHost::tickDiscard;
 }
 
@@ -283,8 +288,7 @@ void NetcpHost::disconnect() {
 }
 
 void NetcpHost::tick() {
-	(this->*tickproc)();
-	if (World::netcp() && pollSocket(serv)) {	// check if the instance still exists in case it gets deleted during tick
+	if (!(this->*tickproc)() && pollSocket(serv)) {	// check if the instance still exists in case it gets deleted during tick
 		if (sock.fd != INVALID_SOCKET)
 			sendRejection(serv.fd);
 		else try {

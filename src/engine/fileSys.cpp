@@ -1,6 +1,6 @@
 #include "fileSys.h"
 #include "inputSys.h"
-#include "utils/widgets.h"
+#include "utils/objects.h"
 #include <iostream>
 #ifdef EMSCRIPTEN
 #include <emscripten.h>
@@ -225,7 +225,7 @@ void FileSys::readBinding(void* inputSys, IniLine& il) {
 				input->addBinding(bid, JoystickButton(readNumber<uint8>(pos, strtoul, 0)));
 				break;
 			case iniVkeyHat:
-				if (uint8 id = readNumber<uint8>(pos, strtoul, 0), val = strToVal<uint8>(KeyGetter::hatNames, readWord(++pos), SDL_HAT_CENTERED); val != SDL_HAT_CENTERED)
+				if (uint8 id = readNumber<uint8>(pos, strtoul, 0), val = strToVal<uint8>(InputSys::hatNames, readWord(++pos), SDL_HAT_CENTERED); val != SDL_HAT_CENTERED)
 					input->addBinding(bid, AsgJoystick(id, val));
 				break;
 			case iniVkeyAxis:
@@ -243,12 +243,12 @@ void FileSys::readBinding(void* inputSys, IniLine& il) {
 			for (; isSpace(*pos); ++pos);
 			switch (*pos++) {
 			case iniVkeyButton:
-				if (SDL_GameControllerButton cid = strToEnum<SDL_GameControllerButton>(KeyGetter::gbuttonNames, readWord(pos)); cid < SDL_CONTROLLER_BUTTON_MAX)
+				if (SDL_GameControllerButton cid = strToEnum<SDL_GameControllerButton>(InputSys::gbuttonNames, readWord(pos)); cid < SDL_CONTROLLER_BUTTON_MAX)
 					input->addBinding(bid, cid);
 				break;
 			case iniVkeyAxis:
 				if (char sign = *pos++; sign == '+' || sign == '-') {
-					if (SDL_GameControllerAxis cid = strToEnum<SDL_GameControllerAxis>(KeyGetter::gaxisNames, readWord(pos)); cid < SDL_CONTROLLER_AXIS_MAX)
+					if (SDL_GameControllerAxis cid = strToEnum<SDL_GameControllerAxis>(InputSys::gaxisNames, readWord(pos)); cid < SDL_CONTROLLER_AXIS_MAX)
 						input->addBinding(bid, AsgGamepad(cid, sign == '+'));
 				} else if (!sign)
 					--pos;
@@ -303,7 +303,7 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 				case AsgJoystick::button:
 					return iniVkeyButton + toStr(aj.getJct());
 				case AsgJoystick::hat:
-					return iniVkeyHat + toStr(aj.getJct()) + '_' + KeyGetter::hatNames.at(aj.getHvl());
+					return iniVkeyHat + toStr(aj.getJct()) + '_' + InputSys::hatNames.at(aj.getHvl());
 				case AsgJoystick::axisPos:
 					return iniVkeyAxis + string(1, '+') + toStr(aj.getJct());
 				case AsgJoystick::axisNeg:
@@ -315,11 +315,11 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 			IniLine::write(text, Binding::names[i], iniKeyGpd, strJoin(input->getBinding(Binding::Type(i)).gpds, [](AsgGamepad ag) -> string {
 				switch (ag.getAsg()) {
 				case AsgGamepad::button:
-					return iniVkeyButton + string(KeyGetter::gbuttonNames[uint8(ag.getButton())]);
+					return iniVkeyButton + string(InputSys::gbuttonNames[uint8(ag.getButton())]);
 				case AsgGamepad::axisPos:
-					return iniVkeyAxis + string(1, '+') + KeyGetter::gaxisNames[uint8((ag.getAxis()))];
+					return iniVkeyAxis + string(1, '+') + InputSys::gaxisNames[uint8((ag.getAxis()))];
 				case AsgGamepad::axisNeg:
-					return iniVkeyAxis + string(1, '-') + KeyGetter::gaxisNames[uint8((ag.getAxis()))];
+					return iniVkeyAxis + string(1, '-') + InputSys::gaxisNames[uint8((ag.getAxis()))];
 				}
 				return string();
 			}));
@@ -375,11 +375,11 @@ umap<string, Config> FileSys::loadConfigs() {
 			if (!cit)
 				break;
 			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile))
-				readAmount(il, Tile::names, cit->tileAmounts);
+				readAmount(il, tileNames, cit->tileAmounts);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle))
-				readAmount(il, Tile::names, cit->middleAmounts);
+				readAmount(il, tileNames, cit->middleAmounts);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
-				readAmount(il, Piece::names, cit->pieceAmounts);
+				readAmount(il, pieceNames, cit->pieceAmounts);
 		}
 	return !confs.empty() ? confs : umap<string, Config>{ pair(Config::defaultName, Config()) };
 }
@@ -410,7 +410,7 @@ void FileSys::readFavorLimit(const char* str, Config* cfg) {
 uint16 FileSys::readCapturers(const string& line) {
 	uint16 capturers = 0;
 	for (const char* pos = line.c_str(); *pos;)
-		if (uint8 id = strToEnum<uint8>(Piece::names, readWord(pos)); id < Piece::names.size())
+		if (uint8 id = strToEnum<uint8>(pieceNames, readWord(pos)); id < pieceNames.size())
 			capturers |= 1 << id;
 	return capturers;
 }
@@ -440,9 +440,9 @@ void FileSys::saveConfigs(const umap<string, Config>& confs) {
 		IniLine::write(text, iniKeywordWinFortress, toStr(cfg.winFortress));
 		IniLine::write(text, iniKeywordWinThrone, toStr(cfg.winThrone));
 		writeCapturers(text, cfg.capturers);
-		writeAmounts(text, iniKeywordTile, Tile::names, cfg.tileAmounts);
-		writeAmounts(text, iniKeywordMiddle, Tile::names, cfg.middleAmounts);
-		writeAmounts(text, iniKeywordPiece, Piece::names, cfg.pieceAmounts);
+		writeAmounts(text, iniKeywordTile, tileNames, cfg.tileAmounts);
+		writeAmounts(text, iniKeywordMiddle, tileNames, cfg.middleAmounts);
+		writeAmounts(text, iniKeywordPiece, pieceNames, cfg.pieceAmounts);
 		text += linend;
 	}
 	writeFile(configPath(fileConfigs), text);
@@ -450,9 +450,9 @@ void FileSys::saveConfigs(const umap<string, Config>& confs) {
 
 void FileSys::writeCapturers(string& text, uint16 capturers) {
 	string str;
-	for (sizet i = 0; i < Piece::lim; ++i)
+	for (sizet i = 0; i < pieceLim; ++i)
 		if (capturers & (1 << i))
-			str += string(Piece::names[i]) + ' ';
+			str += string(pieceNames[i]) + ' ';
 	if (!str.empty())
 		str.pop_back();
 	IniLine::write(text, iniKeywordCapturers, str);
@@ -472,13 +472,13 @@ umap<string, Setup> FileSys::loadSetups() {
 			sit = sets.emplace(std::move(il.prp), Setup()).first;
 		else if (il.type == IniLine::prpKeyVal && !sets.empty()) {
 			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile)) {
-				if (Tile::Type t = strToEnum<Tile::Type>(Tile::names, il.val); t < Tile::fortress)
+				if (TileType t = strToEnum<TileType>(tileNames, il.val); t < TileType::fortress)
 					sit->second.tiles.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
 			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle)) {
-				if (Tile::Type t = strToEnum<Tile::Type>(Tile::names, il.val); t < Tile::fortress)
+				if (TileType t = strToEnum<TileType>(tileNames, il.val); t < TileType::fortress)
 					sit->second.mids.emplace_back(uint16(sstoul(il.key)), t);
 			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
-				if (Piece::Type t = strToEnum<Piece::Type>(Piece::names, il.val); t <= Piece::throne)
+				if (PieceType t = strToEnum<PieceType>(pieceNames, il.val); t <= PieceType::throne)
 					sit->second.pieces.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
 		}
 	}
@@ -490,11 +490,11 @@ void FileSys::saveSetups(const umap<string, Setup>& sets) {
 	for (auto& [name, stp] : sets) {
 		IniLine::write(text, name);
 		for (auto& [pos, type] : stp.tiles)
-			IniLine::write(text, iniKeywordTile, toStr(pos), Tile::names[type]);
+			IniLine::write(text, iniKeywordTile, toStr(pos), tileNames[uint8(type)]);
 		for (auto& [pos, type] : stp.mids)
-			IniLine::write(text, iniKeywordMiddle, toStr(pos), Tile::names[type]);
+			IniLine::write(text, iniKeywordMiddle, toStr(pos), tileNames[uint8(type)]);
 		for (auto& [pos, type] : stp.pieces)
-			IniLine::write(text, iniKeywordPiece, toStr(pos), Piece::names[type]);
+			IniLine::write(text, iniKeywordPiece, toStr(pos), pieceNames[uint8(type)]);
 		text += linend;
 	}
 	writeFile(configPath(fileSetups), text);
@@ -680,6 +680,10 @@ void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<strin
 			std::cerr << "failed to load " << name << ": " << SDL_GetError() << std::endl;
 	}
 	SDL_RWclose(ifh);
+}
+
+void FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
+	loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { txv[name].reload(img, iform, pform); }, scale);
 }
 
 vector<uint8> FileSys::loadFile(const string& file) {

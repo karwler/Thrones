@@ -2,12 +2,12 @@
 #include "fileSys.h"
 #include "inputSys.h"
 #include "world.h"
+#include "prog/board.h"
 #include "prog/progs.h"
 
 // CAMERA
 
 Camera::Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax) :
-	state(State::stationary),
 	pmax(pitchMax),
 	ymax(yawMax)
 {
@@ -202,14 +202,6 @@ void Animation::append(Animation& ani) {
 
 // SCENE
 
-Scene::Scene() :
-	camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup),
-	select(nullptr),
-	firstSelect(nullptr),
-	capture(nullptr),
-	light(vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f)
-{}
-
 Scene::~Scene() {
 	setPtrVec(overlays, {});
 	for (auto& [name, tex] : texes)
@@ -225,7 +217,7 @@ void Scene::draw() {
 		glViewport(0, 0, World::sets()->shadowRes, World::sets()->shadowRes);
 		glBindFramebuffer(GL_FRAMEBUFFER, light.depthFrame);
 		glClear(GL_DEPTH_BUFFER_BIT);
-		World::program()->getGame()->board.drawObjectDepths();
+		World::game()->board->drawObjectDepths();
 		if (Object* obj = dynamic_cast<Object*>(capture))
 			obj->drawTopDepth();
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -234,7 +226,7 @@ void Scene::draw() {
 	glUseProgram(*World::geom());
 	glViewport(0, 0, World::window()->getScreenView().x, World::window()->getScreenView().y);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	World::program()->getGame()->board.drawObjects();
+	World::game()->board->drawObjects();
 	if (Object* obj = dynamic_cast<Object*>(capture))
 		obj->drawTop();
 
@@ -527,7 +519,7 @@ Interactable* Scene::getSelected(const ivec2& mPos) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
-				return dynamic_cast<Navigator*>(*it) ? World::game()->board.findObject(rayXZIsct(pickerRay(mPos))) : (*it)->selectable() ? *it : getScrollOrObject(mPos, *it);
+				return dynamic_cast<Navigator*>(*it) ? World::game()->board->findObject(rayXZIsct(pickerRay(mPos))) : (*it)->selectable() ? *it : getScrollOrObject(mPos, *it);
 		} else
 			return getScrollOrObject(mPos, box);
 	}
@@ -536,7 +528,7 @@ Interactable* Scene::getSelected(const ivec2& mPos) {
 Interactable* Scene::getScrollOrObject(const ivec2& mPos, Widget* wgt) const {
 	if (ScrollArea* lay = findFirstScrollArea(wgt))
 		return lay;
-	return !popup ? static_cast<Interactable*>(World::game()->board.findObject(rayXZIsct(pickerRay(mPos)))) : static_cast<Interactable*>(popup.get());
+	return !popup ? static_cast<Interactable*>(World::game()->board->findObject(rayXZIsct(pickerRay(mPos)))) : static_cast<Interactable*>(popup.get());
 }
 
 ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {

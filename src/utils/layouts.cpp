@@ -1,5 +1,6 @@
 #include "engine/scene.h"
 #include "engine/world.h"
+#include "prog/board.h"
 
 // NAVIGATOR
 
@@ -20,7 +21,7 @@ Interactable* Navigator::findSelectable(const ivec2& entry) const {
 	vec3 pos = World::scene()->rayXZIsct(World::scene()->pickerRay(entry));
 	float dmin = FLT_MAX;
 	Tile* tile = nullptr;
-	for (Tile& it : World::game()->board.getTiles())
+	for (Tile& it : World::game()->board->getTiles())
 		if (float dist = glm::distance(pos, it.getPos()); it.rigid && dist < dmin) {
 			dmin = dist;
 			tile = &it;
@@ -258,7 +259,7 @@ Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okC
 
 void Popup::draw() const {
 	Rect rct = rect();
-	Quad::draw(Rect(ivec2(0), World::window()->getScreenView()), bgColor, World::scene()->texture());					// dim other widgets
+	Quad::draw(Rect(ivec2(0), World::window()->getScreenView()), bgColor, World::scene()->texture());				// dim other widgets
 	Quad::draw(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, World::scene()->texture());		// draw background
 	Layout::draw();
 }

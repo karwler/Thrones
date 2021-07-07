@@ -42,7 +42,7 @@ inline optional<bool> Joystick::axisDown(int16 val, uint8 id) {
 class Gamepad : public Controller {
 private:
 	SDL_GameController* ctr;
-	bool axes[SDL_CONTROLLER_AXIS_MAX+2];	// last read axis values as booleans (add 2 because there's padding anyway)
+	bool axes[SDL_CONTROLLER_AXIS_MAX+2]{};	// last read axis values as booleans (add 2 because there's padding anyway)
 
 public:
 	Gamepad(SDL_GameController* pad);
@@ -51,6 +51,10 @@ public:
 	SDL_GameController* getCtr() const;
 	optional<bool> axisDown(int16 val, uint8 id);
 };
+
+inline Gamepad::Gamepad(SDL_GameController* pad) :
+	ctr(pad)
+{}
 
 inline void Gamepad::close() {
 	SDL_GameControllerClose(ctr);
@@ -67,7 +71,39 @@ inline optional<bool> Gamepad::axisDown(int16 val, uint8 id) {
 // handles input events and contains controls settings
 class InputSys {
 public:
-	bool mouseLast;		// last input was mouse or touch
+	static inline const umap<uint8, const char*> hatNames = {
+		pair(SDL_HAT_UP, "Up"),
+		pair(SDL_HAT_RIGHT, "Right"),
+		pair(SDL_HAT_DOWN, "Down"),
+		pair(SDL_HAT_LEFT, "Left")
+	};
+	static constexpr array<const char*, SDL_CONTROLLER_BUTTON_MAX> gbuttonNames = {
+		"A",
+		"B",
+		"X",
+		"Y",
+		"Back",
+		"Guide",
+		"Start",
+		"LS",
+		"RS",
+		"LB",
+		"RB",
+		"Up",
+		"Down",
+		"Left",
+		"Right"
+	};
+	static constexpr array<const char*, SDL_CONTROLLER_AXIS_MAX> gaxisNames = {
+		"LX",
+		"LY",
+		"RX",
+		"RY",
+		"LT",
+		"RT"
+	};
+
+	bool mouseLast = false;		// last input was mouse or touch
 private:
 	umap<SDL_JoystickID, Joystick> joysticks;	// currently connected joysticks
 	umap<SDL_JoystickID, Gamepad> gamepads;		// currently connected game controllers
@@ -75,8 +111,8 @@ private:
 	mumap<SDL_Scancode, Binding::Type> keymap;
 	mumap<AsgJoystick, Binding::Type> joymap;
 	mumap<AsgGamepad, Binding::Type> padmap;
-	ivec2 mouseMove;	// last recorded cursor position difference
-	uint32 moveTime;	// timestamp of last recorded mouseMove
+	ivec2 mouseMove = { 0, 0 };	// last recorded cursor position difference
+	uint32 moveTime = 0;		// timestamp of last recorded mouseMove
 
 	static constexpr uint32 moveTimeout = 50;
 

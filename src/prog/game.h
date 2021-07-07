@@ -1,18 +1,20 @@
 #pragma once
 
-#include "board.h"
+#include "prog/types.h"
 #include "server/server.h"
 #include <random>
 
 // handles game logic
 class Game {
 public:
-	Board board;
-	array<uint16, Tile::lim> favorsCount, favorsLeft;
+	Board* board;
+	array<uint16, tileLim> favorsCount, favorsLeft;
 	uint16 availableFF;
 	uint16 vpOwn, vpEne;
 
 private:
+	AudioSys* audio;
+	Program* prog;
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
 	Com::Buffer sendb;
@@ -23,7 +25,8 @@ private:
 	bool myTurn, firstTurn;
 
 public:
-	Game();
+	Game(AudioSys* audioSys, Program* program, const Scene* scene);
+	~Game();
 
 	void finishSetup();
 	void finishFavor(Favor next, Favor previous);
@@ -42,19 +45,19 @@ public:
 	void recvKill(const uint8* data);
 	void recvBreach(const uint8* data);
 	void recvTile(const uint8* data);
-	void recvRecord(const uint8* data);
+	bool recvRecord(const uint8* data);	// returns whether the connection was dropped
 
 	void pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move);
 	void pieceFire(Piece* killer, svec2 dst, Piece* victim);
 	void placeDragon(Piece* dragon, svec2 pos, Piece* occupant);
 	void establishTile(Piece* throne, bool reinit);
 	void rebuildTile(Piece* throne, bool reinit);
-	void spawnPiece(Piece::Type type, Tile* tile, bool reinit);	// set tile to nullptr for auto-select (only for farm, city or single fortress)
+	void spawnPiece(PieceType type, Tile* tile, bool reinit);	// set tile to nullptr for auto-select (only for farm, city or single fortress)
 	void prepareTurn(bool fcont);
 	void endTurn();
 	bool checkPointsWin();
 	void surrender();
-	void changeTile(Tile* tile, Tile::Type type, TileTop top = TileTop::none);
+	void changeTile(Tile* tile, TileType type, TileTop top = TileTop::none);
 
 #ifdef DEBUG
 	void processCommand(const char* cmd);
@@ -76,8 +79,8 @@ private:
 	Piece* readCommandPieceId(const char*& cmd);
 	Piece* readCommandPiecePos(const char*& cmd);
 	void readCommandPieceMove(const char*& cmd, Piece* pce, bool killOccupant);
-	pair<uint16, string> readCommandTileId(const char*& cmd);
-	pair<svec2, string> readCommandTilePos(const char*& cmd);
+	static pair<uint16, string> readCommandTileId(const char*& cmd);
+	static pair<svec2, string> readCommandTilePos(const char*& cmd);
 	void readCommandChange(uint16 id, const char* name);
 	static svec2 readCommandVec(const char*& cmd);
 	static pair<uint8, uint16> readCommandMnum(const char*& cmd, initlist<char> pref = { '+', '-' });
@@ -100,13 +103,3 @@ inline const Record& Game::getEneRec() const {
 inline bool Game::hasDoneAnything() const {
 	return myTurn && (!ownRec.actors.empty() || !ownRec.assault.empty() || anyFavorUsed || miscActionTaken);
 }
-
-inline void Game::recvBreach(const uint8* data) {
-	board.getTiles()[Com::read16(data)].setBreached(data[sizeof(uint16)]);
-}
-
-#ifdef DEBUG
-inline Piece* Game::readCommandPiecePos(const char*& cmd) {
-	return board.findOccupant(readCommandVec(cmd) % board.boardLimit());
-}
-#endif

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "prog/types.h"
+#include "oven/oven.h"
+#include "utils/text.h"
 
 // reads/writes an INI line
 struct IniLine {
@@ -194,8 +195,4 @@ inline string FileSys::windowIconPath() {
 
 inline string FileSys::configPath(const char* file) {
 	return dirConfig + file;
-}
-
-inline void FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
-	loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { txv[name].reload(img, iform, pform); }, scale);
 }

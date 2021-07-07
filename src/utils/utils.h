@@ -9,8 +9,6 @@ enum class UserCode : int32 {
 
 // general wrappers
 
-constexpr float PI = float(M_PI);
-
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 #ifndef OPENGLES
 GLuint makeCubemap(GLsizei res, GLenum active);
@@ -93,23 +91,23 @@ struct Rect : SDL_Rect {
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
-inline constexpr Rect::Rect(int n) :
+constexpr Rect::Rect(int n) :
 	SDL_Rect{ n, n, n, n }
 {}
 
-inline constexpr Rect::Rect(int px, int py, int sw, int sh) :
+constexpr Rect::Rect(int px, int py, int sw, int sh) :
 	SDL_Rect{ px, py, sw, sh }
 {}
 
-inline constexpr Rect::Rect(int px, int py, const ivec2& size) :
+constexpr Rect::Rect(int px, int py, const ivec2& size) :
 	SDL_Rect{ px, py, size.x, size.y }
 {}
 
-inline constexpr Rect::Rect(const ivec2& pos, int sw, int sh) :
+constexpr Rect::Rect(const ivec2& pos, int sw, int sh) :
 	SDL_Rect{ pos.x, pos.y, sw, sh }
 {}
 
-inline constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
+constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
 	SDL_Rect{ pos.x, pos.y, size.x, size.y }
 {}
 
@@ -154,11 +152,11 @@ private:
 	static constexpr GLenum defaultFormat4 = GL_BGRA;
 #endif
 
-	GLuint id;
-	ivec2 res;
+	GLuint id = 0;
+	ivec2 res = { 0, 0 };
 
 public:
-	Texture();
+	Texture() = default;
 	Texture(SDL_Surface* img);								// for text
 	Texture(SDL_Surface* img, GLint iform, GLenum pform);	// for image
 	Texture(array<uint8, 3> color);							// load blank
@@ -167,16 +165,11 @@ public:
 	void free();
 	operator GLuint() const;
 	const ivec2& getRes() const;
-	void reload(SDL_Surface* img, GLint iformat, GLenum pformat);
+	void reload(const SDL_Surface* img, GLint iformat, GLenum pformat);
 private:
-	void load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
-	void upload(SDL_Surface* img, GLint iformat, GLenum pformat);
+	void load(const SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
+	void upload(const SDL_Surface* img, GLint iformat, GLenum pformat);
 };
-
-inline Texture::Texture() :
-	id(0),
-	res(0)
-{}
 
 inline void Texture::free() {
 	glDeleteTextures(1, &id);
@@ -190,7 +183,7 @@ inline const ivec2& Texture::getRes() const {
 	return res;
 }
 
-inline void Texture::reload(SDL_Surface* img, GLint iformat, GLenum pformat) {
+inline void Texture::reload(const SDL_Surface* img, GLint iformat, GLenum pformat) {
 	upload(img, iformat, pformat);
 	glGenerateMipmap(GL_TEXTURE_2D);
 }
@@ -219,27 +212,27 @@ public:
 	constexpr bool negative() const;
 };
 
-inline constexpr Direction::Direction(Dir direction) :
+constexpr Direction::Direction(Dir direction) :
 	dir(direction)
 {}
 
-inline constexpr Direction::operator Dir() const {
+constexpr Direction::operator Dir() const {
 	return dir;
 }
 
-inline constexpr bool Direction::vertical() const {
+constexpr bool Direction::vertical() const {
 	return dir <= down;
 }
 
-inline constexpr bool Direction::horizontal() const {
+constexpr bool Direction::horizontal() const {
 	return dir >= left;
 }
 
-inline constexpr bool Direction::positive() const {
+constexpr bool Direction::positive() const {
 	return dir & 1;
 }
 
-inline constexpr bool Direction::negative() const {
+constexpr bool Direction::negative() const {
 	return !positive();
 }
 

@@ -6,10 +6,10 @@
 class Navigator : public Widget {
 public:
 	using Widget::Widget;
-	virtual ~Navigator() override = default;
+	~Navigator() override = default;
 
-	virtual bool selectable() const override;
-	virtual void onNavSelect(Direction dir) override;
+	bool selectable() const override;
+	void onNavSelect(Direction dir) override;
 	virtual void navSelectFrom(int mid, Direction dir);
 	virtual Interactable* findFirstSelectable() const;
 	void navSelectOut(const vec3& pos, Direction dir);
@@ -28,16 +28,16 @@ protected:
 
 public:
 	Layout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0);
-	virtual ~Layout() override;
+	~Layout() override;
 
-	virtual void draw() const override;
-	virtual void tick(float dSec) override;
-	virtual void onResize() override;
-	virtual void postInit() override;
-	virtual bool selectable() const override;
-	virtual void navSelectFrom(int mid, Direction dir) override;
+	void draw() const override;
+	void tick(float dSec) override;
+	void onResize() override;
+	void postInit() override;
+	bool selectable() const override;
+	void navSelectFrom(int mid, Direction dir) override;
 	virtual void navSelectNext(sizet id, int mid, Direction dir);
-	virtual Interactable* findFirstSelectable() const override;
+	Interactable* findFirstSelectable() const override;
 
 	template <class T = Widget> T* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
@@ -88,13 +88,13 @@ protected:
 
 public:
 	RootLayout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0, const vec4& color = vec4(0.f));
-	virtual ~RootLayout() override = default;
+	~RootLayout() override = default;
 
-	virtual void draw() const override;
-	virtual ivec2 position() const override;
-	virtual ivec2 size() const override;
-	virtual void setSize(const Size& size) override;
-	virtual Rect frame() const override;
+	void draw() const override;
+	ivec2 position() const override;
+	ivec2 size() const override;
+	void setSize(const Size& size) override;
+	Rect frame() const override;
 };
 
 // layout with background with free position/size (shouldn't have a parent)
@@ -110,11 +110,11 @@ protected:
 
 public:
 	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, Widget* firstSelect = nullptr, const vec4& color = uniformBgColor);
-	virtual ~Popup() override = default;
+	~Popup() override = default;
 
-	virtual void draw() const override;
-	virtual ivec2 position() const override;
-	virtual ivec2 size() const override;
+	void draw() const override;
+	ivec2 position() const override;
+	ivec2 size() const override;
 };
 
 // popup that can be enabled or disabled
@@ -126,10 +126,10 @@ private:
 
 public:
 	Overlay(const pair<Size, Size>& pos = pair(0.f, 0.f), const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, bool visible = false, bool interactive = true, int space = 0, const vec4& color = vec4(0.f));
-	virtual ~Overlay() override = default;
+	~Overlay() final = default;
 
-	virtual void draw() const override;
-	virtual ivec2 position() const override;
+	void draw() const final;
+	ivec2 position() const final;
 
 	bool getShow() const;
 	void setShow(bool yes);
@@ -151,23 +151,23 @@ private:
 
 public:
 	using Layout::Layout;
-	virtual ~ScrollArea() override = default;
+	~ScrollArea() final = default;
 
-	virtual void draw() const override;
-	virtual void tick(float dSec) override;
-	virtual void postInit() override;
-	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
-	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
-	virtual void onUndrag(uint8 mBut) override;
-	virtual void onScroll(const ivec2& wMov) override;
-	virtual void onNavSelect(Direction dir) override;
-	virtual void navSelectNext(sizet id, int mid, Direction dir) override;
-	virtual void navSelectFrom(int mid, Direction dir) override;
-	virtual void onCancelCapture() override;
+	void draw() const final;
+	void tick(float dSec) final;
+	void postInit() final;
+	void onHold(const ivec2& mPos, uint8 mBut) final;
+	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
+	void onUndrag(uint8 mBut) final;
+	void onScroll(const ivec2& wMov) final;
+	void onNavSelect(Direction dir) final;
+	void navSelectNext(sizet id, int mid, Direction dir) final;
+	void navSelectFrom(int mid, Direction dir) final;
+	void onCancelCapture() final;
 
-	virtual Rect frame() const override;
-	virtual ivec2 wgtPosition(sizet id) const override;
-	virtual ivec2 wgtSize(sizet id) const override;
+	Rect frame() const final;
+	ivec2 wgtPosition(sizet id) const final;
+	ivec2 wgtSize(sizet id) const final;
 	mvec2 visibleWidgets() const;
 
 private:

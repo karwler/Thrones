@@ -182,9 +182,7 @@ private:
 		};
 
 		string logStr;
-		State state;
-
-		Loader();
+		State state = State::start;
 
 		void addLine(const string& str, WindowSys* win);
 	};
@@ -208,7 +206,7 @@ private:
 	bool run;			// whether the loop in which the program runs should continue
 	uint8 cursorHeight;
 #ifdef EMSCRIPTEN
-	uptr<Loader> loader;
+	Loader> loader;
 	void (WindowSys::*loopFunc)();
 #endif
 
@@ -262,10 +260,6 @@ private:
 	bool checkCurDisplay();
 	template <class T> static void checkResolution(T& val, const vector<T>& modes);
 };
-
-inline WindowSys::Loader::Loader() :
-	state(State::start)
-{}
 
 inline void WindowSys::close() {
 	run = false;

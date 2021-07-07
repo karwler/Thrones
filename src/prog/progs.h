@@ -7,14 +7,13 @@ class ProgState {
 public:
 	vec2 objectDragPos;
 protected:
-	TextBox* chatBox;
-	Overlay* notification;
+	TextBox* chatBox = nullptr;
+	Overlay* notification = nullptr;
 	Label* fpsText;
 
 	static constexpr float axisScrollThrottle = 4000.f;
 
 public:
-	ProgState();
 	virtual ~ProgState() = default;	// to keep the compiler happy
 
 	virtual void eventEscape() {}
@@ -84,10 +83,6 @@ inline TextBox* ProgState::getChat() {
 	return chatBox;
 }
 
-inline bool ProgState::showNotification() const {
-	return notification ? notification->getShow() : false;
-}
-
 inline Label* ProgState::getFpsText() {
 	return fpsText;
 }
@@ -96,12 +91,12 @@ class ProgMenu : public ProgState {
 public:
 	Label* versionNotif;
 
-	virtual ~ProgMenu() override = default;
+	~ProgMenu() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventFinish() override;
+	void eventEscape() final;
+	void eventFinish() final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 };
 
 class ProgLobby : public ProgState {
@@ -111,34 +106,22 @@ private:
 
 public:
 	ProgLobby(vector<pair<string, bool>>&& roomList);
-	virtual ~ProgLobby() override = default;
+	~ProgLobby() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventFinish() override;
-	virtual void eventScrollUp(float val) override;
-	virtual void eventScrollDown(float val) override;
+	void eventEscape() final;
+	void eventFinish() final;
+	void eventScrollUp(float val) final;
+	void eventScrollDown(float val) final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
 	void openRoom(const string& name, bool open);
-	bool hasRoom(const string& name);
+	bool hasRoom(const string& name) const;
 private:
 	 sizet findRoom(const string& name) const;
 };
-
-inline void ProgLobby::delRoom(const string& name) {
-	rooms->deleteWidget(findRoom(name));
-}
-
-inline bool ProgLobby::hasRoom(const string& name) {
-	return findRoom(name) < rooms->getWidgets().size();
-}
-
-inline sizet ProgLobby::findRoom(const string& name) const {
-	return sizet(std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [name](const Widget* rm) -> bool { return static_cast<const Label*>(rm)->getText() == name; }) - rooms->getWidgets().begin());
-}
 
 class ProgRoom : public ProgState {
 public:
@@ -152,14 +135,14 @@ private:
 public:
 	ProgRoom();					// for host
 	ProgRoom(string config);	// for guest
-	virtual ~ProgRoom() override = default;
+	~ProgRoom() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventFinish() override;
-	virtual void eventScrollUp(float val) override;
-	virtual void eventScrollDown(float val) override;
+	void eventEscape() final;
+	void eventFinish() final;
+	void eventScrollUp(float val) final;
+	void eventScrollDown(float val) final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 
 	void setStartConfig();
 	void updateStartButton();
@@ -176,20 +159,24 @@ public:
 	Navigator* planeSwitch;
 	Label* message;
 	Icon* bswapIcon;
-	ScrollArea* configList;
+	ScrollArea* configList = nullptr;
 	string configName;
 
 	ProgGame(string config);
-	virtual ~ProgGame() override = default;
+	~ProgGame() override = default;
 
-	virtual void eventScrollUp(float val) override;
-	virtual void eventScrollDown(float val) override;
+	void eventScrollUp(float val) override;
+	void eventScrollDown(float val) override;
 
-	virtual uint8 switchButtons(uint8 but) override;
-	virtual vector<Overlay*> createOverlays() override;
+	uint8 switchButtons(uint8 but) override;
+	vector<Overlay*> createOverlays() override;
 private:
 	void axisScroll(float val);
 };
+
+inline ProgGame::ProgGame(string config) :
+	configName(std::move(config))
+{}
 
 class ProgSetup : public ProgGame {
 public:
@@ -202,33 +189,33 @@ public:
 	};
 
 	umap<string, Setup> setups;
-	vector<Tile::Type> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
+	vector<TileType> rcvMidBuffer;	// buffer for received opponent's middle tile placement (positions in own left to right)
 	uint16 piecePicksLeft;
-	bool enemyReady;
+	bool enemyReady = false;
 private:
-	uint8 iselect;
+	uint8 iselect = 0;
 	Stage stage;
-	uint8 lastButton;	// last button that was used on lastHold (0 for none)
-	svec2 lastHold;		// position of last object that the cursor was dragged over
+	uint8 lastButton = 0;			// last button that was used on lastHold (0 for none)
+	svec2 lastHold = { UINT16_MAX, UINT16_MAX };	// position of last object that the cursor was dragged over
 	GuiGen::SetupIO sio;
 	vector<uint16> counters;
 
 public:
-	ProgSetup(string config);
-	virtual ~ProgSetup() override = default;
+	using ProgGame::ProgGame;
+	~ProgSetup() final = default;
 
-	virtual void eventEscape() override;	// for previous stage
-	virtual void eventEnter() override;		// for placing objects
-	virtual void eventWheel(int ymov) override;
-	virtual void eventDrag(uint32 mStat) override;
-	virtual void eventUndrag() override;
-	virtual void eventFinish() override;	// for next stage
-	virtual void eventDelete() override;
-	virtual void eventSelectNext() override;
-	virtual void eventSelectPrev() override;
-	virtual void eventSetSelected(uint8 sel) override;
+	void eventEscape() final;	// for previous stage
+	void eventEnter() final;		// for placing objects
+	void eventWheel(int ymov) final;
+	void eventDrag(uint32 mStat) final;
+	void eventUndrag() final;
+	void eventFinish() final;	// for next stage
+	void eventDelete() final;
+	void eventSelectNext() final;
+	void eventSelectPrev() final;
+	void eventSetSelected(uint8 sel) final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 
 	Stage getStage() const;
 	void setStage(Stage stg);	// returns true if match is ready to load
@@ -247,10 +234,6 @@ inline ProgSetup::Stage ProgSetup::getStage() const {
 	return stage;
 }
 
-inline Icon* ProgSetup::getIcon(uint8 type) const {
-	return sio.icons->getWidget<Icon>(type + 1);
-}
-
 inline uint16 ProgSetup::getCount(uint8 type) const {
 	return counters[type];
 }
@@ -261,33 +244,33 @@ inline uint8 ProgSetup::getSelected() const {
 
 class ProgMatch : public ProgGame {
 public:
-	Piece::Type spawning;	// type of piece to spawn
+	PieceType spawning;	// type of piece to spawn
 private:
 	uint16 unplacedDragons;
 	GuiGen::MatchIO mio;
 
 public:
 	using ProgGame::ProgGame;
-	virtual ~ProgMatch() override = default;
+	~ProgMatch() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventEnter() override;
-	virtual void eventWheel(int ymov) override;
-	virtual void eventFinish() override;
-	virtual void eventSurrender() override;
-	virtual void eventEngage() override;
-	virtual void eventDestroyOn() override;
-	virtual void eventDestroyOff() override;
-	virtual void eventDestroyToggle() override;
-	virtual void eventHasten() override;
-	virtual void eventAssault() override;
-	virtual void eventConspire() override;
-	virtual void eventDeceive() override;
-	virtual void eventCameraReset() override;
-	virtual void eventCameraLeft(float val) override;
-	virtual void eventCameraRight(float val) override;
+	void eventEscape() final;
+	void eventEnter() final;
+	void eventWheel(int ymov) final;
+	void eventFinish() final;
+	void eventSurrender() final;
+	void eventEngage() final;
+	void eventDestroyOn() final;
+	void eventDestroyOff() final;
+	void eventDestroyToggle() final;
+	void eventHasten() final;
+	void eventAssault() final;
+	void eventConspire() final;
+	void eventDeceive() final;
+	void eventCameraReset() final;
+	void eventCameraLeft(float val) final;
+	void eventCameraRight(float val) final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 
 	void setIcons(Favor favor, Icon* homefront = nullptr);	// set favor or a homefront icon
 	const array<Icon*, favorMax>& getFavorIcons() const;
@@ -307,10 +290,6 @@ inline const array<Icon*, favorMax>& ProgMatch::getFavorIcons() const {
 	return mio.favors;
 }
 
-inline Favor ProgMatch::favorIconSelect() const {
-	return Favor(std::find_if(mio.favors.begin(), mio.favors.end(), [](Icon* it) -> bool { return it && it->selected; }) - mio.favors.begin());
-}
-
 inline uint16 ProgMatch::getUnplacedDragons() const {
 	return unplacedDragons;
 }
@@ -327,17 +306,17 @@ private:
 	umap<string, uint32> pixelformats;
 
 public:
-	virtual ~ProgSettings() override = default;
+	~ProgSettings() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventFinish() override;
+	void eventEscape() final;
+	void eventFinish() final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 
-	const umap<string, uint32>& getPixelformats();
+	const umap<string, uint32>& getPixelformats() const;
 };
 
-inline const umap<string, uint32>& ProgSettings::getPixelformats() {
+inline const umap<string, uint32>& ProgSettings::getPixelformats() const {
 	return pixelformats;
 }
 
@@ -346,12 +325,12 @@ private:
 	ScrollArea* content;
 
 public:
-	virtual ~ProgInfo() override = default;
+	~ProgInfo() final = default;
 
-	virtual void eventEscape() override;
-	virtual void eventFinish() override;
-	virtual void eventScrollUp(float val) override;
-	virtual void eventScrollDown(float val) override;
+	void eventEscape() final;
+	void eventFinish() final;
+	void eventScrollUp(float val) final;
+	void eventScrollDown(float val) final;
 
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) override;
+	uptr<RootLayout> createLayout(Interactable*& selected) final;
 };

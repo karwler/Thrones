@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.h"
-#include "utils/layouts.h"
+#include "utils/settings.h"
+#include "utils/text.h"
 
 class GuiGen {
 public:
@@ -36,15 +37,15 @@ public:
 		CheckBox* terrainRules;
 		CheckBox* dragonLate;
 		CheckBox* dragonStraight;
-		array<LabelEdit*, Tile::lim> tiles;
-		array<LabelEdit*, Tile::lim> middles;
-		array<LabelEdit*, Piece::lim> pieces;
+		array<LabelEdit*, tileLim> tiles;
+		array<LabelEdit*, tileLim> middles;
+		array<LabelEdit*, pieceLim> pieces;
 		Label* tileFortress;
 		Label* middleFortress;
 		Label* pieceTotal;
 		LabelEdit* winThrone;
 		LabelEdit* winFortress;
-		array<Icon*, Piece::lim> capturers;
+		array<Icon*, pieceLim> capturers;
 	};
 
 	struct RoomIO {
@@ -111,7 +112,7 @@ public:
 	Overlay* createGameChat(TextBox*& chatBox) const;
 	vector<Widget*> createBottomIcons(bool tiles) const;
 	int keyGetLineSize(Binding::Type bind) const;
-	KeyGetter* createKeyGetter(KeyGetter::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
+	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
 
 	uptr<RootLayout> makeMainMenu(Interactable*& selected, Label*& versionNotif) const;
 	uptr<RootLayout> makeLobby(Interactable*& selected, TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff) const;
@@ -127,7 +128,7 @@ public:
 	SDL_DisplayMode fstrToDisp(const umap<string, uint32>& pixelformats, const string& str) const;
 private:
 	static string dispToFstr(const SDL_DisplayMode& mode);
-	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, KeyGetter::Accept type, Label* lbl) const;
+	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const;
 	static string bindingToFstr(Binding::Type bind);
 	static const char* pixelformatName(uint32 format);
 	static string versionText(const SDL_version& ver);

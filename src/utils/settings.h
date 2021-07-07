@@ -224,6 +224,17 @@ struct Binding {
 		"scroll_up",
 		"scroll_down"
 	};
+	enum class Accept : uint8 {
+		keyboard,
+		joystick,
+		gamepad,
+		any
+	};
+	static constexpr array<const char*, uint8(Accept::any)> acceptNames = {
+		"keyboard",
+		"joystick",
+		"gamepad"
+	};
 
 	static constexpr Type singles = Type::textHome;
 	static constexpr Type holders = Type::cameraUp;

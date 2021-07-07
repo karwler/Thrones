@@ -7,7 +7,7 @@ class Connector {
 private:
 	addrinfo* inf;
 	addrinfo* cur;
-	pollfd sock;
+	pollfd sock = { INVALID_SOCKET, POLLOUT, 0 };
 
 public:
 	Connector(const char* addr, const char* port, int family);
@@ -21,33 +21,38 @@ private:
 // handles networking (for joining/hosting rooms on a remote sever)
 class Netcp {
 protected:
-	void (Netcp::*tickproc)();
+	bool (Netcp::*tickproc)() = nullptr;	// returns whether this instance was deleted
 	Com::Buffer recvb;
+	Program* prog;
 	uptr<Connector> connector;
-	pollfd sock;
-	bool webs;
+	pollfd sock = { INVALID_SOCKET, POLLIN | POLLRDHUP, 0 };
+	bool webs = false;
 
 public:
-	Netcp();
+	Netcp(Program* program);
 	virtual ~Netcp();
 
-	virtual void connect();
+	virtual void connect(const Settings* sets);
 	virtual void disconnect();
 	virtual void tick();
 	void sendData(Com::Buffer& sendb);
 	void sendData(Com::Code code);
 	void sendData(const vector<uint8>& vec);
 
-	void setTickproc(void (Netcp::*func)());
-	void tickConnect();
-	void tickWait();
-	void tickLobby();
-	void tickGame();
+	void setTickproc(bool (Netcp::*func)());
+	bool tickConnect();
+	bool tickWait();
+	bool tickLobby();
+	bool tickGame();
 protected:
-	void tickValidate();
-	void tickDiscard() {}
+	bool tickValidate();
+	bool tickDiscard();
 	static bool pollSocket(pollfd& sock);
 };
+
+inline Netcp::Netcp(Program* program) :
+	prog(program)
+{}
 
 inline void Netcp::sendData(Com::Buffer& sendb) {
 	sendb.send(sock.fd, webs);
@@ -57,24 +62,20 @@ inline void Netcp::sendData(const vector<uint8>& vec) {
 	Com::sendData(sock.fd, vec.data(), uint(vec.size()), webs);
 }
 
-inline void Netcp::setTickproc(void (Netcp::*func)()) {
+inline void Netcp::setTickproc(bool (Netcp::*func)()) {
 	tickproc = func;
 }
 
 // for running one room on self as server
 class NetcpHost : public Netcp {
 private:
-	pollfd serv;
+	pollfd serv = { INVALID_SOCKET, POLLIN | POLLRDHUP, 0 };
 
 public:
-	NetcpHost();
-	virtual ~NetcpHost() override;
+	using Netcp::Netcp;
+	~NetcpHost() final;
 
-	virtual void connect() override;
-	virtual void disconnect() override;
-	virtual void tick() override;
+	void connect(const Settings* sets) final;
+	void disconnect() final;
+	void tick() final;
 };
-
-inline NetcpHost::NetcpHost() :
-	serv{ INVALID_SOCKET, POLLIN | POLLRDHUP, 0 }
-{}

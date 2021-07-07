@@ -1,16 +1,9 @@
-#include "engine/inputSys.h"
 #include "engine/scene.h"
+#include "engine/inputSys.h"
 #include "engine/world.h"
 #include "prog/progs.h"
 
 // SCROLL
-
-ScrollBar::ScrollBar() :
-	listPos(0),
-	motion(0.f),
-	diffSliderMouse(0),
-	draggingSlider(false)
-{}
 
 void ScrollBar::draw(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z) const {
 	GLuint tex = World::scene()->texture();
@@ -130,12 +123,6 @@ void Quad::draw(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint 
 }
 
 // WIDGET
-
-Widget::Widget(Size size) :
-	relSize(size),
-	parent(nullptr),
-	index(SIZE_MAX)
-{}
 
 ivec2 Widget::position() const {
 	return parent->wgtPosition(index);
@@ -260,8 +247,7 @@ Slider::Slider(Size size, int val, int minimum, int maximum, int navStep, BCall 
 	vmin(minimum),
 	vmax(maximum),
 	keyStep(navStep),
-	oldVal(val),
-	diffSliderMouse(0)
+	oldVal(val)
 {}
 
 void Slider::draw() const {
@@ -633,13 +619,11 @@ void ComboBox::set(vector<string>&& opts, const string& name) {
 
 LabelEdit::LabelEdit(Size size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, const Texture& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, GLuint tex, const vec4& clr) :
 	Label(size, std::move(line), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
-	cpos(0),
 	oldText(text),
 	ecall(retCall),
 	ccall(cancCall),
 	chatMode(isChat),
-	limit(lim),
-	textOfs(0)
+	limit(lim)
 {
 	cutText();
 }
@@ -901,7 +885,7 @@ bool LabelEdit::selectable() const {
 
 // KEY GETTER
 
-KeyGetter::KeyGetter(Size size, Accept atype, Binding::Type binding, sizet keyId, BCall exitCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+KeyGetter::KeyGetter(Size size, Binding::Accept atype, Binding::Type binding, sizet keyId, BCall exitCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
 	Label(size, bindingText(atype, binding, keyId), exitCall, rightCall, tooltip, dim, align, bg, tex, clr),
 	accept(atype),
 	bind(binding),
@@ -919,11 +903,11 @@ void KeyGetter::onClick(const ivec2&, uint8 mBut) {
 }
 
 void KeyGetter::onKeyDown(const SDL_KeyboardEvent& key) {
-	setBinding(Accept::keyboard, key.keysym.scancode);
+	setBinding(Binding::Accept::keyboard, key.keysym.scancode);
 }
 
 void KeyGetter::onJButtonDown(uint8 but) {
-	setBinding(Accept::joystick, JoystickButton(but));
+	setBinding(Binding::Accept::joystick, JoystickButton(but));
 }
 
 void KeyGetter::onJHatDown(uint8 hat, uint8 val) {
@@ -933,19 +917,19 @@ void KeyGetter::onJHatDown(uint8 hat, uint8 val) {
 		else if (val & SDL_HAT_LEFT)
 			val = SDL_HAT_LEFT;
 	}
-	setBinding(Accept::joystick, AsgJoystick(hat, val));
+	setBinding(Binding::Accept::joystick, AsgJoystick(hat, val));
 }
 
 void KeyGetter::onJAxisDown(uint8 axis, bool positive) {
-	setBinding(Accept::joystick, AsgJoystick(JoystickAxis(axis), positive));
+	setBinding(Binding::Accept::joystick, AsgJoystick(JoystickAxis(axis), positive));
 }
 
 void KeyGetter::onGButtonDown(SDL_GameControllerButton but) {
-	setBinding(Accept::gamepad, but);
+	setBinding(Binding::Accept::gamepad, but);
 }
 
 void KeyGetter::onGAxisDown(SDL_GameControllerAxis axis, bool positive) {
-	setBinding(Accept::gamepad, AsgGamepad(axis, positive));
+	setBinding(Binding::Accept::gamepad, AsgGamepad(axis, positive));
 }
 
 void KeyGetter::onCancelCapture() {
@@ -957,8 +941,8 @@ bool KeyGetter::selectable() const {
 }
 
 template <class T>
-void KeyGetter::setBinding(Accept expect, T key) {
-	if (accept != expect && accept != Accept::any)
+void KeyGetter::setBinding(Binding::Accept expect, T key) {
+	if (accept != expect && accept != Binding::Accept::any)
 		return;
 
 	if (kid != SIZE_MAX) {	// edit an existing binding from the list
@@ -972,30 +956,30 @@ void KeyGetter::setBinding(Accept expect, T key) {
 	}
 }
 
-string KeyGetter::bindingText(Accept accept, Binding::Type bind, sizet kid) {
+string KeyGetter::bindingText(Binding::Accept accept, Binding::Type bind, sizet kid) {
 	switch (accept) {
-	case Accept::keyboard:
+	case Binding::Accept::keyboard:
 		return SDL_GetScancodeName(World::input()->getBinding(bind).keys[kid]);
-	case Accept::joystick:
+	case Binding::Accept::joystick:
 		switch (AsgJoystick aj = World::input()->getBinding(bind).joys[kid]; aj.getAsg()) {
 		case AsgJoystick::button:
 			return "Button " + toStr(aj.getJct());
 		case AsgJoystick::hat:
-			return "Hat " + toStr(aj.getJct()) + ' ' + hatNames.at(aj.getHvl());
+			return "Hat " + toStr(aj.getJct()) + ' ' + InputSys::hatNames.at(aj.getHvl());
 		case AsgJoystick::axisPos:
 			return "Axis +" + toStr(aj.getJct());
 		case AsgJoystick::axisNeg:
 			return "Axis -" + toStr(aj.getJct());
 		}
 		break;
-	case Accept::gamepad:
+	case Binding::Accept::gamepad:
 		switch (AsgGamepad ag = World::input()->getBinding(bind).gpds[kid]; ag.getAsg()) {
 		case AsgGamepad::button:
-			return gbuttonNames[uint8(ag.getButton())];
+			return InputSys::gbuttonNames[uint8(ag.getButton())];
 		case AsgGamepad::axisPos:
-			return '+' + string(gaxisNames[uint8(ag.getAxis())]);
+			return '+' + string(InputSys::gaxisNames[uint8(ag.getAxis())]);
 		case AsgGamepad::axisNeg:
-			return '-' + string(gaxisNames[uint8(ag.getAxis())]);
+			return '-' + string(InputSys::gaxisNames[uint8(ag.getAxis())]);
 		}
 	}
 	return string();

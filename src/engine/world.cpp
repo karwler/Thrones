@@ -1,9 +1,12 @@
 #include "world.h"
-#include "audioSys.h"
 
-void World::play(const string& name) {
-	if (windowSys.getAudio())
-		windowSys.getAudio()->play(name, windowSys.getSets()->avolume);
+template <class C>
+void World::setArgs(int argc, const C* const* argv) {
+#ifdef NDEBUG
+	args.setArgs(argc, argv, {}, { Settings::argExternal });
+#else
+	args.setArgs(argc, argv, { Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
+#endif
 }
 
 #ifndef IS_TEST_LIBRARY

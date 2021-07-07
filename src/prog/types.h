@@ -1,7 +1,53 @@
 #pragma once
 
-#include "utils/objects.h"
+#include "utils/alias.h"
 #include <numeric>
+
+enum class TileType : uint8 {
+	plains,
+	forest,
+	mountain,
+	water,
+	fortress,
+	empty
+};
+constexpr uint8 tileLim = uint8(TileType::fortress);
+
+constexpr array<const char*, uint8(TileType::empty)+1> tileNames = {
+	"plains",
+	"forest",
+	"mountain",
+	"water",
+	"fortress",
+	""
+};
+
+enum class PieceType : uint8 {
+	rangers,
+	spearmen,
+	crossbowmen,
+	catapult,
+	trebuchet,
+	lancer,
+	warhorse,
+	elephant,
+	dragon,
+	throne
+};
+constexpr uint8 pieceLim = uint8(PieceType::throne) + 1;
+
+constexpr array<const char*, uint8(PieceType::throne)+1> pieceNames = {
+	"rangers",
+	"spearmen",
+	"crossbowmen",
+	"catapult",
+	"trebuchet",
+	"lancer",
+	"warhorse",
+	"elephant",
+	"dragon",
+	"throne"
+};
 
 constexpr array<uint16 (*const)(uint16, svec2), 8> adjacentIndex = {
 	[](uint16 id, svec2 lim) -> uint16 { return id / lim.x && id % lim.x ? id - lim.x - 1 : UINT16_MAX; },							// left up
@@ -46,18 +92,6 @@ struct Config {
 		dragonStraight = 0x400
 	};
 
-	svec2 homeSize;		// neither width nor height shall exceed UINT8_MAX
-	uint8 battlePass;
-	Option opts;
-	uint16 victoryPointsNum;
-	uint16 setPieceBattleNum;
-	uint16 favorLimit;
-	array<uint16, Tile::lim> tileAmounts;
-	array<uint16, Tile::lim> middleAmounts;
-	array<uint16, Piece::lim> pieceAmounts;
-	uint16 winThrone, winFortress;
-	uint16 capturers;	// bitmask of piece types that can capture fortresses
-
 	static constexpr char defaultName[] = "default";
 	static constexpr uint8 maxNameLength = 63;
 	static constexpr float boardWidth = 10.f;
@@ -66,7 +100,18 @@ struct Config {
 	static constexpr svec2 maxHomeSize = { 101, 50 };
 	static constexpr uint16 maxFavorMax = UINT16_MAX / 4;
 
-	Config();
+	svec2 homeSize = { 9, 4 };	// neither width nor height shall exceed UINT8_MAX
+	uint8 battlePass = randomLimit / 2;
+	Option opts = favorTotal | terrainRules | dragonStraight;
+	uint16 victoryPointsNum = 21;
+	uint16 setPieceBattleNum = 10;
+	uint16 favorLimit = 1;
+	array<uint16, tileLim> tileAmounts = { 14, 9, 5, 7 };
+	array<uint16, tileLim> middleAmounts = { 1, 1, 1, 1 };
+	array<uint16, pieceLim> pieceAmounts = { 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 };
+	uint16 winThrone = 1;
+	uint16 winFortress = 1;
+	uint16 capturers = 1 << uint8(PieceType::throne);	// bitmask of piece types that can capture fortresses
 
 	Config& checkValues();
 	uint16 dataSize(const string& name) const;
@@ -84,7 +129,7 @@ struct Config {
 };
 
 inline uint16 Config::dataSize(const string& name) const {
-	return uint16(sizeof(uint8) + name.length() + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + Tile::lim * sizeof(uint16) + Tile::lim * sizeof(uint16) + Piece::lim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers));
+	return uint16(sizeof(uint8) + name.length() + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceLim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers));
 }
 
 inline uint16 Config::countTiles() const {
@@ -179,15 +224,15 @@ constexpr TileTop::TileTop(T tileTop) :
 	type(Type(tileTop))
 {}
 
-inline constexpr TileTop::operator Type() const {
+constexpr TileTop::operator Type() const {
 	return type;
 }
 
-inline constexpr bool TileTop::isFarm() const {
+constexpr bool TileTop::isFarm() const {
 	return type < none && !(type % 2);
 }
 
-inline constexpr bool TileTop::isCity() const {
+constexpr bool TileTop::isCity() const {
 	return type < none && type % 2;
 }
 
@@ -203,7 +248,7 @@ constexpr TileTop::Type TileTop::invert() const {
 	return isOwn() ? type + 2 : isEne() ? type - 2 : type;
 }
 
-inline constexpr const char* TileTop::name() const {
+constexpr const char* TileTop::name() const {
 	return names[type%2];
 }
 
@@ -224,183 +269,22 @@ private:
 	};
 
 	struct Comp {
-		bool operator()(Node a, Node b);
+		bool operator()(Node a, Node b) const;
 	};
 
 public:
 	static vector<uint16> travelDist(uint16 src, uint16 dlim, svec2 size, bool (*stepable)(uint16, void*), void* data);
 };
 
-inline bool Dijkstra::Comp::operator()(Node a, Node b) {
+inline bool Dijkstra::Comp::operator()(Node a, Node b) const {
 	return a.dst > b.dst;
-}
-
-// tile container
-class TileCol {
-private:
-	uptr<Tile[]> tl;
-	uint16 home, extra, size;	// home = number of home tiles, extra = home + board width, size = all tiles
-
-public:
-	TileCol();
-
-	void update(const Config& conf);
-	uint16 getHome() const;
-	uint16 getExtra() const;
-	uint16 getSize() const;
-
-	Tile& operator[](uint16 i);
-	const Tile& operator[](uint16 i) const;
-	Tile* begin();
-	const Tile* begin() const;
-	Tile* end();
-	const Tile* end() const;
-	Tile* ene(pdift i = 0);
-	const Tile* ene(pdift i = 0) const;
-	Tile* mid(pdift i = 0);
-	const Tile* mid(pdift i = 0) const;
-	Tile* own(pdift i = 0);
-	const Tile* own(pdift i = 0) const;
-};
-
-inline uint16 TileCol::getHome() const {
-	return home;
-}
-
-inline uint16 TileCol::getExtra() const {
-	return extra;
-}
-
-inline uint16 TileCol::getSize() const {
-	return size;
-}
-
-inline Tile& TileCol::operator[](uint16 i) {
-	return tl[i];
-}
-
-inline const Tile& TileCol::operator[](uint16 i) const {
-	return tl[i];
-}
-
-inline Tile* TileCol::begin() {
-	return tl.get();
-}
-
-inline const Tile* TileCol::begin() const {
-	return tl.get();
-}
-
-inline Tile* TileCol::end() {
-	return &tl[size];
-}
-
-inline const Tile* TileCol::end() const {
-	return &tl[size];
-}
-
-inline Tile* TileCol::ene(pdift i) {
-	return &tl[i];
-}
-
-inline const Tile* TileCol::ene(pdift i) const {
-	return &tl[i];
-}
-
-inline Tile* TileCol::mid(pdift i) {
-	return &tl[home+i];
-}
-
-inline const Tile* TileCol::mid(pdift i) const {
-	return &tl[home+i];
-}
-
-inline Tile* TileCol::own(pdift i) {
-	return &tl[extra+i];
-}
-
-inline const Tile* TileCol::own(pdift i) const {
-	return &tl[extra+i];
-}
-
-// piece container
-class PieceCol {
-private:
-	uptr<Piece[]> pc;
-	uint16 num, size;	// num = number of one player's pieces, i.e. size / 2
-
-public:
-	PieceCol();
-
-	void update(const Config& conf, bool regular);
-	uint16 getNum() const;
-	uint16 getSize() const;
-
-	Piece& operator[](uint16 i);
-	const Piece& operator[](uint16 i) const;
-	Piece* begin();
-	const Piece* begin() const;
-	Piece* end();
-	const Piece* end() const;
-	Piece* own(pdift i = 0);
-	const Piece* own(pdift i = 0) const;
-	Piece* ene(pdift i = 0);
-	const Piece* ene(pdift i = 0) const;
-};
-
-inline uint16 PieceCol::getNum() const {
-	return num;
-}
-
-inline uint16 PieceCol::getSize() const {
-	return size;
-}
-
-inline Piece& PieceCol::operator[](uint16 i) {
-	return pc[i];
-}
-
-inline const Piece& PieceCol::operator[](uint16 i) const {
-	return pc[i];
-}
-
-inline Piece* PieceCol::begin() {
-	return pc.get();
-}
-
-inline const Piece* PieceCol::begin() const {
-	return pc.get();
-}
-
-inline Piece* PieceCol::end() {
-	return &pc[size];
-}
-
-inline const Piece* PieceCol::end() const {
-	return &pc[size];
-}
-
-inline Piece* PieceCol::own(pdift i) {
-	return &pc[i];
-}
-
-inline const Piece* PieceCol::own(pdift i) const {
-	return &pc[i];
-}
-
-inline Piece* PieceCol::ene(pdift i) {
-	return &pc[num+i];
-}
-
-inline const Piece* PieceCol::ene(pdift i) const {
-	return &pc[num+i];
 }
 
 // setup save/load data
 struct Setup {
-	vector<pair<svec2, Tile::Type>> tiles;
-	vector<pair<uint16, Tile::Type>> mids;
-	vector<pair<svec2, Piece::Type>> pieces;
+	vector<pair<svec2, TileType>> tiles;
+	vector<pair<uint16, TileType>> mids;
+	vector<pair<svec2, PieceType>> pieces;
 
 	void clear();
 };

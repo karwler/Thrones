@@ -1,14 +1,13 @@
 #include "audioSys.h"
 #include "fileSys.h"
-#include "windowSys.h"
 #include <iostream>
 
-AudioSys::AudioSys(WindowSys* win) :
-	alen(0)
+AudioSys::AudioSys(const uint8& avolume) :
+	volume(avolume)
 {
 	SDL_AudioSpec spec = Sound::defaultSpec;
 	spec.callback = callback;
-	spec.userdata = win;
+	spec.userdata = this;
 	if (device = SDL_OpenAudioDevice(nullptr, SDL_FALSE, &spec, &aspec, SDL_AUDIO_ALLOW_ANY_CHANGE); !device)
 		throw std::runtime_error("failed to initialize audio system");
 	if (aspec.freq != spec.freq)
@@ -26,7 +25,7 @@ AudioSys::~AudioSys() {
 		sound.free();
 }
 
-void AudioSys::play(const string& name, uint8 volume) {
+void AudioSys::play(const string& name) {
 	if (!volume)
 		return;
 	umap<string, Sound>::iterator it = sounds.find(name);
@@ -39,16 +38,16 @@ void AudioSys::play(const string& name, uint8 volume) {
 }
 
 void AudioSys::callback(void* udata, uint8* stream, int len) {
-	WindowSys* win = static_cast<WindowSys*>(udata);
+	AudioSys* as = static_cast<AudioSys*>(udata);
 	SDL_memset(stream, 0, uint(len));
-	if (uint32(len) > win->getAudio()->alen) {
-		if (!win->getAudio()->alen) {
-			SDL_PauseAudioDevice(win->getAudio()->device, SDL_TRUE);
+	if (uint32(len) > as->alen) {
+		if (!as->alen) {
+			SDL_PauseAudioDevice(as->device, SDL_TRUE);
 			return;
 		}
-		len = int(win->getAudio()->alen);
+		len = int(as->alen);
 	}
-	SDL_MixAudioFormat(stream, win->getAudio()->apos, win->getAudio()->aspec.format, uint32(len), win->getSets()->avolume);
-	win->getAudio()->apos += len;
-	win->getAudio()->alen -= uint32(len);
+	SDL_MixAudioFormat(stream, as->apos, as->aspec.format, uint32(len), as->volume);
+	as->apos += len;
+	as->alen -= uint32(len);
 }

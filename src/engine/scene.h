@@ -1,8 +1,8 @@
 #pragma once
 
-#include "prog/types.h"
 #include "utils/context.h"
 #include "utils/layouts.h"
+#include "utils/objects.h"
 #include <queue>
 
 // additional data for rendering objects
@@ -26,7 +26,7 @@ public:
 	static constexpr vec3 up = { 0.f, 1.f, 0.f };
 	static constexpr vec3 center = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f };
 
-	State state;
+	State state = State::stationary;
 	float pmax, ymax;
 private:
 	vec2 prot;			// pitch and yaw record of position relative to lat
@@ -142,11 +142,11 @@ inline bool Animation::operator==(const Animation& ani) const {
 // handles more back-end UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
 public:
-	Camera camera;
+	Camera camera = Camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup);
 private:
-	Interactable* select;	// currently selected widget/object
-	Interactable* firstSelect;
-	Interactable* capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
+	Interactable* select = nullptr;	// currently selected widget/object
+	Interactable* firstSelect = nullptr;
+	Interactable* capture = nullptr;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 	uptr<RootLayout> layout;
 	uptr<Popup> popup;
 	vector<Overlay*> overlays;
@@ -155,14 +155,13 @@ private:
 	umap<string, Mesh> meshes;
 	umap<string, Material> matls;
 	umap<string, Texture> texes;
-	Light light;
+	Light light = Light(vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f);
 	ClickStamp cstamp;	// data about last mouse click
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
 
 public:
-	Scene();
 	~Scene();
 
 	void draw();

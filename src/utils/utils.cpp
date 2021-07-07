@@ -72,7 +72,7 @@ void Texture::close() {
 	}
 }
 
-void Texture::load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter) {
+void Texture::load(const SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter) {
 	glGenTextures(1, &id);
 	upload(img, iformat, pformat);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
@@ -81,7 +81,7 @@ void Texture::load(SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 }
 
-void Texture::upload(SDL_Surface* img, GLint iformat, GLenum pformat) {
+void Texture::upload(const SDL_Surface* img, GLint iformat, GLenum pformat) {
 	res = ivec2(img->w, img->h);
 	glBindTexture(GL_TEXTURE_2D, id);
 	glTexImage2D(GL_TEXTURE_2D, 0, iformat, res.x, res.y, 0, pformat, GL_UNSIGNED_BYTE, img->pixels);

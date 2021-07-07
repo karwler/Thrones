@@ -1,16 +1,11 @@
-#include "engine/inputSys.h"
 #include "engine/scene.h"
+#include "engine/inputSys.h"
 #include "engine/world.h"
+#include "prog/board.h"
 #include "prog/progs.h"
 #include <glm/gtc/matrix_inverse.hpp>
 
-// GMESH
-
-Mesh::Mesh() :
-	vao(0),
-	ecnt(0),
-	shape(0)
-{}
+// MESH
 
 Mesh::Mesh(const vector<Vertex>& vertices, const vector<GLushort>& elements, uint8 type) :
 	ecnt(uint16(elements.size())),
@@ -84,16 +79,11 @@ void Object::setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& 
 	norm = glm::inverseTranspose(mat3(model));
 }
 
-// GAME OBJECT
+// BOARD OBJECT
 
 BoardObject::BoardObject(const vec3& position, float rotation, float size, const Mesh* model, const Material* material, GLuint texture, bool visible, float alpha) :
 	Object(position, vec3(0.f, rotation, 0.f), vec3(size), model, material, texture, visible),
-	alphaFactor(alpha),
-	hgcall(nullptr),
-	ulcall(nullptr),
-	urcall(nullptr),
-	diffuseFactor(1.f),
-	emission(EMI_NONE)
+	alphaFactor(alpha)
 {}
 
 void BoardObject::draw() const {
@@ -221,13 +211,13 @@ void BoardObject::onInputUp(Binding::Type bind) {
 
 void BoardObject::onNavSelect(Direction dir) {
 	svec2 mov = swap(uint16(dir.positive() ? 1 : -1), uint16(0), dir.vertical());
-	for (svec2 gpos = World::game()->board.ptog(getPos()) + mov; inRange(gpos, svec2(0), World::game()->board.boardLimit()); gpos += mov) {
-		if (Piece* pce = World::game()->board.findOccupant(gpos); pce && pce->rigid) {
+	for (svec2 gpos = World::game()->board->ptog(getPos()) + mov; inRange(gpos, svec2(0), World::game()->board->boardLimit()); gpos += mov) {
+		if (Piece* pce = World::game()->board->findOccupant(gpos); pce && pce->rigid) {
 			World::state()->objectDragPos = vec2(pce->getPos().x, pce->getPos().z);
 			World::scene()->updateSelect(pce);
 			return;
 		}
-		if (Tile* til = World::game()->board.getTile(gpos); til->rigid) {
+		if (Tile* til = World::game()->board->getTile(gpos); til->rigid) {
 			World::state()->objectDragPos = vec2(til->getPos().x, til->getPos().z);
 			World::scene()->updateSelect(til);
 			return;
@@ -250,14 +240,12 @@ void BoardObject::setEmission(Emission emi) {
 // TILE
 
 Tile::Tile(const vec3& position, float size, bool visible) :
-	BoardObject(position, 0.f, size, World::scene()->mesh("tile"), World::scene()->material("empty"), World::scene()->texture(names[empty]), visible, 0.f),
-	type(empty),
-	breached(false)
+	BoardObject(position, 0.f, size, World::scene()->mesh("tile"), World::scene()->material("empty"), World::scene()->texture(tileNames[uint8(TileType::empty)]), visible, 0.f)
 {}
 
 #ifndef OPENGLES
 void Tile::drawDepth() const {
-	if (type != empty)
+	if (type != TileType::empty)
 		Object::drawDepth();
 }
 
@@ -294,7 +282,7 @@ void Tile::onHover() {
 }
 
 void Tile::onUnhover() {
-	alphaFactor = type != empty ? 1.f : 0.f;
+	alphaFactor = type != TileType::empty ? 1.f : 0.f;
 	setEmission(getEmission() & ~EMI_SEL);
 }
 
@@ -302,12 +290,12 @@ void Tile::onCancelCapture() {
 	show = true;
 }
 
-void Tile::setType(Type newType) {
+void Tile::setType(TileType newType) {
 	type = newType;
-	alphaFactor = type != empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
+	alphaFactor = type != TileType::empty || (getEmission() & EMI_SEL) ? 1.f : 0.f;
 	mesh = World::scene()->mesh(pickMesh());
-	matl = World::scene()->material(type != empty ? "tile" : "empty");
-	tex = World::scene()->texture(names[type]);
+	matl = World::scene()->material(type != TileType::empty ? "tile" : "empty");
+	tex = World::scene()->texture(tileNames[uint8(type)]);
 }
 
 void Tile::setBreached(bool yes) {
@@ -319,20 +307,30 @@ void Tile::setBreached(bool yes) {
 void Tile::setInteractivity(Interact lvl, bool dim) {
 	rigid = lvl != Interact::ignore;
 	setEmission(dim || breached ? getEmission() | EMI_DIM : getEmission() & ~EMI_DIM);
-	ulcall = lvl == Interact::interact && type != empty ? &Program::eventMoveTile : nullptr;
+	ulcall = lvl == Interact::interact && type != TileType::empty ? &Program::eventMoveTile : nullptr;
 }
 
 void Tile::setEmission(Emission emi) {
 	BoardObject::setEmission(emi);
-	if (TileTop top = World::game()->board.findTileTop(this); top != TileTop::none)
-		World::game()->board.getTileTop(top)->setEmission(emi);
+	if (TileTop top = World::game()->board->findTileTop(this); top != TileTop::none)
+		World::game()->board->getTileTop(top)->setEmission(emi);
+}
+
+// TILE COL
+
+void TileCol::update(const Config& conf) {
+	if (uint16 cnt = conf.homeSize.x * conf.homeSize.y; cnt != home) {
+		home = cnt;
+		extra = home + conf.homeSize.x;
+		size = extra + home;
+		tl = std::make_unique<Tile[]>(size);
+	}
 }
 
 // PIECE
 
 Piece::Piece(const vec3& position, float rotation, float size, const Material* material) :
-	BoardObject(position, rotation, size, nullptr, material, World::scene()->texture(), false, 1.f),
-	lastFortress(UINT16_MAX)
+	BoardObject(position, rotation, size, nullptr, material, World::scene()->texture(), false, 1.f)
 {}
 
 #ifndef OPENGLES
@@ -374,15 +372,15 @@ void Piece::onUndrag(uint8 mBut) {
 }
 
 void Piece::onHover() {
-	if (setEmission(getEmission() | EMI_SEL); World::game()->board.pieceOnBoard(this)) {
-		Tile* til = World::game()->board.getTile(World::game()->board.ptog(getPos()));
+	if (setEmission(getEmission() | EMI_SEL); World::game()->board->pieceOnBoard(this)) {
+		Tile* til = World::game()->board->getTile(World::game()->board->ptog(getPos()));
 		til->setEmission(til->getEmission() | EMI_SEL);
 	}
 }
 
 void Piece::onUnhover() {
-	if (setEmission(getEmission() & ~EMI_SEL); World::game()->board.pieceOnBoard(this)) {	// in case there is no tile (especially when disabling the piece)
-		Tile* til = World::game()->board.getTile(World::game()->board.ptog(getPos()));
+	if (setEmission(getEmission() & ~EMI_SEL); World::game()->board->pieceOnBoard(this)) {	// in case there is no tile (especially when disabling the piece)
+		Tile* til = World::game()->board->getTile(World::game()->board->ptog(getPos()));
 		til->setEmission(til->getEmission() & ~EMI_SEL);
 	}
 }
@@ -392,25 +390,25 @@ void Piece::onCancelCapture() {
 	SDL_ShowCursor(SDL_ENABLE);
 }
 
-void Piece::setType(Type newType) {
+void Piece::setType(PieceType newType) {
 	type = newType;
-	mesh = World::scene()->mesh(names[type]);
+	mesh = World::scene()->mesh(pieceNames[uint8(type)]);
 }
 
 void Piece::updatePos(svec2 bpos, bool forceRigid) {
-	svec2 oldPos = World::game()->board.ptog(getPos());
-	if (setPos(World::game()->board.gtop(bpos)); !World::game()->board.pieceOnBoard(this))
+	svec2 oldPos = World::game()->board->ptog(getPos());
+	if (setPos(World::game()->board->gtop(bpos)); !World::game()->board->pieceOnBoard(this))
 		setActive(false);
 	else if (show = true; forceRigid)
 		rigid = true;
 
 	// needlessly complicated selection update because of retarded controller support
 	if (World::scene()->getSelect() == this) {
-		if (Piece* pce = World::game()->board.findOccupant(oldPos))
+		if (Piece* pce = World::game()->board->findOccupant(oldPos))
 			World::scene()->updateSelect(pce);
-		else if (inRange(oldPos, svec2(0), World::game()->board.boardLimit()))
-			World::scene()->updateSelect(World::game()->board.getTile(oldPos));
-	} else if (BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getSelect()); bob && World::game()->board.ptog(getPos()) == World::game()->board.ptog(bob->getPos()))
+		else if (inRange(oldPos, svec2(0), World::game()->board->boardLimit()))
+			World::scene()->updateSelect(World::game()->board->getTile(oldPos));
+	} else if (BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getSelect()); bob && World::game()->board->ptog(getPos()) == World::game()->board->ptog(bob->getPos()))
 		World::scene()->updateSelect(this);
 }
 
@@ -424,12 +422,22 @@ void Piece::setInteractivity(bool on, bool dim, GCall holdCall, GCall leftCall, 
 
 pair<uint8, uint8> Piece::firingArea() const {
 	switch (type) {
-	case crossbowmen:
+	case PieceType::crossbowmen:
 		return pair(1, 1);
-	case catapult:
+	case PieceType::catapult:
 		return pair(1, 2);
-	case trebuchet:
+	case PieceType::trebuchet:
 		return pair(3, 3);
 	}
 	return pair(0, 0);
+}
+
+// PIECE COL
+
+void PieceCol::update(const Config& conf, bool regular) {
+	if (uint16 cnt = (conf.opts & Config::setPieceBattle) && regular ? std::min(conf.countPieces(), conf.setPieceBattleNum) : conf.countPieces(); cnt != num) {
+		num = cnt;
+		size = cnt * 2;
+		pc = std::make_unique<Piece[]>(size);
+	}
 }

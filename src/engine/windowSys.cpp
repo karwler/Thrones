@@ -140,7 +140,7 @@ string FontSet::init(string name) {
 						break;
 					}
 				if (!tmp)
-					throw std::runtime_error(string("failed to find a font:") + linend + TTF_GetError());
+					throw std::runtime_error(string("Failed to find a font:") + linend + TTF_GetError());
 			}
 		}
 	}
@@ -221,19 +221,8 @@ void WindowSys::Loader::addLine(const string& str, WindowSys* win) {
 // WINDOW SYS
 
 int WindowSys::start(const Arguments& args) {
-	audio = nullptr;
-	inputSys = nullptr;
-	program = nullptr;
-	scene = nullptr;
-	sets = nullptr;
 	window = nullptr;
 	context = nullptr;
-	geom = nullptr;
-#ifndef OPENGLES
-	depth = nullptr;
-#endif
-	gui = nullptr;
-	fonts = nullptr;
 	run = true;
 	cursorHeight = 18;
 
@@ -318,9 +307,6 @@ void WindowSys::init(const Arguments& args) {
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
 	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
-#if SDL_VERSION_ATLEAST(2, 0, 9)
-	SDL_EventState(SDL_DISPLAYEVENT, SDL_DISABLE);
-#endif
 	SDL_EventState(SDL_TEXTEDITING, SDL_DISABLE);
 	SDL_EventState(SDL_KEYMAPCHANGED, SDL_DISABLE);
 	SDL_EventState(SDL_JOYBALLMOTION, SDL_DISABLE);
@@ -335,11 +321,12 @@ void WindowSys::init(const Arguments& args) {
 	SDL_EventState(SDL_DROPCOMPLETE, SDL_DISABLE);
 	SDL_EventState(SDL_AUDIODEVICEADDED, SDL_DISABLE);
 	SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_DISABLE);
-#if SDL_VERSION_ATLEAST(2, 0, 9)
-	SDL_EventState(SDL_SENSORUPDATE, SDL_DISABLE);
-#endif
 	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
+#if SDL_VERSION_ATLEAST(2, 0, 9)
+	SDL_EventState(SDL_DISPLAYEVENT, SDL_DISABLE);
+	SDL_EventState(SDL_SENSORUPDATE, SDL_DISABLE);
+#endif
 	SDL_StopTextInput();
 
 	FileSys::init(args);
@@ -364,16 +351,15 @@ void WindowSys::load(Loader* loader) {
 #endif
 		inputSys = new InputSys;
 		sets = new Settings(FileSys::loadSettings(inputSys));
-		fonts = new FontSet();
+		fonts = new FontSet;
 		sets->font = fonts->init(sets->font);
 		createWindow();
 		loader->addLine("loading audio", this);
 		break;
 	case Loader::State::audio:
 		try {
-			audio = new AudioSys(this);
+			audio = new AudioSys(sets->avolume);
 		} catch (const std::runtime_error& err) {
-			delete audio;
 			std::cerr << err.what() << std::endl;
 		}
 		loader->addLine("loading objects", this);
@@ -429,7 +415,7 @@ void WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_RELEASE_BEHAVIOR, 0);
 #endif
 #endif
-	if (!(window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags)))
+	if (window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags); !window)
 		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
 #ifndef __ANDROID__
 	checkCurDisplay();
@@ -461,7 +447,7 @@ void WindowSys::createWindow() {
 #endif
 
 	// create context and set up rendering
-	if (!(context = SDL_GL_CreateContext(window)))
+	if (context = SDL_GL_CreateContext(window); !context)
 		throw std::runtime_error(string("failed to create context:") + linend + SDL_GetError());
 	setSwapInterval();
 #if !defined(OPENGLES) && !defined(__APPLE__)

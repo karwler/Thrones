@@ -1,7 +1,9 @@
+#include "engine/world.h"
+#include "board.h"
 #include "engine/fileSys.h"
 #include "engine/inputSys.h"
 #include "engine/scene.h"
-#include "engine/world.h"
+#include "server/server.h"
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
 #include <curl/curl.h>
 #endif
@@ -271,7 +273,7 @@ uptr<RootLayout> GuiGen::makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO
 			rio.kick = new Label(kick.length, std::move(kick.text))
 		});
 
-	vector<Widget*> menu = createConfigList(wio, host ? confs.at(startConfig) : World::game()->board.config, host, false);
+	vector<Widget*> menu = createConfigList(wio, host ? confs.at(startConfig) : World::game()->board->config, host, false);
 	Text cfgt("Configuration:", lineHeight);
 	Text copy("Copy", lineHeight);
 	vector<Widget*> top1 = {
@@ -334,17 +336,17 @@ vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool 
 	initlist<const char*>::iterator itxs = txs.begin();
 	int descLength = Text::maxLen(txs.begin(), txs.end(), lineHeight);
 
-	string scTip = "Chance of breaching a " + string(Tile::names[Tile::fortress]);
-	string tileTips[Tile::lim];
-	for (uint8 i = 0; i < Tile::lim; ++i)
-		tileTips[i] = "Number of " + string(Tile::names[i]) + " tiles per homeland";
+	string scTip = "Chance of breaching a " + string(tileNames[uint8(TileType::fortress)]);
+	string tileTips[tileLim];
+	for (uint8 i = 0; i < tileLim; ++i)
+		tileTips[i] = "Number of " + string(tileNames[i]) + " tiles per homeland";
 	constexpr char fortressTip[] = "(calculated automatically to fill the remaining free tiles)";
-	string middleTips[Tile::lim];
-	for (uint8 i = 0; i < Tile::lim; ++i)
-		middleTips[i] = "Number of " + string(Tile::names[i]) + " tiles in the middle row per player";
-	string pieceTips[Piece::lim];
-	for (uint8 i = 0; i < Piece::lim; ++i)
-		pieceTips[i] = "Number of " + string(Piece::names[i]) + " pieces per player";
+	string middleTips[tileLim];
+	for (uint8 i = 0; i < tileLim; ++i)
+		middleTips[i] = "Number of " + string(tileNames[i]) + " tiles in the middle row per player";
+	string pieceTips[pieceLim];
+	for (uint8 i = 0; i < pieceLim; ++i)
+		pieceTips[i] = "Number of " + string(pieceNames[i]) + " pieces per player";
 	constexpr char fortTip[] = "Number of fortresses that need to be captured in order to win";
 	constexpr char throneTip[] = "Number of thrones that need to be killed in order to win";
 	Text equidistant("centered:", lineHeight);
@@ -394,63 +396,63 @@ vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool 
 		wio.terrainRules = new CheckBox(lineHeight, cfg.opts & Config::terrainRules, update, update, makeTooltip("Use terrain related rules"))
 	}, {
 		new Label(descLength, *itxs++),
-		wio.dragonLate = new CheckBox(lineHeight, cfg.opts & Config::dragonLate, update, update, makeTooltip((firstUpper(Piece::names[Piece::dragon]) + " can be placed later during the match on a homeland " + Tile::names[Tile::fortress]).c_str()))
+		wio.dragonLate = new CheckBox(lineHeight, cfg.opts & Config::dragonLate, update, update, makeTooltip((firstUpper(pieceNames[uint8(PieceType::dragon)]) + " can be placed later during the match on a homeland " + tileNames[uint8(TileType::fortress)]).c_str()))
 	}, {
 		new Label(descLength, *itxs++),
-		wio.dragonStraight = new CheckBox(lineHeight, cfg.opts & Config::dragonStraight, update, update, makeTooltip((firstUpper(Piece::names[Piece::dragon]) + " moves in a straight line").c_str()))
+		wio.dragonStraight = new CheckBox(lineHeight, cfg.opts & Config::dragonStraight, update, update, makeTooltip((firstUpper(pieceNames[uint8(PieceType::dragon)]) + " moves in a straight line").c_str()))
 	}, {
 		new Label(descLength, *itxs++)
 	} };
-	lines0.back().resize(Piece::lim + 1);
-	for (uint8 i = 0; i < Piece::lim; ++i)
-		lines0.back()[i+1] = wio.capturers[i] = new Icon(lineHeight, string(), iupdate, iupdate, nullptr, makeTooltip((firstUpper(Piece::names[i]) + " can capture fortresses").c_str()), 1.f, Label::Alignment::left, true, World::scene()->texture(Piece::names[i]), vec4(1.f), cfg.capturers & (1 << i));
+	lines0.back().resize(pieceLim + 1);
+	for (uint8 i = 0; i < pieceLim; ++i)
+		lines0.back()[i+1] = wio.capturers[i] = new Icon(lineHeight, string(), iupdate, iupdate, nullptr, makeTooltip((firstUpper(pieceNames[i]) + " can capture fortresses").c_str()), 1.f, Label::Alignment::left, true, World::scene()->texture(pieceNames[i]), vec4(1.f), cfg.capturers & (1 << i));
 	if (active)
 		lines0[6].insert(lines0[6].begin() + 1, wio.battleSL = new Slider(1.f, cfg.battlePass, 0, Config::randomLimit, 10, update, &Program::eventPrcSliderUpdate, makeTooltip(scTip.c_str())));
 
-	vector<vector<Widget*>> lines1(Tile::lim + 2);
-	for (uint8 i = 0; i < Tile::lim; ++i)
+	vector<vector<Widget*>> lines1(tileLim + 2);
+	for (uint8 i = 0; i < tileLim; ++i)
 		lines1[i] = {
-			new Label(descLength, firstUpper(Tile::names[i])),
+			new Label(descLength, firstUpper(tileNames[i])),
 			wio.tiles[i] = new LabelEdit(amtWidth, toStr(cfg.tileAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(tileTips[i].c_str()) : makeTooltipL((tileTips[i] + '\n' + fortressTip).c_str()))
 		};
-	lines1[Tile::lim] = {
-		new Label(descLength, firstUpper(Tile::names[Tile::fortress])),
-		wio.tileFortress = new Label(1.f, tileFortressString(cfg), nullptr, nullptr, makeTooltipL(("Number of " + string(Tile::names[Tile::fortress]) + " tiles per homeland\n" + fortressTip).c_str()))
+	lines1[tileLim] = {
+		new Label(descLength, firstUpper(tileNames[uint8(TileType::fortress)])),
+		wio.tileFortress = new Label(1.f, tileFortressString(cfg), nullptr, nullptr, makeTooltipL(("Number of " + string(tileNames[uint8(TileType::fortress)]) + " tiles per homeland\n" + fortressTip).c_str()))
 	};
-	lines1[Tile::lim+1] = {
+	lines1[tileLim+1] = {
 		new Label(descLength, *itxs++),
 		wio.winFortress = new LabelEdit(amtWidth, toStr(cfg.winFortress), update, nullptr, nullptr, nullptr, makeTooltip(fortTip))
 	};
 	if (active) {
 		uint16 rest = cfg.countFreeTiles();
-		for (uint8 i = 0; i < Tile::lim; ++i)
+		for (uint8 i = 0; i < tileLim; ++i)
 			lines1[i].insert(lines1[i].begin() + 1, new Slider(1.f, cfg.tileAmounts[i], cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, cfg.tileAmounts[i] + rest, 1, update, &Program::eventTileSliderUpdate, makeTooltip(tileTips[i].c_str())));
-		lines1[Tile::lim+1].insert(lines1[Tile::lim+1].begin() + 1, new Slider(1.f, cfg.winFortress, 0, cfg.countFreeTiles(), 1, update, &Program::eventSLUpdateLE, makeTooltip(fortTip)));
+		lines1[tileLim+1].insert(lines1[tileLim+1].begin() + 1, new Slider(1.f, cfg.winFortress, 0, cfg.countFreeTiles(), 1, update, &Program::eventSLUpdateLE, makeTooltip(fortTip)));
 	}
 
-	vector<vector<Widget*>> lines2(Tile::lim + 1);
-	for (uint8 i = 0; i < Tile::lim; ++i)
+	vector<vector<Widget*>> lines2(tileLim + 1);
+	for (uint8 i = 0; i < tileLim; ++i)
 		lines2[i] = {
-			new Label(descLength, firstUpper(Tile::names[i])),
+			new Label(descLength, firstUpper(tileNames[i])),
 			wio.middles[i] = new LabelEdit(amtWidth, toStr(cfg.middleAmounts[i]), update, nullptr, nullptr, nullptr, i < lines1.size() - 1 ? makeTooltip(middleTips[i].c_str()) : makeTooltipL((tileTips[i] + '\n' + fortressTip).c_str()))
 	};
 	lines2.back() = {
-		new Label(descLength, firstUpper(Tile::names[Tile::fortress])),
-		wio.middleFortress = new Label(1.f, middleFortressString(cfg), nullptr, nullptr, makeTooltipL(("Number of " + string(Tile::names[Tile::fortress]) + " tiles in the middle row\n" + fortressTip).c_str()))
+		new Label(descLength, firstUpper(tileNames[uint8(TileType::fortress)])),
+		wio.middleFortress = new Label(1.f, middleFortressString(cfg), nullptr, nullptr, makeTooltipL(("Number of " + string(tileNames[uint8(TileType::fortress)]) + " tiles in the middle row\n" + fortressTip).c_str()))
 	};
 	if (active) {
 		uint16 rest = cfg.countFreeMiddles();
-		for (uint8 i = 0; i < Tile::lim; ++i)
+		for (uint8 i = 0; i < tileLim; ++i)
 			lines2[i].insert(lines2[i].begin() + 1, new Slider(1.f, cfg.middleAmounts[i], 0, cfg.middleAmounts[i] + rest, 1, update, &Program::eventMiddleSliderUpdate, makeTooltip(middleTips[i].c_str())));
 	}
 
-	vector<vector<Widget*>> lines3(Piece::lim + 2);
-	for (uint8 i = 0; i < Piece::lim; ++i)
+	vector<vector<Widget*>> lines3(pieceLim + 2);
+	for (uint8 i = 0; i < pieceLim; ++i)
 		lines3[i] = {
-			new Label(descLength, firstUpper(Piece::names[i])),
+			new Label(descLength, firstUpper(pieceNames[i])),
 			wio.pieces[i] = new LabelEdit(amtWidth, toStr(cfg.pieceAmounts[i]), update, nullptr, nullptr, nullptr, makeTooltip(pieceTips[i].c_str()))
 		};
-	lines3[Piece::lim] = {
+	lines3[pieceLim] = {
 		new Label(descLength, "Total"),
 		wio.pieceTotal = new Label(1.f, pieceTotalString(cfg), nullptr, nullptr, makeTooltip("Total amount of pieces out of the maximum possible number of pieces per player"))
 	};
@@ -460,13 +462,13 @@ vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool 
 	};
 	if (active) {
 		uint16 rest = cfg.countFreePieces();
-		for (uint8 i = 0; i < Piece::lim; ++i)
+		for (uint8 i = 0; i < pieceLim; ++i)
 			lines3[i].insert(lines3[i].begin() + 1, new Slider(1.f, cfg.pieceAmounts[i], 0, cfg.pieceAmounts[i] + rest, 1, update, &Program::eventPieceSliderUpdate, makeTooltip(pieceTips[i].c_str())));
-		lines3.back().insert(lines3.back().begin() + 1, new Slider(1.f, cfg.winThrone, 0, cfg.pieceAmounts[Piece::throne], 1, update, &Program::eventSLUpdateLE, makeTooltip(throneTip)));
-	} else if (World::netcp() && (World::game()->board.config.opts & Config::setPieceBattle) && World::game()->board.config.setPieceBattleNum < World::game()->board.config.countPieces())
-		for (uint8 i = 0; i < Piece::lim; ++i)
-			if (lines3[i].push_back(new Label(amtWidth, toStr(World::game()->board.ownPieceAmts[i]), nullptr, nullptr, makeTooltip(("Number of ally " + string(Piece::names[i]) + " pieces").c_str()))); match)
-				lines3[i].push_back(new Label(amtWidth, toStr(World::game()->board.enePieceAmts[i]), nullptr, nullptr, makeTooltip(("Number of enemy " + string(Piece::names[i]) + " pieces").c_str())));
+		lines3.back().insert(lines3.back().begin() + 1, new Slider(1.f, cfg.winThrone, 0, cfg.pieceAmounts[uint8(PieceType::throne)], 1, update, &Program::eventSLUpdateLE, makeTooltip(throneTip)));
+	} else if (World::netcp() && (World::game()->board->config.opts & Config::setPieceBattle) && World::game()->board->config.setPieceBattleNum < World::game()->board->config.countPieces())
+		for (uint8 i = 0; i < pieceLim; ++i)
+			if (lines3[i].push_back(new Label(amtWidth, toStr(World::game()->board->ownPieceAmts[i]), nullptr, nullptr, makeTooltip(("Number of ally " + string(pieceNames[i]) + " pieces").c_str()))); match)
+				lines3[i].push_back(new Label(amtWidth, toStr(World::game()->board->enePieceAmts[i]), nullptr, nullptr, makeTooltip(("Number of enemy " + string(pieceNames[i]) + " pieces").c_str())));
 
 	sizet id = 0;
 	vector<Widget*> menu(lines0.size() + lines1.size() + lines2.size() + lines3.size() + 3);	// 3 title bars
@@ -539,8 +541,8 @@ uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*&
 }
 
 vector<Widget*> GuiGen::createBottomIcons(bool tiles) const {
-	uint8 size = tiles ? Tile::lim : Piece::lim;
-	const char* const* names = tiles ? Tile::names.data() : Piece::names.data();
+	uint8 size = tiles ? tileLim : pieceLim;
+	const char* const* names = tiles ? tileNames.data() : pieceNames.data();
 	vector<Widget*> ibot(size + 2);
 	ibot.front() = new Widget();
 	for (uint8 i = 0; i < size; ++i)
@@ -632,8 +634,8 @@ void GuiGen::openPopupPiecePicker(uint16 piecePicksLeft) const {
 	vector<Widget*> bot[2] = { vector<Widget*>(5), vector<Widget*>(5) };
 	for (uint8 r = 0, t = 0; r < 2; ++r)
 		for (uint8 i = 0; i < 5; ++i, ++t) {
-			bool more = World::game()->board.ownPieceAmts[t] < World::game()->board.config.pieceAmounts[t];
-			bot[r][i] = new Button(superHeight, more ? &Program::eventSetupPickPiece : nullptr, nullptr, makeTooltip(firstUpper(Piece::names[t]).c_str()), more ? 1.f : defaultDim, World::scene()->texture(Piece::names[t]), vec4(1.f));
+			bool more = World::game()->board->ownPieceAmts[t] < World::game()->board->config.pieceAmounts[t];
+			bot[r][i] = new Button(superHeight, more ? &Program::eventSetupPickPiece : nullptr, nullptr, makeTooltip(firstUpper(pieceNames[t]).c_str()), more ? 1.f : defaultDim, World::scene()->texture(pieceNames[t]), vec4(1.f));
 			if (more && !defSel)
 				defSel = bot[r][i];
 		}
@@ -686,7 +688,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		mio.turn = new Label(lineHeight, *isidt++, nullptr, nullptr, makeTooltip("Finish current turn"))
 	};
 	selected = mio.turn;
-	if (World::game()->board.config.opts & Config::homefront) {
+	if (World::game()->board->config.opts & Config::homefront) {
 		left.insert(left.end() - 1, {
 			mio.establish = new Icon(lineHeight, *isidt++, nullptr, nullptr, nullptr, makeTooltip("Respawn a piece")),
 			mio.rebuild = new Icon(lineHeight, *isidt++, nullptr, nullptr, nullptr, makeTooltip("Rebuild a fortress or farm")),
@@ -694,7 +696,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		});
 	} else
 		mio.rebuild = mio.establish = mio.spawn = nullptr;
-	if (World::game()->board.config.favorLimit && World::game()->board.ownPieceAmts[Piece::throne]) {
+	if (World::game()->board->config.favorLimit && World::game()->board->ownPieceAmts[uint8(PieceType::throne)]) {
 		for (sizet i = 0; i < mio.favors.size(); ++i)
 			mio.favors[i] = new Icon(iconSize, string(), nullptr, nullptr, nullptr, makeTooltip(firstUpper(favorNames[i]).c_str()), 1.f, Label::Alignment::center, true, World::scene()->texture(favorNames[i]), vec4(1.f));
 		left.push_back(new Widget(0));
@@ -704,11 +706,11 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		std::fill(mio.favors.begin(), mio.favors.end(), nullptr);
 
 	unplacedDragons = 0;
-	for (Piece* pce = World::game()->board.getOwnPieces(Piece::dragon); pce->getType() == Piece::dragon; ++pce)
+	for (Piece* pce = World::game()->board->getOwnPieces(PieceType::dragon); pce->getType() == PieceType::dragon; ++pce)
 		if (!pce->show)
 			++unplacedDragons;
 	if (unplacedDragons) {
-		mio.dragon = new Icon(iconSize, string(), nullptr, nullptr, nullptr, makeTooltip((string("Place ") + Piece::names[Piece::dragon]).c_str()), 1.f, Label::Alignment::left, true, World::scene()->texture(Piece::names[Piece::dragon]), vec4(1.f));
+		mio.dragon = new Icon(iconSize, string(), nullptr, nullptr, nullptr, makeTooltip((string("Place ") + pieceNames[uint8(PieceType::dragon)]).c_str()), 1.f, Label::Alignment::left, true, World::scene()->texture(pieceNames[uint8(PieceType::dragon)]), vec4(1.f));
 		left.push_back(new Layout(iconSize, { mio.dragon }, false, 0));
 	} else
 		mio.dragon = nullptr;
@@ -718,8 +720,8 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		new Layout(sideLength, std::move(left), true, lineSpacing),
 		nullptr
 	};
-	if (World::game()->board.config.opts & Config::victoryPoints) {
-		int plen = Text::strLen(string(numDigits(World::game()->board.config.victoryPointsNum), '0').c_str(), lineHeight);
+	if (World::game()->board->config.opts & Config::victoryPoints) {
+		int plen = Text::strLen(string(numDigits(World::game()->board->config.victoryPointsNum), '0').c_str(), lineHeight);
 		Text tit("Victory Points", lineHeight);
 		vector<Widget*> topb = {
 			new Widget(),
@@ -747,8 +749,8 @@ void GuiGen::openPopupSpawner() const {
 	vector<Widget*> bot[2] = { vector<Widget*>(4), vector<Widget*>(4) };
 	for (uint8 r = 0, t = 0; r < 2; ++r)
 		for (uint8 i = 0; i < 4; ++i, ++t) {
-			bool on = World::game()->board.pieceSpawnable(Piece::Type(t));
-			bot[r][i] = new Button(superHeight, on ? BCall(&Program::eventSpawnPiece) : nullptr, nullptr, makeTooltip(firstUpper(Piece::names[t]).c_str()), on ? 1.f : defaultDim, World::scene()->texture(Piece::names[t]), vec4(1.f));
+			bool on = World::game()->board->pieceSpawnable(PieceType(t));
+			bot[r][i] = new Button(superHeight, on ? BCall(&Program::eventSpawnPiece) : nullptr, nullptr, makeTooltip(firstUpper(pieceNames[t]).c_str()), on ? 1.f : defaultDim, World::scene()->texture(pieceNames[t]), vec4(1.f));
 			if (on && !defSel)
 				defSel = bot[r][i];
 		}
@@ -956,9 +958,9 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		Label* lbl = new Label(lineHeight, std::move(bnames[i]));
 		vector<Widget*> line = {
 			new Layout(descLength, { lbl, new Widget() }),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).keys, KeyGetter::Accept::keyboard, lbl),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).joys, KeyGetter::Accept::joystick, lbl),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).gpds, KeyGetter::Accept::gamepad, lbl),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).keys, Binding::Accept::keyboard, lbl),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).joys, Binding::Accept::joystick, lbl),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).gpds, Binding::Accept::gamepad, lbl),
 			new Layout(add.length, { new Label(lineHeight, std::move(add.text), &Program::eventAddKeyBinding, nullptr, makeTooltip(("Add a " + lbl->getText() + " binding").c_str()), 1.f, Label::Alignment::center) })
 		};
 		lns[bindingsStart+i] = new Layout(keyGetLineSize(Binding::Type(i)), std::move(line), false, lineSpacing);
@@ -973,15 +975,15 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 }
 
 template <class T>
-Layout* GuiGen::createKeyGetterList(Binding::Type bind, const vector<T>& refs, KeyGetter::Accept type, Label* lbl) const {
+Layout* GuiGen::createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const {
 	vector<Widget*> lst(refs.size());
 	for (sizet i = 0; i < refs.size(); ++i)
 		lst[i] = createKeyGetter(type, bind, i, lbl);
 	return new Layout(1.f, std::move(lst), true, lineSpacing);
 }
 
-KeyGetter* GuiGen::createKeyGetter(KeyGetter::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const {
-	return new KeyGetter(lineHeight, accept, bind, kid, &Program::eventSaveSettings, &Program::eventDelKeyBinding, makeTooltip((lbl->getText() + ' ' + KeyGetter::acceptNames[uint8(accept)] + " binding").c_str()));
+KeyGetter* GuiGen::createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const {
+	return new KeyGetter(lineHeight, accept, bind, kid, &Program::eventSaveSettings, &Program::eventDelKeyBinding, makeTooltip((lbl->getText() + ' ' + Binding::acceptNames[uint8(accept)] + " binding").c_str()));
 }
 
 SDL_DisplayMode GuiGen::fstrToDisp(const umap<string, uint32>& pixelformats, const string& str) const {
@@ -999,7 +1001,7 @@ int GuiGen::keyGetLineSize(Binding::Type bind) const {
 
 void GuiGen::openPopupKeyGetter(Binding::Type bind) const {
 	Text ms("Add " + bindingToFstr(bind) + " binding:", superHeight);
-	KeyGetter* kget = new KeyGetter(1.f, KeyGetter::Accept::any, bind, SIZE_MAX, &Program::eventSetNewBinding, &Program::eventClosePopup);
+	KeyGetter* kget = new KeyGetter(1.f, Binding::Accept::any, bind, SIZE_MAX, &Program::eventSetNewBinding, &Program::eventClosePopup);
 	vector<Widget*> con = {
 		new Label(1.f, std::move(ms.text)),
 		kget

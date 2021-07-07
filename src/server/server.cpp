@@ -285,12 +285,6 @@ void sendData(nsint socket, const uint8* data, uint len, bool webs) {
 
 // BUFFER
 
-Buffer::Buffer() :
-	data(std::make_unique<uint8[]>(sizeStep)),
-	size(sizeStep),
-	dlim(0)
-{}
-
 uint Buffer::pushHead(Code code, uint16 dlen) {
 	uint end = checkOver(dlim + dataHeadSize);
 	data[dlim] = uint8(code);

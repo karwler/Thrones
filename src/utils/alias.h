@@ -80,21 +80,39 @@ using glm::uvec4;
 using svec2 = glm::vec<2, uint16, glm::defaultp>;
 using mvec2 = glm::vec<2, sizet, glm::defaultp>;
 
-class Arguments;
 class AudioSys;
+class Board;
 class BoardObject;
 class Button;
+class CheckBox;
+class ComboBox;
+struct Config;
+class Context;
+class Icon;
 class InputSys;
+class Interactable;
+class KeyGetter;
 class Label;
 class LabelEdit;
 class Layout;
+class Mesh;
+class Navigator;
 class Netcp;
+class Overlay;
+class Piece;
+class Popup;
 class Program;
-class ProgMatch;
 class ProgState;
+class RootLayout;
 class Scene;
+class ScrollArea;
 struct Settings;
+struct Setup;
 class Slider;
+class TextBox;
+class Texture;
+class Tile;
+class Widget;
 class WindowSys;
 
 using BCall = void (Program::*)(Button*);
@@ -102,6 +120,77 @@ using GCall = void (Program::*)(BoardObject*, uint8);
 using CCall = void (Program::*)(uint, const string&);
 using SBCall = void (ProgState::*)();
 using SACall = void (ProgState::*)(float);
+
+constexpr float PI = float(M_PI);
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator++(T& a) {
+	return a = T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(1));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator++(T& a, int) {
+	T r = a;
+	a = T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(1));
+	return r;
+}
+
+template <class T, class U, std::enable_if_t<std::is_enum_v<T>&& std::is_integral_v<U>, int> = 0>
+constexpr T operator+(T a, U b) {
+	return T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator--(T& a) {
+	return a = T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(1));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator--(T& a, int) {
+	T r = a;
+	a = T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(1));
+	return r;
+}
+
+template <class T, class U, std::enable_if_t<std::is_enum_v<T>&& std::is_integral_v<U>, int> = 0>
+constexpr T operator-(T a, U b) {
+	return T(std::underlying_type_t<T>(a) - std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator~(T a) {
+	return T(~std::underlying_type_t<T>(a));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator&(T a, T b) {
+	return T(std::underlying_type_t<T>(a) & std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator&=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) & std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator|(T a, T b) {
+	return T(std::underlying_type_t<T>(a) | std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator|=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) | std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator^(T a, T b) {
+	return T(std::underlying_type_t<T>(a) ^ std::underlying_type_t<T>(b));
+}
+
+template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
+constexpr T operator^=(T& a, T b) {
+	return a = T(std::underlying_type_t<T>(a) ^ std::underlying_type_t<T>(b));
+}
 
 template <class T>
 T readMem(const void* data) {

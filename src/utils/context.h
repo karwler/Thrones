@@ -17,18 +17,18 @@ private:
 
 public:
 	Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner = nullptr, int width = 0);
-	virtual ~Context() override;
+	~Context() final;
 
 	void onMouseMove(const ivec2& mPos);
 	void draw() const;
-	virtual void tick(float dSec) override;
-	virtual void onClick(const ivec2& mPos, uint8 mBut) override;
-	virtual void onHold(const ivec2& mPos, uint8 mBut) override;
-	virtual void onDrag(const ivec2& mPos, const ivec2& mMov) override;
-	virtual void onUndrag(uint8 mBut) override;
-	virtual void onScroll(const ivec2& wMov) override;
-	virtual void onNavSelect(Direction dir) override;
-	virtual void onCancelCapture() override;
+	void tick(float dSec) final;
+	void onClick(const ivec2& mPos, uint8 mBut) final;
+	void onHold(const ivec2& mPos, uint8 mBut) final;
+	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
+	void onUndrag(uint8 mBut) final;
+	void onScroll(const ivec2& wMov) final;
+	void onNavSelect(Direction dir) final;
+	void onCancelCapture() final;
 
 	void confirm();
 	Rect rect() const;

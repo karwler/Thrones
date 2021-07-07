@@ -17,18 +17,10 @@ static bool cprocPlayer(nsint pfd, Player& player);
 
 struct Player {
 	Buffer recvb;
-	bool (*cproc)(nsint, Player&);
-	nsint partner;
-	bool webs;
-
-	Player();
+	bool (*cproc)(nsint, Player&) = cprocValidate;
+	nsint partner = INVALID_SOCKET;
+	bool webs = false;
 };
-
-Player::Player() :
-	cproc(cprocValidate),
-	partner(INVALID_SOCKET),
-	webs(false)
-{}
 
 // PLAYER ERROR
 
@@ -200,7 +192,7 @@ static void joinRoom(const uint8* data, nsint pfd, Player& player) {
 	}
 }
 
-static void leaveRoom(uint pfd, Player& player, Code listCode = Code::rlist) {	// use Code::version to not send a room list
+static void leaveRoom(nsint pfd, Player& player, Code listCode = Code::rlist) {	// use Code::version to not send a room list
 	uset<nsint> errPfds;
 	umap<nsint, Player>::iterator partner = players.find(player.partner);
 	if (umap<nsint, string>::iterator room = rooms.find(pfd); room == rooms.end()) {	// is a guest
@@ -343,7 +335,7 @@ bool cprocValidate(nsint pfd, Player& player) {
 bool cprocPlayer(nsint pfd, Player& player) {
 	uint8* data;
 	try {
-		if (!(data = player.recvb.recv(pfd, player.webs)))
+		if (data = player.recvb.recv(pfd, player.webs); !data)
 			return false;
 	} catch (const Error&) {
 		throw PlayerError{ pfd };
@@ -455,9 +447,9 @@ static bool exec(vector<pollfd>& pfds) {
 			try {
 				if (pfds[i].revents & POLLIN) {
 					Player& player = players.at(pfds[i].fd);
-					bool final = player.recvb.recvData(pfds[i].fd);
+					bool fin = player.recvb.recvData(pfds[i].fd);
 					while (player.cproc(pfds[i].fd, player));
-					if (final)
+					if (fin)
 						throw PlayerError{ pfds[i].fd };
 				} else if (pfds[i].revents & polleventsDisconnect)
 					throw PlayerError{ pfds[i].fd };

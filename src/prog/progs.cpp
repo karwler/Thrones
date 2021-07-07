@@ -1,15 +1,11 @@
 #include "progs.h"
+#include "board.h"
 #include "engine/fileSys.h"
 #include "engine/inputSys.h"
 #include "engine/scene.h"
 #include "engine/world.h"
 
 // PROGRAM STATE
-
-ProgState::ProgState() :
-	chatBox(nullptr),
-	notification(nullptr)
-{}
 
 void ProgState::chatEmbedAxisScroll(float val) {
 	if (chatBox && chatBox->getParent()->getSize().pix)
@@ -148,6 +144,10 @@ vector<Overlay*> ProgState::createOverlays() {
 	};
 }
 
+bool ProgState::showNotification() const {
+	return notification ? notification->getShow() : false;
+}
+
 void ProgState::showNotification(bool yes) const {
 	if (notification)
 		notification->setShow(yes);
@@ -208,7 +208,7 @@ uptr<RootLayout> ProgMenu::createLayout(Interactable*& selected) {
 
 ProgLobby::ProgLobby(vector<pair<string, bool>>&& roomList) :
 	ProgState(),
-	roomBuff(roomList)
+	roomBuff(std::move(roomList))
 {
 	std::sort(roomBuff.begin(), roomBuff.end(), [](pair<string, bool>& a, pair<string, bool>& b) -> bool { return strnatless(a.first, b.first); });
 }
@@ -238,10 +238,22 @@ void ProgLobby::addRoom(string&& name) {
 	rooms->insertWidget(sizet(it - rooms->getWidgets().begin()), World::pgui()->createRoom(std::move(name), true));
 }
 
+void ProgLobby::delRoom(const string& name) {
+	rooms->deleteWidget(findRoom(name));
+}
+
 void ProgLobby::openRoom(const string& name, bool open) {
 	Label* le = rooms->getWidget<Label>(findRoom(name));
 	le->lcall = open ? &Program::eventJoinRoomRequest : nullptr;
 	le->setDim(open ? 1.f : GuiGen::defaultDim);
+}
+
+bool ProgLobby::hasRoom(const string& name) const {
+	return findRoom(name) < rooms->getWidgets().size();
+}
+
+sizet ProgLobby::findRoom(const string& name) const {
+	return sizet(std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [name](const Widget* rm) -> bool { return static_cast<const Label*>(rm)->getText() == name; }) - rooms->getWidgets().begin());
 }
 
 // PROG ROOM
@@ -333,14 +345,14 @@ void ProgRoom::updateConfigWidgets(const Config& cfg) {
 	wio.terrainRules->on = cfg.opts & Config::terrainRules;
 	wio.dragonLate->on = cfg.opts & Config::dragonLate;
 	wio.dragonStraight->on = cfg.opts & Config::dragonStraight;
-	setAmtSliders(cfg, cfg.tileAmounts.data(), wio.tiles.data(), wio.tileFortress, Tile::lim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, GuiGen::tileFortressString);
-	setAmtSliders(cfg, cfg.middleAmounts.data(), wio.middles.data(), wio.middleFortress, Tile::lim, 0, &Config::countFreeMiddles, GuiGen::middleFortressString);
-	setAmtSliders(cfg, cfg.pieceAmounts.data(), wio.pieces.data(), wio.pieceTotal, Piece::lim, 0, &Config::countFreePieces, GuiGen::pieceTotalString);
+	setAmtSliders(cfg, cfg.tileAmounts.data(), wio.tiles.data(), wio.tileFortress, tileLim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, GuiGen::tileFortressString);
+	setAmtSliders(cfg, cfg.middleAmounts.data(), wio.middles.data(), wio.middleFortress, tileLim, 0, &Config::countFreeMiddles, GuiGen::middleFortressString);
+	setAmtSliders(cfg, cfg.pieceAmounts.data(), wio.pieces.data(), wio.pieceTotal, pieceLim, 0, &Config::countFreePieces, GuiGen::pieceTotalString);
 	wio.winFortress->setText(toStr(cfg.winFortress));
 	updateWinSlider(wio.winFortress, cfg.winFortress, cfg.countFreeTiles());
 	wio.winThrone->setText(toStr(cfg.winThrone));
-	updateWinSlider(wio.winThrone, cfg.winThrone, cfg.pieceAmounts[Piece::throne]);
-	for (uint8 i = 0; i < Piece::lim; ++i)
+	updateWinSlider(wio.winThrone, cfg.winThrone, cfg.pieceAmounts[uint8(PieceType::throne)]);
+	for (uint8 i = 0; i < pieceLim; ++i)
 		wio.capturers[i]->selected = cfg.capturers & (1 << i);
 }
 
@@ -365,11 +377,6 @@ void ProgRoom::updateWinSlider(Label* amt, uint16 val, uint16 max) {
 }
 
 // PROG GAME
-
-ProgGame::ProgGame(string config) :
-	configList(nullptr),
-	configName(std::move(config))
-{}
 
 void ProgGame::eventScrollUp(float val) {
 	axisScroll(-val);
@@ -409,14 +416,6 @@ vector<Overlay*> ProgGame::createOverlays() {
 
 // PROG SETUP
 
-ProgSetup::ProgSetup(string config) :
-	ProgGame(std::move(config)),
-	enemyReady(false),
-	iselect(0),
-	lastButton(0),
-	lastHold(UINT16_MAX)
-{}
-
 void ProgSetup::eventEscape() {
 	stage > Stage::tiles && stage < Stage::preparation ? World::program()->eventSetupBack() : World::program()->eventAbortGame();
 }
@@ -435,7 +434,7 @@ void ProgSetup::eventDrag(uint32 mStat) {
 
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
 	BoardObject* bo = dynamic_cast<BoardObject*>(World::scene()->getSelect());
-	svec2 curHold = bo ? World::game()->board.ptog(bo->getPos()) : svec2(UINT16_MAX);
+	svec2 curHold = bo ? World::game()->board->ptog(bo->getPos()) : svec2(UINT16_MAX);
 	if (bo && curButton && (curHold != lastHold || curButton != lastButton)) {
 		if (stage <= Stage::middles)
 			curButton == SDL_BUTTON_LEFT ? World::program()->eventPlaceTile() : World::program()->eventClearTile();
@@ -478,28 +477,28 @@ void ProgSetup::eventSetSelected(uint8 sel) {
 void ProgSetup::setStage(ProgSetup::Stage stg) {
 	switch (stage = stg) {
 	case Stage::tiles:
-		World::game()->board.setOwnTilesInteract(Tile::Interact::interact);
-		World::game()->board.setMidTilesInteract(Tile::Interact::ignore, true);
-		World::game()->board.setOwnPiecesVisible(false);
-		counters = World::game()->board.countOwnTiles();
+		World::game()->board->setOwnTilesInteract(Tile::Interact::interact);
+		World::game()->board->setMidTilesInteract(Tile::Interact::ignore, true);
+		World::game()->board->setOwnPiecesVisible(false);
+		counters = World::game()->board->countOwnTiles();
 		break;
 	case Stage::middles:
-		World::game()->board.setOwnTilesInteract(Tile::Interact::ignore, true);
-		World::game()->board.setMidTilesInteract(Tile::Interact::interact);
-		World::game()->board.setOwnPiecesVisible(false);
-		World::game()->board.fillInFortress();
-		counters = World::game()->board.countMidTiles();
+		World::game()->board->setOwnTilesInteract(Tile::Interact::ignore, true);
+		World::game()->board->setMidTilesInteract(Tile::Interact::interact);
+		World::game()->board->setOwnPiecesVisible(false);
+		World::game()->board->fillInFortress();
+		counters = World::game()->board->countMidTiles();
 		break;
 	case Stage::pieces:
-		World::game()->board.setOwnTilesInteract(Tile::Interact::recognize);
-		World::game()->board.setMidTilesInteract(Tile::Interact::ignore, true);
-		World::game()->board.setOwnPiecesVisible(true);
-		counters = World::game()->board.countOwnPieces();
+		World::game()->board->setOwnTilesInteract(Tile::Interact::recognize);
+		World::game()->board->setMidTilesInteract(Tile::Interact::ignore, true);
+		World::game()->board->setOwnPiecesVisible(true);
+		counters = World::game()->board->countOwnPieces();
 		break;
 	default:
-		World::game()->board.setOwnTilesInteract(Tile::Interact::ignore);
-		World::game()->board.setMidTilesInteract(Tile::Interact::ignore);
-		World::game()->board.disableOwnPiecesInteract(false);
+		World::game()->board->setOwnTilesInteract(Tile::Interact::ignore);
+		World::game()->board->setMidTilesInteract(Tile::Interact::ignore);
+		World::game()->board->disableOwnPiecesInteract(false);
 		counters.clear();
 	}
 
@@ -542,7 +541,7 @@ uint8 ProgSetup::findNextSelect(bool fwd) {
 
 void ProgSetup::handlePlacing() {
 	if (stage <= Stage::middles) {
-		if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect()); til && til->getType() != Tile::empty)
+		if (Tile* til = dynamic_cast<Tile*>(World::scene()->getSelect()); til && til->getType() != TileType::empty)
 			til->startKeyDrag(SDL_BUTTON_LEFT);
 		else
 			World::program()->eventPlaceTile();
@@ -563,6 +562,10 @@ void ProgSetup::handleClearing() {
 
 uptr<RootLayout> ProgSetup::createLayout(Interactable*& selected) {
 	return World::pgui()->makeSetup(selected, sio, bswapIcon, planeSwitch);
+}
+
+Icon* ProgSetup::getIcon(uint8 type) const {
+	return sio.icons->getWidget<Icon>(type + 1);
 }
 
 void ProgSetup::incdecIcon(uint8 type, bool inc) {
@@ -612,17 +615,17 @@ void ProgMatch::eventEngage() {
 
 void ProgMatch::eventDestroyOn() {
 	mio.destroy->selected = true;
-	World::game()->board.setPxpadPos(dynamic_cast<Piece*>(World::scene()->getCapture()));
+	World::game()->board->setPxpadPos(dynamic_cast<Piece*>(World::scene()->getCapture()));
 }
 
 void ProgMatch::eventDestroyOff() {
 	mio.destroy->selected = false;
-	World::game()->board.setPxpadPos(nullptr);
+	World::game()->board->setPxpadPos(nullptr);
 }
 
 void ProgMatch::eventDestroyToggle() {
 	mio.destroy->selected = !mio.destroy->selected;
-	World::game()->board.setPxpadPos(mio.destroy->selected ? dynamic_cast<Piece*>(World::scene()->getCapture()) : nullptr);
+	World::game()->board->setPxpadPos(mio.destroy->selected ? dynamic_cast<Piece*>(World::scene()->getCapture()) : nullptr);
 }
 
 void ProgMatch::eventHasten() {
@@ -668,7 +671,7 @@ void ProgMatch::setIcons(Favor favor, Icon* homefront) {
 	if (mio.spawn && mio.spawn->selected && mio.spawn != homefront) {
 		if (mio.spawn != homefront)
 			mio.spawn->selected = false;
-		World::game()->board.resetTilesAfterSpawn();
+		World::game()->board->resetTilesAfterSpawn();
 	}
 	if (mio.dragon && mio.dragon->selected) {
 		if (mio.dragon != homefront)
@@ -678,7 +681,7 @@ void ProgMatch::setIcons(Favor favor, Icon* homefront) {
 
 	Favor old = selectFavorIcon(favor);
 	World::game()->finishFavor(favor, old);
-	World::game()->board.setFavorInteracts(favor, World::game()->getOwnRec());
+	World::game()->board->setFavorInteracts(favor, World::game()->getOwnRec());
 }
 
 Favor ProgMatch::selectFavorIcon(Favor& type) {
@@ -708,6 +711,10 @@ void ProgMatch::updateFavorIcon(Favor type, bool on) {
 			mio.favors[uint8(type)] = nullptr;
 		}
 	}
+}
+
+Favor ProgMatch::favorIconSelect() const {
+	return Favor(std::find_if(mio.favors.begin(), mio.favors.end(), [](Icon* it) -> bool { return it && it->selected; }) - mio.favors.begin());
 }
 
 void ProgMatch::updateVictoryPoints(uint16 own, uint16 ene) {

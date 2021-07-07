@@ -23,20 +23,20 @@ public:
 		seconds
 	};
 
-	Info info;
-	FrameTime ftimeMode;
+	Info info = INF_NONE;
+	FrameTime ftimeMode = FrameTime::none;
 private:
-	uptr<ProgState> state;
-	uptr<Netcp> netcp;
+	ProgState* state = nullptr;
+	Netcp* netcp = nullptr;
 	Game game;
 	GuiGen gui;
 #if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
-	SDL_Thread* proc;
-	string curlVersion;
+	SDL_Thread* proc = nullptr;
+	string curlVersion = "not found";
 #endif
 	string latestVersion;
 	string chatPrefix;
-	float ftimeSleep;
+	float ftimeSleep = ftimeUpdateDelay;
 
 	static constexpr float ftimeUpdateDelay = 0.5f;
 	static constexpr float transAnimTime = 0.5f;
@@ -219,6 +219,7 @@ public:
 	void eventCycleFrameCounter();
 
 	ProgState* getState();
+	template <class T> T* getState();
 	Netcp* getNetcp();
 	Game* getGame();
 	GuiGen* getGui();
@@ -247,7 +248,7 @@ private:
 	template <class T, class... A> void setState(A&&... args);
 	template <class T, class... A> void setStateWithChat(A&&... args);
 	void resetLayoutsWithChat();
-	tuple<BoardObject*, Piece*, svec2> pickBob();	// returns selected object, occupant, position
+	tuple<BoardObject*, Piece*, svec2> pickBob() const;	// returns selected object, occupant, position
 
 #ifdef EMSCRIPTEN
 	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
@@ -263,11 +264,16 @@ private:
 };
 
 inline ProgState* Program::getState() {
-	return state.get();
+	return state;
+}
+
+template <class T>
+T* Program::getState() {
+	return static_cast<T*>(state);
 }
 
 inline Netcp* Program::getNetcp() {
-	return netcp.get();
+	return netcp;
 }
 
 inline Game* Program::getGame() {

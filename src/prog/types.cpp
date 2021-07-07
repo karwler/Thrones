@@ -1,23 +1,8 @@
-#include "types.h"
 #include "server/server.h"
+#include "utils/objects.h"
 #include <queue>
 
 // CONFIG
-
-Config::Config() :
-	homeSize(9, 4),
-	battlePass(randomLimit / 2),
-	opts(favorTotal | terrainRules | dragonStraight),
-	victoryPointsNum(21),
-	setPieceBattleNum(10),
-	favorLimit(1),
-	tileAmounts{ 14, 9, 5, 7 },
-	middleAmounts{ 1, 1, 1, 1 },
-	pieceAmounts{ 2, 2, 1, 1, 1, 2, 1, 1, 1, 1 },
-	winThrone(1),
-	winFortress(1),
-	capturers(1 << Piece::throne)
-{}
 
 Config& Config::checkValues() {
 	homeSize = glm::clamp(homeSize, minHomeSize, maxHomeSize);
@@ -52,23 +37,23 @@ Config& Config::checkValues() {
 
 	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, uint8(pieceAmounts.size() - 1));
 	if (!psize)
-		psize = pieceAmounts[Piece::throne] = 1;
+		psize = pieceAmounts[uint8(PieceType::throne)] = 1;
 	if (!capturers)
 		capturers = 0x3FF;	// all pieces set
 
 	if (!(opts & victoryPoints)) {
 		uint16 capCnt = 0;
-		for (uint8 i = 0; i < Piece::lim; ++i)
+		for (uint8 i = 0; i < pieceLim; ++i)
 			if (capturers & (1 << i))
 				capCnt += pieceAmounts[i];
 		winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
 
-		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[Piece::throne]);
+		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(PieceType::throne)]);
 		if (!(winFortress || winThrone))
-			if (winThrone = 1; !pieceAmounts[Piece::throne]) {
+			if (winThrone = 1; !pieceAmounts[uint8(PieceType::throne)]) {
 				if (psize == hsize)
 					--*std::find_if(pieceAmounts.rbegin(), pieceAmounts.rend(), [](uint16 amt) -> bool { return amt; });
-				++pieceAmounts[Piece::throne];
+				++pieceAmounts[uint8(PieceType::throne)];
 			}
 		setPieceBattleNum = std::max(std::max(setPieceBattleNum, winFortress), winThrone);
 	}
@@ -166,7 +151,7 @@ Action Record::actionsExhausted() const {
 	uint8 moves = 0, swaps = 0;
 	for (auto [pce, act] : actors) {
 		moves += bool(act & ACT_MOVE);
-		swaps += !swaps && bool(act & ACT_SWAP) && pce->getType() != Piece::warhorse;
+		swaps += !swaps && bool(act & ACT_SWAP) && pce->getType() != PieceType::warhorse;
 		if (moves + swaps >= 2)
 			return ACT_MS;
 		if (act & ACT_AF)
@@ -213,38 +198,6 @@ vector<uint16> Dijkstra::travelDist(uint16 src, uint16 dlim, svec2 size, bool (*
 		}
 	} while (!nodes.empty());
 	return dist;
-}
-
-// TILE COL
-
-TileCol::TileCol() :
-	home(0),
-	extra(0),
-	size(0)
-{}
-
-void TileCol::update(const Config& conf) {
-	if (uint16 cnt = conf.homeSize.x * conf.homeSize.y; cnt != home) {
-		home = cnt;
-		extra = home + conf.homeSize.x;
-		size = extra + home;
-		tl = std::make_unique<Tile[]>(size);
-	}
-}
-
-// PIECE COL
-
-PieceCol::PieceCol() :
-	num(0),
-	size(0)
-{}
-
-void PieceCol::update(const Config& conf, bool regular) {
-	if (uint16 cnt = (conf.opts & Config::setPieceBattle) && regular ? std::min(conf.countPieces(), conf.setPieceBattleNum) : conf.countPieces(); cnt != num) {
-		num = cnt;
-		size = cnt * 2;
-		pc = std::make_unique<Piece[]>(size);
-	}
 }
 
 // SETUP

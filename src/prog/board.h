@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.h"
+#include "utils/objects.h"
 
 // game board
 class Board {
@@ -11,7 +11,7 @@ public:
 	static constexpr float screenYDown = -4.2f;
 
 	Config config;
-	array<uint16, Piece::lim> ownPieceAmts, enePieceAmts;
+	array<uint16, pieceLim> ownPieceAmts, enePieceAmts;
 private:
 	uint16 boardHeight;	// total number of rows
 	float objectSize;	// width and height of a tile/piece
@@ -41,7 +41,7 @@ public:
 	void uninitObjects();
 	void initOwnPieces();
 	uint16 countAvailableFavors();
-	void prepareMatch(bool myTurn, Tile::Type* buf);
+	void prepareMatch(bool myTurn, TileType* buf);
 	void prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record& erec);
 
 	TileCol& getTiles();
@@ -52,12 +52,12 @@ public:
 	bool isEnemyTile(const Tile* til) const;
 	uint16 tileCompressionSize() const;
 	uint8 compressTile(uint16 e) const;
-	static Tile::Type decompressTile(const uint8* src, uint16 i);
-	Piece* getPieces(Piece* beg, const array<uint16, Piece::lim>& amts, Piece::Type type);
+	static TileType decompressTile(const uint8* src, uint16 i);
+	Piece* getPieces(Piece* beg, const array<uint16, pieceLim>& amts, PieceType type);
 	Piece* findPiece(Piece* beg, Piece* end, svec2 pos);
 	PieceCol& getPieces();
-	Piece* getOwnPieces(Piece::Type type);
-	Piece* getEnePieces(Piece::Type type);
+	Piece* getOwnPieces(PieceType type);
+	Piece* getEnePieces(PieceType type);
 	Piece* findOccupant(const Tile* tile);
 	Piece* findOccupant(svec2 pos);
 	BoardObject* findObject(const vec3& isct);
@@ -87,32 +87,32 @@ public:
 	Tile* getTileBot(TileTop top);
 	void setTileTop(TileTop top, const Tile* tile);
 	void selectEstablishers();
-	pair<Tile*, TileTop> checkTileEstablishable(Piece* throne);
-	bool tileRebuildable(Piece* throne);
+	pair<Tile*, TileTop> checkTileEstablishable(const Piece* throne);
+	bool tileRebuildable(const Piece* throne);
 	void selectRebuilders();
-	bool pieceSpawnable(Piece::Type type);
+	bool pieceSpawnable(PieceType type);
 	void selectSpawners();	// can only happen when spawning on fortresses
-	Tile* findSpawnableTile(Piece::Type type);
-	Piece* findSpawnablePiece(Piece::Type type);
+	Tile* findSpawnableTile(PieceType type);
+	Piece* findSpawnablePiece(PieceType type);
 	void resetTilesAfterSpawn();
 
 	void collectTilesBySingle(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByStraight(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*));
 	void collectTilesByArea(uset<uint16>& tcol, uint16 pos, uint16 dlim, bool (*stepable)(uint16, void*));
 	void collectTilesByType(uset<uint16>& tcol, uint16 pos, bool (*stepable)(uint16, void*));
-	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, Tile::Type type, bool (*stepable)(uint16, void*));
+	void collectAdjacentTilesByType(uset<uint16>& tcol, uint16 pos, TileType type, bool (*stepable)(uint16, void*));
 	void collectTilesByPorts(uset<uint16>& tcol, uint16 pos);
 	void collectTilesForLancer(uset<uint16>& tcol, uint16 pos);
 	void collectTilesByDistance(uset<uint16>& tcol, svec2 pos, pair<uint8, uint8> dist);
 	static bool spaceAvailableAny(uint16 pos, void* board);
 	static bool spaceAvailableGround(uint16 pos, void* board);
 	static bool spaceAvailableDragon(uint16 pos, void* board);
-	void highlightMoveTiles(Piece* pce, const Record& erec, Favor favor);	// nullptr to disable
-	void highlightEngageTiles(Piece* pce);									// ^
+	void highlightMoveTiles(const Piece* pce, const Record& erec, Favor favor);	// nullptr to disable
+	void highlightEngageTiles(const Piece* pce);								// ^
 	uset<uint16> collectMoveTiles(const Piece* piece, const Record& erec, Favor favor, bool single = false);
 	uset<uint16> collectEngageTiles(const Piece* piece);
-	bool checkThroneWin(Piece* pcs, const array<uint16, Piece::lim>& amts);
-	bool checkFortressWin(const Tile* tit, const Piece* pit, const array<uint16, Piece::lim>& amts);
+	bool checkThroneWin(Piece* pcs, const array<uint16, pieceLim>& amts);
+	bool checkFortressWin(const Tile* tit, const Piece* pit, const array<uint16, pieceLim>& amts) const;
 	Record::Info countVictoryPoints(uint16& own, uint16& ene, const Record& erec);
 
 	svec2 boardLimit() const;
@@ -136,7 +136,7 @@ private:
 	void setPieces(Piece* pces, float rot, const Material* matl);
 	void setBgrid();
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
-	uint16 findEmptyMiddle(const vector<Tile::Type>& mid, uint16 i, uint16 m);
+	uint16 findEmptyMiddle(const vector<TileType>& mid, uint16 i, uint16 m) const;
 };
 
 inline Board::~Board() {
@@ -175,19 +175,19 @@ inline uint8 Board::compressTile(uint16 i) const {
 	return uint8(uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4));
 }
 
-inline Tile::Type Board::decompressTile(const uint8* src, uint16 i) {
-	return Tile::Type((src[i/2] >> (i % 2 * 4)) & 0xF);
+inline TileType Board::decompressTile(const uint8* src, uint16 i) {
+	return TileType((src[i/2] >> (i % 2 * 4)) & 0xF);
 }
 
 inline PieceCol& Board::getPieces() {
 	return pieces;
 }
 
-inline Piece* Board::getOwnPieces(Piece::Type type) {
+inline Piece* Board::getOwnPieces(PieceType type) {
 	return getPieces(pieces.own(), ownPieceAmts, type);
 }
 
-inline Piece* Board::getEnePieces(Piece::Type type) {
+inline Piece* Board::getEnePieces(PieceType type) {
 	return getPieces(pieces.ene(), ownPieceAmts, type);
 }
 

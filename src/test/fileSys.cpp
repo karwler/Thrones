@@ -1,5 +1,4 @@
 #include "tests.h"
-#include "engine/fileSys.h"
 
 static void testReadIniLine() {
 	assertEqual(IniLine(""), IniLine(IniLine::empty));

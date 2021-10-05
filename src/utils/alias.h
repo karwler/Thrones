@@ -1,21 +1,12 @@
 #pragma once
 
-#if !(defined(_DEBUG) || defined(DEBUG)) && !defined(NDEBUG)
-#define NDEBUG
-#elif defined(_DEBUG) && !defined(DEBUG)
-#define DEBUG
+#if (defined(__ANDROID__) || defined(__EMSCRIPTEN__)) && !defined(OPENGLES)
+#define OPENGLES 1
 #endif
-#ifdef DEBUG
-#define MALLOC_CHECK_ 2
-#endif
-#if (defined(__ANDROID__) || defined(EMSCRIPTEN)) && !defined(OPENGLES)
-#define OPENGLES
-#endif
-
 #ifndef __ANDROID__
 #define SDL_MAIN_HANDLED
 #endif
-#if defined(__ANDROID__) || defined(_WIN32) || defined(__APPLE__) || defined(APPIMAGE)
+#if defined(__ANDROID__) || defined(_WIN32) || defined(__APPLE__)
 #include <SDL.h>
 #else
 #include <SDL2/SDL.h>
@@ -98,6 +89,7 @@ class Layout;
 class Mesh;
 class Navigator;
 class Netcp;
+class Object;
 class Overlay;
 class Piece;
 class Popup;
@@ -111,6 +103,7 @@ struct Setup;
 class Slider;
 class TextBox;
 class Texture;
+class TextureSet;
 class Tile;
 class Widget;
 class WindowSys;
@@ -120,8 +113,6 @@ using GCall = void (Program::*)(BoardObject*, uint8);
 using CCall = void (Program::*)(uint, const string&);
 using SBCall = void (ProgState::*)();
 using SACall = void (ProgState::*)(float);
-
-constexpr float PI = float(M_PI);
 
 template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
 constexpr T operator++(T& a) {

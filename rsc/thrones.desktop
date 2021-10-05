@@ -1,6 +1,7 @@
 [Desktop Entry]
+Version=1.0
 Name=Thrones
-Exec=bin/thrones
+Exec=usr/bin/thrones
 Icon=thrones
 Comment=Thrones Board Game
 GenericName=Board Game

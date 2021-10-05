@@ -80,8 +80,9 @@ public:
 	static constexpr char msgFavorPick[] = "Pick a fate's favor";
 	static constexpr char msgPickPiece[] = "Pick piece (";
 	static constexpr float chatEmbedSize = 0.5f;
+	static constexpr char chatPrefix[] = ": ";
 private:
-	static constexpr uint16 chatLineLimit = 2000;
+	static constexpr uint16 chatCharLimit = 16384 - Settings::playerNameLimit - 3;	// subtract prefix length
 
 	int smallHeight, lineHeight, superHeight, tooltipHeight;
 	int lineSpacing, superSpacing, iconSize;
@@ -101,6 +102,7 @@ public:
 	void openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const;
 	void openPopupPiecePicker(uint16 piecePicksLeft) const;
 	void openPopupSpawner() const;
+	void openPopupSettings(ScrollArea*& content, sizet& bindingsStart) const;
 	void openPopupKeyGetter(Binding::Type bind) const;
 
 	vector<Widget*> createChat(TextBox*& chatBox, bool overlay) const;
@@ -114,28 +116,28 @@ public:
 	int keyGetLineSize(Binding::Type bind) const;
 	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
 
-	uptr<RootLayout> makeMainMenu(Interactable*& selected, Label*& versionNotif) const;
+	uptr<RootLayout> makeMainMenu(Interactable*& selected, LabelEdit*& pname, Label*& versionNotif) const;
 	uptr<RootLayout> makeLobby(Interactable*& selected, TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff) const;
 	uptr<RootLayout> makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO& rio, TextBox*& chatBox, ComboBox*& configName, const umap<string, Config>& confs, const string& startConfig) const;
 	uptr<RootLayout> makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch) const;
 	uptr<RootLayout> makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons) const;
-	uptr<RootLayout> makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart, umap<string, uint32>& pixelformats) const;
+	uptr<RootLayout> makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart) const;
 	uptr<RootLayout> makeInfo(Interactable*& selected, ScrollArea*& content) const;
 
 	static string tileFortressString(const Config& cfg);
 	static string middleFortressString(const Config& cfg);
 	static string pieceTotalString(const Config& cfg);
-	SDL_DisplayMode fstrToDisp(const umap<string, uint32>& pixelformats, const string& str) const;
+	static SDL_DisplayMode fstrToDisp(const string& str);
 private:
 	static string dispToFstr(const SDL_DisplayMode& mode);
 	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const;
 	static string bindingToFstr(Binding::Type bind);
-	static const char* pixelformatName(uint32 format);
 	static string versionText(const SDL_version& ver);
 	static string ibtos(int val);
 	vector<Widget*> createConfigList(ConfigIO& wio, const Config& cfg, bool active, bool match) const;
 	void setConfigLines(vector<Widget*>& menu, vector<vector<Widget*> >& lines, sizet& id) const;
 	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) const;
+	ScrollArea* createSettingsList(sizet& bindingsStart) const;
 
 	void appendProgram(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
 	void appendSystem(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
@@ -171,10 +173,6 @@ inline string GuiGen::pieceTotalString(const Config& cfg) {
 
 inline string GuiGen::dispToFstr(const SDL_DisplayMode& mode) {
 	return toStr(mode.w) + rv2iSeparator + toStr(mode.h) + " | " + toStr(mode.refresh_rate) + "Hz " + pixelformatName(mode.format);
-}
-
-inline const char* GuiGen::pixelformatName(uint32 format) {
-	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
 }
 
 inline string GuiGen::versionText(const SDL_version& ver) {

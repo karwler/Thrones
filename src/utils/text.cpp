@@ -160,9 +160,9 @@ string cwtos(const wchar* src) {
 
 string swtos(const wstring& src) {
 	string dst;
-	if (int len = WideCharToMultiByte(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0, nullptr, nullptr); len > 0) {
+	if (int len = WideCharToMultiByte(CP_UTF8, 0, src.c_str(), src.length(), nullptr, 0, nullptr, nullptr); len > 0) {
 		dst.resize(len);
-		WideCharToMultiByte(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len, nullptr, nullptr);
+		WideCharToMultiByte(CP_UTF8, 0, src.c_str(), src.length(), dst.data(), len, nullptr, nullptr);
 	}
 	return dst;
 }
@@ -178,9 +178,9 @@ wstring cstow(const char* src) {
 
 wstring sstow(const string& src) {
 	wstring dst;
-	if (int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), nullptr, 0); len > 0) {
+	if (int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), src.length(), nullptr, 0); len > 0) {
 		dst.resize(len);
-		MultiByteToWideChar(CP_UTF8, 0, src.c_str(), int(src.length()), dst.data(), len);
+		MultiByteToWideChar(CP_UTF8, 0, src.c_str(), src.length(), dst.data(), len);
 	}
 	return dst;
 }

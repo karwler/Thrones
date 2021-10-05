@@ -2,7 +2,7 @@ from http import server
 import sys
 
 if __name__ == '__main__':
-	port = 8000
+	port = 8080
 	for ag in sys.argv:
 		if ag.isdigit():
 			n = int(ag)

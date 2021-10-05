@@ -61,9 +61,10 @@ constexpr array<const char*, 1> compatibleVersions = {
 };
 
 enum class Code : uint8 {
-	version,	// version info
+	version,	// version info optionally with player name request
 	full,		// server full
-	rlist,		// list all rooms (pid + amount + flags + names)
+	rlistcon,	// initial list of rooms (name response + rlist data)
+	rlist,		// list all rooms (amount + flags + names)
 	rnew,		// create new room (room name)
 	cnrnew,		// confirm new room (CncrnewCode)
 	rerase,		// delete a room (name info)
@@ -96,15 +97,15 @@ enum class CncrnewCode : uint8 {
 
 const umap<Code, uint16> codeSizes = {
 	pair(Code::full, dataHeadSize),
-	pair(Code::cnrnew, dataHeadSize + uint16(sizeof(uint8))),
+	pair(Code::cnrnew, dataHeadSize + sizeof(uint8)),
 	pair(Code::leave, dataHeadSize),
 	pair(Code::thost, dataHeadSize),
 	pair(Code::kick, dataHeadSize),
 	pair(Code::hello, dataHeadSize),
-	pair(Code::move, dataHeadSize + uint16(sizeof(uint16) * 2)),
-	pair(Code::kill, dataHeadSize + uint16(sizeof(uint16))),
-	pair(Code::breach, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8))),
-	pair(Code::tile, dataHeadSize + uint16(sizeof(uint16) + sizeof(uint8)))
+	pair(Code::move, dataHeadSize + sizeof(uint16) * 2),
+	pair(Code::kill, dataHeadSize + sizeof(uint16)),
+	pair(Code::breach, dataHeadSize + sizeof(uint16) + sizeof(uint8)),
+	pair(Code::tile, dataHeadSize + sizeof(uint16) + sizeof(uint8))
 };
 
 // socket functions
@@ -125,11 +126,12 @@ inline void closeSocketV(nsint fd) {
 
 // universal functions
 void sendWaitClose(nsint socket);
-void sendVersion(nsint socket, bool webs);
+void sendVersionRejection(nsint socket, bool webs);	// this might as well be sendText(const string& text)
 void sendRejection(nsint server);
 void sendData(nsint socket, const uint8* data, uint len, bool webs);
 string digestSha1(string str);
 string encodeBase64(const string& str);
+ulong generateRandomSeed();
 
 inline uint16 read16(const void* data) {
 	return SDL_SwapBE16(readMem<uint16>(data));
@@ -218,7 +220,7 @@ public:
 	void send(nsint socket, bool webs, bool clr = true);	// sends and clears all data
 	uint8* recv(nsint socket, bool webs);	// returns begin of data or nullptr if nothing to process yet
 	bool recvData(nsint socket);	// load recv data into buffer; returns true if the connection closed (call once before iterating over recv()
-	Init recvConn(nsint socket, bool& webs);
+	Init recvConn(nsint socket, bool& webs, bool& nameError, bool (*nameCheck)(const string& name));
 private:
 	bool recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs);
 	uint8* recvLoad(uint ofs, const uint8* mask);

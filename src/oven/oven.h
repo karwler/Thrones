@@ -8,24 +8,39 @@
 #include <OpenGL/gl3.h>
 #endif
 #elif defined(OPENGLES)
+#if OPENGLES == 32
+#include <GLES3/gl32.h>
+#else
 #include <GLES3/gl3.h>
+#endif
 #else
 #define GLEW_STATIC
 #include <GL/glew.h>
 #endif
 #ifdef __APPLE__
 #include <SDL2_image/SDL_image.h>
-#elif defined(__ANDROID__) || defined(_WIN32) || defined(APPIMAGE)
+#elif defined(__ANDROID__) || defined(_WIN32)
 #include <SDL_image.h>
 #else
 #include <SDL2/SDL_image.h>
 #endif
 
+#ifndef GL_BGRA
+#define GL_BGRA 0x80E1
+#endif
+
 constexpr uint audioHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 3 + sizeof(uint8);
 constexpr uint objectHeaderSize = sizeof(uint8) + sizeof(uint16) * 2;
 constexpr uint shaderHeaderSize = sizeof(uint8) + sizeof(uint16);
-constexpr uint textureHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 2;
-constexpr int imgInitFull = IMG_INIT_JPG | IMG_INIT_PNG;
+constexpr uint textureHeaderSize = sizeof(uint8) * 2;
+
+enum TexturePlacement : uint8 {
+	TEXPLACE_NONE,
+	TEXPLACE_WIDGET,
+	TEXPLACE_OBJECT,
+	TEXPLACE_BOTH,
+	TEXPLACE_CUBE
+};
 
 struct Sound {
 	static constexpr SDL_AudioSpec defaultSpec = { 22050, AUDIO_S16, 1, 0, 4096, 0, 0, nullptr, nullptr };
@@ -58,16 +73,16 @@ struct Vertex {
 	vec3 pos;
 	vec3 nrm;
 	vec2 tuv;
+	vec3 tng;
 
 	Vertex() = default;
-	Vertex(const vec3& position, const vec3& normal, const vec2& texuv);
+	Vertex(const vec3& position, const vec3& normal, vec2 texuv, const vec3& tangent);
 };
 
 // other functions
-SDL_Surface* scaleSurface(SDL_Surface* img, int div);
 
-template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_signed_v<S>, int> = 0>
-U cycle(U pos, U siz, S mov) {
-	U rst = pos + U(mov % S(siz));
-	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
+SDL_Surface* scaleSurface(SDL_Surface* img, ivec2 res);
+
+inline SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
+	return div <= 1 || !img ? img : scaleSurface(img, ivec2(img->w, img->h) / div);
 }

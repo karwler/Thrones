@@ -1,6 +1,8 @@
 #include "server.h"
 #include "utils/text.h"
+#include <ctime>
 #include <iostream>
+#include <random>
 
 namespace Com {
 
@@ -11,7 +13,7 @@ addrinfo* resolveAddress(const char* addr, const char* port, int family) {
 	addrinfo* info;
 #ifdef __ANDROID__
 	hints.ai_flags = AI_ADDRCONFIG;
-#elif defined(EMSCRIPTEN)
+#elif defined(__EMSCRIPTEN__)
 	hints.ai_flags = AI_V4MAPPED;
 #else
 	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
@@ -67,7 +69,7 @@ int noblockSocket(nsint fd, bool noblock) {
 #ifdef _WIN32
 	u_long on = noblock;
 	return ioctlsocket(fd, FIONBIO, &on);
-#elif !defined(EMSCRIPTEN)
+#elif !defined(__EMSCRIPTEN__)
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (flags == -1)
 		return flags;
@@ -84,13 +86,13 @@ static void sendNet(nsint fd, const void* data, uint size) {
 
 static uint recvNet(nsint fd, void* data, uint size) {
 	long len = recv(fd, static_cast<char*>(data), size, 0);
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 	if (!len || (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
 #else
 	if (len <= 0)
 #endif
 		throw Error(msgConnectionLost);
-	return uint(len);
+	return len;
 }
 
 static long recvNow(nsint fd, void* data, uint size) {
@@ -205,11 +207,11 @@ string encodeBase64(const string& str) {
 	uint8 arr3[3], arr4[4];
 	uint i = 0;
 	for (char ch : str) {
-		arr3[i++] = uint8(ch);
+		arr3[i++] = ch;
 		if (i == 3) {
 			arr4[0] = (arr3[0] & 0xFC) >> 2;
-			arr4[1] = uint8(((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4));
-			arr4[2] = uint8(((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6));
+			arr4[1] = ((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4);
+			arr4[2] = ((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6);
 			arr4[3] = arr3[2] & 0x3F;
 
 			for (i = 0; i < 4 ; ++i)
@@ -221,8 +223,8 @@ string encodeBase64(const string& str) {
 		for (uint j = i; j < 3; ++j)
 			arr3[j] = '\0';
 		arr4[0] = (arr3[0] & 0xFC) >> 2;
-		arr4[1] = uint8(((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4));
-		arr4[2] = uint8(((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6));
+		arr4[1] = ((arr3[0] & 0x03) << 4) + ((arr3[1] & 0xF0) >> 4);
+		arr4[2] = ((arr3[1] & 0x0F) << 2) + ((arr3[2] & 0xC0) >> 6);
 
 		for (uint j = 0; j < i + 1; ++j)
 			ret += b64charset[arr4[j]];
@@ -240,13 +242,11 @@ void sendWaitClose(nsint socket) {
 	} catch (const Error&) {}
 }
 
-void sendVersion(nsint socket, bool webs) {
-	uint16 len = uint16(strlen(commonVersion));
-	vector<uint8> data(dataHeadSize + len);
-	data[0] = uint8(Code::version);
-	write16(data.data() + 1, uint16(data.size()));
-	std::copy_n(commonVersion, len, data.data() + dataHeadSize);
-	sendData(socket, data.data(), uint(data.size()), webs);
+void sendVersionRejection(nsint socket, bool webs) {
+	array<uint8, dataHeadSize + (sizeof(commonVersion) - 1) / sizeof(*commonVersion)> data = { uint8(Code::version) };
+	write16(data.data() + 1, data.size());
+	std::copy_n(commonVersion, strlen(commonVersion), data.data() + dataHeadSize);
+	sendData(socket, data.data(), data.size(), webs);
 }
 
 void sendRejection(nsint server) {
@@ -265,10 +265,10 @@ void sendData(nsint socket, const uint8* data, uint len, bool webs) {
 		uint ofs = wsHeadMin;
 		uint8 frame[wsHeadMax] = { 0x82 };
 		if (len <= 125)
-			frame[1] = uint8(len);
+			frame[1] = len;
 		else if (len <= UINT16_MAX) {
 			frame[1] = 126;
-			write16(frame + wsHeadMin, uint16(len));
+			write16(frame + wsHeadMin, len);
 			ofs += sizeof(uint16);
 		} else {
 			frame[1] = 127;
@@ -278,9 +278,19 @@ void sendData(nsint socket, const uint8* data, uint len, bool webs) {
 		vector<uint8> wdat(len + ofs);
 		std::copy_n(frame, ofs, wdat.begin());
 		std::copy_n(data, len, wdat.begin() + ofs);
-		sendNet(socket, wdat.data(), uint(wdat.size()));
+		sendNet(socket, wdat.data(), wdat.size());
 	} else
 		sendNet(socket, data, len);
+}
+
+ulong generateRandomSeed() {
+	try {
+		std::random_device rd;
+		return rd();
+	} catch (...) {
+		std::cerr << "failed to use random_device" << std::endl;
+	}
+	return time(nullptr);
 }
 
 // BUFFER
@@ -346,7 +356,7 @@ void Buffer::push(const string& str) {
 
 template <class T, class F>
 void Buffer::pushNumberList(initlist<T> lst, F writer) {
-	checkOver(dlim + uint(lst.size() * sizeof(T)));
+	checkOver(dlim + lst.size() * sizeof(T));
 	for (T n : lst) {
 		writer(&data[dlim], n);
 		dlim += sizeof(T);
@@ -355,7 +365,7 @@ void Buffer::pushNumberList(initlist<T> lst, F writer) {
 
 template <class T>
 void Buffer::pushRaw(const T& vec) {
-	uint end = checkOver(dlim + uint(vec.size()));
+	uint end = checkOver(dlim + vec.size());
 	std::copy(vec.begin(), vec.end(), &data[dlim]);
 	dlim = end;
 }
@@ -424,7 +434,7 @@ bool Buffer::recvData(nsint socket) {
 	}
 }
 
-Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
+Buffer::Init Buffer::recvConn(nsint socket, bool& webs, bool& nameError, bool (*nameCheck)(const string& name)) {
 	uint ofs = 0;
 	uint8* mask = nullptr;
 	if (!recvHead(socket, ofs, mask, webs))
@@ -435,8 +445,12 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 		uint8* dat = recvLoad(ofs, mask);
 		if (!dat)
 			return Init::wait;
-		if (std::find(compatibleVersions.begin(), compatibleVersions.end(), readText(dat)) == compatibleVersions.end())
+		string version = readName(dat + dataHeadSize);
+		if (std::find(compatibleVersions.begin(), compatibleVersions.end(), version) == compatibleVersions.end())
 			return Init::version;
+
+		string pname = readName(dat + dataHeadSize + sizeof(uint8) + version.length());
+		nameError = pname.empty() || nameCheck(pname);
 		clearCur(webs);
 		return Init::connect; }
 	case Code::wsconn: {
@@ -461,8 +475,8 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs) {
 			"Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n"
 			"Sec-WebSocket-Accept: " + encodeBase64(digestSha1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n";
-		sendNet(socket, response.c_str(), uint(response.length()));
-		eraseFront(uint(rend - data.get()));
+		sendNet(socket, response.c_str(), response.length());
+		eraseFront(rend - data.get());
 		webs = true;
 		return Init::cont; }
 	default:
@@ -487,7 +501,7 @@ bool Buffer::recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs) {
 		} else if (plen == 127) {
 			if (ofs += sizeof(uint64); dlim < ofs)
 				return false;
-			plen = uint(read64(&data[wsHeadMin]));
+			plen = read64(&data[wsHeadMin]);
 		}
 
 		if (data[1] & 0x80) {

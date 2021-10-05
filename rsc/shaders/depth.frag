@@ -3,8 +3,13 @@
 uniform vec3 lightPos;
 uniform float farPlane;
 
-in vec4 fragPos;
+in vec3 fragPos;
+flat in float fragAlpha;
+flat in int fragShow;
 
 void main() {
-	gl_FragDepth = length(fragPos.xyz - lightPos) / farPlane;
+	if (bool(fragShow) && fragAlpha > 0.2)
+		gl_FragDepth = length(fragPos - lightPos) / farPlane;
+	else
+		discard;
 }

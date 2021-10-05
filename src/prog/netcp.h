@@ -48,6 +48,8 @@ protected:
 	bool tickValidate();
 	bool tickDiscard();
 	static bool pollSocket(pollfd& sock);
+private:
+	void sendVersionRequest();
 };
 
 inline Netcp::Netcp(Program* program) :
@@ -59,7 +61,7 @@ inline void Netcp::sendData(Com::Buffer& sendb) {
 }
 
 inline void Netcp::sendData(const vector<uint8>& vec) {
-	Com::sendData(sock.fd, vec.data(), uint(vec.size()), webs);
+	Com::sendData(sock.fd, vec.data(), vec.size(), webs);
 }
 
 inline void Netcp::setTickproc(bool (Netcp::*func)()) {
@@ -73,9 +75,9 @@ private:
 
 public:
 	using Netcp::Netcp;
-	~NetcpHost() final;
+	~NetcpHost() override;
 
-	void connect(const Settings* sets) final;
-	void disconnect() final;
-	void tick() final;
+	void connect(const Settings* sets) override;
+	void disconnect() override;
+	void tick() override;
 };

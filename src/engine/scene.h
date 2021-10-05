@@ -5,6 +5,91 @@
 #include "utils/objects.h"
 #include <queue>
 
+// screen space quad
+class Frame {
+public:
+	static constexpr uint corners = 4;
+private:
+	static constexpr uint stride = 4;
+	static constexpr uint vlength = 2;
+	static constexpr float vertices[corners * stride] = {
+		-1.f,  1.f, 0.f, 1.f,
+		1.f,  1.f, 1.f, 1.f,
+		-1.f, -1.f, 0.f, 0.f,
+		1.f, -1.f, 1.f, 0.f,
+	};
+
+	GLuint vao = 0, vbo = 0;
+
+public:
+	Frame();
+	~Frame();
+
+	GLuint getVao() const;
+};
+
+inline GLuint Frame::getVao() const {
+	return vao;
+}
+
+// skybox cube
+class Skybox {
+public:
+	static constexpr uint corners = 36;
+private:
+	static constexpr uint vlength = 3;
+	static constexpr float vertices[corners * vlength] = {
+		1.f, -1.f, -1.f,
+		-1.f, -1.f, -1.f,
+		-1.f,  1.f, -1.f,
+		-1.f,  1.f, -1.f,
+		1.f,  1.f, -1.f,
+		1.f, -1.f, -1.f,
+		-1.f,  1.f, -1.f,
+		-1.f, -1.f, -1.f,
+		-1.f, -1.f,  1.f,
+		-1.f, -1.f,  1.f,
+		-1.f,  1.f,  1.f,
+		-1.f,  1.f, -1.f,
+		1.f,  1.f,  1.f,
+		1.f, -1.f,  1.f,
+		1.f, -1.f, -1.f,
+		1.f, -1.f, -1.f,
+		1.f,  1.f, -1.f,
+		1.f,  1.f,  1.f,
+		1.f,  1.f,  1.f,
+		-1.f,  1.f,  1.f,
+		-1.f, -1.f,  1.f,
+		-1.f, -1.f,  1.f,
+		1.f, -1.f,  1.f,
+		1.f,  1.f,  1.f,
+		1.f,  1.f,  1.f,
+		1.f,  1.f, -1.f,
+		-1.f,  1.f, -1.f,
+		-1.f,  1.f, -1.f,
+		-1.f,  1.f,  1.f,
+		1.f,  1.f,  1.f,
+		1.f, -1.f, -1.f,
+		-1.f, -1.f,  1.f,
+		-1.f, -1.f, -1.f,
+		1.f, -1.f,  1.f,
+		-1.f, -1.f,  1.f,
+		1.f, -1.f, -1.f
+	};
+
+	GLuint vao = 0, vbo = 0;
+
+public:
+	Skybox();
+	~Skybox();
+
+	GLuint getVao() const;
+};
+
+inline GLuint Skybox::getVao() const {
+	return vao;
+}
+
 // additional data for rendering objects
 class Camera {
 public:
@@ -14,11 +99,11 @@ public:
 		dragging	// user is moving it
 	};
 
-	static constexpr float fov = 35.f;
+	static constexpr float fov = glm::radians(35.f);
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
-	static constexpr float pmaxSetup = -PI / 2.f + PI / 10.f, pmaxMatch = -PI / 2.f + PI / 20.f;
-	static constexpr float ymaxSetup = PI / 6.f, ymaxMatch = PI * 2.f;
+	static constexpr float pmaxSetup = -glm::half_pi<float>() + glm::pi<float>() / 10.f, pmaxMatch = -glm::half_pi<float>() + glm::pi<float>() / 20.f;
+	static constexpr float ymaxSetup = glm::pi<float>() / 6.f, ymaxMatch = glm::pi<float>() * 2.f;
 	static constexpr vec3 posSetup = { Config::boardWidth / 2.f, 9.f, Config::boardWidth / 2.f + 9.f };
 	static constexpr vec3 posMatch = { Config::boardWidth / 2.f, 12.f, Config::boardWidth / 2.f + 10.f };
 	static constexpr vec3 latSetup = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 2.5f };
@@ -44,9 +129,9 @@ public:
 	const vec3& getPos() const;
 	const vec3& getLat() const;
 	void setPos(const vec3& newPos, const vec3& newLat);
-	void rotate(const vec2& dRot, float dYaw);
+	void rotate(vec2 dRot, float dYaw);
 	void zoom(int mov);
-	vec3 direction(const ivec2& mPos) const;
+	vec3 direction(ivec2 mPos) const;
 	ivec2 screenPos(const vec3& pnt) const;
 private:
 	void updateRotations(const vec3& pvec, const vec3& lvec);
@@ -73,10 +158,8 @@ inline float Camera::calcYaw(const vec3& pos, float dist) {
 // single light information
 class Light {
 public:
-	GLuint depthMap, depthFrame;
+	GLuint fboDepth = 0, texDepth = 0;
 
-	static constexpr GLenum depthTexa = GL_TEXTURE7;
-	static constexpr float defaultRange = 140.f;
 private:
 	static constexpr float snear = 0.1f;
 
@@ -85,12 +168,13 @@ private:
 	vec3 diffuse;
 	float linear;
 	float quadratic;
+	float farPlane;
 
 public:
-	Light(const vec3& pos, const vec3& color, float ambiFac, float range = defaultRange);
-	~Light();
+	Light(GLsizei res, const vec3& pos = vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), const vec3& color = vec3(1.f, 0.98f, 0.92f), float ambiFac = 0.8f, float range = 140.f);
 
-	void updateValues(float range = defaultRange);
+	void free();
+	void updateValues();
 };
 
 // saves what widget is being clicked on with what button at what position
@@ -100,7 +184,7 @@ struct ClickStamp {
 	ivec2 pos;
 	uint8 but;
 
-	ClickStamp(Interactable* interact = nullptr, ScrollArea* scrollArea = nullptr, const ivec2& position = ivec2(INT_MIN), uint8 button = 0);
+	ClickStamp(Interactable* interact = nullptr, ScrollArea* scrollArea = nullptr, ivec2 position = ivec2(INT_MIN), uint8 button = 0);
 };
 
 // defines change of object properties at a time
@@ -148,29 +232,35 @@ private:
 	Interactable* firstSelect = nullptr;
 	Interactable* capture = nullptr;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 	uptr<RootLayout> layout;
-	uptr<Popup> popup;
+	vector<Popup*> popups;
 	vector<Overlay*> overlays;
 	uptr<Context> context;
 	vector<Animation> animations;
-	umap<string, Mesh> meshes;
+	vector<Mesh> meshes;
+	umap<string, uint16> meshRefs;
 	umap<string, Material> matls;
 	umap<string, Texture> texes;
-	Light light = Light(vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), vec3(1.f, 0.98f, 0.92f), 0.8f);
+	TextureSet texSet;
+	Light light;
 	ClickStamp cstamp;	// data about last mouse click
+	FrameSet frames;
+	Frame scrFrame;
+	Skybox skybox;
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
 
 public:
+	Scene();
 	~Scene();
 
 	void draw();
 	void tick(float dSec);
 	void onResize();
-	void onMouseMove(const ivec2& pos, const ivec2& mov, uint32 state);
-	void onMouseDown(const ivec2& pos, uint8 but);
-	void onMouseUp(const ivec2& pos, uint8 but);
-	void onMouseWheel(const ivec2& mov);
+	void onMouseMove(ivec2 pos, ivec2 mov, uint32 state);
+	void onMouseDown(ivec2 pos, uint8 but);
+	void onMouseUp(ivec2 pos, uint8 but);
+	void onMouseWheel(ivec2 mov);
 	void onMouseLeave();
 	void onText(const char* str);
 	void onConfirm();
@@ -178,15 +268,17 @@ public:
 	void onCancel();
 	void onXbutCancel();
 
-	const Mesh* mesh(const string& name) const;
+	Mesh* mesh(const string& name);
 	const Material* material(const string& name) const;
 	void loadObjects();
 	const Texture* getTex(const string& name) const;
 	GLuint texture(const string& name = string()) const;
+	int objTex(const string& name = string()) const;
 	void loadTextures();
 	void reloadTextures();
-	void resetShadows();
 	void reloadShader();
+	void resetShadows();
+	void resetFrames();
 	Interactable* getSelect() const;
 	Interactable* getFirstSelect() const;
 	Interactable* getCapture() const;
@@ -195,23 +287,24 @@ public:
 	RootLayout* getLayout();
 	Popup* getPopup();
 	vector<Overlay*>& getOverlays();
-	void setPopup(uptr<Popup>&& newPopup, Widget* newCapture = nullptr);
+	void pushPopup(uptr<Popup>&& newPopup, Widget* newCapture = nullptr);
+	void popPopup();
 	Context* getContext();
 	void setContext(uptr<Context>&& newContext);
 	void addAnimation(Animation&& anim);
 	void delegateStamp(Interactable* inter);
-	bool cursorInClickRange(const ivec2& mPos) const;
-	vec3 pickerRay(const ivec2& mPos) const;
+	bool cursorInClickRange(ivec2 mPos) const;
+	vec3 pickerRay(ivec2 mPos) const;
 	vec3 rayXZIsct(const vec3& ray) const;
 
 	void navSelect(Direction dir);
 	void updateSelect();
 	void updateSelect(Interactable* sel);
-	void updateSelect(const ivec2& mPos);
+	void updateSelect(ivec2 mPos);
 	void deselect();
 private:
-	Interactable* getSelected(const ivec2& mPos);
-	Interactable* getScrollOrObject(const ivec2& mPos, Widget* wgt) const;
+	Interactable* getSelected(ivec2 mPos);
+	Interactable* getScrollOrObject(ivec2 mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea(Interactable* inter) const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 };
@@ -233,7 +326,7 @@ inline RootLayout* Scene::getLayout() {
 }
 
 inline Popup* Scene::getPopup() {
-	return popup.get();
+	return !popups.empty() ? popups.back() : nullptr;
 }
 
 inline vector<Overlay*>& Scene::getOverlays() {
@@ -244,11 +337,11 @@ inline Context* Scene::getContext() {
 	return context.get();
 }
 
-inline bool Scene::cursorInClickRange(const ivec2& mPos) const {
+inline bool Scene::cursorInClickRange(ivec2 mPos) const {
 	return glm::length(vec2(mPos - cstamp.pos)) <= clickThreshold;
 }
 
-inline void Scene::updateSelect(const ivec2& mPos) {
+inline void Scene::updateSelect(ivec2 mPos) {
 	updateSelect(getSelected(mPos));
 }
 
@@ -256,7 +349,7 @@ inline ScrollArea* Scene::getSelectedScrollArea(Interactable* inter) const {
 	return dynamic_cast<Widget*>(inter) ? findFirstScrollArea(static_cast<Widget*>(inter)) : nullptr;
 }
 
-inline vec3 Scene::pickerRay(const ivec2& mPos) const {
+inline vec3 Scene::pickerRay(ivec2 mPos) const {
 	return camera.direction(mPos) * Camera::zfar;
 }
 
@@ -264,8 +357,8 @@ inline vec3 Scene::rayXZIsct(const vec3& ray) const {
 	return camera.getPos() - ray * (camera.getPos().y / ray.y);
 }
 
-inline const Mesh* Scene::mesh(const string& name) const {
-	return &meshes.at(name);
+inline Mesh* Scene::mesh(const string& name) {
+	return &meshes[meshRefs.at(name)];
 }
 
 inline const Material* Scene::material(const string& name) const {
@@ -278,4 +371,8 @@ inline const Texture* Scene::getTex(const string& name) const {
 
 inline GLuint Scene::texture(const string& name) const {
 	return texes.at(name);
+}
+
+inline int Scene::objTex(const string& name) const {
+	return texSet.get(name);
 }

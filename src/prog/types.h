@@ -129,19 +129,19 @@ struct Config {
 };
 
 inline uint16 Config::dataSize(const string& name) const {
-	return uint16(sizeof(uint8) + name.length() + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceLim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers));
+	return sizeof(uint8) + name.length() + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceLim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers);
 }
 
 inline uint16 Config::countTiles() const {
-	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), uint16(0));
+	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), 0);
 }
 
 inline uint16 Config::countMiddles() const {
-	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), uint16(0));
+	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), 0);
 }
 
 inline uint16 Config::countPieces() const {
-	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), uint16(0));
+	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), 0);
 }
 
 inline uint16 Config::countFreeTiles() const {

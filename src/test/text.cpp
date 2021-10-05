@@ -1,4 +1,5 @@
 #include "tests.h"
+#include "prog/types.h"
 #include "server/server.h"
 
 static void testReadWordM() {
@@ -176,6 +177,12 @@ static void testToStr() {
 	assertEqual(toStr(2, 3), "002");
 	assertEqual(toStr(40, 3), "040");
 	assertEqual(toStr(100, 3), "100");
+	assertEqual(toStr<2>(5u), "101");
+	assertEqual(toStr<2>(36u), "100100");
+	assertEqual(toStr<10>(0u), "0");
+	assertEqual(toStr<10>(12u), "12");
+	assertEqual(toStr<16>(0xA7u), "A7");
+	assertEqual(toStr<16>(0x1Cu), "1C");
 	assertEqual(toStr(glm::ivec3(1, 0, -1), " | "), "1 | 0 | -1");
 	assertEqual(toStr(glm::vec3(4.2f, 0.f, -2.53f), "x"), "4.2x0x-2.53");
 }
@@ -202,13 +209,13 @@ static void testBtos() {
 }
 
 static void testStrToEnum() {
-	assertEqual(strToEnum<uint8>(Tile::names, "plains"), uint8(Tile::plains));
-	assertEqual(strToEnum<uint8>(Tile::names, "Plains"), uint8(Tile::plains));
-	assertEqual(strToEnum<uint8>(Tile::names, "forest"), uint8(Tile::forest));
-	assertEqual(strToEnum<uint8>(Tile::names, "FOREST"), uint8(Tile::forest));
-	assertEqual(strToEnum<uint8>(Tile::names, ""), uint8(Tile::empty));
-	assertEqual(strToEnum<uint8>(Tile::names, "garbage"), Tile::names.size());
-	assertEqual(strToEnum<uint8>(Tile::names, "garbage", UINT8_MAX), UINT8_MAX);
+	assertEqual(strToEnum<uint8>(tileNames, "plains"), uint8(TileType::plains));
+	assertEqual(strToEnum<uint8>(tileNames, "Plains"), uint8(TileType::plains));
+	assertEqual(strToEnum<uint8>(tileNames, "forest"), uint8(TileType::forest));
+	assertEqual(strToEnum<uint8>(tileNames, "FOREST"), uint8(TileType::forest));
+	assertEqual(strToEnum<uint8>(tileNames, ""), uint8(TileType::empty));
+	assertEqual(strToEnum<uint8>(tileNames, "garbage"), tileNames.size());
+	assertEqual(strToEnum<uint8>(tileNames, "garbage", UINT8_MAX), UINT8_MAX);
 }
 
 static void testReadNumber() {

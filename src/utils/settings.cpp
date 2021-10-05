@@ -117,6 +117,14 @@ void Binding::init(Type type) {
 		bcall = &ProgState::eventChat;
 		ucall = nullptr;
 		break;
+	case Type::config:
+		bcall = &ProgState::eventOpenConfig;
+		ucall = nullptr;
+		break;
+	case Type::settings:
+		bcall = &ProgState::eventOpenSettings;
+		ucall = nullptr;
+		break;
 	case Type::frameCounter:
 		bcall = &ProgState::eventFrameCounter;
 		ucall = nullptr;
@@ -327,6 +335,16 @@ void Binding::reset(Binding::Type type) {
 		joys = { JoystickButton::back };
 		gpds = { SDL_CONTROLLER_BUTTON_BACK };
 		break;
+	case Type::config:
+		keys = { SDL_SCANCODE_I };
+		joys.clear();
+		gpds.clear();
+		break;
+	case Type::settings:
+		keys = { SDL_SCANCODE_O };
+		joys.clear();
+		gpds.clear();
+		break;
 	case Type::frameCounter:
 		keys = { SDL_SCANCODE_P };
 		joys = { JoystickButton::rs };
@@ -383,8 +401,6 @@ void Binding::reset(Binding::Type type) {
 		gpds.clear();
 		break;
 	case Type::select8:
-		bcall = &ProgState::eventSelect8;
-		ucall = nullptr;
 		keys = { SDL_SCANCODE_9, SDL_SCANCODE_KP_9 };
 		joys.clear();
 		gpds.clear();
@@ -446,15 +462,20 @@ Settings::Settings() :
 	chatLines(511),
 	deadzone(12000),
 	display(0),
-#ifdef __ANDROID__
-	screen(Screen::desktop),
-#else
 	screen(defaultScreen),
-#endif
 	vsync(defaultVSync),
-	msamples(4),
 	texScale(100),
+#ifdef OPENGLES
+	msamples(0),
+	softShadows(false),
+	ssao(false),
+	bloom(false),
+#else
+	msamples(4),
 	softShadows(true),
+	ssao(true),
+	bloom(true),
+#endif
 	avolume(0),
 	colorAlly(defaultAlly),
 	colorEnemy(defaultEnemy),

@@ -12,10 +12,10 @@ void World::setArgs(int argc, const C* const* argv) {
 #ifndef IS_TEST_LIBRARY
 #ifdef _WIN32
 #ifdef __MINGW32__
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR lpCmdLine, int) {
 	if (int argc; LPWSTR* argv = CommandLineToArgvW(cstow(lpCmdLine).c_str(), &argc)) {
 #else
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR pCmdLine, int) {
 	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
 #endif
 		World::setArgs(argc, argv);

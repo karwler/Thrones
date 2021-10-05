@@ -6,7 +6,7 @@
 // CONTROLLER
 
 int16 Controller::axisValue(int16 value) {
-	return std::abs(int(value)) > int(World::sets()->deadzone) ? value : 0;
+	return std::abs(value) > World::sets()->deadzone ? value : 0;
 }
 
 optional<bool> Controller::axisDown(int16 val, uint8 id, bool* vrec) {
@@ -48,7 +48,7 @@ uint8 Joystick::hatDown(uint8 val, uint8 id) {
 // INPUT SYS
 
 InputSys::InputSys() {
-	for (uint8 i = 0; i < uint8(bindings.size()); ++i)
+	for (uint8 i = 0; i < bindings.size(); ++i)
 		bindings[i].init(Binding::Type(i));
 }
 
@@ -251,7 +251,7 @@ void InputSys::checkInput(const mumap<K, Binding::Type>& kmap, T key, M Binding:
 
 void InputSys::tick() {
 	if (!World::scene()->getCapture())	// handle key hold
-		for (uint8 i = uint8(Binding::holders); i < uint8(bindings.size()); ++i)
+		for (uint8 i = uint8(Binding::holders); i < bindings.size(); ++i)
 			if (int16 amt = isPressed(bindings[i]))
 				World::srun(bindings[i].acall, Controller::axisToFloat(amt));
 }
@@ -430,7 +430,7 @@ void InputSys::resetBindings() {
 	keymap.clear();
 	joymap.clear();
 	padmap.clear();
-	for (uint8 i = 0; i < uint8(bindings.size()); ++i) {
+	for (uint8 i = 0; i < bindings.size(); ++i) {
 		bindings[i].reset(Binding::Type(i));
 		for (SDL_Scancode sc : bindings[i].keys)
 			keymap.emplace(sc, Binding::Type(i));

@@ -13,8 +13,6 @@ public:
 	uint16 vpOwn, vpEne;
 
 private:
-	AudioSys* audio;
-	Program* prog;
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
 	Com::Buffer sendb;
@@ -25,7 +23,7 @@ private:
 	bool myTurn, firstTurn;
 
 public:
-	Game(AudioSys* audioSys, Program* program, const Scene* scene);
+	Game();
 	~Game();
 
 	void finishSetup();
@@ -59,7 +57,7 @@ public:
 	void surrender();
 	void changeTile(Tile* tile, TileType type, TileTop top = TileTop::none);
 
-#ifdef DEBUG
+#ifndef NDEBUG
 	void processCommand(const char* cmd);
 #endif
 private:
@@ -73,9 +71,8 @@ private:
 	void removePiece(Piece* piece);				// remove from board
 	void breachTile(Tile* tile, bool yes = true);
 	static string actionRecordMsg(Action action, bool self);
-	static std::default_random_engine createRandomEngine();
 
-#ifdef DEBUG
+#ifndef NDEBUG
 	Piece* readCommandPieceId(const char*& cmd);
 	Piece* readCommandPiecePos(const char*& cmd);
 	void readCommandPieceMove(const char*& cmd, Piece* pce, bool killOccupant);

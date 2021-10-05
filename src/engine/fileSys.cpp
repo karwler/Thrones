@@ -2,7 +2,16 @@
 #include "inputSys.h"
 #include "utils/objects.h"
 #include <iostream>
-#ifdef EMSCRIPTEN
+#ifdef __APPLE__
+#include <SDL2_ttf/SDL_ttf.h>
+#else
+#if defined(__ANDROID__) || defined(_WIN32)
+#include <SDL_ttf.h>
+#else
+#include <SDL2/SDL_ttf.h>
+#endif
+#endif
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #elif defined(_WIN32)
 #include <windows.h>
@@ -53,7 +62,7 @@ void FileSys::init(const Arguments& args) {
 #ifdef __ANDROID__
 	if (const char* path = SDL_AndroidGetExternalStoragePath())
 		dirConfig = path + string("/");
-#elif defined(EMSCRIPTEN)
+#elif defined(__EMSCRIPTEN__)
 	dirBase = "/";
 	dirConfig = "/data/";
 	EM_ASM(
@@ -121,9 +130,9 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 		return;
 
 	Settings& sets = *static_cast<Settings*>(settings);
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDisplay))
-		sets.display = uint8(std::min(sstoul(il.val), ulong(SDL_GetNumVideoDisplays())));
+		sets.display = std::min(sstoull(il.val), ullong(SDL_GetNumVideoDisplays()));
 	else
 #endif
 #ifndef __ANDROID__
@@ -139,19 +148,23 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 #endif
 #ifndef OPENGLES
 	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMsamples))
-		sets.msamples = uint8(std::min(sstoul(il.val), 8ul));
-	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordShadows))
-		readShadows(il.val.c_str(), sets);
+		sets.msamples = std::min(sstoull(il.val), 8ull);
 	else
 #endif
-	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTexScale))
-		sets.texScale = uint8(std::clamp(sstoul(il.val), 1ul, 100ul));
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordShadows))
+		readShadows(il.val.c_str(), sets);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSsao))
+		sets.ssao = stob(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBloom))
+		sets.bloom = stob(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTexScale))
+		sets.texScale = std::clamp(sstoull(il.val), 1ull, 100ull);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVsync))
 		sets.vsync = strToEnum(Settings::vsyncNames, il.val, Settings::defaultVSync + 1) - 1;
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordGamma))
 		sets.gamma = std::clamp(sstof(il.val), 0.f, Settings::gammaMax);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAVolume))
-		sets.avolume = uint8(std::min(sstoul(il.val), ulong(SDL_MIX_MAXVOLUME)));
+		sets.avolume = std::min(sstoull(il.val), ullong(SDL_MIX_MAXVOLUME));
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordColors))
 		readColors(il.val.c_str(), sets);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordScales))
@@ -161,9 +174,9 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTooltips))
 		sets.tooltips = stob(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordChatLines))
-		sets.chatLines = uint16(std::min(stoul(il.val), ulong(Settings::chatLinesMax)));
+		sets.chatLines = std::min(sstoul(il.val), ulong(Settings::chatLinesMax));
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDeadzone))
-		sets.deadzone = uint16(std::clamp(stoul(il.val), ulong(Settings::deadzoneLimit.x), ulong(Settings::deadzoneLimit.y)));
+		sets.deadzone = std::clamp(sstoul(il.val), ulong(Settings::deadzoneLimit.x), ulong(Settings::deadzoneLimit.y));
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordResolveFamily))
 		sets.resolveFamily = strToEnum(Settings::familyNames, il.val, Settings::defaultFamily);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFont))
@@ -174,13 +187,15 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 		sets.address = std::move(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPort))
 		sets.port = std::move(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPlayerName))
+		sets.playerName = std::move(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordLastConfig))
 		sets.lastConfig = std::move(il.val);
 }
 
 void FileSys::readShadows(const char* str, Settings& sets) {
 	if (string word = readWord(str); !word.empty())
-		sets.shadowRes = uint16(std::min(sstoul(word), ulong(Settings::shadowResMax)));
+		sets.shadowRes = std::min(sstoull(word), 1ull << Settings::shadowBitMax);
 	if (string word = readWord(str); !word.empty())
 		sets.softShadows = stob(word);
 }
@@ -262,7 +277,7 @@ void FileSys::readBinding(void* inputSys, IniLine& il) {
 void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	string text;
 	IniLine::write(text, iniTitleSettings);
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	IniLine::write(text, iniKeywordDisplay, toStr(sets.display));
 #endif
 #ifndef __ANDROID__
@@ -273,8 +288,10 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 #endif
 #ifndef OPENGLES
 	IniLine::write(text, iniKeywordMsamples, toStr(sets.msamples));
-	IniLine::write(text, iniKeywordShadows, toStr(sets.shadowRes) + ' ' + btos(sets.softShadows));
 #endif
+	IniLine::write(text, iniKeywordShadows, toStr(sets.shadowRes) + ' ' + btos(sets.softShadows));
+	IniLine::write(text, iniKeywordSsao, btos(sets.ssao));
+	IniLine::write(text, iniKeywordBloom, btos(sets.bloom));
 	IniLine::write(text, iniKeywordTexScale, toStr(sets.texScale));
 	IniLine::write(text, iniKeywordVsync, Settings::vsyncNames[uint8(sets.vsync+1)]);
 	IniLine::write(text, iniKeywordGamma, toStr(sets.gamma));
@@ -290,11 +307,12 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(text, iniKeywordInvertWheel, btos(sets.invertWheel));
 	IniLine::write(text, iniKeywordAddress, sets.address);
 	IniLine::write(text, iniKeywordPort, sets.port);
+	IniLine::write(text, iniKeywordPlayerName, sets.playerName);
 	IniLine::write(text, iniKeywordLastConfig, sets.lastConfig);
 	text += linend;
 
 	IniLine::write(text, iniTitleBindings);
-	for (uint8 i = 0; i < uint8(Binding::names.size()); ++i) {
+	for (uint8 i = 0; i < Binding::names.size(); ++i) {
 		if (!input->getBinding(Binding::Type(i)).keys.empty())
 			IniLine::write(text, Binding::names[i], iniKeyKey, strJoin(input->getBinding(Binding::Type(i)).keys, [](SDL_Scancode sc) -> string { return strEnclose(SDL_GetScancodeName(sc)); }));
 		if (!input->getBinding(Binding::Type(i)).joys.empty())
@@ -315,11 +333,11 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 			IniLine::write(text, Binding::names[i], iniKeyGpd, strJoin(input->getBinding(Binding::Type(i)).gpds, [](AsgGamepad ag) -> string {
 				switch (ag.getAsg()) {
 				case AsgGamepad::button:
-					return iniVkeyButton + string(InputSys::gbuttonNames[uint8(ag.getButton())]);
+					return iniVkeyButton + string(InputSys::gbuttonNames[ag.getButton()]);
 				case AsgGamepad::axisPos:
-					return iniVkeyAxis + string(1, '+') + InputSys::gaxisNames[uint8((ag.getAxis()))];
+					return iniVkeyAxis + string(1, '+') + InputSys::gaxisNames[ag.getAxis()];
 				case AsgGamepad::axisNeg:
-					return iniVkeyAxis + string(1, '-') + InputSys::gaxisNames[uint8((ag.getAxis()))];
+					return iniVkeyAxis + string(1, '-') + InputSys::gaxisNames[ag.getAxis()];
 				}
 				return string();
 			}));
@@ -353,7 +371,7 @@ umap<string, Config> FileSys::loadConfigs() {
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBoardSize))
 				cit->homeSize = stoiv<svec2>(il.val.c_str(), strtol);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBattlePass))
-				cit->battlePass = uint8(sstol(il.val));
+				cit->battlePass = std::min(sstoull(il.val), ullong(Config::randomLimit));
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFavorLimit))
 				readFavorLimit(il.val.c_str(), cit);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFirstTurnEngage))
@@ -365,9 +383,9 @@ umap<string, Config> FileSys::loadConfigs() {
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonStraight))
 				cit->opts = stob(il.val) ? cit->opts | Config::dragonStraight : cit->opts & ~Config::dragonStraight;
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinFortress))
-				cit->winFortress = uint16(sstol(il.val));
+				cit->winFortress = sstol(il.val);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinThrone))
-				cit->winThrone = uint16(sstol(il.val));
+				cit->winThrone = sstol(il.val);
 			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordCapturers))
 				cit->capturers = readCapturers(il.val);
 			break;
@@ -388,7 +406,7 @@ void FileSys::readVictoryPoints(const char* str, Config* cfg) {
 	if (string word = readWord(str); !word.empty())
 		cfg->opts = stob(word) ? cfg->opts | Config::victoryPoints : cfg->opts & ~Config::victoryPoints;
 	if (string word = readWord(str); !word.empty())
-		cfg->victoryPointsNum = uint16(sstol(word));
+		cfg->victoryPointsNum = sstol(word);
 	if (string word = readWord(str); !word.empty())
 		cfg->opts = stob(word) ? cfg->opts | Config::victoryPointsEquidistant : cfg->opts & ~Config::victoryPointsEquidistant;
 }
@@ -397,12 +415,12 @@ void FileSys::readSetPieceBattle(const char* str, Config* cfg) {
 	if (string word = readWord(str); !word.empty())
 		cfg->opts = stob(word) ? cfg->opts | Config::setPieceBattle : cfg->opts & ~Config::setPieceBattle;
 	if (string word = readWord(str); !word.empty())
-		cfg->setPieceBattleNum = uint16(sstol(word));
+		cfg->setPieceBattleNum = sstol(word);
 }
 
 void FileSys::readFavorLimit(const char* str, Config* cfg) {
 	if (string word = readWord(str); !word.empty())
-		cfg->favorLimit = uint16(sstol(word));
+		cfg->favorLimit = sstol(word);
 	if (string word = readWord(str); !word.empty())
 		cfg->opts = stob(word) ? cfg->opts | Config::favorTotal : cfg->opts & ~Config::favorTotal;
 }
@@ -418,7 +436,7 @@ uint16 FileSys::readCapturers(const string& line) {
 template <sizet N, sizet S>
 void FileSys::readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts) {
 	if (uint8 id = strToEnum<uint8>(names, il.key); id < amts.size())
-		amts[id] = uint16(sstol(il.val));
+		amts[id] = sstol(il.val);
 }
 
 void FileSys::saveConfigs(const umap<string, Config>& confs) {
@@ -473,13 +491,13 @@ umap<string, Setup> FileSys::loadSetups() {
 		else if (il.type == IniLine::prpKeyVal && !sets.empty()) {
 			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile)) {
 				if (TileType t = strToEnum<TileType>(tileNames, il.val); t < TileType::fortress)
-					sit->second.tiles.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
+					sit->second.tiles.emplace_back(stoiv<svec2>(il.key.c_str(), strtoul), t);
 			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle)) {
 				if (TileType t = strToEnum<TileType>(tileNames, il.val); t < TileType::fortress)
-					sit->second.mids.emplace_back(uint16(sstoul(il.key)), t);
+					sit->second.mids.emplace_back(sstoul(il.key), t);
 			} else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
 				if (PieceType t = strToEnum<PieceType>(pieceNames, il.val); t <= PieceType::throne)
-					sit->second.pieces.emplace_back(stoiv<svec2>(il.key.c_str(), strtol), t);
+					sit->second.pieces.emplace_back(stoiv<svec2>(il.key.c_str(), strtoul), t);
 		}
 	}
 	return sets;
@@ -501,35 +519,37 @@ void FileSys::saveSetups(const umap<string, Setup>& sets) {
 }
 
 vector<string> FileSys::listFonts() {
-#if defined(__ANDROID__) || defined(EMSCRIPTEN)
-	return { Settings::defaultFont, "Merriweather" };
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+	return { filePrimaryFont, fileSecondaryFont };
 #else
+	string dirpath = dataPath();
 	vector<string> entries;
 #ifdef _WIN32
 	WIN32_FIND_DATAW data;
-	HANDLE hFind = FindFirstFileW(sstow(fontPath() + '*').c_str(), &data);
+	HANDLE hFind = FindFirstFileW(sstow(dataPath() + '*').c_str(), &data);
 	if (hFind == INVALID_HANDLE_VALUE)
 		return entries;
 
 	do {
-		if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)))
-			entries.push_back(cwtos(data.cFileName));
+		if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+			string ename = cwtos(data.cFileName);
+			if (TTF_Font* font = TTF_OpenFont((dirpath + ename).c_str(), fontTestHeight)) {
+				TTF_CloseFont(font);
+				entries.push_back(std::move(ename));
+			}
+		}
 	} while (FindNextFileW(hFind, &data));
 	FindClose(hFind);
 #else
-	DIR* directory = opendir(fontPath().c_str());
+	DIR* directory = opendir(dataPath().c_str());
 	if (!directory)
 		return entries;
 
 	while (dirent* entry = readdir(directory))
-		if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, ".."))
-			switch (entry->d_type) {
-			case DT_REG:
+		if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..") && (entry->d_type == DT_REG || entry->d_type == DT_LNK))
+			if (TTF_Font* font = TTF_OpenFont((dirpath + entry->d_name).c_str(), fontTestHeight)) {
+				TTF_CloseFont(font);
 				entries.emplace_back(entry->d_name);
-				break;
-			case DT_LNK:
-				if (struct stat info; !stat(entry->d_name, &info) && S_ISREG(info.st_mode))
-					entries.emplace_back(entry->d_name);
 			}
 	closedir(directory);
 #endif
@@ -581,7 +601,8 @@ umap<string, Material> FileSys::loadMaterials() {
 
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Material> mtls(size + 1);
+	umap<string, Material> mtls;
+	mtls.reserve(size + 1);
 	mtls.emplace();
 
 	uint8 len;
@@ -599,15 +620,15 @@ umap<string, Material> FileSys::loadMaterials() {
 	return mtls;
 }
 
-umap<string, Mesh> FileSys::loadObjects() {
+vector<Mesh> FileSys::loadObjects(umap<string, uint16>& refs) {
 	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileObjects).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load objects");
 
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Mesh> mshs(size + 1);
-	mshs.emplace();
+	vector<Mesh> mshs(size);
+	refs.reserve(size + 1);
 
 	uint8 ibuf[objectHeaderSize];
 	for (uint16 i = 0; i < size; ++i) {
@@ -620,9 +641,15 @@ umap<string, Mesh> FileSys::loadObjects() {
 		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
 		SDL_RWread(ifh, elems.data(), sizeof(*elems.data()), elems.size());
 		SDL_RWread(ifh, verts.data(), sizeof(*verts.data()), verts.size());
-		mshs.emplace(std::move(name), Mesh(verts, elems));
+		mshs[i].init(verts, elems);
+		refs.emplace(std::move(name), i + (i >= 2));
 	}
 	SDL_RWclose(ifh);
+
+	mshs.emplace(mshs.begin() + 2);
+	mshs[2].shape = GL_LINES;
+	mshs[2].init(vector<Vertex>(), vector<GLushort>());
+	refs.emplace("grid", 2);
 	return mshs;
 }
 
@@ -650,13 +677,16 @@ umap<string, string> FileSys::loadShaders() {
 	return shds;
 }
 
-umap<string, Texture> FileSys::loadTextures(int scale) {
-	umap<string, Texture> texs = { pair(string(), Texture({ 255, 255, 255 })) };
-	loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { txv.emplace(std::move(name), Texture(img, iform, pform)); }, scale);
-	return texs;
+TextureSet FileSys::loadTextures(umap<string, Texture>& texs, int scale) {
+	texs = { pair(string(), Texture({ 255, 255, 255, 255 })) };
+	return loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLenum fmt) { txv.emplace(std::move(name), Texture(img, fmt)); }, scale);
 }
 
-void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum), int scale) {
+TextureSet FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
+	return loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLenum fmt) { txv.at(name).reload(img, fmt); }, scale);
+}
+
+TextureSet FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale) {
 	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileTextures).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load textures");
@@ -664,26 +694,59 @@ void FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<strin
 	scale = 100 / scale;
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
+	TextureSet::Import imp;
 
 	uint8 ibuf[textureHeaderSize];
 	for (uint16 i = 0; i < size; ++i) {
 		SDL_RWread(ifh, ibuf, sizeof(*ibuf), textureHeaderSize);
 		string name;
-		name.resize(ibuf[0]);
-		vector<uint8> imgd(readMem<uint32>(ibuf + 1));
-
+		name.resize(ibuf[1]);
 		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
-		SDL_RWread(ifh, imgd.data(), sizeof(*imgd.data()), imgd.size());
-		if (SDL_Surface* img = scaleSurface(IMG_Load_RW(SDL_RWFromMem(imgd.data(), int(imgd.size())), SDL_TRUE), scale))
-			inset(texs, std::move(name), img, readMem<uint16>(ibuf + 5), readMem<uint16>(ibuf + 7));
-		else
-			std::cerr << "failed to load " << name << ": " << SDL_GetError() << std::endl;
+
+		if (ibuf[0] != TEXPLACE_CUBE) {
+			auto [img, pform] = loadImageBlock(ifh, name);
+			if (!img)
+				continue;
+
+			if (ibuf[0] == TEXPLACE_BOTH) {
+				inset(texs, string(name), img, pform);
+				loadObjectTexture(ifh, img, std::move(name), pform, imp, scale);
+			} else if (ibuf[0] & TEXPLACE_OBJECT)
+				loadObjectTexture(ifh, img, std::move(name), pform, imp, scale);
+			else {
+				if (ibuf[0] & TEXPLACE_WIDGET)
+					inset(texs, std::move(name), img, pform);
+				SDL_FreeSurface(img);
+			}
+		} else
+			for (sizet s = 0; s < imp.sky.size(); ++s)
+				if (imp.sky[s] = loadImageBlock(ifh, name); !imp.sky[s].first) {
+					std::for_each(imp.sky.begin(), imp.sky.begin() + s, [](pair<SDL_Surface*, GLenum>& it) { SDL_FreeSurface(it.first); });
+					break;
+				}
 	}
 	SDL_RWclose(ifh);
+	return TextureSet(std::move(imp));
 }
 
-void FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
-	loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLint iform, GLenum pform) { txv[name].reload(img, iform, pform); }, scale);
+void FileSys::loadObjectTexture(SDL_RWops* ifh, SDL_Surface* img, string&& name, GLenum ifmt, TextureSet::Import& imp, int scale) {
+	if (auto [nrm, nfmt] = loadImageBlock(ifh, name); nrm) {
+		imp.cres = glm::max(ivec2(img->w, img->h) / scale, imp.cres);
+		imp.nres = glm::max(ivec2(nrm->w, nrm->h) / scale, imp.nres);
+		imp.imgs.emplace_back(img, nrm, std::move(name), ifmt, nfmt);
+	} else
+		SDL_FreeSurface(img);
+}
+
+pair<SDL_Surface*, GLenum> FileSys::loadImageBlock(SDL_RWops* ifh, const string& name) {
+	uint32 dataSize;
+	SDL_RWread(ifh, &dataSize, sizeof(dataSize), 1);
+	vector<uint8> imgd(dataSize);
+	SDL_RWread(ifh, imgd.data(), sizeof(*imgd.data()), imgd.size());
+	SDL_Surface* img = IMG_Load_RW(SDL_RWFromConstMem(imgd.data(), imgd.size()), SDL_TRUE);
+	if (!img)
+		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
+	return Texture::pickPixFormat(img);
 }
 
 vector<uint8> FileSys::loadFile(const string& file) {
@@ -695,7 +758,7 @@ T FileSys::readFile(const string& file) {
 	T data;
 	if (SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode)) {
 		if (int64 len = SDL_RWsize(ifh); len != -1) {
-			data.resize(sizet(len));
+			data.resize(len);
 			if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
 				data.resize(read);
 		}
@@ -712,7 +775,7 @@ void FileSys::writeFile(const string& path, const string& text) {
 	}
 	SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
 	SDL_RWclose(ofh);
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 	EM_ASM(
 		Module.syncdone = 0;
 		FS.syncfs(function(err) {
@@ -722,7 +785,7 @@ void FileSys::writeFile(const string& path, const string& text) {
 #endif
 }
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 bool FileSys::canRead() {
 	return emscripten_run_script_int("Module.syncdone");
 }

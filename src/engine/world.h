@@ -23,10 +23,14 @@ public:
 	template <class T> static T* state();
 	static Settings* sets();
 	static Scene* scene();
-	static const ShaderGeometry* geom();
-#ifndef OPENGLES
+	static const ShaderGeom* geom();
 	static const ShaderDepth* depth();
-#endif
+	static const ShaderSsao* ssao();
+	static const ShaderBlur* blur();
+	static const ShaderLight* light();
+	static const ShaderGauss* gauss();
+	static const ShaderFinal* sfinal();
+	static const ShaderSkybox* skybox();
 	static const ShaderGui* sgui();
 
 	template <class C> static void setArgs(int argc, const C* const* argv);
@@ -83,15 +87,37 @@ inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
-inline const ShaderGeometry* World::geom() {
+inline const ShaderGeom* World::geom() {
 	return windowSys.getGeom();
 }
 
-#ifndef OPENGLES
 inline const ShaderDepth* World::depth() {
 	return windowSys.getDepth();
 }
-#endif
+
+inline const ShaderSsao* World::ssao() {
+	return windowSys.getSsao();
+}
+
+inline const ShaderBlur* World::blur() {
+	return windowSys.getBlur();
+}
+
+inline const ShaderLight* World::light() {
+	return windowSys.getLight();
+}
+
+inline const ShaderGauss* World::gauss() {
+	return windowSys.getGauss();
+}
+
+inline const ShaderFinal* World::sfinal() {
+	return windowSys.getSfinal();
+}
+
+inline const ShaderSkybox* World::skybox() {
+	return windowSys.getSkybox();
+}
 
 inline const ShaderGui* World::sgui() {
 	return windowSys.getGui();

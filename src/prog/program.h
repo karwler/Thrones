@@ -2,7 +2,7 @@
 
 #include "game.h"
 #include "guiGen.h"
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/fetch.h>
 #endif
@@ -30,12 +30,12 @@ private:
 	Netcp* netcp = nullptr;
 	Game game;
 	GuiGen gui;
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	SDL_Thread* proc = nullptr;
 	string curlVersion = "not found";
 #endif
+	string chatName;
 	string latestVersion;
-	string chatPrefix;
 	float ftimeSleep = ftimeUpdateDelay;
 
 	static constexpr float ftimeUpdateDelay = 0.5f;
@@ -55,7 +55,6 @@ private:
 #endif
 
 public:
-	Program();
 	~Program();
 
 	void start();
@@ -70,8 +69,11 @@ public:
 	void eventResetAddress(Button* but);
 	void eventUpdatePort(Button* but);
 	void eventResetPort(Button* but);
+	void eventUpdatePlayerName(Button* but);
+	void eventResetPlayerName(Button* but);
 
 	// lobby menu
+	void eventConnLobby(const uint8* data);
 	void eventOpenLobby(const uint8* data, const char* message = nullptr);
 	void eventHostRoomInput(Button* but = nullptr);
 	void eventHostRoomRequest(Button* but = nullptr);
@@ -135,7 +137,6 @@ public:
 	void eventSetupLoad(Button* but);
 	void eventSetupDelete(Button* but);
 	void eventShowConfig(Button* but = nullptr);
-	void eventCloseConfigList(Button* but = nullptr);
 	void eventSwitchGameButtons(Button* but = nullptr);
 
 	// game match
@@ -170,6 +171,7 @@ public:
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
+	void eventShowSettings(Button* but = nullptr);
 	void eventSetDisplay(Button* but);
 	void eventSetScreen(uint id, const string& str);
 	void eventSetWindowSize(uint id, const string& str);
@@ -181,6 +183,8 @@ public:
 	void eventSetShadowResSL(Button* but);
 	void eventSetShadowResLE(Button* but);
 	void eventSetSoftShadows(Button* but);
+	void eventSetSsao(Button* but);
+	void eventSetBloom(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
 	void eventSetVolumeSL(Button* but);
@@ -204,13 +208,14 @@ public:
 	void eventResetSettings(Button* but);
 	void eventSaveSettings(Button* but = nullptr);
 	void eventOpenInfo(Button* but = nullptr);
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void eventOpenRules(Button* but = nullptr);
 	void eventOpenDocs(Button* but = nullptr);
 #endif
 
 	// other
 	void eventClosePopup(Button* but = nullptr);
+	void eventCloseScrollingPopup(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
@@ -223,8 +228,9 @@ public:
 	Netcp* getNetcp();
 	Game* getGame();
 	GuiGen* getGui();
+	const string& getChatName() const;
 	const string& getLatestVersion() const;
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	const string& getCurlVersion() const;
 #endif
 
@@ -237,6 +243,7 @@ private:
 	static void updateAmtSliders(Slider* sl, Config& cfg, uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Config::*counter)() const, string (*totstr)(const Config&));
 	void setSaveConfig(const string& name, bool save = true);
 	void openPopupSaveLoad(bool save);
+	void initSetupObjects(bool regular);
 	void popuplateSetup(Setup& setup);
 	Piece* getUnplacedDragon();
 	void setShadowRes(uint16 newRes);
@@ -250,11 +257,12 @@ private:
 	void resetLayoutsWithChat();
 	tuple<BoardObject*, Piece*, svec2> pickBob() const;	// returns selected object, occupant, position
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
 	static void fetchVersionFail(emscripten_fetch_t* fetch);
 #elif !defined(__ANDROID__)
-	void openDoc(const char* file) const;
+	static void openDoc(const char* file);
+	static void openDocNative(const string& path);
 	static int fetchVersion(void* data);
 	static sizet writeText(char* ptr, sizet size, sizet nmemb, void* userdata);
 #endif
@@ -284,11 +292,15 @@ inline GuiGen* Program::getGui() {
 	return &gui;
 }
 
+inline const string& Program::getChatName() const {
+	return chatName;
+}
+
 inline const string& Program::getLatestVersion() const {
 	return latestVersion;
 }
 
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 inline const string& Program::getCurlVersion() const {
 	return curlVersion;
 }

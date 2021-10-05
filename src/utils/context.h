@@ -13,22 +13,21 @@ private:
 	ScrollBar scroll;
 	uint selected;
 	int lineHeight;
-	GLuint tex;
 
 public:
-	Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner = nullptr, int width = 0);
-	~Context() final;
+	Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2 pos, int lineH, Widget* owner = nullptr, int width = 0);
+	~Context() override;
 
-	void onMouseMove(const ivec2& mPos);
+	void onMouseMove(ivec2 mPos);
 	void draw() const;
-	void tick(float dSec) final;
-	void onClick(const ivec2& mPos, uint8 mBut) final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
-	void onUndrag(uint8 mBut) final;
-	void onScroll(const ivec2& wMov) final;
-	void onNavSelect(Direction dir) final;
-	void onCancelCapture() final;
+	void tick(float dSec) override;
+	void onClick(ivec2 mPos, uint8 mBut) override;
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onDrag(ivec2 mPos, ivec2 mMov) override;
+	void onUndrag(uint8 mBut) override;
+	void onScroll(ivec2 wMov) override;
+	void onNavSelect(Direction dir) override;
+	void onCancelCapture() override;
 
 	void confirm();
 	Rect rect() const;
@@ -39,8 +38,8 @@ private:
 	static int calcPos(int pos, int& siz, int limit);
 };
 
-inline void Context::onMouseMove(const ivec2& mPos) {
-	selected = rect().contain(mPos) ? uint((mPos.y - position.y + scroll.listPos.y) / lineHeight) : UINT_MAX;
+inline void Context::onMouseMove(ivec2 mPos) {
+	selected = rect().contain(mPos) ? (mPos.y - position.y + scroll.listPos.y) / lineHeight : UINT_MAX;
 }
 
 inline Rect Context::rect() const {
@@ -52,5 +51,5 @@ inline Interactable* Context::getParent() const {
 }
 
 inline int Context::itemPos(sizet id) const {
-	return int(id) * lineHeight - scroll.listPos.y;
+	return id * lineHeight - scroll.listPos.y;
 }

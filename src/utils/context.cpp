@@ -9,13 +9,12 @@ void Interactable::onNavSelect(Direction) {
 
 // CONTEXT
 
-Context::Context(const ivec2& mPos, const vector<string>& txts, CCall cancelCall, const ivec2& pos, int lineH, Widget* owner, int width) :
-	size(width, int(txts.size()) * lineH),
+Context::Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2 pos, int lineH, Widget* owner, int width) :
+	size(width, txts.size() * lineH),
 	listSize(0, size.y),
 	call(cancelCall),
 	parent(owner),
-	lineHeight(lineH),
-	tex(World::scene()->texture())
+	lineHeight(lineH)
 {
 	items.resize(txts.size());
 	for (sizet i = 0; i < txts.size(); ++i) {
@@ -34,16 +33,17 @@ Context::~Context() {
 
 void Context::draw() const {
 	Rect rct = rect();
+	GLuint tex = World::scene()->texture();
 	if (Quad::draw(rct, Widget::colorDark, tex, -1.f); selected < items.size())
 		Quad::draw(Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed, tex, -1.f);
 
 	mvec2 i = listSize.y <= size.y ? mvec2(0, items.size()) : mvec2(scroll.listPos.y / lineHeight, (size.y + scroll.listPos.y + lineHeight - 1) / lineHeight);
-	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + int(i.x) * lineHeight - scroll.listPos.y); i.x < i.y; ++i.x, pos.y += lineHeight)
+	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + i.x * lineHeight - scroll.listPos.y); i.x < i.y; ++i.x, pos.y += lineHeight)
 		Quad::draw(Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first, -1.f);
 	scroll.draw(listSize, position, size, true, -1.f);
 }
 
-void Context::onClick(const ivec2& mPos, uint8 mBut) {
+void Context::onClick(ivec2 mPos, uint8 mBut) {
 	if (onMouseMove(mPos); mBut == SDL_BUTTON_LEFT) {
 		if (ComboBox* cb = dynamic_cast<ComboBox*>(parent))
 			cb->setText(items[selected].second);
@@ -56,11 +56,11 @@ void Context::tick(float dSec) {
 	scroll.tick(dSec, listSize, size);
 }
 
-void Context::onHold(const ivec2& mPos, uint8 mBut) {
+void Context::onHold(ivec2 mPos, uint8 mBut) {
 	scroll.hold(mPos, mBut, this, listSize, position, size, true);
 }
 
-void Context::onDrag(const ivec2& mPos, const ivec2& mMov) {
+void Context::onDrag(ivec2 mPos, ivec2 mMov) {
 	scroll.drag(mPos, mMov, listSize, position, size, true);
 }
 
@@ -68,7 +68,7 @@ void Context::onUndrag(uint8 mBut) {
 	scroll.undrag(mBut, true);
 }
 
-void Context::onScroll(const ivec2& wMov) {
+void Context::onScroll(ivec2 wMov) {
 	scroll.scroll(wMov, listSize, size, true);
 }
 
@@ -78,7 +78,7 @@ void Context::onNavSelect(Direction dir) {
 		if (int y = itemPos(selected) + lineHeight; y > size.y)
 			scroll.moveListPos(ivec2(0, y - size.y), listSize, size);
 	} else {
-		selected = selected ? selected - 1 : uint(items.size() - 1);
+		selected = selected ? selected - 1 : items.size() - 1;
 		if (int y = itemPos(selected); y < 0)
 			scroll.moveListPos(ivec2(0, y), listSize, size);
 	}

@@ -5,13 +5,18 @@
 // for handling program state specific things that occur in all states
 class ProgState {
 public:
-	vec2 objectDragPos;
+	ScrollArea* mainScrollContent = nullptr;
+	sizet keyBindingsStart;	// only for when viewing settings
+
 protected:
+	static constexpr float axisScrollThrottle = 4000.f;
+
 	TextBox* chatBox = nullptr;
 	Overlay* notification = nullptr;
 	Label* fpsText;
-
-	static constexpr float axisScrollThrottle = 4000.f;
+private:
+	Mesh* objectDragMesh;
+	vec2 objectDragPos;
 
 public:
 	virtual ~ProgState() = default;	// to keep the compiler happy
@@ -62,11 +67,17 @@ public:
 	void eventSelect7();
 	void eventSelect8();
 	void eventSelect9();
+	virtual void eventOpenConfig() {}
+	virtual void eventOpenSettings();
 
 	virtual uint8 switchButtons(uint8 but);
 	virtual uptr<RootLayout> createLayout(Interactable*& selected) = 0;
 	virtual vector<Overlay*> createOverlays();
 
+	void initObjectDrag(BoardObject* bob, Mesh* mesh, vec2 pos);
+
+	Mesh* getObjectDragMesh();
+	void setObjectDragPos(vec2 pos);
 	TextBox* getChat();
 	bool showNotification() const;
 	void showNotification(bool yes) const;
@@ -79,6 +90,10 @@ protected:
 	void chatEmbedAxisScroll(float val);
 };
 
+inline Mesh* ProgState::getObjectDragMesh() {
+	return objectDragMesh;
+}
+
 inline TextBox* ProgState::getChat() {
 	return chatBox;
 }
@@ -89,14 +104,15 @@ inline Label* ProgState::getFpsText() {
 
 class ProgMenu : public ProgState {
 public:
+	LabelEdit* pname;
 	Label* versionNotif;
 
-	~ProgMenu() final = default;
+	~ProgMenu() override = default;
 
-	void eventEscape() final;
-	void eventFinish() final;
+	void eventEscape() override;
+	void eventFinish() override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 };
 
 class ProgLobby : public ProgState {
@@ -106,14 +122,14 @@ private:
 
 public:
 	ProgLobby(vector<pair<string, bool>>&& roomList);
-	~ProgLobby() final = default;
+	~ProgLobby() override = default;
 
-	void eventEscape() final;
-	void eventFinish() final;
-	void eventScrollUp(float val) final;
-	void eventScrollDown(float val) final;
+	void eventEscape() override;
+	void eventFinish() override;
+	void eventScrollUp(float val) override;
+	void eventScrollDown(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
@@ -135,14 +151,14 @@ private:
 public:
 	ProgRoom();					// for host
 	ProgRoom(string config);	// for guest
-	~ProgRoom() final = default;
+	~ProgRoom() override = default;
 
-	void eventEscape() final;
-	void eventFinish() final;
-	void eventScrollUp(float val) final;
-	void eventScrollDown(float val) final;
+	void eventEscape() override;
+	void eventFinish() override;
+	void eventScrollUp(float val) override;
+	void eventScrollDown(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 
 	void setStartConfig();
 	void updateStartButton();
@@ -159,7 +175,6 @@ public:
 	Navigator* planeSwitch;
 	Label* message;
 	Icon* bswapIcon;
-	ScrollArea* configList = nullptr;
 	string configName;
 
 	ProgGame(string config);
@@ -167,6 +182,7 @@ public:
 
 	void eventScrollUp(float val) override;
 	void eventScrollDown(float val) override;
+	virtual void eventOpenConfig() override;
 
 	uint8 switchButtons(uint8 but) override;
 	vector<Overlay*> createOverlays() override;
@@ -202,20 +218,20 @@ private:
 
 public:
 	using ProgGame::ProgGame;
-	~ProgSetup() final = default;
+	~ProgSetup() override = default;
 
-	void eventEscape() final;	// for previous stage
-	void eventEnter() final;		// for placing objects
-	void eventWheel(int ymov) final;
-	void eventDrag(uint32 mStat) final;
-	void eventUndrag() final;
-	void eventFinish() final;	// for next stage
-	void eventDelete() final;
-	void eventSelectNext() final;
-	void eventSelectPrev() final;
-	void eventSetSelected(uint8 sel) final;
+	void eventEscape() override;	// for previous stage
+	void eventEnter() override;		// for placing objects
+	void eventWheel(int ymov) override;
+	void eventDrag(uint32 mStat) override;
+	void eventUndrag() override;
+	void eventFinish() override;	// for next stage
+	void eventDelete() override;
+	void eventSelectNext() override;
+	void eventSelectPrev() override;
+	void eventSetSelected(uint8 sel) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 
 	Stage getStage() const;
 	void setStage(Stage stg);	// returns true if match is ready to load
@@ -251,26 +267,26 @@ private:
 
 public:
 	using ProgGame::ProgGame;
-	~ProgMatch() final = default;
+	~ProgMatch() override = default;
 
-	void eventEscape() final;
-	void eventEnter() final;
-	void eventWheel(int ymov) final;
-	void eventFinish() final;
-	void eventSurrender() final;
-	void eventEngage() final;
-	void eventDestroyOn() final;
-	void eventDestroyOff() final;
-	void eventDestroyToggle() final;
-	void eventHasten() final;
-	void eventAssault() final;
-	void eventConspire() final;
-	void eventDeceive() final;
-	void eventCameraReset() final;
-	void eventCameraLeft(float val) final;
-	void eventCameraRight(float val) final;
+	void eventEscape() override;
+	void eventEnter() override;
+	void eventWheel(int ymov) override;
+	void eventFinish() override;
+	void eventSurrender() override;
+	void eventEngage() override;
+	void eventDestroyOn() override;
+	void eventDestroyOff() override;
+	void eventDestroyToggle() override;
+	void eventHasten() override;
+	void eventAssault() override;
+	void eventConspire() override;
+	void eventDeceive() override;
+	void eventCameraReset() override;
+	void eventCameraLeft(float val) override;
+	void eventCameraRight(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 
 	void setIcons(Favor favor, Icon* homefront = nullptr);	// set favor or a homefront icon
 	const array<Icon*, favorMax>& getFavorIcons() const;
@@ -300,37 +316,24 @@ inline const Icon* ProgMatch::getDestroyIcon() const {
 
 class ProgSettings : public ProgState {
 public:
-	ScrollArea* content;
-	sizet bindingsStart;
-private:
-	umap<string, uint32> pixelformats;
+	~ProgSettings() override = default;
 
-public:
-	~ProgSettings() final = default;
+	void eventEscape() override;
+	void eventFinish() override;
+	void eventOpenSettings() override {}
 
-	void eventEscape() final;
-	void eventFinish() final;
-
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
-
-	const umap<string, uint32>& getPixelformats() const;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 };
 
-inline const umap<string, uint32>& ProgSettings::getPixelformats() const {
-	return pixelformats;
-}
-
 class ProgInfo : public ProgState {
-private:
-	ScrollArea* content;
-
 public:
-	~ProgInfo() final = default;
+	~ProgInfo() override = default;
 
-	void eventEscape() final;
-	void eventFinish() final;
-	void eventScrollUp(float val) final;
-	void eventScrollDown(float val) final;
+	void eventEscape() override;
+	void eventFinish() override;
+	void eventScrollUp(float val) override;
+	void eventScrollDown(float val) override;
+	void eventOpenSettings() override {}
 
-	uptr<RootLayout> createLayout(Interactable*& selected) final;
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
 };

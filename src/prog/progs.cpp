@@ -66,7 +66,7 @@ void ProgState::eventRight() {
 void ProgState::eventStartCamera() {
 	if (World::scene()->camera.state != Camera::State::animating) {
 		World::scene()->camera.state = Camera::State::dragging;
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 		World::scene()->deselect();
 		SDL_SetRelativeMouseMode(SDL_TRUE);
 #endif
@@ -76,7 +76,7 @@ void ProgState::eventStartCamera() {
 void ProgState::eventStopCamera() {
 	if (World::scene()->camera.state != Camera::State::animating) {
 		World::scene()->camera.state = Camera::State::stationary;
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 		SDL_SetRelativeMouseMode(SDL_FALSE);
 #endif
 		World::input()->simulateMouseMove();
@@ -131,6 +131,13 @@ void ProgState::eventSelect9() {
 	eventSetSelected(9);
 }
 
+void ProgState::eventOpenSettings() {
+	if (Popup* pop = World::scene()->getPopup(); !pop)
+		World::program()->eventShowSettings();
+	else if (pop->getType() == Popup::Type::settings)
+		World::program()->eventCloseScrollingPopup();
+}
+
 uint8 ProgState::switchButtons(uint8 but) {
 	return but;
 }
@@ -141,7 +148,21 @@ vector<Overlay*> ProgState::createOverlays() {
 		World::pgui()->createFpsCounter(fpsText)
 	} : vector<Overlay*>{
 		World::pgui()->createFpsCounter(fpsText)
-	};
+};
+}
+
+void ProgState::initObjectDrag(BoardObject* bob, Mesh* mesh, vec2 pos) {
+	objectDragMesh = mesh;
+	objectDragPos = pos;
+	World::scene()->setCapture(bob);
+}
+
+void ProgState::setObjectDragPos(vec2 pos) {
+	objectDragPos = pos;
+	if (BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getCapture())) {
+		objectDragMesh->getInstanceTop().model = Object::getTransform(vec3(objectDragPos.x, bob->getTopY(), objectDragPos.y), bob->getRot(), bob->getScl());
+		objectDragMesh->updateInstanceTop(offsetof(Mesh::Instance, model), sizeof(Mesh::Instance::model));
+	}
 }
 
 bool ProgState::showNotification() const {
@@ -201,7 +222,7 @@ void ProgMenu::eventFinish() {
 }
 
 uptr<RootLayout> ProgMenu::createLayout(Interactable*& selected) {
-	return World::pgui()->makeMainMenu(selected, versionNotif);
+	return World::pgui()->makeMainMenu(selected, pname, versionNotif);
 }
 
 // PROG LOBBY
@@ -235,7 +256,7 @@ uptr<RootLayout> ProgLobby::createLayout(Interactable*& selected) {
 
 void ProgLobby::addRoom(string&& name) {
 	vector<Widget*>::const_iterator it = std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [&name](const Widget* rm) -> bool { return strnatless(reinterpret_cast<const Label*>(rm)->getText(), name); });
-	rooms->insertWidget(sizet(it - rooms->getWidgets().begin()), World::pgui()->createRoom(std::move(name), true));
+	rooms->insertWidget(it - rooms->getWidgets().begin(), World::pgui()->createRoom(std::move(name), true));
 }
 
 void ProgLobby::delRoom(const string& name) {
@@ -253,7 +274,7 @@ bool ProgLobby::hasRoom(const string& name) const {
 }
 
 sizet ProgLobby::findRoom(const string& name) const {
-	return sizet(std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [name](const Widget* rm) -> bool { return static_cast<const Label*>(rm)->getText() == name; }) - rooms->getWidgets().begin());
+	return std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [name](const Widget* rm) -> bool { return static_cast<const Label*>(rm)->getText() == name; }) - rooms->getWidgets().begin();
 }
 
 // PROG ROOM
@@ -301,7 +322,7 @@ uptr<RootLayout> ProgRoom::createLayout(Interactable*& selected) {
 
 void ProgRoom::updateStartButton() {
 	if (World::program()->info & Program::INF_UNIQ) {
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 		rio.start->setText("Open");
 		rio.start->lcall = &Program::eventHostServer;
 #endif
@@ -386,9 +407,16 @@ void ProgGame::eventScrollDown(float val) {
 	axisScroll(val);
 }
 
+void ProgGame::eventOpenConfig() {
+	if (Popup* pop = World::scene()->getPopup(); !pop)
+		World::program()->eventShowConfig();
+	else if (pop->getType() == Popup::Type::config)
+		World::program()->eventCloseScrollingPopup();
+}
+
 void ProgGame::axisScroll(float val) {
-	if (configList)
-		configList->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+	if (Popup* pop = World::scene()->getPopup(); pop && pop->getType() == Popup::Type::config)
+		mainScrollContent->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 	else if (chatBox && static_cast<Overlay*>(chatBox->getParent())->getShow())
 		chatBox->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
@@ -523,17 +551,17 @@ void ProgSetup::setStage(ProgSetup::Stage stg) {
 		sio.icons->setWidgets(World::pgui()->createBottomIcons(tiles));
 		sio.icons->getWidget<Icon>(iselect + 1)->selected = true;	// like eventSetSelected but without crashing
 		for (sizet i = 0; i < counters.size(); ++i)
-			switchIcon(uint8(i), counters[i]);
+			switchIcon(i, counters[i]);
 	} else
 		sio.icons->setWidgets({});
 }
 
 uint8 ProgSetup::findNextSelect(bool fwd) {
 	uint8 m = btom<uint8>(fwd);
-	for (uint8 i = iselect + m; i < uint8(counters.size()); i += m)
+	for (uint8 i = iselect + m; i < counters.size(); i += m)
 		if (counters[i])
 			return i;
-	for (uint8 i = fwd ? 0 : uint8(counters.size() - 1); i != iselect; i += m)
+	for (uint8 i = fwd ? 0 : counters.size() - 1; i != iselect; i += m)
 		if (counters[i])
 			return i;
 	return iselect;
@@ -792,7 +820,7 @@ void ProgSettings::eventFinish() {
 }
 
 uptr<RootLayout> ProgSettings::createLayout(Interactable*& selected) {
-	return World::pgui()->makeSettings(selected, content, bindingsStart, pixelformats);
+	return World::pgui()->makeSettings(selected, mainScrollContent, keyBindingsStart);
 }
 
 // PROG INFO
@@ -806,13 +834,13 @@ void ProgInfo::eventFinish() {
 }
 
 void ProgInfo::eventScrollUp(float val) {
-	content->onScroll(vec2(0.f, -val * axisScrollThrottle * World::window()->getDeltaSec()));
+	mainScrollContent->onScroll(vec2(0.f, -val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
 void ProgInfo::eventScrollDown(float val) {
-	content->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+	mainScrollContent->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
 uptr<RootLayout> ProgInfo::createLayout(Interactable*& selected) {
-	return World::pgui()->makeInfo(selected, content);
+	return World::pgui()->makeInfo(selected, mainScrollContent);
 }

@@ -9,64 +9,82 @@
 // vertex data that's shared between objects
 class Mesh {
 public:
-	static constexpr GLenum elemType = GL_UNSIGNED_SHORT;
+	struct Instance {
+		mat4 model;
+		mat3 normat;
+		vec4 diffuse;
+		vec4 specShine;	// RGB = specular, A = shininess
+		int texid;
+		bool show;
+	};
 
 private:
-	GLuint vao = 0, vbo = 0, ebo = 0;
+	struct Top {
+		Instance data;
+		GLuint vao = 0, ibo = 0;
+	};
+
+	vector<Instance> instanceData;
+	uptr<Top> top;
+	GLuint vao = 0, vbo = 0, ibo = 0, ebo = 0;
 	uint16 ecnt = 0;	// number of elements
-	uint8 shape = 0;	// GLenum for how to handle elements
-
 public:
-	Mesh() = default;
-	Mesh(const vector<Vertex>& vertices, const vector<GLushort>& elements, uint8 type = GL_TRIANGLES);
+	uint8 shape = GL_TRIANGLES;	// GLenum for how to handle elements
 
+	void init(const vector<Vertex>& vertices, const vector<GLushort>& elements);
 	void free();
-	GLuint getVao() const;
-	uint16 getEcnt() const;
-	uint8 getShape() const;
+	void draw();
+	void drawTop();
+	void updateVertexData(const vector<Vertex>& vertices, const vector<GLushort>& elements);
+	void allocate(uint size, bool setTop = false);
+	uint insert(const Instance& data);
+	Instance erase(uint id);
+	Instance& getInstance(uint id);
+	void updateInstance(uint id, iptrt loffs = 0, sizet size = sizeof(Instance));
+	void updateInstanceData();
+	Instance& getInstanceTop();
+	void updateInstanceTop(iptrt loffs = 0, sizet size = sizeof(Instance));
+	void updateInstanceDataTop();
+
+private:
+	void initTop();
+	void setVertexAttrib();
+	void setInstanceAttrib();
+	void disableAttrib();
+	void setVertexData(const vector<Vertex>& vertices);
+	void setElementData(const vector<GLushort>& elements);
 };
 
-inline GLuint Mesh::getVao() const {
-	return vao;
+inline Mesh::Instance& Mesh::getInstance(uint id) {
+	return instanceData[id];
 }
 
-inline uint16 Mesh::getEcnt() const {
-	return ecnt;
-}
-
-inline uint8 Mesh::getShape() const {
-	return shape;
+inline Mesh::Instance& Mesh::getInstanceTop() {
+	return top->data;
 }
 
 // 3D object with triangles
 class Object : public Interactable {
-public:
-	const Mesh* mesh;
+protected:
+	Mesh* mesh = nullptr;
 	const Material* matl;
-	GLuint tex;
-	bool show;
-	bool rigid;
 private:
 	vec3 pos, scl;
 	quat rot;
-	mat4 trans;
-	mat3 normat;
-
 public:
+	uint meshIndex;
+	bool rigid;
+
 	Object() = default;
 	Object(const Object&) = default;
 	Object(Object&&) = default;
-	Object(const vec3& position, const vec3& rotation = vec3(0.f), const vec3& scale = vec3(1.f), const Mesh* model = nullptr, const Material* material = nullptr, GLuint texture = 0, bool visible = true, bool interactive = false);
+	Object(const vec3& position, const vec3& rotation = vec3(0.f), const vec3& scale = vec3(1.f), bool interactive = false);
 	~Object() override = default;
 
 	Object& operator=(const Object&) = default;
 	Object& operator=(Object&&) = default;
 
-#ifndef OPENGLES
-	virtual void drawDepth() const;
-	virtual void drawTopDepth() const {}
-#endif
-	void draw() const;
+	void init(Mesh* model, uint id, const Material* material, int texture, bool visible = true);
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -74,48 +92,46 @@ public:
 	void setRot(const quat& qut);
 	const vec3& getScl() const;
 	void setScl(const vec3& vec);
-protected:
-	const mat4& getTrans() const;
-	const mat3& getNormat() const;
+	static mat4 getTransform(const vec3& pos, const quat& rot, const vec3& scl);
+	void setTrans(const vec3& position, const quat& rotation);
+	void setTrans(const vec3& position, const vec3& scale);
+	void setTrans(const quat& rotation, const vec3& scale);
+	void setTrans(const vec3& position, const quat& rotation, const vec3& scale);
 
-	static void setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl);
-	static void setTransform(mat4& model, mat3& norm, const vec3& pos, const quat& rot, const vec3& scl);
+	Mesh* getMesh();
+	void setMaterial(const Material* material);
+	void setTexture(int texture);
+	bool getShow() const;
+	void setShow(bool visible);
+protected:
+	void updateTransform();
+	void getTransform(mat4& model, mat3& normat);
+	void getColors(vec4& diffuse, vec4& specShine);
+	mat4 getTransform();
 };
 
 inline const vec3& Object::getPos() const {
 	return pos;
 }
 
-inline void Object::setPos(const vec3& vec) {
-	setTransform(trans, pos = vec, rot, scl);
-}
-
 inline const quat& Object::getRot() const {
 	return rot;
-}
-
-inline void Object::setRot(const quat& qut) {
-	setTransform(trans, normat, pos, rot = qut, scl);
 }
 
 inline const vec3& Object::getScl() const {
 	return scl;
 }
 
-inline void Object::setScl(const vec3& vec) {
-	setTransform(trans, normat, pos, rot, scl = vec);
+inline mat4 Object::getTransform(const vec3& pos, const glm::quat& rot, const vec3& scl) {
+	return glm::scale(glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot), scl);
 }
 
-inline const mat4& Object::getTrans() const {
-	return trans;
+inline Mesh* Object::getMesh() {
+	return mesh;
 }
 
-inline const mat3& Object::getNormat() const {
-	return normat;
-}
-
-inline void Object::setTransform(mat4& model, const vec3& pos, const quat& rot, const vec3& scl) {
-	model = glm::scale(glm::translate(mat4(1.f), pos) * glm::mat4_cast(rot), scl);
+inline bool Object::getShow() const {
+	return mesh->getInstance(meshIndex).show;
 }
 
 // square object on a single plane
@@ -128,34 +144,33 @@ public:
 		EMI_HIGH = 4
 	};
 
-	float alphaFactor;
+	static constexpr float noEngageAlpha = 0.6f;
+protected:
+	static constexpr vec4 moveColorFactor = { 1.f, 1.f, 1.f, 0.9f };
+
+	bool leftDrag;
+	bool topDepth;
+private:
+	Emission emission = EMI_NONE;
+
+public:
 	GCall hgcall = nullptr;
 	GCall ulcall = nullptr;
 	GCall urcall = nullptr;
 
-	static constexpr float noEngageAlpha = 0.6f;
-protected:
-	static constexpr float topYpos = 0.1f;
-	static constexpr vec4 moveColorFactor = { 1.f, 1.f, 1.f, 9.9f };
-
-private:
-	float diffuseFactor = 1.f;
-	Emission emission = EMI_NONE;
-protected:
-	bool leftDrag;
-
-public:
 	BoardObject() = default;
 	BoardObject(const BoardObject&) = default;
 	BoardObject(BoardObject&&) = default;
-	BoardObject(const vec3& position, float rotation, float size, const Mesh* model, const Material* material, GLuint texture, bool visible, float alpha);
+	BoardObject(const vec3& position, float rotation, float size);
 	~BoardObject() override = default;
 
 	BoardObject& operator=(const BoardObject&) = default;
 	BoardObject& operator=(BoardObject&&) = default;
 
-	void draw() const;
-	void onDrag(const ivec2& mPos, const ivec2& mMov) override;
+	void init(Mesh* model, uint id, const Material* material, int texture, bool visible = true, float alpha = 1.f);
+	virtual float getTopY();
+
+	void onDrag(ivec2 mPos, ivec2 mMov) override;
 	void onKeyDown(const SDL_KeyboardEvent& key) override;
 	void onKeyUp(const SDL_KeyboardEvent& key) override;
 	void onJButtonDown(uint8 but) override;
@@ -171,20 +186,35 @@ public:
 	void onNavSelect(Direction dir) override;
 	void startKeyDrag(uint8 mBut);
 
+	bool getTopDepth() const;
 	Emission getEmission() const;
 	virtual void setEmission(Emission emi);
+	void setAlphaFactor(float alpha);
+
 protected:
-#ifndef OPENGLES
-	void drawTopMeshDepth(float ypos) const;
-#endif
-	void drawTopMesh(float ypos, const Mesh* tmesh, const Material& tmatl, GLuint ttexture) const;
+	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, int texture, bool depth = true);
+
 private:
+	float emissionFactor();
+
 	void onInputDown(Binding::Type bind);
 	void onInputUp(Binding::Type bind);
 };
 
+inline BoardObject::BoardObject(const vec3& position, float rotation, float size) :
+	Object(position, vec3(0.f, rotation, 0.f), vec3(size))
+{}
+
+inline bool BoardObject::getTopDepth() const {
+	return topDepth;
+}
+
 inline BoardObject::Emission BoardObject::getEmission() const {
 	return emission;
+}
+
+inline float BoardObject::emissionFactor() {
+	return (emission & EMI_DIM ? 0.6f : 1.f) + (emission & EMI_SEL ? 0.2f : 0.f) + (emission & EMI_HIGH ? 0.2f : 0.f);
 }
 
 // piece of terrain
@@ -204,22 +234,17 @@ public:
 	Tile() = default;
 	Tile(const Tile&) = default;
 	Tile(Tile&&) = default;
-	Tile(const vec3& position, float size, bool visible);
-	~Tile() final = default;
+	Tile(const vec3& position, float size);
+	~Tile() override = default;
 
 	Tile& operator=(const Tile&) = default;
 	Tile& operator=(Tile&&) = default;
 
-#ifndef OPENGLES
-	void drawDepth() const final;
-	void drawTopDepth() const final;
-#endif
-	void drawTop() const final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onUndrag(uint8 mBut) final;
-	void onHover() final;
-	void onUnhover() final;
-	void onCancelCapture() final;
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onUndrag(uint8 mBut) override;
+	void onHover() override;
+	void onUnhover() override;
+	void onCancelCapture() override;
 
 	TileType getType() const;
 	void setType(TileType newType);
@@ -228,14 +253,14 @@ public:
 	bool getBreached() const;
 	void setBreached(bool yes);
 	void setInteractivity(Interact lvl, bool dim = false);
-	void setEmission(Emission emi) final;
+	void setEmission(Emission emi) override;
 private:
-	const char* pickMesh();
+	void swapMesh();
 };
 
-inline const char* Tile::pickMesh() {
-	return type != TileType::fortress ? "tile" : breached ? "breached" : "fortress";
-}
+inline Tile::Tile(const vec3& position, float size) :
+	BoardObject(position, 0.f, size)
+{}
 
 inline TileType Tile::getType() const {
 	return type;
@@ -352,42 +377,38 @@ public:
 	Piece() = default;
 	Piece(const Piece&) = default;
 	Piece(Piece&&) = default;
-	Piece(const vec3& position, float rotation, float size, const Material* material);
-	~Piece() final = default;
+	Piece(const vec3& position, float rotation, float size);
+	~Piece() override = default;
 
 	Piece& operator=(const Piece&) = default;
 	Piece& operator=(Piece&&) = default;
 
-#ifndef OPENGLES
-	void drawTopDepth() const final;
-#endif
-	void drawTop() const final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onUndrag(uint8 mBut) final;
-	void onHover() final;
-	void onUnhover() final;
-	void onCancelCapture() final;
+	void init(Mesh* model, uint id, const Material* material, int texture, bool visible, PieceType iniType);
+	float getTopY() override;
+
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onUndrag(uint8 mBut) override;
+	void onHover() override;
+	void onUnhover() override;
+	void onCancelCapture() override;
 
 	PieceType getType() const;
-	void setType(PieceType newType);
 	pair<uint8, uint8> firingArea() const;	// 0 if non-firing piece
 	void setActive(bool on);
 	void updatePos(svec2 bpos = svec2(UINT16_MAX), bool forceRigid = false);
 	void setInteractivity(bool on, bool dim, GCall holdCall, GCall leftCall, GCall rightCall);
-private:
-	float selfTopYpos(const Interactable* occupant) const;
 };
+
+inline Piece::Piece(const vec3& position, float rotation, float size) :
+	BoardObject(position, rotation, size)
+{}
 
 inline PieceType Piece::getType() const {
 	return type;
 }
 
 inline void Piece::setActive(bool on) {
-	show = rigid = on;
-}
-
-inline float Piece::selfTopYpos(const Interactable* occupant) const {
-	return dynamic_cast<const Piece*>(occupant) && occupant != this ? 1.1f * getScl().y : 0.01f;
+	setShow(rigid = on);
 }
 
 // piece container

@@ -1,13 +1,9 @@
 #include "oven.h"
 #include "utils/text.h"
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
 #include <iostream>
-
-#ifndef GL_BGR
-#define GL_BGR 0x80E0
-#endif
-#ifndef GL_BGRA
-#define GL_BGRA 0x80E1
-#endif
 
 constexpr char mtlKeywordNewmtl[] = "newmtl";
 constexpr char argAudio = 'a';
@@ -21,69 +17,57 @@ constexpr char messageUsage[] = "usage: oven <-a|-m|-o|-s|-t> <destination file>
 
 // OBJ FILE DATA
 
-struct Element {
-	uint p, t, n;
-
-	Element() = default;
-	Element(uint pos, uint tuv, uint nrm);
-
-	uint& operator[](uint i);
-	uint* begin();
-	uint* end();
-};
-
-Element::Element(uint pos, uint tuv, uint nrm) :
-	p(pos),
-	t(tuv),
-	n(nrm)
-{}
-
-uint& Element::operator[](uint i) {
-	return reinterpret_cast<uint*>(this)[i];
-}
-
-uint* Element::begin() {
-	return reinterpret_cast<uint*>(this);
-}
-
-uint* Element::end() {
-	return reinterpret_cast<uint*>(this) + 3;
-}
-
 struct Blueprint {
 	string name;
 	vector<GLushort> elems;
 	vector<Vertex> data;
+	uint8 level;
 
-	Blueprint(string&& capt);
+	Blueprint(string&& capt, vector<GLushort>&& elements, vector<Vertex>&& vertices, uint8 lvl);
 
 	bool empty() const;
 };
 
-Blueprint::Blueprint(string&& capt) :
-	name(std::move(capt))
+Blueprint::Blueprint(string&& capt, vector<GLushort>&& elements, vector<Vertex>&& vertices, uint8 lvl) :
+	name(std::move(capt)),
+	elems(std::move(elements)),
+	data(std::move(vertices)),
+	level(lvl)
 {}
 
 bool Blueprint::empty() const {
 	return elems.empty() || data.empty();
 }
 
-// BMP FILE DATA
+// TEXTURE FILE DATA
+
+struct PixelData {
+	vector<uint8> data;
+	ivec2 res = ivec2(0);
+	SDL_PixelFormatEnum format;
+
+	PixelData() = default;
+	PixelData(vector<uint8>&& pdata, ivec2 resolution, SDL_PixelFormatEnum pixelformat);
+};
+
+PixelData::PixelData(vector<uint8>&& pdata, ivec2 resolution, SDL_PixelFormatEnum pixelformat) :
+	data(std::move(pdata)),
+	res(resolution),
+	format(pixelformat)
+{}
 
 struct Image {
 	string name;
-	vector<uint8> data;
-	GLint iformat;
-	GLenum pformat;
+	vector<PixelData> pdat;
+	TexturePlacement place;
 
-	Image(string&& fname, vector<uint8>&& pdata, uint16 itype, uint16 ptype);
+	Image(string&& fname, vector<PixelData>&& data, TexturePlacement tpl);
 };
 
-Image::Image(string&& fname, vector<uint8>&& pdata, uint16 itype, uint16 ptype) :
+Image::Image(string&& fname, vector<PixelData>&& data, TexturePlacement tpl) :
 	name(std::move(fname)),
-	data(std::move(pdata)),
-	iformat(itype),
-	pformat(ptype)
+	pdat(std::move(data)),
+	place(tpl)
 {}
 
 // UTILITY
@@ -98,7 +82,7 @@ T loadFile(const string& path) {
 #endif
 		if (!fseek(ifh, 0, SEEK_END))
 			if (long len = ftell(ifh); len != -1 && !fseek(ifh, 0, SEEK_SET)) {
-				data.resize(len);
+				data.resize(ulong(len));
 				if (sizet red = fread(data.data(), sizeof(*data.data()), data.size(), ifh); red < data.size())
 					data.resize(red);
 			}
@@ -133,7 +117,7 @@ static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
 	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
 
 	for (auto& [name, sound] : auds) {
-		obuf[0] = uint8(name.length());
+		obuf[0] = name.length();
 		obuf[1] = sound.channels;
 		writeMem(obuf + 2, sound.length);
 		writeMem(obuf + 6, sound.frequency);
@@ -187,11 +171,11 @@ static void writeMaterials(const char* file, vector<pair<string, Material>>& mtl
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
 	}
-	uint16 mamt = uint16(mtls.size());
+	uint16 mamt = mtls.size();
 	SDL_RWwrite(ofh, &mamt, sizeof(mamt), 1);
 
 	for (const auto& [name, matl] : mtls) {
-		uint8 nlen = uint8(name.length());
+		uint8 nlen = name.length();
 		SDL_RWwrite(ofh, &nlen, sizeof(nlen), 1);
 		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
 		SDL_RWwrite(ofh, &matl, sizeof(float), sizeof(Material) / sizeof(float));
@@ -201,89 +185,52 @@ static void writeMaterials(const char* file, vector<pair<string, Material>>& mtl
 
 // OBJECTS
 
-static uint resolveObjId(int id, uint size) {
-	if (uint(id) < size)
-		return uint(id);
-	if (uint(-id) < size)
-		return size + uint(id);
-	return 0;
-}
-
-static void readFace(const char* str, vector<vec3>& verts, vector<vec2>& tuvs, vector<vec3>& norms, vector<pair<Element, GLushort>>& elems, Blueprint& obj) {
-	array<uint, 3> sizes = { uint(verts.size()), uint(tuvs.size()), uint(norms.size()) };
-	array<Element, 3> face;
-	uint v = 0, e = 0;
-	for (char* end; *str && v < face.size();) {
-		if (int n = int(strtol(str, &end, 0)); end != str) {
-			face[v][e] = resolveObjId(n, sizes[e]);
-			str = end;
-			++e;
-		} else if (*str == '/')
-			face[v][e++] = 0;
-
-		if (e && (*str != '/' || e >= sizes.size())) {
-			std::fill(face[v].begin() + e, face[v].end(), 0);
-			e = 0;
-			++v;
-		}
-		if (*str)
-			++str;
-	}
-	if (v < uint(face.size()))
-		return;
-
-	std::swap(face[1], face[2]);	// model is CW, need CCW
-	for (v = 0; v < uint(face.size()); ++v) {
-		if (!face[v].n) {
-			vec3 normal = glm::normalize(glm::cross(verts[face[cycle(v, uint(face.size()), int8(-1))][0]] - verts[face[v][0]], verts[face[cycle(v, uint(face.size()), int8(-2))][0]] - verts[face[v][0]]));
-			if (vector<vec3>::iterator it = std::find(norms.begin(), norms.end(), normal); it == norms.end()) {
-				face[v].n = uint(norms.size());
-				norms.push_back(normal);
-			} else
-				face[v].n = uint(it - norms.begin());
-		}
-
-		if (vector<pair<Element, uint16>>::iterator ei = std::find_if(elems.begin(), elems.end(), [&face, v](const pair<Element, uint16>& it) -> bool { return it.first.p == face[v].p && it.first.t == face[v].t && it.first.n == face[v].n; }); ei == elems.end()) {
-			obj.elems.push_back(GLushort(obj.data.size()));
-			obj.data.emplace_back(verts[face[v].p], norms[face[v].n], vec2(tuvs[face[v].t].x, 1.f - tuvs[face[v].t].y));
-			elems.emplace_back(face[v], obj.elems.back());
-		} else
-			obj.elems.push_back(ei->second);
-	}
-}
-
 static void loadObj(const char* file, vector<Blueprint>& bprs) {
-	vector<string> lines = readTextLines(loadFile(file));
-	if (lines.empty()) {
-		std::cerr << "error: couldn't read " << file << std::endl;
+	uint8 level = UINT8_MAX;
+	string name = filename(delExt(file));
+	if (name.empty()) {
+		std::cerr << "error: empty object name in " << file << std::endl;
 		return;
 	}
-	vector<vec3> verts = { vec3(0.f) };
-	vector<vec2> tuvs = { vec2(0.f, 1.f) };
-	vector<vec3> norms = { vec3(0.f) };
-	vector<pair<Element, GLushort>> elems;	// mapping of current object's face ids to blueprint elements
-	bprs.emplace_back(filename(delExt(file)));
+	if (isdigit(name.back()) && name.length() > 1) {
+		level = name.back() - '0';
+		name.pop_back();
+	}
 
-	for (const string& line : lines) {
-		if (char c0 = char(toupper(line[0])); c0 == 'V') {
-			if (char c1 = char(toupper(line[1])); c1 == 'T')
-				tuvs.push_back(stofv<vec2>(&line[2]));
-			else if (c1 == 'N')
-				norms.push_back(stofv<vec3>(&line[2]));
-			else
-				verts.push_back(stofv<vec3>(&line[1]));
-		} else if (c0 == 'F')
-			readFace(&line[1], verts, tuvs, norms, elems, bprs.back());
-		else if (c0 == 'O') {
-			if (Blueprint next(trim(line.substr(1))); bprs.back().empty())
-				bprs.back() = std::move(next);
-			else
-				bprs.push_back(std::move(next));
-			elems.clear();
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile(file, aiProcess_CalcTangentSpace | aiProcess_JoinIdenticalVertices | aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_PreTransformVertices | aiProcess_ImproveCacheLocality | aiProcess_FlipUVs | aiProcess_FlipWindingOrder);
+	if (!(scene && scene->HasMeshes())) {
+		std::cerr << "error: failed to read " << name << std::endl;
+		return;
+	}
+
+	const aiMesh* mesh = scene->mMeshes[0];
+	if (!(mesh->HasPositions() && mesh->HasFaces())) {
+		std::cerr << "error: insufficient data in mesh " << name << std::endl;
+		return;
+	}
+
+	vector<Vertex> verts(mesh->mNumVertices);
+	for (uint i = 0; i < mesh->mNumVertices; ++i) {
+		verts[i].pos = vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+		verts[i].nrm = vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z);
+		if (mesh->HasTextureCoords(0) && mesh->HasTangentsAndBitangents()) {
+			verts[i].tuv = vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y);
+			verts[i].tng = vec3(mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z);
+		} else {
+			verts[i].tuv = vec2(0.f);
+			verts[i].tng = vec3(0.f);
 		}
 	}
-	if (bprs.back().empty())
-		bprs.pop_back();
+
+	vector<GLushort> elems(mesh->mNumFaces * 3);
+	for (uint i = 0, j = 0; i < mesh->mNumFaces; ++i, j += 3) {
+		if (mesh->mFaces[i].mNumIndices == 3)
+			std::copy_n(mesh->mFaces[i].mIndices, 3, elems.begin() + j);
+		else
+			std::cerr << "invalid number of face indices " << mesh->mFaces[i].mNumIndices << " in " << name << std::endl;
+	}
+	bprs.emplace_back(std::move(name), std::move(elems), std::move(verts), level);
 }
 
 static void writeObjects(const char* file, vector<Blueprint>& bprs) {
@@ -292,6 +239,7 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 		std::cerr << "error: couldn't write " << file << std::endl;
 		return;
 	}
+	std::sort(bprs.begin(), bprs.end(), [](const Blueprint& a, const Blueprint& b) -> bool { return a.level < b.level; });
 	uint8 obuf[objectHeaderSize];
 	writeMem(obuf, uint16(bprs.size()));
 	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
@@ -300,7 +248,7 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 		if (it.data.size() > 64000)
 			std::cout << "warning: " << it.name << "'s size of " << it.data.size() << " exceeds 8000 vertices" << std::endl;
 
-		obuf[0] = uint8(it.name.length());
+		obuf[0] = it.name.length();
 		writeMem(obuf + 1, uint16(it.elems.size()));
 		writeMem(obuf + 3, uint16(it.data.size()));
 
@@ -314,6 +262,7 @@ static void writeObjects(const char* file, vector<Blueprint>& bprs) {
 
 // SHADERS
 
+#ifdef NDEBUG
 static bool checkText(char c) {
 	return isalnum(c) || c == '_';
 }
@@ -321,9 +270,11 @@ static bool checkText(char c) {
 static bool checkSpace(char c) {
 	return isSpace(c) && c != '\n';
 }
+#endif
 
 static void loadGlsl(const char* file, vector<pairStr>& srcs, bool gles) {
 	string text = trim(loadFile(file));
+#ifdef NDEBUG
 	bool keepLF = false;
 	for (sizet i = 0; i < text.length(); ++i) {
 		if (checkSpace(text[i])) {
@@ -352,12 +303,12 @@ static void loadGlsl(const char* file, vector<pairStr>& srcs, bool gles) {
 			}
 		}
 	}
-
+#endif
 	if (gles) {
 		constexpr char verstr[] = "#version ";
 		if (sizet p = text.find(verstr); p < text.length()) {
 			p += strlen(verstr);
-			text.replace(p, text.find('\n', p) - p + 1, "300 es\nprecision highp float;");
+			text.replace(p, text.find('\n', p) - p + 1, "300 es\nprecision highp float;precision highp int;precision highp sampler2D;precision highp sampler2DArray;precision highp samplerCube;");
 		}
 	}
 	if (!text.empty())
@@ -374,7 +325,7 @@ static void writeShaders(const char* file, vector<pairStr>& srcs) {
 	SDL_RWwrite(ofh, obuf, sizeof(*obuf), 1);
 
 	for (const auto& [name, text] : srcs) {
-		*obuf = uint8(name.length());
+		obuf[0] = name.length();
 		writeMem(obuf + 1, uint16(text.length()));
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), shaderHeaderSize);
@@ -386,91 +337,81 @@ static void writeShaders(const char* file, vector<pairStr>& srcs) {
 
 // TEXTURES
 
-static bool checkFormat(uint32 format, bool regular) {
-	if (regular && (format == SDL_PIXELFORMAT_BGR24 || format == SDL_PIXELFORMAT_BGRA32))
-		return true;
-	return format == SDL_PIXELFORMAT_RGB24 || format == SDL_PIXELFORMAT_RGBA32;
-}
-
-static uint32 getFormat(uint8 bpp, bool regular) {
-	if (regular)
-		return bpp == 3 ? SDL_PIXELFORMAT_BGR24 : bpp == 4 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_UNKNOWN;
-	return bpp == 3 ? SDL_PIXELFORMAT_RGB24 : bpp == 4 ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_UNKNOWN;
-}
-
-static uint16 getIformat(uint8 bpp) {
-	switch (bpp) {
-	case 1:
-		return GL_R8;
-	case 2:
-		return GL_RG8;
-	case 3:
-		return GL_RGB8;
-	case 4:
-		return GL_RGBA8;
-	}
-	return 0;
-}
-
-static uint16 getPformat(uint32 format) {
-	switch (format) {
-	case SDL_PIXELFORMAT_BGR24:
-		return GL_BGR;
-	case SDL_PIXELFORMAT_BGRA32:
-		return GL_BGRA;
-	case SDL_PIXELFORMAT_RGB24:
-		return GL_RGB;
-	case SDL_PIXELFORMAT_RGBA32:
-		return GL_RGBA;
-	}
-	return 0;
-}
-
-static void loadImg(const char* file, vector<Image>& imgs, bool regular) {
-	string name = filename(delExt(file));
+static PixelData loadImageFile(const char* file, const string& name, bool gles) {
 	vector<uint8> data = loadFile<vector<uint8>>(file);
-	SDL_Surface* img;
-	if (data.empty() || !(img = IMG_Load_RW(SDL_RWFromMem(data.data(), int(data.size())), SDL_TRUE))) {
+	SDL_Surface* img = IMG_Load_RW(SDL_RWFromConstMem(data.data(), data.size()), SDL_TRUE);
+	if (!img) {
 		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
-		return;
+		return PixelData();
 	}
-	bool renew = !regular;
-	if (renew)
-		img = scaleSurface(img, 2);
 
-	uint8 bpp = img->format->BytesPerPixel;
-	if (!checkFormat(img->format->format, regular)) {
-		uint32 format = getFormat(bpp, regular);
-		if (!format) {
-			SDL_FreeSurface(img);
-			std::cerr << "invalid pixel size " << bpp << " of " << name << std::endl;
-			return;
+	bool renew = gles;
+	if (renew)
+		if (img = scaleSurface(img, 2); !img)
+			return PixelData();
+	if (img->format->BytesPerPixel < 4) {
+		SDL_Surface* dst = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_RGBA32, 0);
+		SDL_FreeSurface(img);
+		if (!dst) {
+			std::cerr << "failed to convert " << name << ": " << SDL_GetError() << std::endl;
+			return PixelData();
 		}
-		if (SDL_Surface* pic = SDL_ConvertSurfaceFormat(img, format, 0)) {
-			SDL_FreeSurface(img);
-			img = pic;
-			renew = true;
-		} else {
-			SDL_FreeSurface(img);
-			std::cerr << SDL_GetError();
-			return;
-		}
+		img = dst;
+		renew = true;
 	}
 
 	if (renew) {
-		data.resize(uint(img->pitch) * uint(img->h));
-		SDL_RWops* dw = SDL_RWFromMem(data.data(), int(data.size()));
-		if (bpp == 3 ? IMG_SaveJPG_RW(img, dw, SDL_FALSE, 100) : IMG_SavePNG_RW(img, dw, SDL_FALSE)) {	// png don't work with 3 byte pixels
+		data.resize(sizet(img->pitch) * sizet(img->h) * 2);	// double the size just in case it ends up big
+		SDL_RWops* dw = SDL_RWFromMem(data.data(), data.size());
+		if (IMG_SavePNG_RW(img, dw, SDL_FALSE)) {
 			SDL_RWclose(dw);
 			SDL_FreeSurface(img);
 			std::cerr << "failed to save " << name << ": " << IMG_GetError() << std::endl;
-			return;
+			return PixelData();
 		}
-		data.resize(sizet(SDL_RWtell(dw)));
+		data.resize(SDL_RWtell(dw));
 		SDL_RWclose(dw);
 	}
-	imgs.emplace_back(std::move(name), std::move(data), getIformat(bpp), getPformat(img->format->format));
+	PixelData pret(std::move(data), ivec2(img->w, img->h), SDL_PixelFormatEnum(img->format->format));
 	SDL_FreeSurface(img);
+	return pret;
+}
+
+static void loadImg(const char* file, vector<Image>& imgs, bool gles) {
+	string name = filename(delExt(file));
+	string::iterator num = std::find_if_not(name.rbegin(), name.rend(), isdigit).base();
+	if (num == name.begin() || num == name.end()) {
+		std::cerr << "invalid texture name: " << name << std::endl;
+		return;
+	}
+	TexturePlacement place = TexturePlacement(*num - '0');
+	if (place > TEXPLACE_CUBE || (place == TEXPLACE_CUBE ? *(num + 1) < '0' || *(num + 1) > '5' || num + 2 != name.end() : num + 1 != name.end())) {
+		std::cerr << "texture placement out of bounds: " << name << std::endl;
+		return;
+	}
+	name.erase(num, name.end());
+
+	vector<PixelData> pdat(place != TEXPLACE_CUBE ? place & TEXPLACE_OBJECT ? 2 : 1 : 6);
+	if (place != TEXPLACE_CUBE) {
+		pdat[0] = loadImageFile(file, name, gles);
+		if (pdat[0].data.empty())
+			return;
+
+		if (place & TEXPLACE_OBJECT) {
+			string normalFile = file;
+			normalFile[normalFile.rfind('.')-1] = 'N';
+			pdat[1] = loadImageFile(normalFile.c_str(), name, gles);
+		}
+	} else {
+		string cubeFile = file;
+		sizet idid = cubeFile.rfind('.') - 1;
+		for (uint8 i = 0; i < pdat.size(); ++i) {
+			cubeFile[idid] = '0' + i;
+			if (pdat[i] = loadImageFile(cubeFile.c_str(), name, gles); pdat[i].data.empty())
+				return;
+		}
+	}
+	imgs.emplace_back(std::move(name), std::move(pdat), place);
 }
 
 static void writeImages(const char* file, vector<Image>& imgs) {
@@ -484,14 +425,16 @@ static void writeImages(const char* file, vector<Image>& imgs) {
 	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
 
 	for (Image& it : imgs) {
-		obuf[0] = uint8(it.name.length());
-		writeMem(obuf + 1, uint32(it.data.size()));
-		writeMem(obuf + 5, uint16(it.iformat));
-		writeMem(obuf + 7, uint16(it.pformat));
+		obuf[0] = it.place;
+		obuf[1] = it.name.length();
 
 		SDL_RWwrite(ofh, obuf, sizeof(*obuf), textureHeaderSize);
 		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
-		SDL_RWwrite(ofh, it.data.data(), sizeof(*it.data.data()), it.data.size());
+		for (const PixelData& pd : it.pdat) {
+			uint32 dataSize = pd.data.size();
+			SDL_RWwrite(ofh, &dataSize, sizeof(dataSize), 1);
+			SDL_RWwrite(ofh, pd.data.data(), sizeof(*pd.data.data()), pd.data.size());
+		}
 	}
 	SDL_RWclose(ofh);
 }
@@ -515,7 +458,7 @@ int wmain(int argc, wchar** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
-	if (SDL_Init(0) || IMG_Init(imgInitFull) != imgInitFull) {
+	if (SDL_Init(0) || IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG) {
 		std::cerr << SDL_GetError() << std::endl;
 		return -1;
 	}
@@ -533,9 +476,9 @@ int main(int argc, char** argv) {
 	else if (dest = arg.getOpt(argShaderE); dest)
 		process(dest, arg.getVals(), loadGlsl, writeShaders, true);
 	else if (dest = arg.getOpt(argTexture); dest)
-		process(dest, arg.getVals(), loadImg, writeImages, true);
-	else if (dest = arg.getOpt(argTextureR); dest)
 		process(dest, arg.getVals(), loadImg, writeImages, false);
+	else if (dest = arg.getOpt(argTextureR); dest)
+		process(dest, arg.getVals(), loadImg, writeImages, true);
 	else
 		std::cout << "error: invalid mode" << linend << messageUsage << std::endl;
 

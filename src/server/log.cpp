@@ -24,7 +24,7 @@ DateTime::DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ym
 DateTime DateTime::now() {
 	time_t rawt = time(nullptr);
 	struct tm* tim = localtime(&rawt);
-	return DateTime(uint8(tim->tm_sec), uint8(tim->tm_min), uint8(tim->tm_hour), uint8(tim->tm_mday), uint8(tim->tm_mon + 1), uint16(tim->tm_year + 1900), uint8(tim->tm_wday ? tim->tm_wday : 7));
+	return DateTime(tim->tm_sec, tim->tm_min, tim->tm_hour, tim->tm_mday, tim->tm_mon + 1, tim->tm_year + 1900, tim->tm_wday ? tim->tm_wday : 7);
 }
 
 // LOG

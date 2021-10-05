@@ -1,19 +1,15 @@
-#include "engine/audioSys.h"
 #include "board.h"
-#include "program.h"
 #include "netcp.h"
 #include "progs.h"
-#include "utils/widgets.h"
+#include "engine/audioSys.h"
+#include "engine/scene.h"
+#include "engine/world.h"
 #include <ctime>
 #include <iostream>
 
-// GAME
-
-Game::Game(AudioSys* audioSys, Program* program, const Scene* scene) :
-	board(new Board(scene)),
-	audio(audioSys),
-	prog(program),
-	randGen(createRandomEngine()),
+Game::Game() :
+	board(new Board(World::scene(), World::sets())),
+	randGen(Com::generateRandomSeed()),
 	randDist(0, Config::randomLimit - 1)
 {}
 
@@ -37,7 +33,7 @@ void Game::finishFavor(Favor next, Favor previous) {
 			anyFavorUsed = true;
 			lastFavorUsed = false;
 		}
-		ProgMatch* pm = prog->getState<ProgMatch>();
+		ProgMatch* pm = World::state<ProgMatch>();
 		if (pm->updateFavorIcon(previous, true); next == Favor::none)
 			pm->selectFavorIcon(next);
 	}
@@ -52,7 +48,7 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 	svec2 pos = board->ptog(piece->getPos());
 	Tile* stil = board->getTile(pos);
 	Tile* dtil = board->getTile(dst);
-	Favor favor = prog->getState<ProgMatch>()->favorIconSelect();
+	Favor favor = World::state<ProgMatch>()->favorIconSelect();
 	Action action = move ? occupant ? ACT_SWAP : ACT_MOVE : ACT_ATCK;
 	if (pos == dst)
 		throw string();
@@ -96,19 +92,19 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 			throw string("Can't move there");
 		doEngage(piece, pos, dst, occupant, dtil, action);
 	}
-	if (board->getPxpad()->show)
+	if (board->getPxpad()->getShow())
 		changeTile(stil, TileType::plains);
 	if (concludeAction(piece, action, favor) && availableFF)
-		prog->getGui()->openPopupFavorPick(availableFF);
-	if (audio)
-		audio->play("move");
+		World::pgui()->openPopupFavorPick(availableFF);
+	if (World::audio())
+		World::audio()->play("move");
 }
 
 void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
 	svec2 pos = board->ptog(killer->getPos());
 	Tile* stil = board->getTile(pos);
 	Tile* dtil = board->getTile(dst);
-	Favor favor = prog->getState<ProgMatch>()->favorIconSelect();
+	Favor favor = World::state<ProgMatch>()->favorIconSelect();
 	if (pos == dst)
 		throw string();
 
@@ -131,9 +127,9 @@ void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
 
 	doEngage(killer, pos, dst, victim, dtil, ACT_FIRE);
 	if (concludeAction(killer, ACT_FIRE, favor) && availableFF)
-		prog->getGui()->openPopupFavorPick(availableFF);
-	if (audio)
-		audio->play("ammo");
+		World::pgui()->openPopupFavorPick(availableFF);
+	if (World::audio())
+		World::audio()->play("ammo");
 }
 
 bool Game::concludeAction(Piece* piece, Action action, Favor favor) {
@@ -148,13 +144,13 @@ bool Game::concludeAction(Piece* piece, Action action, Favor favor) {
 		return false;
 
 	Action termin = ownRec.actionsExhausted();
-	bool done = termin != ACT_NONE && std::none_of(favorsCount.begin(), favorsCount.end(), [](uint16 cnt) -> bool { return cnt; }) && !prog->getState<ProgMatch>()->getUnplacedDragons();
+	bool done = termin != ACT_NONE && std::none_of(favorsCount.begin(), favorsCount.end(), [](uint16 cnt) -> bool { return cnt; }) && !World::state<ProgMatch>()->getUnplacedDragons();
 	if (((done || (termin & (ACT_AF | ACT_SPAWN))) && !(board->config.opts & Config::homefront)) || eneRec.info == Record::battleFail) {
 		if (checkPointsWin())
 			return false;
 		endTurn();
 	} else {
-		ProgMatch* pm = prog->getState<ProgMatch>();
+		ProgMatch* pm = World::state<ProgMatch>();
 		pm->updateIcons();
 		pm->message->setText("Your turn");	// in case it got changed during the turn
 		board->setFavorInteracts(pm->favorIconSelect(), ownRec);
@@ -164,9 +160,9 @@ bool Game::concludeAction(Piece* piece, Action action, Favor favor) {
 }
 
 void Game::placeDragon(Piece* dragon, svec2 pos, Piece* occupant) {
-	ProgMatch* pm = prog->getState<ProgMatch>();
+	ProgMatch* pm = World::state<ProgMatch>();
 	if (Tile* til = board->getTile(pos); board->isHomeTile(til) && til->getType() == TileType::fortress) {
-		dragon->setInteractivity(dragon->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+		dragon->setInteractivity(dragon->getShow(), false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 		pm->decreaseDragonIcon();
 		if (occupant)
 			removePiece(occupant);
@@ -177,7 +173,7 @@ void Game::placeDragon(Piece* dragon, svec2 pos, Piece* occupant) {
 }
 
 void Game::establishTile(Piece* throne, bool reinit) {
-	ProgMatch* pm = prog->getState<ProgMatch>();
+	ProgMatch* pm = World::state<ProgMatch>();
 	auto [tile, top] = board->checkTileEstablishable(throne);
 	if (top == TileTop::ownCity)
 		pm->destroyEstablishIcon();
@@ -194,7 +190,7 @@ void Game::rebuildTile(Piece* throne, bool reinit) {
 		board->restorePiecesInteract(ownRec);
 	breachTile(board->getTile(board->ptog(throne->getPos())), false);
 	miscActionTaken = true;
-	prog->getState<ProgMatch>()->updateIcons();
+	World::state<ProgMatch>()->updateIcons();
 }
 
 void Game::spawnPiece(PieceType type, Tile* tile, bool reinit) {
@@ -332,7 +328,7 @@ void Game::doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dt
 
 bool Game::checkPointsWin() {
 	Record::Info win = board->countVictoryPoints(vpOwn, vpEne, eneRec);
-	prog->getState<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
+	World::state<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
 	if (win != Record::none) {
 		doWin(win);
 		return true;
@@ -355,15 +351,15 @@ bool Game::checkWin() {
 void Game::doWin(Record::Info win) {
 	ownRec.info = win;
 	endTurn();
-	prog->finishMatch(win);
+	World::program()->finishMatch(win);
 }
 
 void Game::surrender() {
-	sendb.pushHead(Com::Code::record, Com::dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16) * 2));
+	sendb.pushHead(Com::Code::record, Com::dataHeadSize + sizeof(uint8) + sizeof(uint16) * 2);
 	sendb.push(uint8(Record::loose));
 	sendb.push({ uint16(UINT16_MAX), uint16(0) });
-	prog->getNetcp()->sendData(sendb);
-	prog->finishMatch(Record::loose);
+	World::netcp()->sendData(sendb);
+	World::program()->finishMatch(Record::loose);
 }
 
 void Game::prepareTurn(bool fcont) {
@@ -373,18 +369,18 @@ void Game::prepareTurn(bool fcont) {
 	if (myTurn && !fcont)
 		anyFavorUsed = lastFavorUsed = miscActionTaken = false;
 
-	ProgMatch* pm = prog->getState<ProgMatch>();
+	ProgMatch* pm = World::state<ProgMatch>();
 	pm->updateIcons(fcont);
 	pm->message->setText(myTurn ? xmov ? "Opponent lost a battle" : "Your turn" : "Opponent's turn");
 }
 
 void Game::endTurn() {
-	sendb.pushHead(Com::Code::record, Com::dataHeadSize + uint16(sizeof(uint8) + sizeof(uint16) * (2 + ownRec.protects.size())));	// 2 for last actor and protects size
+	sendb.pushHead(Com::Code::record, Com::dataHeadSize + sizeof(uint8) + sizeof(uint16) * (2 + ownRec.protects.size()));	// 2 for last actor and protects size
 	sendb.push(uint8(ownRec.info | (eneRec.info & Record::battleFail)));
 	sendb.push({ board->inversePieceId(ownRec.lastAct.first), uint16(ownRec.protects.size()) });
 	for (auto& [pce, prt] : ownRec.protects)
 		sendb.push(uint16((board->inversePieceId(pce) & 0x7FFF) | (uint16(prt) << 15)));
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 
 	firstTurn = myTurn = false;
 	board->setPxpadPos(nullptr);
@@ -409,21 +405,21 @@ bool Game::recvRecord(const uint8* data) {
 	}
 
 	board->countVictoryPoints(vpOwn, vpEne, eneRec);
-	prog->getState<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
+	World::state<ProgMatch>()->updateVictoryPoints(vpOwn, vpEne);
 	if (eneRec.info == Record::win || eneRec.info == Record::loose || eneRec.info == Record::tie)
-		prog->finishMatch(eneRec.info == Record::win ? Record::loose : eneRec.info == Record::loose ? Record::win : Record::tie);
+		World::program()->finishMatch(eneRec.info == Record::win ? Record::loose : eneRec.info == Record::loose ? Record::win : Record::tie);
 	else {
 		myTurn = true;
 		prepareTurn(fcont);
-		if (board->getPxpad()->show)
-			prog->getGui()->openPopupChoice("Destroy forest at " + toStr(board->ptog(board->getPxpad()->getPos()), "|") + '?', &Program::eventKillDestroy, &Program::eventCancelDestroy);
+		if (board->getPxpad()->getShow())
+			World::pgui()->openPopupChoice("Destroy forest at " + toStr(board->ptog(board->getPxpad()->getPos()), "|") + '?', &Program::eventKillDestroy, &Program::eventCancelDestroy);
 	}
-	return prog->getNetcp();
+	return World::netcp();
 }
 
 void Game::sendConfig(bool onJoin) {
 	uint ofs;
-	ProgRoom* pr = prog->getState<ProgRoom>();
+	ProgRoom* pr = World::state<ProgRoom>();
 	Config& cfg = pr->confs[pr->configName->getText()];
 	if (onJoin) {
 		ofs = sendb.allocate(Com::Code::cnjoin, Com::dataHeadSize + 1 + cfg.dataSize(pr->configName->getText()));
@@ -431,28 +427,28 @@ void Game::sendConfig(bool onJoin) {
 	} else
 		ofs = sendb.allocate(Com::Code::config, Com::dataHeadSize + cfg.dataSize(pr->configName->getText()));
 	cfg.toComData(&sendb[ofs], pr->configName->getText());
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
 void Game::sendStart() {
-	myTurn = uint8(std::uniform_int_distribution<uint>(0, 1)(randGen));
-	ProgRoom* pr = prog->getState<ProgRoom>();
+	myTurn = std::uniform_int_distribution<uint>(0, 1)(randGen);
+	ProgRoom* pr = World::state<ProgRoom>();
 	Config& cfg = pr->confs[pr->configName->getText()];
 	uint ofs = sendb.allocate(Com::Code::start, Com::dataHeadSize + cfg.dataSize(pr->configName->getText()));
 	ofs = sendb.write(uint8(!myTurn), ofs);
 	cfg.toComData(&sendb[ofs], pr->configName->getText());
-	prog->getNetcp()->sendData(sendb);
-	prog->eventOpenSetup(pr->configName->getText());
+	World::netcp()->sendData(sendb);
+	World::program()->eventOpenSetup(pr->configName->getText());
 }
 
 void Game::recvStart(const uint8* data) {
 	myTurn = data[0];
-	prog->eventOpenSetup(board->config.fromComData(data + 1));
+	World::program()->eventOpenSetup(board->config.fromComData(data + 1));
 }
 
 void Game::sendSetup() {
 	uint tcnt = board->tileCompressionSize();
-	uint ofs = sendb.allocate(Com::Code::setup, uint16(Com::dataHeadSize + tcnt + pieceLim * sizeof(uint16) + board->getPieces().getNum() * sizeof(uint16)));
+	uint ofs = sendb.allocate(Com::Code::setup, Com::dataHeadSize + tcnt + pieceLim * sizeof(uint16) + board->getPieces().getNum() * sizeof(uint16));
 	std::fill_n(&sendb[ofs], tcnt, 0);
 	for (uint16 i = 0; i < board->getTiles().getExtra(); ++i)
 		sendb[i/2+ofs] |= board->compressTile(i);
@@ -461,7 +457,7 @@ void Game::sendSetup() {
 	for (uint8 i = 0; i < pieceLim; ofs = sendb.write(board->ownPieceAmts[i++], ofs));
 	for (uint16 i = 0; i < board->getPieces().getNum(); ++i)
 		sendb.write(board->pieceOnBoard(board->getPieces().own(i)) ? board->invertId(board->posToId(board->ptog(board->getPieces().own(i)->getPos()))) : uint16(UINT16_MAX), i * sizeof(uint16) + ofs);
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
 void Game::recvSetup(const uint8* data) {
@@ -469,16 +465,29 @@ void Game::recvSetup(const uint8* data) {
 	for (uint16 i = 0; i < board->getTiles().getHome(); ++i)
 		board->getTiles()[i].setType(board->decompressTile(data, i));
 	for (uint16 i = 0; i < board->config.homeSize.x; ++i)
-		prog->getState<ProgSetup>()->rcvMidBuffer[i] = board->decompressTile(data, board->getTiles().getHome() + i);
+		World::state<ProgSetup>()->rcvMidBuffer[i] = board->decompressTile(data, board->getTiles().getHome() + i);
 
 	uint16 ofs = board->tileCompressionSize();
 	for (uint8 i = 0; i < pieceLim; ++i, ofs += sizeof(uint16))
 		board->enePieceAmts[i] = Com::read16(data + ofs);
+
+	Mesh* meshes[pieceNames.size()];
+	for (uint8 i = 0; i < pieceNames.size(); ++i) {
+		uint total = board->ownPieceAmts[i] + board->enePieceAmts[i];
+		meshes[i] = World::scene()->mesh(pieceNames[i]);
+		meshes[i]->allocate(total, true);
+	}
 	uint8 t = 0;
+	const Material* matl = World::scene()->material(Settings::colorNames[uint8(World::sets()->colorEnemy)]);
+	int tex = World::scene()->objTex("metal");
 	for (uint16 i = 0, c = 0; i < board->getPieces().getNum(); ++i, ++c) {
-		uint16 id = Com::read16(data + i * sizeof(uint16) + ofs);
 		for (; c >= board->enePieceAmts[t]; ++t, c = 0);
-		board->getPieces().ene(i)->setType(PieceType(t));
+		board->getPieces().ene(i)->init(meshes[t], board->enePieceAmts[t] + c, matl, tex, true, PieceType(t));
+	}
+	for (Mesh* it : meshes)
+		it->updateInstanceData();
+	for (uint16 i = 0; i < board->getPieces().getNum(); ++i) {
+		uint16 id = Com::read16(data + i * sizeof(uint16) + ofs);
 		board->getPieces().ene(i)->setPos(board->gtop(id < board->getTiles().getHome() ? board->idToPos(id) : svec2(UINT16_MAX)));
 	}
 
@@ -488,8 +497,8 @@ void Game::recvSetup(const uint8* data) {
 			throne->lastFortress = pos;
 
 	// finish up
-	if (ProgSetup* ps = prog->getState<ProgSetup>(); ps->getStage() == ProgSetup::Stage::ready)
-		prog->eventOpenMatch();
+	if (ProgSetup* ps = World::state<ProgSetup>(); ps->getStage() == ProgSetup::Stage::ready)
+		World::program()->eventOpenMatch();
 	else {
 		ps->enemyReady = true;
 		ps->message->setText(ps->getStage() >= ProgSetup::Stage::pieces ? "Opponent ready" : "Hurry the fuck up!");
@@ -511,7 +520,7 @@ void Game::placePiece(Piece* piece, svec2 pos) {
 	piece->updatePos(pos, true);
 	sendb.pushHead(Com::Code::move);
 	sendb.push({ board->inversePieceId(piece), board->invertId(board->posToId(pos)) });
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
 void Game::recvKill(const uint8* data) {
@@ -529,7 +538,7 @@ void Game::removePiece(Piece* piece) {
 	piece->updatePos();
 	sendb.pushHead(Com::Code::kill);
 	sendb.push(board->inversePieceId(piece));
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
 void Game::breachTile(Tile* tile, bool yes) {
@@ -537,7 +546,7 @@ void Game::breachTile(Tile* tile, bool yes) {
 	sendb.pushHead(Com::Code::breach);
 	sendb.push(board->inverseTileId(tile));
 	sendb.push(uint8(yes));
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
 void Game::recvTile(const uint8* data) {
@@ -555,22 +564,10 @@ void Game::changeTile(Tile* tile, TileType type, TileTop top) {
 	sendb.pushHead(Com::Code::tile);
 	sendb.push(board->inverseTileId(tile));
 	sendb.push(uint8(uint8(type) | (top.invert() << 4)));
-	prog->getNetcp()->sendData(sendb);
+	World::netcp()->sendData(sendb);
 }
 
-std::default_random_engine Game::createRandomEngine() {
-	std::default_random_engine randGen;
-	try {
-		std::random_device rd;
-		randGen.seed(rd());
-	} catch (...) {
-		randGen.seed(std::random_device::result_type(time(nullptr)));
-		std::cerr << "failed to use random_device" << std::endl;
-	}
-	return randGen;
-}
-
-#ifdef DEBUG
+#ifndef NDEBUG
 void Game::processCommand(const char* cmd) {
 	if (string key = readWord(cmd); !SDL_strcasecmp(key.c_str(), "m")) {
 		while (*cmd)

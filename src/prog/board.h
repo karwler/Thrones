@@ -19,27 +19,24 @@ private:
 	vec2 bobOffset;		// offset for gtop
 	vec4 boardBounds;
 
-	Mesh gridat;
 	Object ground, board, bgrid, screen;
 	TileCol tiles;
 	array<BoardObject, TileTop::none> tileTops;
 	Object pxpad;
 	PieceCol pieces;
 
-public:
-	Board(const Scene* scene);
-	~Board();
+	Scene* scene;
+	Settings* sets;
 
-#ifndef OPENGLES
-	void drawObjectDepths() const;
-#endif
-	void drawObjects() const;
-	void initObjects(const Config& cfg, bool regular, const Settings* sets, const Scene* scene);
-#ifdef DEBUG
-	void initDummyObjects(const Config& cfg, const Settings* sets, const Scene* scene);
+public:
+	Board(Scene* sceneSys, Settings* settings);
+
+	uint16 initConfig(const Config& cfg);	// returns number of pieces left to pick
+	void initObjects(bool regular, bool initPieces = true);
+#ifndef NDEBUG
+	void initDummyObjects();
 #endif
 	void uninitObjects();
-	void initOwnPieces();
 	uint16 countAvailableFavors();
 	void prepareMatch(bool myTurn, TileType* buf);
 	void prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record& erec);
@@ -125,23 +122,16 @@ public:
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
 	uint16 inversePieceId(Piece* piece) const;
+	void updateTileInstances(Tile* til, Mesh* old);
 
 private:
-#ifndef OPENGLES
-	template <class T> void drawObjectDepths(const T& objs) const;
-#endif
-	template <class T> void drawObjects(const T& objs) const;
-	void setTiles(Tile* tils, uint16 yofs, bool show);
-	void setMidTiles();
-	void setPieces(Piece* pces, float rot, const Material* matl);
+	void setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, int tex);
+	void setMidFortressTiles();
+	void setPieces(Piece* pces, float rot);
 	void setBgrid();
 	static vector<uint16> countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt);
-	uint16 findEmptyMiddle(const vector<TileType>& mid, uint16 i, uint16 m) const;
+	uint16 findEmptyMiddle(const vector<TileType>& mid, uint16 i, int16 m) const;
 };
-
-inline Board::~Board() {
-	gridat.free();
-}
 
 inline TileCol& Board::getTiles() {
 	return tiles;
@@ -172,7 +162,7 @@ inline uint16 Board::tileCompressionSize() const {
 }
 
 inline uint8 Board::compressTile(uint16 i) const {
-	return uint8(uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4));
+	return uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4);
 }
 
 inline TileType Board::decompressTile(const uint8* src, uint16 i) {
@@ -256,7 +246,7 @@ inline vec3 Board::gtop(svec2 p, float z) const {
 }
 
 inline uint16 Board::posToId(svec2 p) const {
-	return uint16(p.y * config.homeSize.x + p.x);
+	return p.y * config.homeSize.x + p.x;
 }
 
 inline svec2 Board::idToPos(uint16 i) const {
@@ -268,13 +258,13 @@ inline uint16 Board::invertId(uint16 i) const {
 }
 
 inline uint16 Board::tileId(const Tile* tile) const {
-	return uint16(tile - tiles.begin());
+	return tile - tiles.begin();
 }
 
 inline uint16 Board::inverseTileId(const Tile* tile) const {
-	return uint16(tiles.end() - tile - 1);
+	return tiles.end() - tile - 1;
 }
 
 inline uint16 Board::inversePieceId(Piece* piece) const {
-	return piece ? isOwnPiece(piece) ? uint16(piece - pieces.own()) + pieces.getNum() : uint16(piece - pieces.ene()) : UINT16_MAX;
+	return piece ? isOwnPiece(piece) ? piece - pieces.own() + pieces.getNum() : piece - pieces.ene() : UINT16_MAX;
 }

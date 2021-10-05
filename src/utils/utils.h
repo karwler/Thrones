@@ -10,11 +10,7 @@ enum class UserCode : int32 {
 // general wrappers
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
-#ifndef OPENGLES
-GLuint makeCubemap(GLsizei res, GLenum active);
-void loadCubemap(GLuint tex, GLsizei res, GLenum active);
-GLuint makeFramebufferDepth(GLuint tex);
-#endif
+void checkFramebufferStatus(const string& name);
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format == b.format && a.w == b.w && a.h == b.h && a.refresh_rate == b.refresh_rate;
@@ -48,9 +44,8 @@ inline void glClearDepth(double d) {
 #endif
 
 template <class T>
-void setPtrVec(vector<T*>& vec, vector<T*>&& set) {
-	for (T* it : vec)
-		delete it;
+void setPtrVec(vector<T*>& vec, vector<T*>&& set = vector<T*>()) {
+	std::for_each(vec.begin(), vec.end(), [](T* it) { delete it; });
 	vec = std::move(set);
 }
 
@@ -77,9 +72,9 @@ struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
 	constexpr Rect(int px, int py, int sw, int sh);
-	constexpr Rect(int px, int py, const ivec2& size);
-	constexpr Rect(const ivec2& pos, int sw, int sh);
-	constexpr Rect(const ivec2& pos, const ivec2& size);
+	constexpr Rect(int px, int py, ivec2 size);
+	constexpr Rect(ivec2 pos, int sw, int sh);
+	constexpr Rect(ivec2 pos, ivec2 size);
 
 	ivec2& pos();
 	ivec2 pos() const;
@@ -87,7 +82,7 @@ struct Rect : SDL_Rect {
 	ivec2 size() const;
 	ivec2 end() const;
 
-	bool contain(const ivec2& point) const;
+	bool contain(ivec2 point) const;
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
@@ -99,15 +94,15 @@ constexpr Rect::Rect(int px, int py, int sw, int sh) :
 	SDL_Rect{ px, py, sw, sh }
 {}
 
-constexpr Rect::Rect(int px, int py, const ivec2& size) :
+constexpr Rect::Rect(int px, int py, ivec2 size) :
 	SDL_Rect{ px, py, size.x, size.y }
 {}
 
-constexpr Rect::Rect(const ivec2& pos, int sw, int sh) :
+constexpr Rect::Rect(ivec2 pos, int sw, int sh) :
 	SDL_Rect{ pos.x, pos.y, sw, sh }
 {}
 
-constexpr Rect::Rect(const ivec2& pos, const ivec2& size) :
+constexpr Rect::Rect(ivec2 pos, ivec2 size) :
 	SDL_Rect{ pos.x, pos.y, size.x, size.y }
 {}
 
@@ -131,7 +126,7 @@ inline ivec2 Rect::end() const {
 	return pos() + size();
 }
 
-inline bool Rect::contain(const ivec2& point) const {
+inline bool Rect::contain(ivec2 point) const {
 	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
 
@@ -140,35 +135,36 @@ inline Rect Rect::intersect(const Rect& rect) const {
 	return SDL_IntersectRect(this, &rect, &isct) ? isct : Rect(0);
 }
 
-// OpenGL texture wrapper
+// OpenGL texture wrapper for widgets
 
 class Texture {
-private:
-#ifdef OPENGLES
-	static constexpr GLenum defaultFormat3 = GL_RGB;
-	static constexpr GLenum defaultFormat4 = GL_RGBA;
-#else
-	static constexpr GLenum defaultFormat3 = GL_BGR;
-	static constexpr GLenum defaultFormat4 = GL_BGRA;
-#endif
+public:
+	static constexpr GLenum texa = GL_TEXTURE0;
 
+#ifdef OPENGLES
+	static inline bool bgraSupported = false;
+#endif
+private:
 	GLuint id = 0;
-	ivec2 res = { 0, 0 };
+	ivec2 res = ivec2(0, 0);
 
 public:
 	Texture() = default;
-	Texture(SDL_Surface* img);								// for text
-	Texture(SDL_Surface* img, GLint iform, GLenum pform);	// for image
-	Texture(array<uint8, 3> color);							// load blank
+	Texture(SDL_Surface* img, GLenum pform);	// for images
+	Texture(SDL_Surface* img);					// for text
+	Texture(array<uint8, 4> color);
 
 	void close();
 	void free();
+
 	operator GLuint() const;
-	const ivec2& getRes() const;
-	void reload(const SDL_Surface* img, GLint iformat, GLenum pformat);
+	ivec2 getRes() const;
+	static pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
+
+	void reload(const SDL_Surface* img, GLenum pform);
 private:
-	void load(const SDL_Surface* img, GLint iformat, GLenum pformat, GLint wrap, GLint filter);
-	void upload(const SDL_Surface* img, GLint iformat, GLenum pformat);
+	void load(const SDL_Surface* img, GLenum pform, GLint wrap, GLint filter);
+	void upload(const SDL_Surface* img, GLenum pform);
 };
 
 inline void Texture::free() {
@@ -179,14 +175,81 @@ inline Texture::operator GLuint() const {
 	return id;
 }
 
-inline const ivec2& Texture::getRes() const {
+inline ivec2 Texture::getRes() const {
 	return res;
 }
 
-inline void Texture::reload(const SDL_Surface* img, GLint iformat, GLenum pformat) {
-	upload(img, iformat, pformat);
-	glGenerateMipmap(GL_TEXTURE_2D);
+// OpenGL texture wrapper for 3D objects
+
+class TextureSet {
+public:
+	struct Element {
+		SDL_Surface* color;
+		SDL_Surface* normal;
+		string name;
+		GLenum cformat, nformat;
+
+		Element(SDL_Surface* iclr, SDL_Surface* inrm, string&& texName, GLenum cfmt, GLenum nfmt);
+	};
+
+	struct Import {
+		vector<Element> imgs;
+		array<pair<SDL_Surface*, GLenum>, 6> sky;	// image and format
+		ivec2 cres = ivec2(0), nres = ivec2(0);
+	};
+
+	static constexpr GLenum colorTexa = GL_TEXTURE1;
+	static constexpr GLenum normalTexa = GL_TEXTURE2;
+	static constexpr GLenum skyboxTexa = GL_TEXTURE3;
+
+private:
+	GLuint clr = 0, nrm = 0, sky = 0;
+	umap<string, int> refs;
+
+public:
+	TextureSet() = default;
+	TextureSet(Import&& imp);
+
+	void free();
+	operator GLuint() const;
+	int get(const string& name = string()) const;
+
+private:
+	static void loadTexArray(GLuint& tex, Import& imp, ivec2 res, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank, GLenum active);
+};
+
+inline TextureSet::operator GLuint() const {
+	return clr;
 }
+
+inline int TextureSet::get(const string& name) const {
+	return refs.at(name);
+}
+
+// Render data group
+
+class FrameSet {
+public:
+	static constexpr GLenum vposTexa = GL_TEXTURE4;
+	static constexpr GLenum normTexa = GL_TEXTURE5;
+	static constexpr GLenum ssaoTexa = GL_TEXTURE6;
+	static constexpr GLenum blurTexa = GL_TEXTURE7;
+	static constexpr GLenum colorTexa = GL_TEXTURE8;
+	static constexpr GLenum brightTexa = GL_TEXTURE9;
+
+	GLuint fboGeom = 0, texPosition = 0, texNormal = 0, rboGeom = 0;
+	GLuint fboSsao = 0, texSsao = 0;
+	GLuint fboBlur = 0, texBlur = 0;
+	GLuint fboLight = 0, texColor = 0, texBright = 0, rboLight = 0;
+	array<GLuint, 2> fboGauss{}, texGauss{};
+
+	FrameSet(const Settings* sets, ivec2 res);
+
+	void free();
+
+private:
+	static GLuint makeTexture(ivec2 res, GLint iform, GLenum pform, GLenum active, GLint filter = GL_NEAREST);
+};
 
 // for Object and Widget
 
@@ -248,13 +311,13 @@ public:
 
 	virtual void drawTop() const {}
 	virtual void tick(float) {}
-	virtual void onClick(const ivec2&, uint8) {}
-	virtual void onHold(const ivec2&, uint8) {}
-	virtual void onDrag(const ivec2&, const ivec2&) {}	// mouse move while left button down
+	virtual void onClick(ivec2, uint8) {}
+	virtual void onHold(ivec2, uint8) {}
+	virtual void onDrag(ivec2, ivec2) {}	// mouse move while left button down
 	virtual void onUndrag(uint8) {}						// gets called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
-	virtual void onScroll(const ivec2&) {}
+	virtual void onScroll(ivec2) {}
 	virtual void onKeyDown(const SDL_KeyboardEvent&) {}
 	virtual void onKeyUp(const SDL_KeyboardEvent&) {}
 	virtual void onText(const char*) {}
@@ -316,4 +379,10 @@ template <class T, std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
 T swapBits(T n, uint8 i, uint8 j) {
 	T x = ((n >> i) & 1) ^ ((n >> j) & 1);
 	return n ^ ((x << i) | (x << j));
+}
+
+template <class U, class S, std::enable_if_t<std::is_unsigned_v<U> && std::is_signed_v<S>, int> = 0>
+U cycle(U pos, U siz, S mov) {
+	U rst = pos + U(mov % S(siz));
+	return rst < siz ? rst : mov >= S(0) ? rst - siz : siz + rst;
 }

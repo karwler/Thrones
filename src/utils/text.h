@@ -47,6 +47,11 @@ inline string firstUpper(string str) {
 	return str;
 }
 
+inline string firstLower(string str) {
+	str[0] = char(toupper(str[0]));
+	return str;
+}
+
 inline string trim(const string& str) {
 	string::const_iterator pos = std::find_if(str.begin(), str.end(), notSpace);
 	return string(pos, std::find_if(str.rbegin(), string::const_reverse_iterator(pos), notSpace).base());
@@ -60,6 +65,10 @@ inline string delExt(const string& path) {
 inline string filename(const string& path) {
 	string::const_reverse_iterator end = std::find_if_not(path.rbegin(), path.rend(), isDsep);
 	return string(std::find_if(end, path.rend(), isDsep).base(), end.base());
+}
+
+inline const char* pixelformatName(uint32 format) {
+	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
 }
 
 // conversions
@@ -79,7 +88,7 @@ string toStr(T num) {
 }
 
 template <class T, std::enable_if_t<std::is_integral_v<T>, int> = 0>
-inline string toStr(T num, sizet len) {
+string toStr(T num, sizet len) {
 	string str = std::to_string(num);
 	return len > str.length() ? string(len - str.length(), '0') + str : str;
 }
@@ -89,6 +98,20 @@ string toStr(T num) {
 	string str = std::to_string(num);
 	sizet id = str.find_last_not_of('0');
 	return str.substr(0, str[id] == '.' ? id : id + 1);
+}
+
+template <uint8 base, class T, std::enable_if_t<std::is_unsigned_v<T> && base >= 2 && base <= 64, int> = 0>
+string toStr(T val) {
+	if (!val)
+		return "0";
+
+	const char* digits = base < 64 ? "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+" : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	char buf[sizeof(T)*8];
+	uint8 blen = 0;
+	for (uint64 num = val; num; num /= base)
+		buf[blen++] = digits[num % base];
+	std::reverse(buf, buf + blen);
+	return string(buf, blen);
 }
 
 inline bool stob(const string& str) {
@@ -198,10 +221,11 @@ string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
 
 template <class T, std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
 uint8 numDigits(T num, uint8 base = 10) {
-	return num ? log(num) / log(base) + 1 : 1;
+	return num ? uint8(log(num) / log(base)) + 1 : 1;
 }
 
 // command line arguments
+
 class Arguments {
 private:
 	vector<string> vals;

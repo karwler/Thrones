@@ -39,54 +39,54 @@ private:
 	static constexpr float throttle = 10.f;
 
 public:
-	void draw(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z = 0.f) const;
-	void draw(const Rect& frame, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z = 0.f) const;
-	void tick(float dSec, const ivec2& listSize, const ivec2& size);
-	void hold(const ivec2& mPos, uint8 mBut, Interactable* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert);
-	void drag(const ivec2& mPos, const ivec2& mMov, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert);
+	void draw(ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
+	void draw(const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
+	void tick(float dSec, ivec2 listSize, ivec2 size);
+	void hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
+	void drag(ivec2 mPos, ivec2 mMov, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
 	void undrag(uint8 mBut, bool vert);
 	void cancelDrag();
-	void scroll(const ivec2& wMov, const ivec2& listSize, const ivec2& size, bool vert);
+	void scroll(ivec2 wMov, ivec2 listSize, ivec2 size, bool vert);
 
-	static ivec2 listLim(const ivec2& listSize, const ivec2& size);	// max list position
-	void setListPos(const ivec2& pos, const ivec2& listSize, const ivec2& size);
-	void moveListPos(const ivec2& mov, const ivec2& listSize, const ivec2& size);
-	static int barSize(const ivec2& listSize, const ivec2& size, bool vert);	// returns 0 if slider isn't needed
+	static ivec2 listLim(ivec2 listSize, ivec2 size);	// max list position
+	void setListPos(ivec2 pos, ivec2 listSize, ivec2 size);
+	void moveListPos(ivec2 mov, ivec2 listSize, ivec2 size);
+	static int barSize(ivec2 listSize, ivec2 size, bool vert);	// returns 0 if slider isn't needed
 private:
-	static Rect barRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert);
-	Rect sliderRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const;
-	void setSlider(int spos, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert);
-	static int sliderSize(const ivec2& listSize, const ivec2& size, bool vert);
-	int sliderPos(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const;
-	static int sliderLim(const ivec2& listSize, const ivec2& size, bool vert);	// max slider position
+	static Rect barRect(ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
+	Rect sliderRect(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const;
+	void setSlider(int spos, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
+	static int sliderSize(ivec2 listSize, ivec2 size, bool vert);
+	int sliderPos(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const;
+	static int sliderLim(ivec2 listSize, ivec2 size, bool vert);	// max slider position
 	static void throttleMotion(float& mov, float dSec);
 };
 
-inline ivec2 ScrollBar::listLim(const ivec2& listSize, const ivec2& size) {
+inline ivec2 ScrollBar::listLim(ivec2 listSize, ivec2 size) {
 	return ivec2(size.x < listSize.x ? listSize.x - size.x : 0, size.y < listSize.y ? listSize.y - size.y : 0);
 }
 
-inline void ScrollBar::setListPos(const ivec2& pos, const ivec2& listSize, const ivec2& size) {
+inline void ScrollBar::setListPos(ivec2 pos, ivec2 listSize, ivec2 size) {
 	listPos = glm::clamp(pos, ivec2(0), listLim(listSize, size));
 }
 
-inline void ScrollBar::moveListPos(const ivec2& mov, const ivec2& listSize, const ivec2& size) {
+inline void ScrollBar::moveListPos(ivec2 mov, ivec2 listSize, ivec2 size) {
 	listPos = glm::clamp(listPos + mov, ivec2(0), listLim(listSize, size));
 }
 
-inline int ScrollBar::barSize(const ivec2& listSize, const ivec2& size, bool vert) {
+inline int ScrollBar::barSize(ivec2 listSize, ivec2 size, bool vert) {
 	return listSize[vert] > size[vert] ? width : 0;
 }
 
-inline int ScrollBar::sliderSize(const ivec2& listSize, const ivec2& size, bool vert) {
+inline int ScrollBar::sliderSize(ivec2 listSize, ivec2 size, bool vert) {
 	return size[vert] < listSize[vert] ? size[vert] * size[vert] / listSize[vert] : size[vert];
 }
 
-inline int ScrollBar::sliderPos(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const {
+inline int ScrollBar::sliderPos(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const {
 	return listSize[vert] > size[vert] ? pos[vert] + listPos[vert] * sliderLim(listSize, size, vert) / listLim(listSize, size)[vert] : pos[vert];
 }
 
-inline int ScrollBar::sliderLim(const ivec2& listSize, const ivec2& size, bool vert) {
+inline int ScrollBar::sliderLim(ivec2 listSize, ivec2 size, bool vert) {
 	return size[vert] - sliderSize(listSize, size, vert);
 }
 
@@ -139,7 +139,7 @@ public:
 
 protected:
 	Size relSize;				// size relative to parent's parameters
-	Layout* parent = nullptr;	// every widget that isn't a Layout should have a parent
+	Layout* parent = nullptr;	// every widget that isn't a RootLayout should have a parent
 	sizet index = SIZE_MAX;		// this widget's id in parent's widget list
 
 public:
@@ -207,7 +207,7 @@ public:
 	~Button() override;
 
 	void draw() const override;
-	void onClick(const ivec2& mPos, uint8 mBut) override;
+	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onHover() override;
 	void onUnhover() override;
 	void onNavSelect(Direction dir) override;
@@ -228,10 +228,10 @@ public:
 	bool on;
 
 	CheckBox(Size size = 1.f, bool checked = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
-	~CheckBox() final = default;
+	~CheckBox() override = default;
 
-	void draw() const final;
-	void onClick(const ivec2& mPos, uint8 mBut) final;
+	void draw() const override;
+	void onClick(ivec2 mPos, uint8 mBut) override;
 
 	Rect boxRect() const;
 	const vec4& boxColor() const;
@@ -260,20 +260,20 @@ private:
 
 public:
 	Slider(Size size = 1.f, int value = 0, int minimum = 0, int maximum = 255, int navStep = 1, BCall finishCall = nullptr, BCall updateCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
-	~Slider() final = default;
+	~Slider() override = default;
 
-	void draw() const final;
-	void onClick(const ivec2&, uint8) final {}
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
-	void onUndrag(uint8 mBut) final;
-	void onKeyDown(const SDL_KeyboardEvent& key) final;
-	void onJButtonDown(uint8 but) final;
-	void onJHatDown(uint8 hat, uint8 val) final;
-	void onJAxisDown(uint8 axis, bool positive) final;
-	void onGButtonDown(SDL_GameControllerButton but) final;
-	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) final;
-	void onCancelCapture() final;
+	void draw() const override;
+	void onClick(ivec2, uint8) override {}
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onDrag(ivec2 mPos, ivec2 mMov) override;
+	void onUndrag(uint8 mBut) override;
+	void onKeyDown(const SDL_KeyboardEvent& key) override;
+	void onJButtonDown(uint8 but) override;
+	void onJHatDown(uint8 hat, uint8 val) override;
+	void onJAxisDown(uint8 axis, bool positive) override;
+	void onGButtonDown(SDL_GameControllerButton but) override;
+	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
+	void onCancelCapture() override;
 
 	int getValue() const;
 	int getMin() const;
@@ -336,7 +336,7 @@ public:
 	virtual void setText(const string& str);
 	Rect textRect() const;
 protected:
-	static ivec2 textOfs(const ivec2& res, Alignment align, const ivec2& pos, const ivec2& siz, int margin);
+	static ivec2 textOfs(ivec2 res, Alignment align, ivec2 pos, ivec2 siz, int margin);
 	virtual ivec2 textPos() const;
 	virtual void updateTextTex();
 };
@@ -359,27 +359,27 @@ private:
 
 public:
 	TextBox(Size size = 1.f, int lineH = 0, string lines = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, uint16 lineL = UINT16_MAX, bool stickTop = true, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~TextBox() final = default;
+	~TextBox() override = default;
 
-	void draw() const final;
-	void tick(float dSec) final;
-	void postInit() final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
-	void onUndrag(uint8 mBut) final;
-	void onHover() final {}
-	void onUnhover() final {}
-	void onScroll(const ivec2& wMov) final;
-	void onCancelCapture() final;
+	void draw() const override;
+	void tick(float dSec) override;
+	void postInit() override;
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onDrag(ivec2 mPos, ivec2 mMov) override;
+	void onUndrag(uint8 mBut) override;
+	void onHover() override {}
+	void onUnhover() override {}
+	void onScroll(ivec2 wMov) override;
+	void onCancelCapture() override;
 
-	bool selectable() const final;
-	void setText(string&& str) final;
-	void setText(const string &str) final;
+	bool selectable() const override;
+	void setText(string&& str) override;
+	void setText(const string &str) override;
 	void addLine(const string& line);
 	string moveText();
 private:
-	ivec2 textPos() const final;
-	void updateTextTex() final;
+	ivec2 textPos() const override;
+	void updateTextTex() override;
 	void updateListPos();
 	void resetListPos();
 	void cutLines();
@@ -400,11 +400,11 @@ private:
 
 public:
 	Icon(Size size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall holdCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal, bool select = false);
-	~Icon() final = default;
+	~Icon() override = default;
 
-	void draw() const final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	bool selectable() const final;
+	void draw() const override;
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	bool selectable() const override;
 };
 
 // for switching between multiple options (kinda like a drop-down menu except I was too lazy to make an actual one)
@@ -415,13 +415,13 @@ private:
 
 public:
 	ComboBox(Size size = 1.f, string curOpt = string(), vector<string> opts = vector<string>(), CCall optCall = nullptr, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~ComboBox() final = default;
+	~ComboBox() override = default;
 
-	void onClick(const ivec2& mPos, uint8 mBut) final;
+	void onClick(ivec2 mPos, uint8 mBut) override;
 
-	bool selectable() const final;
-	void setText(string&& str) final;
-	void setText(const string& str) final;
+	bool selectable() const override;
+	void setText(string&& str) override;
+	void setText(const string& str) override;
 	sizet getCurOpt() const;
 	void setCurOpt(sizet id);
 	void set(vector<string>&& opts, sizet id);
@@ -429,7 +429,7 @@ public:
 };
 
 inline sizet ComboBox::getCurOpt() const {
-	return sizet(std::find(options.begin(), options.end(), text) - options.begin());
+	return std::find(options.begin(), options.end(), text) - options.begin();
 }
 
 inline void ComboBox::setCurOpt(sizet id) {
@@ -451,29 +451,29 @@ private:
 
 public:
 	LabelEdit(Size size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~LabelEdit() final = default;
+	~LabelEdit() override = default;
 
-	void drawTop() const final;
-	void onClick(const ivec2& mPos, uint8 mBut) final;
-	void onKeyDown(const SDL_KeyboardEvent& key) final;
-	void onJButtonDown(uint8 but) final;
-	void onJHatDown(uint8 hat, uint8 val) final;
-	void onJAxisDown(uint8 axis, bool positive) final;
-	void onGButtonDown(SDL_GameControllerButton but) final;
-	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) final;
-	void onText(const char* str) final;
-	void onCancelCapture() final;
+	void drawTop() const override;
+	void onClick(ivec2 mPos, uint8 mBut) override;
+	void onKeyDown(const SDL_KeyboardEvent& key) override;
+	void onJButtonDown(uint8 but) override;
+	void onJHatDown(uint8 hat, uint8 val) override;
+	void onJAxisDown(uint8 axis, bool positive) override;
+	void onGButtonDown(SDL_GameControllerButton but) override;
+	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
+	void onText(const char* str) override;
+	void onCancelCapture() override;
 
-	bool selectable() const final;
+	bool selectable() const override;
 	const string& getOldText() const;
-	void setText(string&& str) final;
-	void setText(const string& str) final;
+	void setText(string&& str) override;
+	void setText(const string& str) override;
 
 	void confirm();
 	void cancel();
 
 protected:
-	ivec2 textPos() const final;
+	ivec2 textPos() const override;
 private:
 	void onInput(Binding::Type bind, uint16 mod = 0, bool joypad = true);
 	void onTextReset();
@@ -510,17 +510,17 @@ public:
 	sizet kid;				// key id
 
 	KeyGetter(Size size = 1.f, Binding::Accept atype = Binding::Accept::keyboard, Binding::Type binding = Binding::Type(-1), sizet keyId = SIZE_MAX, BCall exitCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~KeyGetter() final = default;
+	~KeyGetter() override = default;
 
-	void onClick(const ivec2& mPos, uint8 mBut) final;
-	void onKeyDown(const SDL_KeyboardEvent& key) final;
-	void onJButtonDown(uint8 but) final;
-	void onJHatDown(uint8 hat, uint8 val) final;
-	void onJAxisDown(uint8 axis, bool positive) final;
-	void onGButtonDown(SDL_GameControllerButton but) final;
-	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) final;
-	void onCancelCapture() final;
-	bool selectable() const final;
+	void onClick(ivec2 mPos, uint8 mBut) override;
+	void onKeyDown(const SDL_KeyboardEvent& key) override;
+	void onJButtonDown(uint8 but) override;
+	void onJHatDown(uint8 hat, uint8 val) override;
+	void onJAxisDown(uint8 axis, bool positive) override;
+	void onGButtonDown(SDL_GameControllerButton but) override;
+	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
+	void onCancelCapture() override;
+	bool selectable() const override;
 
 private:
 	template <class T> void setBinding(Binding::Accept expect, T key);

@@ -5,19 +5,19 @@
 
 // SCROLL
 
-void ScrollBar::draw(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z) const {
+void ScrollBar::draw(ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z) const {
 	GLuint tex = World::scene()->texture();
 	Quad::draw(barRect(listSize, pos, size, vert), Widget::colorDark, tex, z);		// bar
 	Quad::draw(sliderRect(listSize, pos, size, vert), Widget::colorLight, tex, z);	// slider
 }
 
-void ScrollBar::draw(const Rect& frame, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert, float z) const {
+void ScrollBar::draw(const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z) const {
 	GLuint tex = World::scene()->texture();
 	Quad::draw(barRect(listSize, pos, size, vert), frame, Widget::colorDark, tex, z);		// bar
 	Quad::draw(sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, tex, z);	// slider
 }
 
-void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
+void ScrollBar::tick(float dSec, ivec2 listSize, ivec2 size) {
 	if (motion != vec2(0.f)) {
 		moveListPos(motion, listSize, size);
 		throttleMotion(motion.x, dSec);
@@ -26,7 +26,7 @@ void ScrollBar::tick(float dSec, const ivec2& listSize, const ivec2& size) {
 	}
 }
 
-void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Interactable* wgt, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+void ScrollBar::hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) {
 	motion = vec2(0.f);	// get rid of scroll motion
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
 		World::scene()->setCapture(wgt);
@@ -39,7 +39,7 @@ void ScrollBar::hold(const ivec2& mPos, uint8 mBut, Interactable* wgt, const ive
 	}
 }
 
-void ScrollBar::drag(const ivec2& mPos, const ivec2& mMov, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+void ScrollBar::drag(ivec2 mPos, ivec2 mMov, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) {
 	if (draggingSlider)
 		setSlider(mPos.y - diffSliderMouse, listSize, pos, size, vert);
 	else
@@ -59,7 +59,7 @@ void ScrollBar::cancelDrag() {
 	draggingSlider = false;
 }
 
-void ScrollBar::scroll(const ivec2& wMov, const ivec2& listSize, const ivec2& size, bool vert) {
+void ScrollBar::scroll(ivec2 wMov, ivec2 listSize, ivec2 size, bool vert) {
 	moveListPos(swap(wMov.x, wMov.y, !vert), listSize, size);
 	motion = vec2(0.f);
 }
@@ -72,17 +72,17 @@ void ScrollBar::throttleMotion(float& mov, float dSec) {
 		mov = 0.f;
 }
 
-void ScrollBar::setSlider(int spos, const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+void ScrollBar::setSlider(int spos, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) {
 	int lim = listLim(listSize, size)[vert];
 	listPos[vert] = std::clamp((spos - pos[vert]) * lim / sliderLim(listSize, size, vert), 0, lim);
 }
 
-Rect ScrollBar::barRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) {
+Rect ScrollBar::barRect(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) {
 	int bs = barSize(listSize, size, vert);
 	return vert ? Rect(pos.x + size.x - bs, pos.y, bs, size.y) : Rect(pos.x, pos.y + size.y - bs, size.x, bs);
 }
 
-Rect ScrollBar::sliderRect(const ivec2& listSize, const ivec2& pos, const ivec2& size, bool vert) const {
+Rect ScrollBar::sliderRect(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const {
 	int bs = barSize(listSize, size, vert);
 	int sp = sliderPos(listSize, pos, size, vert);
 	int ss = sliderSize(listSize, size, vert);
@@ -170,7 +170,7 @@ void Button::draw() const {
 	Quad::draw(rect(), frame(), color * dimFactor, bgTex);
 }
 
-void Button::onClick(const ivec2&, uint8 mBut) {
+void Button::onClick(ivec2, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT)
 		World::prun(lcall, this);
 	else if (mBut == SDL_BUTTON_RIGHT)
@@ -227,7 +227,7 @@ void CheckBox::draw() const {
 	Quad::draw(boxRect(), frm, boxColor() * dimFactor, World::scene()->texture());	// draw checkbox
 }
 
-void CheckBox::onClick(const ivec2& mPos, uint8 mBut) {
+void CheckBox::onClick(ivec2 mPos, uint8 mBut) {
 	if ((mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) && (lcall || rcall))
 		toggle();
 	Button::onClick(mPos, mBut);
@@ -252,12 +252,13 @@ Slider::Slider(Size size, int val, int minimum, int maximum, int navStep, BCall 
 
 void Slider::draw() const {
 	Rect frm = frame();
-	Quad::draw(rect(), frm, color * dimFactor, bgTex);						// background
-	Quad::draw(barRect(), frm, colorDark, World::scene()->texture());		// bar
-	Quad::draw(sliderRect(), frm, colorLight, World::scene()->texture());	// slider
+	GLuint tex = World::scene()->texture();
+	Quad::draw(rect(), frm, color * dimFactor, bgTex);			// background
+	Quad::draw(barRect(), frm, colorDark * dimFactor, tex);		// bar
+	Quad::draw(sliderRect(), frm, colorLight * dimFactor, tex);	// slider
 }
 
-void Slider::onHold(const ivec2& mPos, uint8 mBut) {
+void Slider::onHold(ivec2 mPos, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || rcall)) {
 		World::scene()->setCapture(this);
 		if (int sp = sliderPos(), sw = size().y / sliderWidthFactor; outRange(mPos.x, sp, sp + sw))	// if mouse outside of slider
@@ -267,7 +268,7 @@ void Slider::onHold(const ivec2& mPos, uint8 mBut) {
 	}
 }
 
-void Slider::onDrag(const ivec2& mPos, const ivec2&) {
+void Slider::onDrag(ivec2 mPos, ivec2) {
 	setSlider(mPos.x - diffSliderMouse);
 }
 
@@ -389,10 +390,8 @@ void Label::draw() const {
 	Rect frm = frame();
 	if (showBG)
 		Quad::draw(rbg, frm, color * dimFactor, bgTex);
-	if (textTex) {
-		int margin = rbg.h / textMarginFactor;
-		Quad::draw(textRect(), Rect(rbg.x + margin, rbg.y, rbg.w - margin * 2, rbg.h).intersect(frm), dimFactor, textTex);
-	}
+	if (textTex)
+		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
 }
 
 void Label::onResize() {
@@ -413,7 +412,7 @@ void Label::setText(const string& str) {
 	updateTextTex();
 }
 
-ivec2 Label::textOfs(const ivec2& res, Alignment align, const ivec2& pos, const ivec2& siz, int margin) {
+ivec2 Label::textOfs(ivec2 res, Alignment align, ivec2 pos, ivec2 siz, int margin) {
 	switch (align) {
 	case Alignment::left:
 		return ivec2(pos.x + margin, pos.y);
@@ -452,7 +451,7 @@ void TextBox::draw() const {
 	if (showBG)
 		Quad::draw(rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
-		Quad::draw(textRect(), rbg, dimFactor, textTex);
+		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
 	scroll.draw(rbg, textTex.getRes(), rbg.pos(), rbg.size(), true);
 }
 
@@ -465,11 +464,11 @@ void TextBox::postInit() {
 	updateListPos();
 }
 
-void TextBox::onHold(const ivec2& mPos, uint8 mBut) {
+void TextBox::onHold(ivec2 mPos, uint8 mBut) {
 	scroll.hold(mPos, mBut, this, textTex.getRes(), position(), size(), true);
 }
 
-void TextBox::onDrag(const ivec2& mPos, const ivec2& mMov) {
+void TextBox::onDrag(ivec2 mPos, ivec2 mMov) {
 	scroll.drag(mPos, mMov, textTex.getRes(), position(), size(), true);
 }
 
@@ -477,7 +476,7 @@ void TextBox::onUndrag(uint8 mBut) {
 	scroll.undrag(mBut, true);
 }
 
-void TextBox::onScroll(const ivec2& wMov) {
+void TextBox::onScroll(ivec2 wMov) {
 	scroll.scroll(wMov, textTex.getRes(), size(), true);
 }
 
@@ -495,7 +494,7 @@ ivec2 TextBox::textPos() const {
 
 void TextBox::updateTextTex() {
 	textTex.close();
-	textTex = World::fonts()->render(text.c_str(), lineHeight, uint(size().x - lineHeight / textMarginFactor * 2 - ScrollBar::width));
+	textTex = World::fonts()->render(text.c_str(), lineHeight, size().x - lineHeight / textMarginFactor * 2 - ScrollBar::width);
 }
 
 void TextBox::setText(string&& str) {
@@ -559,19 +558,20 @@ void Icon::draw() const {
 	if (showBG)
 		Quad::draw(rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
-		Quad::draw(textRect(), frm, dimFactor, textTex);
+		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
 
 	if (selected) {
 		int olSize = std::min(rbg.w, rbg.h) / outlineFactor;
 		vec4 clr = colorLight * dimFactor;
-		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), clr, World::scene()->texture());
-		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), clr, World::scene()->texture());
-		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture());
-		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), clr, World::scene()->texture());
+		GLuint tex = World::scene()->texture();
+		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), frm, clr, tex);
+		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), frm, clr, tex);
+		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
+		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
 	}
 }
 
-void Icon::onHold(const ivec2&, uint8 mBut) {
+void Icon::onHold(ivec2, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT)
 		World::prun(hcall, this);
 }
@@ -588,7 +588,7 @@ ComboBox::ComboBox(Size size, string curOpt, vector<string> opts, CCall optCall,
 	ocall(optCall)
 {}
 
-void ComboBox::onClick(const ivec2& mPos, uint8 mBut) {
+void ComboBox::onClick(ivec2 mPos, uint8 mBut) {
 	if (Button::onClick(mPos, mBut); mBut == SDL_BUTTON_LEFT && ocall)
 		World::scene()->setContext(std::make_unique<Context>(mPos, options, ocall, position(), World::pgui()->getLineHeight(), this, size().x));
 }
@@ -633,9 +633,9 @@ void LabelEdit::drawTop() const {
 	Quad::draw(Rect(caretPos() + ps.x + sz.y / textMarginFactor, ps.y, caretWidth, sz.y), frame(), colorLight, World::scene()->texture());
 }
 
-void LabelEdit::onClick(const ivec2&, uint8 mBut) {
+void LabelEdit::onClick(ivec2, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || ecall)) {
-		setCPos(uint16(text.length()));
+		setCPos(text.length());
 		World::window()->setTextCapture(true);
 		World::scene()->setCapture(this);
 	} else if (mBut == SDL_BUTTON_RIGHT)
@@ -672,7 +672,7 @@ void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
 		setCPos(0);
 		break;
 	case Binding::Type::down:
-		setCPos(uint16(text.length()));
+		setCPos(text.length());
 		break;
 	case Binding::Type::left:
 		if (kmodAlt(mod))	// if holding alt skip word
@@ -686,7 +686,7 @@ void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
 		if (kmodAlt(mod))	// if holding alt skip word
 			setCPos(findWordEnd());
 		else if (kmodCtrl(mod))	// if holding ctrl go to end
-			setCPos(uint16(text.length()));
+			setCPos(text.length());
 		else if (cpos < text.length())	// otherwise go right by one
 			setCPos(jumpCharF(cpos));
 		break;
@@ -723,7 +723,7 @@ void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
 		setCPos(0);
 		break;
 	case Binding::Type::textEnd:
-		setCPos(uint16(text.length()));
+		setCPos(text.length());
 		break;
 	case Binding::Type::textPaste:
 		if (kmodCtrl(mod) || joypad)
@@ -768,7 +768,7 @@ void LabelEdit::onText(const char* str) {
 		slen = cutLength(str, avail);
 	text.insert(cpos, str, slen);
 	updateTextTex();
-	setCPos(cpos + uint16(slen));
+	setCPos(cpos + slen);
 }
 
 void LabelEdit::onCancelCapture() {
@@ -795,7 +795,7 @@ void LabelEdit::setText(const string& str) {
 
 void LabelEdit::onTextReset() {
 	updateTextTex();
-	cpos = uint16(text.length());
+	cpos = text.length();
 	textOfs = 0;
 }
 
@@ -892,7 +892,7 @@ KeyGetter::KeyGetter(Size size, Binding::Accept atype, Binding::Type binding, si
 	kid(keyId)
 {}
 
-void KeyGetter::onClick(const ivec2&, uint8 mBut) {
+void KeyGetter::onClick(ivec2, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT) {
 		World::scene()->setCapture(this);
 		setText("...");
@@ -975,11 +975,11 @@ string KeyGetter::bindingText(Binding::Accept accept, Binding::Type bind, sizet 
 	case Binding::Accept::gamepad:
 		switch (AsgGamepad ag = World::input()->getBinding(bind).gpds[kid]; ag.getAsg()) {
 		case AsgGamepad::button:
-			return InputSys::gbuttonNames[uint8(ag.getButton())];
+			return InputSys::gbuttonNames[ag.getButton()];
 		case AsgGamepad::axisPos:
-			return '+' + string(InputSys::gaxisNames[uint8(ag.getAxis())]);
+			return '+' + string(InputSys::gaxisNames[ag.getAxis()]);
 		case AsgGamepad::axisNeg:
-			return '-' + string(InputSys::gaxisNames[uint8(ag.getAxis())]);
+			return '-' + string(InputSys::gaxisNames[ag.getAxis()]);
 		}
 	}
 	return string();

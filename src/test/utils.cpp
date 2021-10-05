@@ -96,6 +96,23 @@ static void testSwapBits() {
 	assertEqual(swapBits(0xF3u, 1, 0), 0xF3u);
 }
 
+static void testCycle() {
+	assertEqual(cycle(0u, 1u, 1), 0u);
+	assertEqual(cycle(0u, 1u, -1), 0u);
+	assertEqual(cycle(0u, 1u, 2), 0u);
+	assertEqual(cycle(0u, 1u, -2), 0u);
+	assertEqual(cycle(1u, 2u, 4), 1u);
+	assertEqual(cycle(1u, 2u, -4), 1u);
+	assertEqual(cycle(1u, 3u, 1), 2u);
+	assertEqual(cycle(1u, 3u, -1), 0u);
+	assertEqual(cycle(2u, 3u, 2), 1u);
+	assertEqual(cycle(2u, 3u, -2), 0u);
+	assertEqual(cycle(1u, 3u, 3), 1u);
+	assertEqual(cycle(1u, 3u, -3), 1u);
+	assertEqual(cycle(2u, 3u, 4), 0u);
+	assertEqual(cycle(2u, 3u, -4), 1u);
+}
+
 static void testUniqueSort() {
 	vector<int> vals{ 4, 8, 2, 5, 5, 0, 9, 6, 7, 2, 1, 4, 3 };
 	assertRange(uniqueSort(vals), vector<int>({ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));

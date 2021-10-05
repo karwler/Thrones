@@ -14,20 +14,20 @@ Config& Config::checkValues() {
 		for (uint16& it : tileAmounts)
 			if (it < homeSize.y)
 				it = homeSize.y;
-		uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1), homeSize.y);
-		fort -= ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), uint8(tileAmounts.size() - 1));
+		uint16 tamt = floorAmounts(countTiles(), tileAmounts.data(), hsize, tileAmounts.size() - 1, homeSize.y);
+		fort -= ceilAmounts(tamt, homeSize.y * 4 + homeSize.x - 4, tileAmounts.data(), tileAmounts.size() - 1);
 	} else
-		fort -= floorAmounts(countTiles(), tileAmounts.data(), hsize, uint8(tileAmounts.size() - 1));
+		fort -= floorAmounts(countTiles(), tileAmounts.data(), hsize, tileAmounts.size() - 1);
 	for (uint8 i = 0; fort > (homeSize.y - 1) * (homeSize.x - 2); i = i < tileAmounts.size() - 1 ? i + 1 : 0) {
 		++tileAmounts[i];
 		--fort;
 	}
 
-	uint16 mids = floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, uint8(middleAmounts.size() - 1));
+	uint16 mids = floorAmounts(countMiddles(), middleAmounts.data(), homeSize.x / 2, middleAmounts.size() - 1);
 	uint16 mort = homeSize.x - mids * 2;
 	if (opts & victoryPoints) {
 		if ((opts & victoryPointsEquidistant) && !(homeSize.x % 2) && !mort)
-			mort = homeSize.x - floorAmounts(mids, middleAmounts.data(), mids - 2, uint8(middleAmounts.size() - 1)) * 2;
+			mort = homeSize.x - floorAmounts(mids, middleAmounts.data(), mids - 2, middleAmounts.size() - 1) * 2;
 		else if (!mort || ((opts & victoryPointsEquidistant) && (homeSize.x % 2 ? !(mort % 2) : mort % 2))) {
 			--*std::find_if(middleAmounts.rbegin(), middleAmounts.rend(), [](uint16 amt) -> bool { return amt; });
 			++mort;
@@ -35,7 +35,7 @@ Config& Config::checkValues() {
 	}
 	victoryPointsNum = std::clamp(victoryPointsNum, uint16(1), uint16(UINT16_MAX - mort));
 
-	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, uint8(pieceAmounts.size() - 1));
+	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, pieceAmounts.size() - 1);
 	if (!psize)
 		psize = pieceAmounts[uint8(PieceType::throne)] = 1;
 	if (!capturers)
@@ -78,11 +78,11 @@ uint16 Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
 }
 
 void Config::toComData(uint8* data, const string& name) const {
-	*data++ = uint8(name.length());
+	*data++ = name.length();
 	data = std::copy(name.begin(), name.end(), data);
 
-	*data++ = uint8(homeSize.x);
-	*data++ = uint8(homeSize.y);
+	*data++ = homeSize.x;
+	*data++ = homeSize.y;
 	*data++ = battlePass;
 	Com::write16(data, opts);
 	Com::write16(data += sizeof(uint16), victoryPointsNum);
@@ -144,7 +144,7 @@ void Record::update(Piece* actor, Action action, bool regular) {
 
 void Record::addProtect(Piece* piece, bool strong) {
 	protects.emplace(piece, strong);
-	piece->alphaFactor = BoardObject::noEngageAlpha;
+	piece->setAlphaFactor(BoardObject::noEngageAlpha);
 }
 
 Action Record::actionsExhausted() const {

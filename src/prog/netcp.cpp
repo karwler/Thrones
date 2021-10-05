@@ -91,7 +91,7 @@ bool Netcp::tickConnect() {
 	if (nsint fd = connector->pollReady(); fd != INVALID_SOCKET) {
 		connector.reset();
 		sock.fd = fd;
-		sendVersion(sock.fd, webs);
+		sendVersionRequest();
 		tickproc = &Netcp::tickWait;
 	}
 	return false;
@@ -108,8 +108,8 @@ bool Netcp::tickWait() {
 			throw Error("Server expected version " + readText(data));
 		case Code::full:
 			throw Error("Server full");
-		case Code::rlist:
-			prog->eventOpenLobby(data + dataHeadSize);
+		case Code::rlistcon:
+			prog->eventConnLobby(data + dataHeadSize);
 			break;
 		case Code::start:
 			prog->eventStartUnique(data + dataHeadSize);
@@ -228,8 +228,9 @@ bool Netcp::tickValidate() {
 	if (!pollSocket(sock))
 		return false;
 
+	bool nameClash;
 	for (bool fin = recvb.recvData(sock.fd);;)
-		switch (recvb.recvConn(sock.fd, webs)) {
+		switch (recvb.recvConn(sock.fd, webs, nameClash, [](const string&) -> bool { return true; })) {
 		case Buffer::Init::wait:
 			if (fin)
 				throw Error(msgConnectionLost);
@@ -240,7 +241,7 @@ bool Netcp::tickValidate() {
 			prog->eventStartUnique();
 			return false;
 		case Buffer::Init::version:
-			sendVersion(sock.fd, webs);
+			sendVersionRejection(sock.fd, webs);
 		case Buffer::Init::error:
 			closeSocket(sock.fd);
 			tickproc = &Netcp::tickDiscard;
@@ -262,6 +263,21 @@ bool Netcp::pollSocket(pollfd& sock) {
 			throw Error(msgConnectionLost);
 	}
 	return false;
+}
+
+void Netcp::sendVersionRequest() {
+	uint8 vlen = strlen(commonVersion);
+	const string& pname = prog->getChatName();
+	vector<uint8> data(dataHeadSize + sizeof(uint8) + vlen + sizeof(uint8) + pname.length());
+	data[0] = uint8(Code::version);
+	write16(data.data() + 1, data.size());
+
+	uint8* pos = data.data() + dataHeadSize;
+	*pos++ = vlen;
+	pos = std::copy_n(commonVersion, vlen, pos);
+	*pos++ = pname.length();
+	std::copy(pname.begin(), pname.end(), pos);
+	Com::sendData(sock.fd, data.data(), data.size(), webs);
 }
 
 void Netcp::sendData(Code code) {

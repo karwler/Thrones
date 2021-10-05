@@ -1,10 +1,9 @@
-#include "engine/world.h"
 #include "board.h"
 #include "engine/fileSys.h"
 #include "engine/inputSys.h"
 #include "engine/scene.h"
-#include "server/server.h"
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#include "engine/world.h"
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #include <curl/curl.h>
 #endif
 
@@ -51,12 +50,12 @@ void GuiGen::resize() {
 }
 
 Texture GuiGen::makeTooltip(const char* text) const {
-	return World::sets()->tooltips ? World::fonts()->render(text, tooltipHeight, tooltipLimit) : nullptr;
+	return World::sets()->tooltips ? World::fonts()->render(text, tooltipHeight, tooltipLimit) : Texture();
 }
 
 Texture GuiGen::makeTooltipL(const char* text) const {
 	if (!World::sets()->tooltips)
-		return nullptr;
+		return Texture();
 
 	uint width = 0;
 	for (const char* pos = text; *pos;) {
@@ -81,7 +80,7 @@ void GuiGen::openPopupMessage(string msg, BCall ccal, string ctxt) const {
 		new Label(1.f, std::move(ms.text), nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Layout(1.f, std::move(bot), false, 0)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), ccal, ccal, true, lineSpacing));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), ccal, ccal, true, lineSpacing));
 }
 
 void GuiGen::openPopupChoice(string msg, BCall kcal, BCall ccal) const {
@@ -94,7 +93,7 @@ void GuiGen::openPopupChoice(string msg, BCall kcal, BCall ccal) const {
 		new Label(1.f, std::move(ms.text), nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Layout(1.f, std::move(bot), false, lineSpacing)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), kcal, ccal, true, lineSpacing));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), kcal, ccal, true, lineSpacing));
 }
 
 void GuiGen::openPopupInput(string msg, string text, BCall kcal, uint16 limit) const {
@@ -109,13 +108,13 @@ void GuiGen::openPopupInput(string msg, string text, BCall kcal, uint16 limit) c
 		ledit,
 		new Layout(1.f, std::move(bot), false, 0)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(std::max(World::window()->getScreenView().x / 4 * 3, ms.length), superHeight * 3 + lineSpacing * 2), std::move(con), kcal, &Program::eventClosePopup, true, lineSpacing), ledit);
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(std::max(World::window()->getScreenView().x / 4 * 3, ms.length), superHeight * 3 + lineSpacing * 2), std::move(con), kcal, &Program::eventClosePopup, true, lineSpacing), ledit);
 }
 
 vector<Widget*> GuiGen::createChat(TextBox*& chatBox, bool overlay) const {
 	return {
 		chatBox = new TextBox(1.f, smallHeight, string(), &Program::eventFocusChatLabel, &Program::eventClearLabel, Texture(), 1.f, World::sets()->chatLines, false, true, 0, Widget::colorDimmed),
-		new LabelEdit(smallHeight, string(), nullptr, nullptr, &Program::eventSendMessage, overlay ? &Program::eventCloseChat : &Program::eventHideChat, Texture(), 1.f, chatLineLimit, true)
+		new LabelEdit(smallHeight, string(), nullptr, nullptr, &Program::eventSendMessage, overlay ? &Program::eventCloseChat : &Program::eventHideChat, Texture(), 1.f, chatCharLimit, true)
 	};
 }
 
@@ -143,7 +142,7 @@ GuiGen::Text GuiGen::makeFpsText(float dSec) const {
 
 // MAIN MENU
 
-uptr<RootLayout> GuiGen::makeMainMenu(Interactable*& selected, Label*& versionNotif) const {
+uptr<RootLayout> GuiGen::makeMainMenu(Interactable*& selected, LabelEdit*& pname, Label*& versionNotif) const {
 	// server input
 	Text srvt("Server:", superHeight);
 	vector<Widget*> srv = {
@@ -155,6 +154,11 @@ uptr<RootLayout> GuiGen::makeMainMenu(Interactable*& selected, Label*& versionNo
 	vector<Widget*> prt = {
 		new Label(srvt.length, "Port:"),
 		new LabelEdit(1.f, World::sets()->port, &Program::eventUpdatePort, &Program::eventResetPort)
+	};
+
+	vector<Widget*> pnm = {
+		new Label(srvt.length, "Name:"),
+		pname = new LabelEdit(1.f, World::sets()->playerName, &Program::eventUpdatePlayerName, &Program::eventResetPlayerName, nullptr, nullptr, Texture(), 1.f, Settings::playerNameLimit)
 	};
 
 	// net buttons
@@ -178,13 +182,14 @@ uptr<RootLayout> GuiGen::makeMainMenu(Interactable*& selected, Label*& versionNo
 		new Widget(0),
 		new Layout(superHeight, std::move(srv), false, lineSpacing),
 		new Layout(superHeight, std::move(prt), false, lineSpacing),
+		new Layout(superHeight, std::move(pnm), false, lineSpacing),
 		new Layout(superHeight, std::move(con), false, lineSpacing),
 		new Widget(0),
 		new Label(superHeight, "Settings", &Program::eventOpenSettings, nullptr, Texture(), 1.f, Label::Alignment::center),
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 		new Label(superHeight, "Exit", &Program::eventExit, nullptr, Texture(), 1.f, Label::Alignment::center),
 #endif
-		new Widget(0.8f)
+		new Widget(0.6f)
 	};
 
 	// menu and root layout
@@ -261,7 +266,7 @@ uptr<RootLayout> GuiGen::makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO
 		Text setup("Setup", lineHeight);
 		Text port("Port:", lineHeight);
 		top0.insert(top0.begin() + 1, new Label(setup.length, std::move(setup.text), &Program::eventOpenSetup));
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 		top0.insert(top0.end(), {
 			new Label(port.length, std::move(port.text)),
 			new LabelEdit(Text::strLen(string(numDigits(uint(UINT16_MAX)), '0').c_str(), lineHeight) + LabelEdit::caretWidth, World::sets()->port, &Program::eventUpdatePort)
@@ -502,6 +507,7 @@ uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*&
 	// sidebar
 	initlist<const char*> sidt = {
 		"Exit",
+		"Settings",
 		"Config",
 		"Save",
 		"Load",
@@ -515,6 +521,7 @@ uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*&
 
 	vector<Widget*> wgts = {
 		new Label(lineHeight, *isidt++, &Program::eventAbortGame, nullptr, makeTooltip("Exit the game")),
+		new Label(lineHeight, *isidt++, &Program::eventShowSettings, nullptr, makeTooltip("Open settings")),
 		new Label(lineHeight, *isidt++, &Program::eventShowConfig, nullptr, makeTooltip("Show current game configuration")),
 		new Label(lineHeight, *isidt++, &Program::eventOpenSetupSave, nullptr, makeTooltip("Save current setup")),
 		sio.load = new Label(lineHeight, *isidt++, nullptr, nullptr, makeTooltip("Load a setup")),
@@ -577,7 +584,7 @@ void GuiGen::openPopupFavorPick(uint16 availableFF) const {
 		new Label(1.f, std::move(ms.text), nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Layout(1.f, std::move(bot), false, lineSpacing)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(std::max(ms.length, int(favorMax) * superHeight + int(favorMax + 1) * lineSpacing), superHeight * 2 + lineSpacing), std::move(con), nullptr, nullptr, true, lineSpacing, defSel));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(std::max(ms.length, favorMax * superHeight + (favorMax + 1) * lineSpacing), superHeight * 2 + lineSpacing), std::move(con), nullptr, nullptr, true, lineSpacing, defSel));
 }
 
 void GuiGen::openPopupConfig(const string& configName, const Config& cfg, ScrollArea*& configList, bool match) const {
@@ -586,7 +593,7 @@ void GuiGen::openPopupConfig(const string& configName, const Config& cfg, Scroll
 	Text docs("Docs", lineHeight);
 	vector<Widget*> top = {
 		new Label(1.f, configName, nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Label(rules.length, std::move(rules.text), &Program::eventOpenRules, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Label(docs.length, std::move(docs.text), &Program::eventOpenDocs, nullptr, Texture(), 1.f, Label::Alignment::center)
 #endif
@@ -601,7 +608,7 @@ void GuiGen::openPopupConfig(const string& configName, const Config& cfg, Scroll
 		configList = new ScrollArea(1.f, createConfigList(wio, cfg, false, match), true, lineSpacing),
 		new Layout(lineHeight, std::move(bot), false, 0)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseConfigList, true, lineSpacing));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, lineSpacing, nullptr, Popup::Type::config));
 }
 
 void GuiGen::openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const {
@@ -626,7 +633,7 @@ void GuiGen::openPopupSaveLoad(const umap<string, Setup>& setups, bool save) con
 		new Layout(lineHeight, std::move(top), false, lineSpacing),
 		new ScrollArea(1.f, std::move(saves), true, lineSpacing)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventClosePopup, true, superSpacing, blbl));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, superSpacing, blbl));
 }
 
 void GuiGen::openPopupPiecePicker(uint16 piecePicksLeft) const {
@@ -656,7 +663,7 @@ void GuiGen::openPopupPiecePicker(uint16 piecePicksLeft) const {
 		new Label(superHeight, std::move(ms.text), nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
 		new Layout(1.f, std::move(cont), false, 0)
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(std::max(ms.length, plen), superHeight * 3 + lineSpacing * 2), std::move(con), nullptr, nullptr, true, lineSpacing, defSel));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(std::max(ms.length, plen), superHeight * 3 + lineSpacing * 2), std::move(con), nullptr, nullptr, true, lineSpacing, defSel));
 }
 
 // MATCH
@@ -666,6 +673,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 	initlist<const char*> sidt = {
 		"Exit",
 		"Surrender",
+		"Settings",
 		"Config",
 		"Chat",
 		"Engage",
@@ -681,6 +689,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 	vector<Widget*> left = {
 		new Label(lineHeight, *isidt++, &Program::eventAbortGame, nullptr, makeTooltip("Exit the game")),
 		new Label(lineHeight, *isidt++, &Program::eventSurrender, nullptr, makeTooltip("Surrender and quit the match")),
+		new Label(lineHeight, *isidt++, &Program::eventShowSettings, nullptr, makeTooltip("Open settings")),
 		new Label(lineHeight, *isidt++, &Program::eventShowConfig, nullptr, makeTooltip("Show current game configuration")),
 		new Label(lineHeight, *isidt++, &Program::eventToggleChat, nullptr, makeTooltip("Toggle chat")),
 		bswapIcon = new Icon(lineHeight, *isidt++, &Program::eventSwitchGameButtons, nullptr, nullptr, makeTooltip("Switch between engaging and moving a piece")),
@@ -707,7 +716,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 
 	unplacedDragons = 0;
 	for (Piece* pce = World::game()->board->getOwnPieces(PieceType::dragon); pce->getType() == PieceType::dragon; ++pce)
-		if (!pce->show)
+		if (!pce->getShow())
 			++unplacedDragons;
 	if (unplacedDragons) {
 		mio.dragon = new Icon(iconSize, string(), nullptr, nullptr, nullptr, makeTooltip((string("Place ") + pieceNames[uint8(PieceType::dragon)]).c_str()), 1.f, Label::Alignment::left, true, World::scene()->texture(pieceNames[uint8(PieceType::dragon)]), vec4(1.f));
@@ -773,17 +782,17 @@ void GuiGen::openPopupSpawner() const {
 		new Layout(superHeight * 2, std::move(cont), false),
 		cancel
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(std::max(ms.length, plen), superHeight * 4 + lineSpacing * 2), std::move(con), nullptr, &Program::eventClosePopupResetIcons, true, lineSpacing, defSel ? defSel : cancel));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(std::max(ms.length, plen), superHeight * 4 + lineSpacing * 2), std::move(con), nullptr, &Program::eventClosePopupResetIcons, true, lineSpacing, defSel ? defSel : cancel));
 }
 
 // SETTINGS
 
-uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart, umap<string, uint32>& pixelformats) const {
+uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart) const {
 	// side bar
 	initlist<const char*> tps = {
 		"Back",
 		"Info",
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		"Rules",
 		"Docs",
 #endif
@@ -794,7 +803,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 	vector<Widget*> lft = {
 		new Label(lineHeight, *itps++, &Program::eventOpenMainMenu),
 		new Label(lineHeight, *itps++, &Program::eventOpenInfo),
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Label(lineHeight, *itps++, &Program::eventOpenRules),
 		new Label(lineHeight, *itps++, &Program::eventOpenDocs),
 #endif
@@ -803,12 +812,18 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 	};
 	selected = lft.front();
 
+	// root layout
+	vector<Widget*> cont = {
+		new Layout(optLength, std::move(lft), true, lineSpacing),
+		content = createSettingsList(bindingsStart)
+	};
+	return std::make_unique<RootLayout>(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
+}
+
+ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) const {
 	// resolution list
 	vector<ivec2> sizes = World::window()->windowSizes();
 	vector<SDL_DisplayMode> modes = World::window()->displayModes();
-	pixelformats.clear();
-	for (const SDL_DisplayMode& it : modes)
-		pixelformats.emplace(pixelformatName(it.format), it.format);
 	vector<string> winsiz(sizes.size()), dmodes(modes.size());
 	std::transform(sizes.begin(), sizes.end(), winsiz.begin(), [](ivec2 size) -> string { return toStr(size, rv2iSeparator); });
 	std::transform(modes.begin(), modes.end(), dmodes.begin(), dispToFstr);
@@ -818,7 +833,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 
 	// setting buttons, labels and action fields for labels
 	initlist<const char*> txs = {
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		"Display",
 #endif
 #ifndef __ANDROID__
@@ -828,9 +843,11 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 #endif
 #ifndef OPENGLES
 		"Multisamples",
+#endif
 		"Shadow resolution",
 		"Soft shadows",
-#endif
+		"SSAO",
+		"Bloom",
 		"Texture scale",
 		"VSync",
 		"Gamma",
@@ -851,7 +868,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 
 	bindingsStart = txs.size() + 1;
 	array<string, Binding::names.size()> bnames;
-	for (uint8 i = 0; i < uint8(Binding::names.size()); ++i)
+	for (uint8 i = 0; i < Binding::names.size(); ++i)
 		bnames[i] = bindingToFstr(Binding::Type(i));
 	int descLength = std::max(Text::maxLen(txs.begin(), txs.end(), lineHeight), Text::maxLen(bnames.begin(), bnames.end(), lineHeight));
 
@@ -867,7 +884,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 	int slleLength = Text::strLen(string(numDigits(uint(UINT16_MAX)), '0').c_str(), lineHeight) + LabelEdit::caretWidth;
 
 	vector<Widget*> lx[] = { {
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Label(descLength, *itxs++),
 		new LabelEdit(1.f, toStr(World::sets()->display), nullptr, nullptr, &Program::eventSetDisplay, nullptr, makeTooltip("Keep 0 cause it doesn't really work"))
 	}, {
@@ -887,14 +904,20 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		new Label(descLength, *itxs++),
 		new ComboBox(1.f, toStr(World::sets()->msamples), { "0", "1", "2", "4" }, &Program::eventSetSamples, nullptr, nullptr, makeTooltip("Anti-Aliasing multisamples (requires restart)"))
 	}, {
+#endif
 		new Label(descLength, *itxs++),
-		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, 15, 1, nullptr, &Program::eventSetShadowResSL, makeTooltip(shadowTip)),
+		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, Settings::shadowBitMax, 1, nullptr, &Program::eventSetShadowResSL, makeTooltip(shadowTip)),
 		new LabelEdit(slleLength, toStr(World::sets()->shadowRes), &Program::eventSetShadowResLE, nullptr, nullptr, nullptr, makeTooltip(shadowTip))
 	}, {
 		new Label(descLength, *itxs++),
 		new CheckBox(lineHeight, World::sets()->softShadows, &Program::eventSetSoftShadows, &Program::eventSetSoftShadows, makeTooltip("Soft shadow edges"))
 	}, {
-#endif
+		new Label(descLength, *itxs++),
+		new CheckBox(lineHeight, World::sets()->ssao, &Program::eventSetSsao, &Program::eventSetSsao, makeTooltip("Screen space ambient occlusion"))
+	}, {
+		new Label(descLength, *itxs++),
+		new CheckBox(lineHeight, World::sets()->bloom, &Program::eventSetBloom, &Program::eventSetBloom, makeTooltip("Brighten and blur bright areas"))
+	}, {
 		new Label(descLength, *itxs++),
 		new Slider(1.f, World::sets()->texScale, 1, 100, 10, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, makeTooltip(scaleTip)),
 		new LabelEdit(slleLength, toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, makeTooltip(scaleTip))
@@ -953,7 +976,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		lns[i] = new Layout(lineHeight, std::move(lx[i]), false, lineSpacing);
 	lns[txs.size()] = new Widget(0);
 
-	for (uint8 i = 0; i < uint8(bnames.size()); ++i) {
+	for (uint8 i = 0; i < bnames.size(); ++i) {
 		Text add("+", lineHeight);
 		Label* lbl = new Label(lineHeight, std::move(bnames[i]));
 		vector<Widget*> line = {
@@ -965,13 +988,7 @@ uptr<RootLayout> GuiGen::makeSettings(Interactable*& selected, ScrollArea*& cont
 		};
 		lns[bindingsStart+i] = new Layout(keyGetLineSize(Binding::Type(i)), std::move(line), false, lineSpacing);
 	}
-
-	// root layout
-	vector<Widget*> cont = {
-		new Layout(optLength, std::move(lft), true, lineSpacing),
-		content = new ScrollArea(1.f, std::move(lns), true, lineSpacing)
-	};
-	return std::make_unique<RootLayout>(1.f, std::move(cont), false, superSpacing, RootLayout::uniformBgColor);
+	return new ScrollArea(1.f, std::move(lns), true, lineSpacing);
 }
 
 template <class T>
@@ -986,7 +1003,13 @@ KeyGetter* GuiGen::createKeyGetter(Binding::Accept accept, Binding::Type bind, s
 	return new KeyGetter(lineHeight, accept, bind, kid, &Program::eventSaveSettings, &Program::eventDelKeyBinding, makeTooltip((lbl->getText() + ' ' + Binding::acceptNames[uint8(accept)] + " binding").c_str()));
 }
 
-SDL_DisplayMode GuiGen::fstrToDisp(const umap<string, uint32>& pixelformats, const string& str) const {
+SDL_DisplayMode GuiGen::fstrToDisp(const string& str) {
+	vector<SDL_DisplayMode> modes = World::window()->displayModes();
+	umap<string, uint32> pixelformats;
+	pixelformats.reserve(modes.size());
+	for (const SDL_DisplayMode& it : modes)
+		pixelformats.emplace(pixelformatName(it.format), it.format);
+
 	SDL_DisplayMode mode = strToDisp(str);
 	if (string::const_reverse_iterator sit = std::find_if(str.rbegin(), str.rend(), isSpace); sit != str.rend())
 		if (umap<string, uint32>::const_iterator pit = pixelformats.find(string(sit.base(), str.end())); pit != pixelformats.end())
@@ -999,6 +1022,29 @@ int GuiGen::keyGetLineSize(Binding::Type bind) const {
 	return lineHeight * cnt + lineSpacing * (cnt - 1);
 }
 
+void GuiGen::openPopupSettings(ScrollArea*& content, sizet& bindingsStart) const {
+	Text rules("Rules", lineHeight);
+	Text docs("Docs", lineHeight);
+	vector<Widget*> top = {
+		new Label(1.f, "Settings", nullptr, nullptr, Texture(), 1.f, Label::Alignment::center),
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+		new Label(rules.length, std::move(rules.text), &Program::eventOpenRules, nullptr, Texture(), 1.f, Label::Alignment::center),
+		new Label(docs.length, std::move(docs.text), &Program::eventOpenDocs, nullptr, Texture(), 1.f, Label::Alignment::center)
+#endif
+	};
+	vector<Widget*> bot = {
+		new Widget(),
+		new Label(1.f, "Close", &Program::eventClosePopup, nullptr, Texture(), 1.f, Label::Alignment::center),
+		new Widget()
+	};
+	vector<Widget*> con = {
+		new Layout(lineHeight, std::move(top), false, lineSpacing),
+		content = createSettingsList(bindingsStart),
+		new Layout(lineHeight, std::move(bot), false, 0)
+	};
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, lineSpacing, nullptr, Popup::Type::settings));
+}
+
 void GuiGen::openPopupKeyGetter(Binding::Type bind) const {
 	Text ms("Add " + bindingToFstr(bind) + " binding:", superHeight);
 	KeyGetter* kget = new KeyGetter(1.f, Binding::Accept::any, bind, SIZE_MAX, &Program::eventSetNewBinding, &Program::eventClosePopup);
@@ -1006,7 +1052,7 @@ void GuiGen::openPopupKeyGetter(Binding::Type bind) const {
 		new Label(1.f, std::move(ms.text)),
 		kget
 	};
-	World::scene()->setPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), &Program::eventClosePopup, &Program::eventClosePopup, true, lineSpacing), kget);
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(ms.length, superHeight * 2 + lineSpacing), std::move(con), &Program::eventClosePopup, &Program::eventClosePopup, true, lineSpacing), kget);
 }
 
 string GuiGen::bindingToFstr(Binding::Type bind) {
@@ -1073,7 +1119,7 @@ uptr<RootLayout> GuiGen::makeInfo(Interactable*& selected, ScrollArea*& content)
 		"SDL",
 		"SDL_image",
 		"SDL_ttf",
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		"Curl",
 #endif
 		"Logical cores",	// system
@@ -1217,7 +1263,7 @@ void GuiGen::appendProgram(vector<Widget*>& lines, int width, initlist<const cha
 		versionText(bver),
 		versionText(icver),
 		versionText(tcver),
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		LIBCURL_VERSION
 #endif
 	};
@@ -1251,7 +1297,7 @@ void GuiGen::appendProgram(vector<Widget*>& lines, int width, initlist<const cha
 		new Layout(lineHeight, { new Label(width, *args++), new Label(slv.length, std::move(slv.text)), new Label(1.f, SDL_GetRevision()), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, versionText(*ilver)), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, versionText(*tlver)), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, World::program()->getCurlVersion()), new Label(rightLen, std::move(*icmpver++)) }, false, lineSpacing),
 #endif
 		new Widget(lineHeight)
@@ -1340,12 +1386,12 @@ void GuiGen::appendPower(vector<Widget*>& lines, int width, initlist<const char*
 	};
 	int secs, pct;
 	SDL_PowerState power = SDL_GetPowerInfo(&secs, &pct);
-	Text tprc(pct >= 0 ? toStr(pct) + '%' : World::fonts()->hasGlyph(0x221E) ? "\u221E" : "inf", lineHeight);
+	Text tprc(pct >= 0 ? toStr(pct) + '%' : World::fonts()->hasGlyph(0x221E) ? u8"\u221E" : "inf", lineHeight);
 
 	lines.insert(lines.end(), {
 		new Label(superHeight, *titles++),
 		new Layout(lineHeight, { new Label(width, *args++), new Label(1.f, powerNames[power]) }, false, lineSpacing),
-		new Layout(lineHeight, { new Label(width, *args++), new Label(tprc.length, std::move(tprc.text)), new Label(1.f, secs >= 0 ? toStr(secs) + 's' : World::fonts()->hasGlyph(0x221E) ? "\u221E" : "inf") }, false, lineSpacing),
+		new Layout(lineHeight, { new Label(width, *args++), new Label(tprc.length, std::move(tprc.text)), new Label(1.f, secs >= 0 ? toStr(secs) + 's' : World::fonts()->hasGlyph(0x221E) ? u8"\u221E" : "inf") }, false, lineSpacing),
 		new Widget(lineHeight)
 	});
 }

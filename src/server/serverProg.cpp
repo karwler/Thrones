@@ -1,6 +1,7 @@
 #include "log.h"
 #include "server.h"
 #include <csignal>
+#include <random>
 #ifdef _WIN32
 #include <conio.h>
 #elif !defined(SERVICE)
@@ -18,6 +19,7 @@ static bool cprocPlayer(nsint pfd, Player& player);
 struct Player {
 	Buffer recvb;
 	bool (*cproc)(nsint, Player&) = cprocValidate;
+	string name;
 	nsint partner = INVALID_SOCKET;
 	bool webs = false;
 };
@@ -53,7 +55,7 @@ struct Terminal {
 Terminal::Terminal() {
 	tcgetattr(STDIN_FILENO, &termst);
 	oldLflag = termst.c_lflag;
-	termst.c_lflag &= ~uint(ICANON | ECHO);
+	termst.c_lflag &= ~(ICANON | ECHO);
 	tcsetattr(STDIN_FILENO, TCSANOW, &termst);
 }
 
@@ -74,7 +76,7 @@ constexpr char arg6 = '6';
 constexpr char argMaxPlayers = 'c';
 constexpr char argLog = 'l';
 constexpr char argMaxLogs = 'm';
-constexpr char argVerbose = 'v';
+constexpr char	argVerbose = 'v';
 
 static bool running = true;
 static uint maxPlayers;
@@ -82,6 +84,8 @@ static Buffer sendb;
 static umap<nsint, Player> players;	// socket, player data
 static umap<nsint, string> rooms;	// host socket, room name
 static Log slog;
+static std::default_random_engine randGen;
+static std::uniform_int_distribution<uint16> randNameDist(1, UINT16_MAX);	// 0 is reserved to indicate a not taken player name
 
 static uint maxRooms() {
 	return maxPlayers / 2 + maxPlayers % 2;
@@ -94,9 +98,9 @@ void rekeyRoom(T room, nsint key) {
 	rooms.insert(std::move(rnode));
 }
 
-static void sendRoomList(nsint pfd, Player& player, Code code = Code::rlist) {
+static void sendRoomList(nsint pfd, Player& player, Code code, initlist<uint8> extra = {}) {
 	uint ofs = sendb.pushHead(code, 0) - sizeof(uint16);
-	sendb.push(uint64(pfd));
+	sendb.push(extra);
 	sendb.push(uint16(rooms.size()));
 	for (auto& [host, name] : rooms) {
 		sendb.push({ uint8(((players.at(host).partner == INVALID_SOCKET) << 7) | name.length()) });
@@ -104,6 +108,28 @@ static void sendRoomList(nsint pfd, Player& player, Code code = Code::rlist) {
 	}
 	sendb.write(uint16(sendb.getDlim()), ofs);
 	sendb.send(pfd, player.webs);
+}
+
+static void sendConnRoomList(nsint pfd, Player& player, bool nameClash) {
+	try {
+		uint16 nresp = 0;
+		if (nameClash) {
+			string name;
+			do {
+				nresp = randNameDist(randGen);
+				name = toStr<16>(nresp);
+			} while (std::any_of(players.begin(), players.end(), [&name](const pair<const nsint, Player>& it) -> bool { return it.second.name == name; }));
+			player.name = std::move(name);
+		}
+		uint8 nrbuf[2];
+		write16(nrbuf, nresp);
+		sendRoomList(pfd, player, Code::rlistcon, { nrbuf[0], nrbuf[1] });
+	} catch (const Error& err) {
+		sendb.clear();
+		slog.err("failed to send room list to player ", pfd, ": ", err.what());
+		throw PlayerError{ pfd };
+	}
+	player.cproc = cprocPlayer;
 }
 
 static void sendRoomData(Code code, const string& name, initlist<uint8> extra, uset<nsint>& errPfds) {
@@ -308,21 +334,15 @@ static void disconnectPlayers(uint& icur, vector<pollfd>& pfds, const uset<nsint
 
 bool cprocValidate(nsint pfd, Player& player) {
 	try {
-		switch (player.recvb.recvConn(pfd, player.webs)) {
+		bool nameClash;
+		switch (player.recvb.recvConn(pfd, player.webs, nameClash, [](const string& name) -> bool { return std::any_of(players.begin(), players.end(), [name](const pair<const nsint, Player>& it) -> bool { return it.second.name == name; }); })) {
 		case Buffer::Init::wait:
 			return false;
 		case Buffer::Init::connect:
-			try {
-				sendRoomList(pfd, player);
-			} catch (const Error& err) {
-				sendb.clear();
-				slog.err("failed to send room list to player ", pfd, ": ", err.what());
-				throw PlayerError{ pfd };
-			}
-			player.cproc = cprocPlayer;
+			sendConnRoomList(pfd, player, nameClash);
 			break;
 		case Buffer::Init::version:
-			sendVersion(pfd, player.webs);
+			sendVersionRejection(pfd, player.webs);
 		case Buffer::Init::error:
 			throw PlayerError{ pfd };
 		}
@@ -380,7 +400,7 @@ void printTable(vector<array<string, S>>& table, const char* title, array<string
 	for (const array<string, S>& it : table)
 		for (sizet i = 0; i < S; ++i)
 			if (it[i].length() > lens[i])
-				lens[i] = uint(it[i].length());
+				lens[i] = it[i].length();
 
 	std::cout << title << linend;
 	for (const array<string, S>& it : table) {
@@ -502,7 +522,7 @@ int main(int argc, char** argv) {
 		if (!port)
 			port = defaultPort;
 		const char* playerLim = args.getOpt(argMaxPlayers);
-		maxPlayers = playerLim ? std::min(sstoul(playerLim), ulong(maxPlayersLimit)) : defaultMaxPlayers;
+		maxPlayers = playerLim ? std::min(sstoull(playerLim), ullong(maxPlayersLimit)) : defaultMaxPlayers;
 		int family = AF_UNSPEC;
 		if (args.hasFlag(arg4) && !args.hasFlag(arg6))
 			family = AF_INET;
@@ -518,6 +538,7 @@ int main(int argc, char** argv) {
 #endif
 		pfds[0].fd = bindSocket(port, family);
 		slog.out(linend, "Thrones Server v", commonVersion, linend, "PID: ", pid, linend, "port: ", port, linend, "family: ", family == AF_INET ? "AF_INET" : family == AF_INET6 ? "AF_INET6" : "AF_UNSPEC", linend, "player limit: ", maxPlayers, linend, "room limit: ", maxRooms(), linend);
+		randGen.seed(generateRandomSeed());
 	} catch (const Error& err) {
 		slog.err(err.what());
 		return cleanup(pfds, EXIT_FAILURE);

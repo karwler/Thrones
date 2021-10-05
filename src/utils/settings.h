@@ -15,7 +15,7 @@ enum class JoystickButton : uint8 {
 	start,
 	ls,
 	rs,
-	guide,
+	guide
 };
 
 enum class JoystickAxis : uint8 {
@@ -156,6 +156,8 @@ struct Binding {
 		destroyToggle,
 		surrender,
 		chat,
+		config,
+		settings,
 		frameCounter,
 		selectNext,
 		selectPrev,
@@ -176,7 +178,7 @@ struct Binding {
 		scrollUp,
 		scrollDown
 	};
-	static constexpr array<const char*, uint8(Type::scrollDown)+1> names = {
+	static constexpr array<const char*, sizet(Type::scrollDown)+1> names = {
 		"up",
 		"down",
 		"left",
@@ -204,6 +206,8 @@ struct Binding {
 		"destroy_toggle",
 		"surrender",
 		"chat",
+		"config",
+		"settings",
 		"frame_counter",
 		"select_next",
 		"select_prev",
@@ -230,7 +234,7 @@ struct Binding {
 		gamepad,
 		any
 	};
-	static constexpr array<const char*, uint8(Accept::any)> acceptNames = {
+	static constexpr array<const char*, sizet(Accept::any)> acceptNames = {
 		"keyboard",
 		"joystick",
 		"gamepad"
@@ -307,19 +311,24 @@ struct Settings {
 		v4,
 		v6
 	};
-	static constexpr array<const char*, uint8(Family::v6)+1> familyNames = {
+	static constexpr array<const char*, sizet(Family::v6)+1> familyNames = {
 		"any",
 		"IPv4",
 		"IPv6"
 	};
 
 	static constexpr char defaultAddress[] = "94.16.112.206";
+	static constexpr uint8 playerNameLimit = 31;
 	static constexpr char defaultVersionLocation[] = "https://github.com/karwler/Thrones/releases";
 	static constexpr char defaultVersionRegex[] = R"r(<a\s+href="/karwler/Thrones/releases/tag/v(\d+\.\d+\.\d+(\.\d+)?)">)r";
 	static constexpr char defaultFont[] = "Romanesque";
+#ifdef __ANDROID__
+	static constexpr Screen defaultScreen = Screen::desktop;
+#else
 	static constexpr Screen defaultScreen = Screen::window;
+#endif
 	static constexpr VSync defaultVSync = VSync::synchronized;
-	static constexpr uint16 shadowResMax = 1 << 14;
+	static constexpr uint8 shadowBitMax = 13;
 	static constexpr float gammaMax = 2.f;
 	static constexpr uint16 chatLinesMax = 8191;
 	static constexpr svec2 deadzoneLimit = { 256, INT16_MAX - 1 };
@@ -328,13 +337,14 @@ struct Settings {
 	static constexpr Color defaultEnemy = Color::tin;
 
 	static constexpr char argExternal = 'e';
-#ifdef DEBUG
+#ifndef NDEBUG
 	static constexpr char argConsole = 'c';
 	static constexpr char argSetup = 's';
 #endif
 
 	string address;
 	string port;
+	string playerName;
 	string lastConfig;
 	string versionLookupUrl;
 	string versionLookupRegex;
@@ -348,9 +358,11 @@ struct Settings {
 	uint8 display;
 	Screen screen;
 	VSync vsync;
-	uint8 msamples;
 	uint8 texScale;
+	uint8 msamples;
 	bool softShadows;
+	bool ssao;
+	bool bloom;
 	uint8 avolume;
 	Color colorAlly, colorEnemy;
 	bool scaleTiles, scalePieces;

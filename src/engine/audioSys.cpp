@@ -39,15 +39,15 @@ void AudioSys::play(const string& name) {
 
 void AudioSys::callback(void* udata, uint8* stream, int len) {
 	AudioSys* as = static_cast<AudioSys*>(udata);
-	SDL_memset(stream, 0, uint(len));
+	SDL_memset(stream, 0, len);
 	if (uint32(len) > as->alen) {
 		if (!as->alen) {
 			SDL_PauseAudioDevice(as->device, SDL_TRUE);
 			return;
 		}
-		len = int(as->alen);
+		len = as->alen;
 	}
-	SDL_MixAudioFormat(stream, as->apos, as->aspec.format, uint32(len), as->volume);
+	SDL_MixAudioFormat(stream, as->apos, as->aspec.format, len, as->volume);
 	as->apos += len;
-	as->alen -= uint32(len);
+	as->alen -= len;
 }

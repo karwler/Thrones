@@ -2,126 +2,163 @@
 #include "program.h"
 #include "engine/scene.h"
 
-Board::Board(const Scene* scene) :
-	ground(vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->mesh("ground"), scene->material("ground"), scene->texture("grass")),
-	board(vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->mesh("table"), scene->material("board"), scene->texture("rock")),
-	bgrid(vec3(0.f), vec3(0.f), vec3(1.f), &gridat, scene->material("grid"), scene->texture()),
-	screen(vec3(Config::boardWidth / 2.f, screenYUp, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->mesh("screen"), scene->material("screen"), scene->texture("wall")),
+Board::Board(Scene* sceneSys, Settings* settings) :
+	ground(vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f)),
+	board(vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f)),
+	bgrid(vec3(0.f)),
+	screen(vec3(Config::boardWidth / 2.f, screenYUp, Config::boardWidth / 2.f)),
 	tileTops{
-		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::ownFarm).name()), false, 1.f),
-		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::ownCity).name()), false, 1.f),
-		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), PI, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::eneFarm).name()), false, 1.f),
-		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), PI, 0.f, scene->mesh("plane"), scene->material("tile"), scene->texture(TileTop(TileTop::eneCity).name()), false, 1.f)
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), glm::pi<float>(), 0.f),
+		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), glm::pi<float>(), 0.f)
 	},
-	pxpad(gtop(svec2(UINT16_MAX), 0.001f), vec3(0.f), vec3(0.f), scene->mesh("outline"), scene->material("red"), scene->texture(), false)	// show indicates if destruction pad is being used
-{}
+	pxpad(gtop(svec2(UINT16_MAX), 0.001f), vec3(0.f), vec3(0.f)),	// show indicates if destruction pad is being used
+	scene(sceneSys),
+	sets(settings)
+{
+	Mesh* meshGround = scene->mesh("ground");
+	Mesh* meshTable = scene->mesh("table");
+	Mesh* meshGrid = scene->mesh("grid");
+	Mesh* meshScreen = scene->mesh("screen");
+	Mesh* meshPlane = scene->mesh("plane");
+	Mesh* meshOutline = scene->mesh("outline");
+	meshGround->allocate(1);
+	meshTable->allocate(1);
+	meshGrid->allocate(1);
+	meshScreen->allocate(1);
+	meshPlane->allocate(tileTops.size(), true);
+	meshOutline->allocate(1);
 
-#ifndef OPENGLES
-void Board::drawObjectDepths() const {
-	drawObjectDepths(initlist<Object>{ ground, board, bgrid, screen });
-	drawObjectDepths(tiles);
-	drawObjectDepths(tileTops);
-	if (pxpad.show)
-		pxpad.drawDepth();
-	drawObjectDepths(pieces);
+	ground.init(meshGround, 0, scene->material("ground"), scene->objTex("grass"));
+	board.init(meshTable, 0, scene->material("board"), scene->objTex("rock"));
+	bgrid.init(meshGrid, 0, scene->material("grid"), scene->objTex());
+	screen.init(meshScreen, 0, scene->material("screen"), scene->objTex("wall"));
+	for (uint8 i = 0; i < tileTops.size(); ++i)
+		tileTops[i].init(meshPlane, i, scene->material("tile"), scene->objTex(TileTop(i).name()), false);
+	pxpad.init(meshOutline, 0, scene->material("red"), scene->objTex(), false);
+
+	meshGround->updateInstanceData();
+	meshTable->updateInstanceData();
+	meshGrid->updateInstanceData();
+	meshScreen->updateInstanceData();
+	meshPlane->updateInstanceData();
+	meshPlane->updateInstanceDataTop();
+	meshOutline->updateInstanceData();
 }
 
-template <class T>
-void Board::drawObjectDepths(const T& objs) const {
-	for (auto& it : objs)
-		if (it.show)
-			it.drawDepth();
+uint16 Board::initConfig(const Config& cfg) {
+	uint16 piecePicksLeft = 0;
+	if (config = cfg; (config.opts & Config::setPieceBattle) && config.setPieceBattleNum < config.countPieces()) {
+		ownPieceAmts.fill(0);
+		piecePicksLeft = config.setPieceBattleNum;
+		if (config.winThrone) {
+			ownPieceAmts[uint8(PieceType::throne)] += config.winThrone;
+			piecePicksLeft -= config.winThrone;
+		} else {
+			uint16 caps = config.winFortress;
+			for (uint8 i = uint8(PieceType::throne); i < pieceLim && caps; --i)
+				if (config.capturers & (1 << i)) {
+					uint16 diff = std::min(caps, uint16(config.pieceAmounts[i] - ownPieceAmts[i]));
+					ownPieceAmts[i] += diff;
+					piecePicksLeft -= diff;
+					caps -= diff;
+				}
+		}
+	} else
+		ownPieceAmts = config.pieceAmounts;
+	return piecePicksLeft;
 }
-#endif
 
-void Board::drawObjects() const {
-	drawObjects(initlist<Object>{ ground, board, bgrid, screen });
-	drawObjects(tiles);
-	drawObjects(tileTops);
-	if (pxpad.show)
-		pxpad.draw();
-	drawObjects(pieces);
-}
-
-template <class T>
-void Board::drawObjects(const T& objs) const {
-	for (auto& it : objs)
-		if (it.show)
-			it.draw();
-}
-
-void Board::initObjects(const Config& cfg, bool regular, const Settings* sets, const Scene* scene) {
-	config = cfg;
+void Board::initObjects(bool regular, bool initPieces) {
 	boardHeight = config.homeSize.y * 2 + 1;
 	objectSize = Config::boardWidth / float(std::max(config.homeSize.x, boardHeight));
 	tilesOffset = (Config::boardWidth - objectSize * vec2(config.homeSize.x, boardHeight)) / 2.f;
 	bobOffset = objectSize / 2.f + tilesOffset;
 	boardBounds = vec4(tilesOffset.x, tilesOffset.y, tilesOffset.x + objectSize * float(config.homeSize.x), tilesOffset.y + objectSize * float(boardHeight));
-	tiles.update(config);
-	pieces.update(config, regular);
 	setBgrid();
 	screen.setPos(vec3(screen.getPos().x, screen.getPos().y, Config::boardWidth / 2.f - objectSize / 2.f));
 	for (BoardObject& it : tileTops) {
-		it.setPos(gtop(svec2(UINT16_MAX)));
-		it.setScl(vec3(objectSize));
-		it.show = false;
+		it.setTrans(gtop(svec2(UINT16_MAX)), vec3(objectSize));
+		it.setShow(false);
 	}
 	pxpad.setScl(vec3(objectSize));
 
 	// prepare objects for setup
-	setTiles(tiles.ene(), 0, false);
-	setMidTiles();
-	setTiles(tiles.own(), config.homeSize.y + 1, true);
-	setPieces(pieces.own(), PI, scene->material(Settings::colorNames[uint8(sets->colorAlly)]));
-	setPieces(pieces.ene(), 0.f, scene->material(Settings::colorNames[uint8(sets->colorEnemy)]));
+	tiles.update(config);
+	const Material* matl = scene->material("empty");
+	int tex = scene->objTex(tileNames[uint8(TileType::empty)]);
+	Mesh* mesh = scene->mesh("tile");
+	mesh->allocate(tiles.getSize(), true);
+
+	setTiles(0, 0, mesh, matl, tex);
+	setTiles(tiles.getHome(), config.homeSize.y, mesh, matl, tex);
+	setTiles(tiles.getExtra(), config.homeSize.y + 1, mesh, matl, tex);
+	mesh->updateInstanceData();
+	mesh->updateInstanceDataTop();
+	setMidFortressTiles();
+
+	if (initPieces) {
+		pieces.update(config, regular);
+		setPieces(pieces.own(), glm::pi<float>());
+		setPieces(pieces.ene(), 0.f);
+
+		Mesh* meshes[pieceNames.size()];
+		for (uint8 i = 0; i < pieceNames.size(); ++i) {
+			meshes[i] = scene->mesh(pieceNames[i]);
+			meshes[i]->allocate(ownPieceAmts[i], true);
+		}
+
+		matl = scene->material(Settings::colorNames[uint8(sets->colorAlly)]);
+		tex = scene->objTex("metal");
+		uint8 t = 0;
+		for (uint16 i = 0, c = 0; i < pieces.getNum(); ++i, ++c) {
+			for (; c >= ownPieceAmts[t]; ++t, c = 0);
+			pieces.own(i)->init(meshes[t], c, matl, tex, false, PieceType(t));
+		}
+		for (Mesh* it : meshes) {
+			it->updateInstanceData();
+			it->updateInstanceDataTop();
+		}
+	}
 }
 
-void Board::setTiles(Tile* tils, uint16 yofs, bool show) {
-	sizet id = 0;
+void Board::setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, int tex) {
 	for (uint16 y = yofs; y < yofs + config.homeSize.y; ++y)
-		for (uint16 x = 0; x < config.homeSize.x; ++x)
-			tils[id++] = Tile(gtop(svec2(x, y)), objectSize, show);
+		for (uint16 x = 0; x < config.homeSize.x; ++x, ++id) {
+			tiles[id] = Tile(gtop(svec2(x, y)), objectSize);
+			tiles[id].init(mesh, id, matl, tex, false, 0.f);
+		}
 }
 
-void Board::setMidTiles() {
-	for (uint16 i = 0; i < config.homeSize.x; ++i)
-		*tiles.mid(i) = Tile(gtop(svec2(i, config.homeSize.y)), objectSize, true);
+void Board::setMidFortressTiles() {
 	if ((config.opts & (Config::victoryPoints | Config::victoryPointsEquidistant)) == (Config::victoryPoints | Config::victoryPointsEquidistant)) {
 		uint16 forts = config.homeSize.x - config.countMiddles() * 2;
-		for (uint16 i = (config.homeSize.x - forts) / 2; i < uint16((config.homeSize.x + forts) / 2); ++i)
+		for (uint16 i = (config.homeSize.x - forts) / 2; i < (config.homeSize.x + forts) / 2; ++i)
 			tiles.mid(i)->setType(TileType::fortress);
 	}
 }
 
-void Board::setPieces(Piece* pces, float rot, const Material* matl) {
+void Board::setPieces(Piece* pces, float rot) {
 	vec3 pos = gtop(svec2(UINT16_MAX));
 	for (uint16 i = 0; i < pieces.getNum(); ++i)
-		pces[i] = Piece(pos, rot, objectSize, matl);
-}
-
-void Board::initOwnPieces() {
-	uint8 t = 0;
-	for (uint16 i = 0, c = 0; i < pieces.getNum(); ++i, ++c) {
-		for (; c >= ownPieceAmts[t]; ++t, c = 0);
-		pieces.own(i)->setType(PieceType(t));
-	}
+		pces[i] = Piece(pos, rot, objectSize);
 }
 
 void Board::setBgrid() {
-	gridat.free();
 	vector<Vertex> verts((config.homeSize.x + boardHeight + 2) * 2);
 	vector<uint16> elems(verts.size());
-
 	for (sizet i = 0; i < elems.size(); ++i)
-		elems[i] = uint16(i);
+		elems[i] = i;
+
 	uint16 i = 0;
-	for (uint16 x = 0; x <= config.homeSize.x; ++x)
+	for (uint16 x = 1; x < config.homeSize.x; ++x)
 		for (uint16 y : { uint16(0), boardHeight })
-			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f));
-	for (uint16 y = 0; y <= boardHeight; ++y)
+			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f), vec3(1.f, 0.f, 0.f));
+	for (uint16 y = 1; y < boardHeight; ++y)
 		for (uint16 x : { uint16(0), config.homeSize.x })
-			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f));
-	gridat = Mesh(verts, elems, GL_LINES);
+			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f), vec3(1.f, 0.f, 0.f));
+	scene->mesh("grid")->updateVertexData(verts, elems);
 }
 
 void Board::uninitObjects() {
@@ -140,12 +177,10 @@ uint16 Board::countAvailableFavors() {
 }
 
 void Board::prepareMatch(bool myTurn, TileType* buf) {
-	for (Tile* it = tiles.ene(); it != tiles.mid(); ++it)
-		it->show = true;
 	for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-		it->show = pieceOnBoard(it);
-	for (Object& it : tileTops)
-		it.show = false;
+		it->setShow(pieceOnBoard(it));
+	for (BoardObject& it : tileTops)
+		it.setShow(false);
 
 	// rearrange middle tiles
 	vector<TileType> mid(config.homeSize.x);
@@ -160,7 +195,7 @@ void Board::prepareMatch(bool myTurn, TileType* buf) {
 		if (mid[i] < TileType::fortress && buf[i] < TileType::fortress) {
 			TileType val = mid[i];
 			mid[i] = TileType::empty;
-			uint16 a = findEmptyMiddle(mid, i, uint16(-1)), b = findEmptyMiddle(mid, i, 1);
+			uint16 a = findEmptyMiddle(mid, i, -1), b = findEmptyMiddle(mid, i, 1);
 			if (a == b)
 				(myTurn ? a : b) = i;
 			mid[a] = val;
@@ -170,19 +205,19 @@ void Board::prepareMatch(bool myTurn, TileType* buf) {
 		tiles.mid(i)->setType(mid[i] != TileType::empty ? mid[i] : TileType::fortress);
 }
 
-uint16 Board::findEmptyMiddle(const vector<TileType>& mid, uint16 i, uint16 m) const {
+uint16 Board::findEmptyMiddle(const vector<TileType>& mid, uint16 i, int16 m) const {
 	for (i += m; i < config.homeSize.x && mid[i] != TileType::empty; i += m);
 	if (i >= config.homeSize.x)
-		for (i = m <= INT16_MAX ? 0 : config.homeSize.x - 1; i < config.homeSize.x && mid[i] != TileType::empty; i += m);
+		for (i = m > 0 ? 0 : config.homeSize.x - 1; i < config.homeSize.x && mid[i] != TileType::empty; i += m);
 	return i;
 }
 
 void Board::prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record& erec) {
 	if (!(xmov || fcont) && orec.info != Record::battleFail) {
 		for (Piece& it : pieces)
-			it.alphaFactor = 1.f;
+			it.setAlphaFactor(1.f);
 		for (auto& [pce, prt] : (myTurn ? erec : orec).protects)
-			pce->alphaFactor = BoardObject::noEngageAlpha;
+			pce->setAlphaFactor(BoardObject::noEngageAlpha);
 
 		// restore fortresses
 		if (!(config.opts & Config::homefront))
@@ -197,13 +232,13 @@ void Board::prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record
 			it.setInteractivity(false, orec.info == Record::battleFail, nullptr, nullptr, nullptr);
 	} else if (xmov) {
 		for (Piece& it : pieces)
-			it.setInteractivity(it.show, true, nullptr, nullptr, nullptr);
+			it.setInteractivity(it.getShow(), true, nullptr, nullptr, nullptr);
 		erec.lastAct.first->setInteractivity(true, false, &Program::eventPieceStart, &Program::eventMove, nullptr );
 	} else {
 		for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-			it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+			it->setInteractivity(it->getShow(), false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 		for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-			it->setInteractivity(it->show, false, nullptr, nullptr, nullptr);
+			it->setInteractivity(it->getShow(), false, nullptr, nullptr, nullptr);
 	}
 }
 
@@ -231,24 +266,24 @@ void Board::disableOwnPiecesInteract(bool rigid, bool dim) {
 void Board::restorePiecesInteract(const Record& orec) {
 	if (orec.actionsExhausted()) {	// for when there's FFs
 		for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
+			it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
 	} else if (orec.actors.size() == 1 && (orec.actors.begin()->second & ACT_MS) == ACT_MS) {	// for moving and switching a warhorse
 		for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
-		orec.actors.begin()->first->setInteractivity(orec.actors.begin()->first->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+			it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
+		orec.actors.begin()->first->setInteractivity(orec.actors.begin()->first->getShow(), false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 	} else {	// business as usual
 		if (orec.actors.size() >= 2) {	// for pieces with more than a total of two actions
 			for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-				it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
+				it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
 			for (auto [pce, act] : orec.actors)
-				pce->setInteractivity(pce->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+				pce->setInteractivity(pce->getShow(), false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 		} else for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-			it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
+			it->setInteractivity(it->getShow(), false, &Program::eventPieceStart, &Program::eventMove, &Program::eventEngage);
 		for (auto [pce, act] : orec.assault)
-			pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
+			pce->setInteractivity(pce->getShow(), true, nullptr, nullptr, nullptr);
 	}
 	for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-		it->setInteractivity(it->show, false, nullptr, nullptr, nullptr);
+		it->setInteractivity(it->getShow(), false, nullptr, nullptr, nullptr);
 }
 
 vector<uint16> Board::countTiles(const Tile* tiles, uint16 num, vector<uint16> cnt) {
@@ -293,7 +328,7 @@ void Board::checkMidTiles() const {
 void Board::checkOwnPieces() const {
 	uint16 forts = config.countFreeTiles();
 	for (const Piece* it = pieces.own(); it != pieces.ene(); ++it)
-		if (!it->show && !(it->getType() == PieceType::dragon && (config.opts & Config::dragonLate) && forts))
+		if (!it->getShow() && !(it->getType() == PieceType::dragon && (config.opts & Config::dragonLate) && forts))
 			throw firstUpper(pieceNames[uint8(it->getType())]) + " wasn't placed";
 }
 
@@ -459,47 +494,47 @@ void Board::setFavorInteracts(Favor favor, const Record& orec) {
 	case Favor::hasten: {
 		if (orec.actors.size() >= 2 || std::any_of(orec.actors.begin(), orec.actors.end(), [](const pair<const Piece*, Action>& it) -> bool { return it.second & ACT_SWAP; })) {
 			for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-				it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
+				it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
 			for (auto [pce, act] : orec.actors)
-				pce->setInteractivity(pce->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
+				pce->setInteractivity(pce->getShow(), false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 		} else {
 			for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-				it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
+				it->setInteractivity(it->getShow(), false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 			for (auto [pce, act] : orec.assault)
-				pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
+				pce->setInteractivity(pce->getShow(), true, nullptr, nullptr, nullptr);
 		}
 		for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-			it->setInteractivity(it->show, false, nullptr, nullptr, nullptr);
+			it->setInteractivity(it->getShow(), false, nullptr, nullptr, nullptr);
 		break; }
 	case Favor::assault:
 		if (umap<Piece*, Action>::const_iterator pa = orec.assault.find(orec.lastAss.first); pa == orec.assault.end()) {
 			for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-				it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
+				it->setInteractivity(it->getShow(), false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 			for (auto [pce, act] : orec.actors)
-				pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
+				pce->setInteractivity(pce->getShow(), true, nullptr, nullptr, nullptr);
 			for (auto [pce, act] : orec.assault)
 				if ((act & ACT_MS) == ACT_MS)
-					pce->setInteractivity(pce->show, true, nullptr, nullptr, nullptr);
+					pce->setInteractivity(pce->getShow(), true, nullptr, nullptr, nullptr);
 		} else {
 			for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-				it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
-			pa->first->setInteractivity(pa->first->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
+				it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
+			pa->first->setInteractivity(pa->first->getShow(), false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 		}
 		for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-			it->setInteractivity(it->show, false, nullptr, nullptr, nullptr);
+			it->setInteractivity(it->getShow(), false, nullptr, nullptr, nullptr);
 		break;
 	case Favor::conspire:
 		for (Piece& it : pieces) {
 			umap<Piece*, bool>::const_iterator prot = orec.protects.find(&it);
 			bool dim = prot != orec.protects.end() && prot->second;
-			it.setInteractivity(it.show, dim, !dim ? &Program::eventPieceNoEngage : nullptr, nullptr, nullptr);
+			it.setInteractivity(it.getShow(), dim, !dim ? &Program::eventPieceNoEngage : nullptr, nullptr, nullptr);
 		}
 		break;
 	case Favor::deceive:
 		for (Piece* it = pieces.own(); it != pieces.ene(); ++it)
-			it->setInteractivity(it->show, true, nullptr, nullptr, nullptr);
+			it->setInteractivity(it->getShow(), true, nullptr, nullptr, nullptr);
 		for (Piece* it = pieces.ene(); it != pieces.end(); ++it)
-			it->setInteractivity(it->show, false, &Program::eventPieceStart, &Program::eventMove, nullptr);
+			it->setInteractivity(it->getShow(), false, &Program::eventPieceStart, &Program::eventMove, nullptr);
 		break;
 	case Favor::none:
 		restorePiecesInteract(orec);
@@ -507,7 +542,7 @@ void Board::setFavorInteracts(Favor favor, const Record& orec) {
 }
 
 void Board::setPxpadPos(const Piece* piece) {
-	if (pxpad.show = piece && piece->getType() == PieceType::rangers && getTile(ptog(piece->getPos()))->getType() == TileType::forest; pxpad.show)
+	if (pxpad.setShow(piece && piece->getType() == PieceType::rangers && getTile(ptog(piece->getPos()))->getType() == TileType::forest); pxpad.getShow())
 		pxpad.setPos(vec3(piece->getPos().x, pxpad.getPos().y, piece->getPos().z));
 }
 
@@ -518,14 +553,14 @@ TileTop Board::findTileTop(const Tile* tile) {
 
 void Board::setTileTop(TileTop top, const Tile* tile) {
 	tileTops[top].setPos(vec3(tile->getPos().x, tileTops[top].getPos().y, tile->getPos().z));
-	tileTops[top].show = true;
+	tileTops[top].setShow(true);
 }
 
 void Board::selectEstablishers() {
 	for (Piece& it : pieces)
 		it.setInteractivity(false, true, nullptr, nullptr, nullptr);
 	for (Piece* it = getOwnPieces(PieceType::throne); it != pieces.ene(); ++it)
-		if (it->show)
+		if (it->getShow())
 			it->setInteractivity(true, false, &Program::eventEstablish, nullptr, nullptr);
 }
 
@@ -536,11 +571,11 @@ pair<Tile*, TileTop> Board::checkTileEstablishable(const Piece* throne) {
 			if (TileTop top = findTileTop(&it); (it.getType() == TileType::fortress && (&it < tiles.mid() || &it >= tiles.own())) || top != TileTop::none)
 				if (svec2 dp = glm::abs(ivec2(ptog(it.getPos())) - ivec2(pos)); dp.x < 3 && dp.y < 3)
 					throw "Tile is too close to a " + string(top == TileTop::none ? tileNames[uint8(it.getType())] : top.name());
-	return pair(getTile(pos), tileTops[TileTop::ownFarm].show ? TileTop::ownCity : TileTop::ownFarm);
+	return pair(getTile(pos), tileTops[TileTop::ownFarm].getShow() ? TileTop::ownCity : TileTop::ownFarm);
 }
 
 bool Board::tileRebuildable(const Piece* throne) {
-	if (throne->show)
+	if (throne->getShow())
 		if (Tile* til = getTile(ptog(throne->getPos())); (til->getType() == TileType::fortress || findTileTop(til) == TileTop::ownFarm) && til->getBreached())
 			return true;
 	return false;
@@ -557,13 +592,13 @@ void Board::selectRebuilders() {
 bool Board::pieceSpawnable(PieceType type) {
 	switch (type) {
 	case PieceType::rangers: case PieceType::lancer:
-		if (!tileTops[TileTop::ownFarm].show)
+		if (!tileTops[TileTop::ownFarm].getShow())
 			return false;
 		if (Tile* til = getTileBot(TileTop::ownFarm); til->getBreached() || findOccupant(til))
 			return false;
 		break;
 	case PieceType::spearmen: case PieceType::catapult: case PieceType::elephant:
-		if (!tileTops[TileTop::ownCity].show || findOccupant(getTileBot(TileTop::ownCity)))
+		if (!tileTops[TileTop::ownCity].getShow() || findOccupant(getTileBot(TileTop::ownCity)))
 			return false;
 		break;
 	case PieceType::crossbowmen: case PieceType::trebuchet: case PieceType::warhorse:
@@ -575,7 +610,7 @@ bool Board::pieceSpawnable(PieceType type) {
 	}
 
 	for (Piece* it = getOwnPieces(type); it->getType() == type; ++it)
-		if (!it->show)
+		if (!it->getShow())
 			return true;
 	return false;
 }
@@ -609,7 +644,7 @@ Tile* Board::findSpawnableTile(PieceType type) {
 
 Piece* Board::findSpawnablePiece(PieceType type) {
 	for (Piece* it = getOwnPieces(type); it->getType() == type; ++it)
-		if (!it->show)
+		if (!it->getShow())
 			return it;
 	return nullptr;
 }
@@ -627,10 +662,10 @@ bool Board::checkThroneWin(Piece* pcs, const array<uint16, pieceLim>& amts) {
 	if (uint16 c = config.winThrone) {
 		pcs = getPieces(pcs, amts, PieceType::throne);
 		for (uint16 i = 0; i < amts[uint8(PieceType::throne)]; ++i)
-			if (!pcs[i].show && !--c)
+			if (!pcs[i].getShow() && !--c)
 				return true;
 	} else
-		return std::none_of(pcs, pcs + pieces.getNum(), [](Piece& it) -> bool { return it.show; });	// check if all pieces dead
+		return std::none_of(pcs, pcs + pieces.getNum(), [](Piece& it) -> bool { return it.getShow(); });	// check if all pieces dead
 	return false;
 }
 
@@ -658,9 +693,19 @@ Record::Info Board::countVictoryPoints(uint16& own, uint16& ene, const Record& e
 	return Record::none;
 }
 
-#ifdef DEBUG
-void Board::initDummyObjects(const Config& cfg, const Settings* sets, const Scene* scene) {
-	initObjects(cfg, true, sets, scene);
+void Board::updateTileInstances(Tile* til, Mesh* old) {
+	Mesh::Instance ins = old->erase(til->meshIndex);
+	for (Tile& it : tiles)
+		if (it.getMesh() == old && it.meshIndex > til->meshIndex)
+			--it.meshIndex;
+	til->meshIndex = til->getMesh()->insert(ins);
+	old->updateInstanceData();
+	til->getMesh()->updateInstanceData();
+}
+
+#ifndef NDEBUG
+void Board::initDummyObjects() {
+	initObjects(true);
 
 	uint16 t = 0;
 	vector<uint16> amts(config.tileAmounts.begin(), config.tileAmounts.end());
@@ -679,8 +724,8 @@ void Board::initDummyObjects(const Config& cfg, const Settings* sets, const Scen
 	amts.assign(config.middleAmounts.begin(), config.middleAmounts.end());
 	for (sizet i = 0; t < amts.size(); ++i) {
 		for (; t < amts.size() && !amts[t]; ++t);
-		if (t < amts.size() && tiles.mid(i)->getType() == TileType::empty) {
-			tiles.mid(i)->setType(TileType(t));
+		if (t < amts.size() && tiles.mid(pdift(i))->getType() == TileType::empty) {
+			tiles.mid(pdift(i))->setType(TileType(t));
 			--amts[t];
 		}
 	}

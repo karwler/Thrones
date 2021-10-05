@@ -1,7 +1,6 @@
 #pragma once
 
-#include "oven/oven.h"
-#include "utils/text.h"
+#include "utils/utils.h"
 
 // reads/writes an INI line
 struct IniLine {
@@ -43,6 +42,8 @@ inline void IniLine::write(string& text, const string& prp, const string& key, c
 // handles all filesystem interactions
 class FileSys {
 public:
+	static constexpr int fontTestHeight = 100;
+
 	static constexpr char fileRules[] = "rules.html";
 	static constexpr char fileDocs[] = "docs.html";
 private:
@@ -54,6 +55,10 @@ private:
 	static constexpr char fileConfigs[] = "game.ini";
 	static constexpr char fileSettings[] = "setting.ini";
 	static constexpr char fileSetups[] = "setup.ini";
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+	static constexpr char filePrimaryFont[] = "romanesque.ttf";
+	static constexpr char fileSecondaryFont[] = "merriweather.otf";
+#endif
 
 	static constexpr char iniTitleSettings[] = "Settings";
 	static constexpr char iniTitleBindings[] = "Bindings";
@@ -65,6 +70,8 @@ private:
 	static constexpr char iniKeywordMsamples[] = "samples";
 	static constexpr char iniKeywordTexScale[] = "textures";
 	static constexpr char iniKeywordShadows[] = "shadows";
+	static constexpr char iniKeywordSsao[] = "ssao";
+	static constexpr char iniKeywordBloom[] = "bloom";
 	static constexpr char iniKeywordGamma[] = "gamma";
 	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordColors[] = "colors";
@@ -79,6 +86,7 @@ private:
 	static constexpr char iniKeywordVersionLookup[] = "version_lookup";
 	static constexpr char iniKeywordAddress[] = "address";
 	static constexpr char iniKeywordPort[] = "port";
+	static constexpr char iniKeywordPlayerName[] = "player_name";
 	static constexpr char iniKeywordLastConfig[] = "last_config";
 
 	static constexpr char iniKeyKey[] = "K";
@@ -121,20 +129,18 @@ public:
 	static vector<string> listFonts();
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
-	static umap<string, Mesh> loadObjects();	// geometry shader must be in use
+	static vector<Mesh> loadObjects(umap<std::string, uint16>& refs);	// geometry shader must be in use
 	static umap<string, string> loadShaders();
-	static umap<string, Texture> loadTextures(int scale);
-	static void reloadTextures(umap<string, Texture>& texs, int scale);
+	static TextureSet loadTextures(umap<string, Texture>& texs, int scale);
+	static TextureSet reloadTextures(umap<string, Texture>& texs, int scale);
 	static vector<uint8> loadFile(const string& file);
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 	static bool canRead();
 #endif
 	static string dataPath();
-	static string fontPath();
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	static string docPath();
-	static string windowIconPath();
 #endif
 private:
 	static string configPath(const char* file);
@@ -154,41 +160,27 @@ private:
 	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
 	static void writeFile(const string& path, const string& text);
-	static void loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLint, GLenum), int scale);
+	static TextureSet loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale);
+	static void loadObjectTexture(SDL_RWops* ifh, SDL_Surface* img, string&& name, GLenum ifmt, TextureSet::Import& imp, int scale);
+	static pair<SDL_Surface*, GLenum> loadImageBlock(SDL_RWops* ifh, const string& name);
 	template <class T = string> static T readFile(const string& file);
 	template <class T, class F> static string strJoin(const vector<T>& vec, F conv, char sep = ' ');
 };
 
 inline string FileSys::dataPath() {
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(EMSCRIPTEN)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 	return dirBase;
 #else
-	return dirBase + "share/";
+	return dirBase + "share/thrones/";
 #endif
 }
 
-inline string FileSys::fontPath() {
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(EMSCRIPTEN)
-	return dirBase + "fonts/";
-#else
-	return dirBase + "share/fonts/";
-#endif
-}
-
-#if !defined(__ANDROID__) && !defined(EMSCRIPTEN)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 inline string FileSys::docPath() {
 #if defined(_WIN32) || defined(__APPLE__)
 	return dirBase + "doc/";
 #else
-	return dirBase + "share/doc/";
-#endif
-}
-
-inline string FileSys::windowIconPath() {
-#if defined(__APPLE__) || defined(APPIMAGE)
-	return dirBase + "thrones.png";
-#else
-	return dirBase + "share/thrones.png";
+	return dirBase + "share/thrones/doc/";
 #endif
 }
 #endif

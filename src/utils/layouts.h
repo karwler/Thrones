@@ -15,7 +15,7 @@ public:
 	void navSelectOut(const vec3& pos, Direction dir);
 
 private:
-	Interactable* findSelectable(const ivec2& entry) const;
+	Interactable* findSelectable(ivec2 entry) const;
 };
 
 // container for other widgets
@@ -52,6 +52,7 @@ protected:
 	virtual ivec2 listSize() const;
 
 private:
+	void calculateWidgetPositions();
 	void initWidgets();
 	void reinitWidgets(sizet id);
 	static bool deselectWidget(Widget* wgt);
@@ -62,7 +63,7 @@ private:
 };
 
 inline Layout::~Layout() {
-	setPtrVec(widgets, {});
+	setPtrVec(widgets);
 }
 
 template <class T>
@@ -100,22 +101,36 @@ public:
 // layout with background with free position/size (shouldn't have a parent)
 class Popup : public RootLayout {
 public:
+	enum class Type : uint8 {
+		generic,
+		config,
+		settings,
+		overlay
+	};
+
 	BCall kcall, ccall;	// gets called on enter/escape press
 	Widget* defaultSelect;	// nav select to this if nothing selected (popup is not navigable if this is nullptr)
 protected:
 	Size sizeY;			// use Widget's relSize as width
+private:
+	Type type;
 
 	static constexpr int margin = 5;
 	static constexpr vec4 colorBackground = { 0.42f, 0.05f, 0.f, 1.f };
 
 public:
-	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, Widget* firstSelect = nullptr, const vec4& color = uniformBgColor);
+	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, Widget* firstSelect = nullptr, Type ctxType = Type::generic, const vec4& color = uniformBgColor);
 	~Popup() override = default;
 
 	void draw() const override;
 	ivec2 position() const override;
 	ivec2 size() const override;
+	Type getType() const;
 };
+
+inline Popup::Type Popup::getType() const {
+	return type;
+}
 
 // popup that can be enabled or disabled
 class Overlay : public Popup {
@@ -126,10 +141,10 @@ private:
 
 public:
 	Overlay(const pair<Size, Size>& pos = pair(0.f, 0.f), const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, bool visible = false, bool interactive = true, int space = 0, const vec4& color = vec4(0.f));
-	~Overlay() final = default;
+	~Overlay() override = default;
 
-	void draw() const final;
-	ivec2 position() const final;
+	void draw() const override;
+	ivec2 position() const override;
 
 	bool getShow() const;
 	void setShow(bool yes);
@@ -151,23 +166,23 @@ private:
 
 public:
 	using Layout::Layout;
-	~ScrollArea() final = default;
+	~ScrollArea() override = default;
 
-	void draw() const final;
-	void tick(float dSec) final;
-	void postInit() final;
-	void onHold(const ivec2& mPos, uint8 mBut) final;
-	void onDrag(const ivec2& mPos, const ivec2& mMov) final;
-	void onUndrag(uint8 mBut) final;
-	void onScroll(const ivec2& wMov) final;
-	void onNavSelect(Direction dir) final;
-	void navSelectNext(sizet id, int mid, Direction dir) final;
-	void navSelectFrom(int mid, Direction dir) final;
-	void onCancelCapture() final;
+	void draw() const override;
+	void tick(float dSec) override;
+	void postInit() override;
+	void onHold(ivec2 mPos, uint8 mBut) override;
+	void onDrag(ivec2 mPos, ivec2 mMov) override;
+	void onUndrag(uint8 mBut) override;
+	void onScroll(ivec2 wMov) override;
+	void onNavSelect(Direction dir) override;
+	void navSelectNext(sizet id, int mid, Direction dir) override;
+	void navSelectFrom(int mid, Direction dir) override;
+	void onCancelCapture() override;
 
-	Rect frame() const final;
-	ivec2 wgtPosition(sizet id) const final;
-	ivec2 wgtSize(sizet id) const final;
+	Rect frame() const override;
+	ivec2 wgtPosition(sizet id) const override;
+	ivec2 wgtSize(sizet id) const override;
 	mvec2 visibleWidgets() const;
 
 private:

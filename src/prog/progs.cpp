@@ -8,7 +8,7 @@
 // PROGRAM STATE
 
 void ProgState::chatEmbedAxisScroll(float val) {
-	if (chatBox && chatBox->getParent()->getSize().pix)
+	if (chatBox && chatBox->getParent()->getSize() > 0.f)
 		chatBox->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
@@ -91,6 +91,10 @@ void ProgState::eventFrameCounter() {
 	World::program()->eventCycleFrameCounter();
 }
 
+void ProgState::eventScreenshot() {
+	FileSys::saveScreenshot(takeScreenshot(World::window()->getScreenView()));
+}
+
 void ProgState::eventSelect0() {
 	eventSetSelected(0);
 }
@@ -148,7 +152,23 @@ vector<Overlay*> ProgState::createOverlays() {
 		World::pgui()->createFpsCounter(fpsText)
 	} : vector<Overlay*>{
 		World::pgui()->createFpsCounter(fpsText)
-};
+	};
+}
+
+void ProgState::updateTitleBar() {
+	setTitleBarInteractivity(true, false);
+}
+
+void ProgState::setTitleBarInteractivity(bool settings, bool config) {
+	if (World::scene()->getTitleBar()) {
+		Button* bsets = World::scene()->getTitleBar()->getWidget<Button>(0);
+		bsets->lcall = settings ? &Program::eventOpenShowSettings : nullptr;
+		bsets->setDim(settings ? 1.f : GuiGen::defaultDim);
+
+		Button* bcfgs = World::scene()->getTitleBar()->getWidget<Button>(1);
+		bcfgs->lcall = config ? &Program::eventShowConfig : nullptr;
+		bcfgs->setDim(config ? 1.f : GuiGen::defaultDim);
+	}
 }
 
 void ProgState::initObjectDrag(BoardObject* bob, Mesh* mesh, vec2 pos) {
@@ -176,7 +196,7 @@ void ProgState::showNotification(bool yes) const {
 
 tuple<string, bool, bool> ProgState::chatState() {
 	Overlay* lay = chatBox ? dynamic_cast<Overlay*>(chatBox->getParent()) : nullptr;
-	return tuple(chatBox ? chatBox->moveText() : string(), showNotification(), lay ? lay->getShow() : chatBox && !chatBox->getParent()->getSize().usePix);
+	return tuple(chatBox ? chatBox->moveText() : string(), showNotification(), lay ? lay->getShow() : chatBox && chatBox->getParent()->getSize() > 0.f);
 }
 
 void ProgState::chatState(string&& text, bool notif, bool show) {
@@ -193,7 +213,7 @@ void ProgState::chatState(string&& text, bool notif, bool show) {
 }
 
 void ProgState::toggleChatEmbedShow(bool forceShow) {
-	if (chatBox->getParent()->getSize().usePix || forceShow) {
+	if (chatBox->getParent()->getSize() == 0.f || forceShow) {
 		chatBox->getParent()->setSize(GuiGen::chatEmbedSize);
 		if (!forceShow) {
 			LabelEdit* le = chatBox->getParent()->getWidget<LabelEdit>(chatBox->getIndex() + 1);
@@ -207,7 +227,7 @@ void ProgState::toggleChatEmbedShow(bool forceShow) {
 }
 
 void ProgState::hideChatEmbed() {
-	chatBox->getParent()->setSize(0);
+	chatBox->getParent()->setSize(0.f);
 	World::scene()->updateSelect();
 }
 
@@ -442,6 +462,10 @@ vector<Overlay*> ProgGame::createOverlays() {
 	return ProgState::createOverlays();
 }
 
+void ProgGame::updateTitleBar() {
+	setTitleBarInteractivity(true, true);
+}
+
 // PROG SETUP
 
 void ProgSetup::eventEscape() {
@@ -540,11 +564,11 @@ void ProgSetup::setStage(ProgSetup::Stage stg) {
 	bswapIcon->setDim(setup ? 1.f : GuiGen::defaultDim);
 	sio.back->lcall = cback ? &Program::eventSetupBack : nullptr;
 	sio.back->setDim(cback ? 1.f : GuiGen::defaultDim);
-	sio.back->setTooltip(World::pgui()->makeTooltip(stage == Stage::middles ? "Go to placing homeland tiles" : stage == Stage::pieces ? "Go to placing middle row tiles" : ""));
+	sio.back->setTooltip(stage == Stage::middles ? "Go to placing homeland tiles" : stage == Stage::pieces ? "Go to placing middle row tiles" : "");
 	sio.next->lcall = cnext ? &Program::eventSetupNext : nullptr;
 	sio.next->setDim(cnext ? 1.f : GuiGen::defaultDim);
 	sio.next->setText(tiles || !World::netcp() ? "Next" : "Finish");
-	sio.next->setTooltip(World::pgui()->makeTooltip(stage == Stage::tiles ? "Go to placing middle row tiles" : stage == Stage::middles ? "Go to placing pieces" : stage == Stage::pieces && World::netcp() ? "Confirm and finish setup" : ""));
+	sio.next->setTooltip(stage == Stage::tiles ? "Go to placing middle row tiles" : stage == Stage::middles ? "Go to placing pieces" : stage == Stage::pieces && World::netcp() ? "Confirm and finish setup" : "");
 
 	iselect = 0;
 	if (stage <= Stage::pieces) {
@@ -823,6 +847,10 @@ uptr<RootLayout> ProgSettings::createLayout(Interactable*& selected) {
 	return World::pgui()->makeSettings(selected, mainScrollContent, keyBindingsStart);
 }
 
+void ProgSettings::updateTitleBar() {
+	setTitleBarInteractivity(false, false);
+}
+
 // PROG INFO
 
 void ProgInfo::eventEscape() {
@@ -843,4 +871,8 @@ void ProgInfo::eventScrollDown(float val) {
 
 uptr<RootLayout> ProgInfo::createLayout(Interactable*& selected) {
 	return World::pgui()->makeInfo(selected, mainScrollContent);
+}
+
+void ProgInfo::updateTitleBar() {
+	setTitleBarInteractivity(true, false);
 }

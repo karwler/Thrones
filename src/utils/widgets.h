@@ -3,28 +3,6 @@
 #include "settings.h"
 #include "utils.h"
 
-// size of a widget in pixels or relative to it's parent
-struct Size {
-	union {
-		int pix;
-		float prc;
-	};
-	bool usePix;
-
-	constexpr Size(int pixels);
-	constexpr Size(float percent);
-};
-
-constexpr Size::Size(int pixels) :
-	pix(pixels),
-	usePix(true)
-{}
-
-constexpr Size::Size(float percent) :
-	prc(percent),
-	usePix(false)
-{}
-
 // scroll information
 class ScrollBar {
 public:
@@ -41,7 +19,7 @@ private:
 public:
 	void draw(ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
 	void draw(const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
-	void tick(float dSec, ivec2 listSize, ivec2 size);
+	bool tick(float dSec, ivec2 listSize, ivec2 size);
 	void hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
 	void drag(ivec2 mPos, ivec2 mMov, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
 	void undrag(uint8 mBut, bool vert);
@@ -90,44 +68,6 @@ inline int ScrollBar::sliderLim(ivec2 listSize, ivec2 size, bool vert) {
 	return size[vert] - sliderSize(listSize, size, vert);
 }
 
-// vertex data for widgets
-class Quad {
-public:
-	static constexpr uint corners = 4;
-private:
-	static constexpr uint stride = 2;
-	static constexpr float vertices[corners * stride] = {
-		0.f, 0.f,
-		1.f, 0.f,
-		0.f, 1.f,
-		1.f, 1.f
-	};
-
-	GLuint vao, vbo;
-
-public:
-	Quad();
-	~Quad();
-
-	GLuint getVao() const;
-	static void draw(const Rect& rect, const vec4& color, GLuint tex, float z = 0.f);
-	static void draw(const Rect& rect, Rect frame, const vec4& color, GLuint tex, float z = 0.f);
-	static void draw(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z = 0.f);
-};
-
-inline GLuint Quad::getVao() const {
-	return vao;
-}
-
-inline void Quad::draw(const Rect& rect, const vec4& color, GLuint tex, float z) {
-	draw(rect, vec4(0.f, 0.f, 1.f, 1.f), color, tex, z);
-}
-
-inline void Quad::draw(const Rect& rect, Rect frame, const vec4& color, GLuint tex, float z) {
-	frame = rect.intersect(frame);
-	draw(frame, vec4(float(frame.x - rect.x) / float(rect.w), float(frame.y - rect.y) / float(rect.h), float(frame.w) / float(rect.w), float(frame.h) / float(rect.h)), color, tex, z);
-}
-
 // can be used as spacer
 class Widget : public Interactable {
 public:
@@ -143,10 +83,11 @@ protected:
 	sizet index = SIZE_MAX;		// this widget's id in parent's widget list
 
 public:
-	Widget(Size size = 1.f);
+	Widget(const Size& size = 1.f);
 	~Widget() override = default;
 
 	virtual void draw() const {}
+	virtual void drawTop() {}
 	virtual void onResize() {}
 	virtual void postInit() {}		// gets called after parent is set and all set up
 	virtual ivec2 position() const;
@@ -154,6 +95,7 @@ public:
 	virtual void setSize(const Size& size);
 	virtual Rect frame() const;		// the rectangle to restrain a widget's visibility (in Widget it returns the parent's frame and if in Layout, it returns a frame for it's children)
 	virtual bool selectable() const;
+	virtual void updateTipTex() {}
 
 	const Size& getSize() const;
 	sizet getIndex() const;
@@ -163,7 +105,7 @@ public:
 	ivec2 center() const;
 };
 
-inline Widget::Widget(Size size) :
+inline Widget::Widget(const Size& size) :
 	relSize(size)
 {}
 
@@ -194,6 +136,7 @@ public:
 	vec4 color;
 protected:
 	vec4 dimFactor;
+	string tipStr;
 	Texture tipTex;	// memory is handled by the button
 	GLuint bgTex;
 
@@ -201,9 +144,11 @@ private:
 	static constexpr float selectFactor = 1.2f;
 	static constexpr ivec2 tooltipMargin = { 4, 1 };
 	static constexpr int cursorMargin = 2;
+	static constexpr float tooltipHeightFactor = 1.f / 45.f;
+	static constexpr float tooltipLimitFactor = 2.f / 3.f;
 
 public:
-	Button(Size size = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
+	Button(const Size& size = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
 	~Button() override;
 
 	void draw() const override;
@@ -212,9 +157,10 @@ public:
 	void onUnhover() override;
 	void onNavSelect(Direction dir) override;
 	bool selectable() const override;
+	void updateTipTex() override;
 
 	void drawTooltip() const;
-	void setTooltip(const Texture& tooltip);
+	void setTooltip(string&& tooltip);
 	void setDim(float factor);
 };
 
@@ -227,7 +173,7 @@ class CheckBox : public Button {
 public:
 	bool on;
 
-	CheckBox(Size size = 1.f, bool checked = false, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
+	CheckBox(const Size& size = 1.f, bool checked = false, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
 	~CheckBox() override = default;
 
 	void draw() const override;
@@ -250,7 +196,7 @@ inline bool CheckBox::toggle() {
 class Slider : public Button {
 public:
 	static constexpr int barMarginFactor = 4;
-	static constexpr int sliderWidthFactor = 3;
+	static constexpr int sliderWidthFactor = 4;
 
 private:
 	int value, vmin, vmax;
@@ -259,7 +205,7 @@ private:
 	int diffSliderMouse = 0;
 
 public:
-	Slider(Size size = 1.f, int value = 0, int minimum = 0, int maximum = 255, int navStep = 1, BCall finishCall = nullptr, BCall updateCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
+	Slider(const Size& size = 1.f, int value = 0, int minimum = 0, int maximum = 255, int navStep = 1, BCall finishCall = nullptr, BCall updateCall = nullptr, string&& tooltip = string(), float dim = 1.f, GLuint tex = 0, const vec4& clr = colorNormal);
 	~Slider() override = default;
 
 	void draw() const override;
@@ -315,6 +261,7 @@ public:
 		center,
 		right,
 	};
+
 	static constexpr int textMarginFactor = 6;
 
 protected:
@@ -324,7 +271,8 @@ protected:
 	bool showBG;
 
 public:
-	Label(Size size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	Label(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	Label(string line, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
 	~Label() override;
 
 	void draw() const override;
@@ -335,10 +283,19 @@ public:
 	virtual void setText(string&& str);
 	virtual void setText(const string& str);
 	Rect textRect() const;
+
+	static int txtLen(const char* str, int height);
+	static int txtLen(const string& str, int height);
+	static int txtLen(const char* str, float hfac);
+	static int txtLen(const string& str, float hfac);
+
 protected:
-	static ivec2 textOfs(ivec2 res, Alignment align, ivec2 pos, ivec2 siz, int margin);
+	static Rect textFrame(const Rect& rbg, const Rect& frm);
+	static ivec2 textOfs(int resx, Alignment align, ivec2 pos, int sizx, int margin);
 	virtual ivec2 textPos() const;
 	virtual void updateTextTex();
+private:
+	static int precalcWidth(const Widget* self);
 };
 
 inline const string& Label::getText() const {
@@ -349,20 +306,30 @@ inline Rect Label::textRect() const {
 	return Rect(textPos(), textTex.getRes());
 }
 
+inline int Label::txtLen(const string& str, int height) {
+	return txtLen(str.c_str(), height);
+}
+
+inline int Label::txtLen(const string& str, float hfac) {
+	return txtLen(str.c_str(), hfac);
+}
+
 // multi-line scrollable label
 class TextBox : public Label {
 private:
 	bool alignTop;
 	ScrollBar scroll;
-	int lineHeight;
+	SDL_Surface* textImg = nullptr;
+	float lineHeightFactor;
 	uint16 lineLim, lineCnt;
 
 public:
-	TextBox(Size size = 1.f, int lineH = 0, string lines = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, uint16 lineL = UINT16_MAX, bool stickTop = true, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~TextBox() override = default;
+	TextBox(const Size& size = 1.f, float lineH = 0.f, string lines = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lineL = UINT16_MAX, bool stickTop = true, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	~TextBox() override;
 
 	void draw() const override;
 	void tick(float dSec) override;
+	void onResize() override;
 	void postInit() override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
@@ -377,12 +344,14 @@ public:
 	void setText(const string &str) override;
 	void addLine(const string& line);
 	string moveText();
-private:
+protected:
 	ivec2 textPos() const override;
 	void updateTextTex() override;
+private:
 	void updateListPos();
 	void resetListPos();
 	void cutLines();
+	int pixLineHeight() const;
 };
 
 inline void TextBox::resetListPos() {
@@ -399,7 +368,7 @@ private:
 	static constexpr int outlineFactor = 16;
 
 public:
-	Icon(Size size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall holdCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal, bool select = false);
+	Icon(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall holdCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal, bool select = false);
 	~Icon() override = default;
 
 	void draw() const override;
@@ -414,7 +383,7 @@ private:
 	CCall ocall;
 
 public:
-	ComboBox(Size size = 1.f, string curOpt = string(), vector<string> opts = vector<string>(), CCall optCall = nullptr, BCall leftCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	ComboBox(const Size& size = 1.f, string curOpt = string(), vector<string> opts = vector<string>(), CCall optCall = nullptr, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
 	~ComboBox() override = default;
 
 	void onClick(ivec2 mPos, uint8 mBut) override;
@@ -444,16 +413,18 @@ public:
 private:
 	uint16 cpos = 0;	// caret position
 	string oldText;
+	SDL_Surface* textImg = nullptr;
 	BCall ecall, ccall;
 	bool chatMode;
 	uint16 limit;
-	int textOfs = 0;	// text's horizontal offset
+	int viewPos = 0;
+	int texiPos = 0;
 
 public:
-	LabelEdit(Size size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
-	~LabelEdit() override = default;
+	LabelEdit(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	~LabelEdit() override;
 
-	void drawTop() const override;
+	void drawTop() override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onKeyDown(const SDL_KeyboardEvent& key) override;
 	void onJButtonDown(uint8 but) override;
@@ -461,7 +432,8 @@ public:
 	void onJAxisDown(uint8 axis, bool positive) override;
 	void onGButtonDown(SDL_GameControllerButton but) override;
 	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
-	void onText(const char* str) override;
+	void onCompose(const char* str, uint& len) override;
+	void onText(const char* str, uint& len) override;
 	void onCancelCapture() override;
 
 	bool selectable() const override;
@@ -474,11 +446,13 @@ public:
 
 protected:
 	ivec2 textPos() const override;
+	void updateTextTex() override;
 private:
 	void onInput(Binding::Type bind, uint16 mod = 0, bool joypad = true);
 	void onTextReset();
-	int caretPos() const;	// caret's relative x position
+	int caretPos();	// caret's relative x position
 	void setCPos(uint16 cp);
+	static bool shiftText(int cp, int cs, int& vp, int vs, int& tp, int ts, int is);
 
 	static bool kmodCtrl(uint16 mod);
 	static bool kmodAlt(uint16 mod);
@@ -509,7 +483,7 @@ public:
 	Binding::Type bind;		// binding index
 	sizet kid;				// key id
 
-	KeyGetter(Size size = 1.f, Binding::Accept atype = Binding::Accept::keyboard, Binding::Type binding = Binding::Type(-1), sizet keyId = SIZE_MAX, BCall exitCall = nullptr, BCall rightCall = nullptr, const Texture& tooltip = Texture(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
+	KeyGetter(const Size& size = 1.f, Binding::Accept atype = Binding::Accept::keyboard, Binding::Type binding = Binding::Type(-1), sizet keyId = SIZE_MAX, BCall exitCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, GLuint tex = 0, const vec4& clr = colorNormal);
 	~KeyGetter() override = default;
 
 	void onClick(ivec2 mPos, uint8 mBut) override;

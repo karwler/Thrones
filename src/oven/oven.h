@@ -25,41 +25,8 @@
 #include <SDL2/SDL_image.h>
 #endif
 
-#ifndef GL_BGRA
-#define GL_BGRA 0x80E1
-#endif
-
-constexpr uint audioHeaderSize = sizeof(uint8) + sizeof(uint32) + sizeof(uint16) * 3 + sizeof(uint8);
-constexpr uint objectHeaderSize = sizeof(uint8) + sizeof(uint16) * 2;
-constexpr uint shaderHeaderSize = sizeof(uint8) + sizeof(uint16);
-constexpr uint textureHeaderSize = sizeof(uint8) * 2;
-
-enum TexturePlacement : uint8 {
-	TEXPLACE_NONE,
-	TEXPLACE_WIDGET,
-	TEXPLACE_OBJECT,
-	TEXPLACE_BOTH,
-	TEXPLACE_CUBE
-};
-
-struct Sound {
-	static constexpr SDL_AudioSpec defaultSpec = { 22050, AUDIO_S16, 1, 0, 4096, 0, 0, nullptr, nullptr };
-
-	uint8* data;
-	uint32 length;
-	uint16 frequency;
-	SDL_AudioFormat format;
-	uint8 channels;
-	uint16 samples;
-
-	void set(const SDL_AudioSpec& spec);
-	bool convert(const SDL_AudioSpec& dsts);
-	void free();
-};
-
-inline void Sound::free() {
-	SDL_FreeWAV(data);
-}
+constexpr char defaultReadMode[] = "rb";
+constexpr char defaultWriteMode[] = "wb";
 
 struct Material {
 	vec4 color;
@@ -84,5 +51,20 @@ struct Vertex {
 SDL_Surface* scaleSurface(SDL_Surface* img, ivec2 res);
 
 inline SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
-	return div <= 1 || !img ? img : scaleSurface(img, ivec2(img->w, img->h) / div);
+	return div <= 1 || !img || img->w <= 1 || img->h <= 1 ? img : scaleSurface(img, ivec2(img->w, img->h) / div);
 }
+
+template <class T = string>
+T loadFile(const string& file) {
+	T data;
+	if (SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode)) {
+		if (int64 len = SDL_RWsize(ifh); len != -1) {
+			data.resize(len);
+			if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
+				data.resize(read);
+		}
+		SDL_RWclose(ifh);
+	}
+	return data;
+}
+

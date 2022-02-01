@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
-#include "utils/widgets.h"
+#include "utils/settings.h"
+#include "utils/utils.h"
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
@@ -11,193 +12,112 @@
 #endif
 #endif
 
-// for drawing
-class Shader {
+// vertex data for widgets
+class Quad {
 public:
-	static constexpr GLuint vpos = 0, normal = 1, uvloc = 2, tangent = 3;
-	static constexpr GLuint model0 = 4, model1 = 5, model2 = 6, model3 = 7;
-	static constexpr GLuint normat0 = 8, normat1 = 9, normat2 = 10;
-	static constexpr GLuint diffuse = 11, specShine = 12, texid = 13, show = 14;
-
-protected:
-	GLuint program;
-
-public:
-	Shader(const string& srcVert, const string& srcFrag, const char* name);
-	~Shader();
-
-	operator GLuint() const;
-
-protected:
-	static pairStr splitGlobMain(const string& src);
-
+	static constexpr uint corners = 4;
 private:
-	static GLuint loadShader(const string& source, GLenum type, const char* name);
-	template <class C, class I> static void checkStatus(GLuint id, GLenum stat, C check, I info, const string& name);
+	static constexpr uint stride = 2;
+	static constexpr float vertices[corners * stride] = {
+		0.f, 0.f,
+		1.f, 0.f,
+		0.f, 1.f,
+		1.f, 1.f
+	};
+
+	GLuint vao, vbo;
+
+public:
+	void init();
+	void free();
+
+	GLuint getVao() const;
+	static void draw(const ShaderGui* sgui, const Rect& rect, const vec4& color, GLuint tex, float z = 0.f);
+	static void draw(const ShaderGui* sgui, const Rect& rect, const Rect& frame, const vec4& color, GLuint tex, float z = 0.f);
+	static void draw(const ShaderGui* sgui, const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z = 0.f);
 };
 
-inline Shader::~Shader() {
-	glDeleteProgram(program);
+inline GLuint Quad::getVao() const {
+	return vao;
 }
 
-inline Shader::operator GLuint() const {
-	return program;
+inline void Quad::draw(const ShaderGui* sgui, const Rect& rect, const vec4& color, GLuint tex, float z) {
+	draw(sgui, rect, vec4(0.f, 0.f, 1.f, 1.f), color, tex, z);
 }
 
-class ShaderGeom : public Shader {
-public:
-	static constexpr char fileVert[] = "geom.vert";
-	static constexpr char fileFrag[] = "geom.frag";
-
-	GLint proj, view;
-
-	ShaderGeom(const string& srcVert, const string& srcFrag);
-};
-
-class ShaderDepth : public Shader {
-public:
-	static constexpr char fileVert[] = "depth.vert";
-	static constexpr char fileFrag[] = "depth.frag";
-
-	GLint pvTrans, pvId;
-	GLint lightPos, farPlane;
-
-	ShaderDepth(const string& srcVert, const string& srcFrag);
-};
-
-class ShaderSsao : public Shader {
-public:
-	static constexpr char fileVert[] = "frame.vert";
-	static constexpr char fileFrag[] = "ssao.frag";
-	static constexpr GLenum noiseTexa = GL_TEXTURE11;
-
-	GLint proj, noiseScale, samples;
-	GLint vposMap, normMap, noiseMap;
-private:
-	GLuint texNoise;
-
-	static constexpr int sampleSize = 64;
-	static constexpr uint noiseSize = 16;
-
-public:
-	ShaderSsao(const string& srcVert, const string& srcFrag);
-	~ShaderSsao();
-};
-
-inline ShaderSsao::~ShaderSsao() {
-	glDeleteTextures(1, &texNoise);
+inline void Quad::draw(const ShaderGui* sgui, const Rect& rect, const Rect& frame, const vec4& color, GLuint tex, float z) {
+	Rect isct = rect.intersect(frame);
+	draw(sgui, isct, vec4(float(isct.x - rect.x) / float(rect.w), float(isct.y - rect.y) / float(rect.h), float(isct.w) / float(rect.w), float(isct.h) / float(rect.h)), color, tex, z);
 }
-
-class ShaderBlur : public Shader {
-public:
-	static constexpr char fileVert[] = "frame.vert";
-	static constexpr char fileFrag[] = "blur.frag";
-
-	GLint colorMap;
-
-	ShaderBlur(const string& srcVert, const string& srcFrag);
-};
-
-class ShaderLight : public Shader {
-public:
-	static constexpr char fileVert[] = "light.vert";
-	static constexpr char fileFrag[] = "light.frag";
-	static constexpr GLenum depthTexa = GL_TEXTURE10;
-
-	GLint pview, viewPos;
-	GLint screenSize, farPlane;
-	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
-	GLint colorMap, normaMap, depthMap, ssaoMap;
-
-	ShaderLight(const string& srcVert, const string& srcFrag, const Settings* sets);
-
-private:
-	static string editSource(const string& src, const Settings* sets);
-};
-
-class ShaderGauss : public Shader {
-public:
-	static constexpr char fileVert[] = "frame.vert";
-	static constexpr char fileFrag[] = "gauss.frag";
-
-	GLuint colorMap, horizontal;
-
-	ShaderGauss(const string& srcVert, const string& srcFrag);
-};
-
-class ShaderFinal : public Shader {
-public:
-	static constexpr char fileVert[] = "frame.vert";
-	static constexpr char fileFrag[] = "final.frag";
-
-	GLuint sceneMap, bloomMap;
-
-	ShaderFinal(const string& srcVert, const string& srcFrag);
-};
-
-class ShaderSkybox : public Shader {
-public:
-	static constexpr char fileVert[] = "skybox.vert";
-	static constexpr char fileFrag[] = "skybox.frag";
-
-	GLint pview, viewPos;
-	GLuint skyMap;
-
-	ShaderSkybox(const string& srcVert, const string& srcFrag, const Settings* sets);
-
-private:
-	static string editSource(const string& src, const Settings* sets);
-};
-
-class ShaderGui : public Shader {
-public:
-	static constexpr char fileVert[] = "gui.vert";
-	static constexpr char fileFrag[] = "gui.frag";
-
-	GLint pview, rect, uvrc, zloc;
-	GLint color, texsamp;
-	Quad wrect;
-
-	ShaderGui(const string& srcVert, const string& srcFrag);
-};
 
 // loads different font sizes from one font and handles basic log display
 class FontSet {
 private:
 	static constexpr char fontTestString[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`~!@#$%^&*()_+-=[]{}'\\\"|;:,.<>/?";
 	static constexpr float fallbackScale = 0.9f;
+#ifdef OPENGLES
+	static constexpr SDL_Color textColor = { 37, 193, 255, 255 };	// don't wanna deal with OpenGL ES's pixel format bullshit and extension checks are fucked on Android, thus simply invert that shit
+#else
 	static constexpr SDL_Color textColor = { 255, 193, 37, 255 };
+#endif
 
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
+	TTF_Font* font = nullptr;
+#else
 	umap<int, TTF_Font*> fonts;
 	vector<uint8> fontData;
+	Settings::Hinting hinting;
+#endif
 	float heightScale;	// for scaling down font size to fit requested height
+	int maxTexSize;
 
 public:
 	~FontSet();
 
-	string init(string name);	// returns name or a chosen fallback name
+	string init(string name, Settings::Hinting hint);	// returns name or a chosen fallback name
+#if !SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	void clear();
+#endif
 	int length(const char* text, int height);
+	int length(char* text, int height, sizet length);
 	bool hasGlyph(uint16 ch);
+	void setHinting(Settings::Hinting hinting);
+	int getMaxTexSize() const;
+	void setMaxTexSize(int texLimit, int winLimit);
 	Texture render(const char* text, int height);
+	Texture render(const char* text, int height, SDL_Surface*& img, ivec2 offset);
 	Texture render(const char* text, int height, uint length);
+	Texture render(const char* text, int height, uint length, SDL_Surface*& img, ivec2 offset);
 
 private:
 	TTF_Font* load(const string& name);
 	TTF_Font* findFile(const string& name, const vector<string>& available);
 	TTF_Font* getFont(int height);
+	Texture finishRender(SDL_Surface* img);
 };
 
 inline FontSet::~FontSet() {
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
+	TTF_CloseFont(font);
+#else
 	clear();
+#endif
+}
+
+inline int FontSet::getMaxTexSize() const {
+	return maxTexSize;
+}
+
+inline void FontSet::setMaxTexSize(int texLimit, int winLimit) {
+	maxTexSize = std::min(texLimit, int(ceilPower2(winLimit)));
 }
 
 inline Texture FontSet::render(const char* text, int height) {
-	return TTF_RenderUTF8_Blended(getFont(height), text, textColor);
+	return finishRender(TTF_RenderUTF8_Blended(getFont(height), text, textColor));
 }
 
 inline Texture FontSet::render(const char* text, int height, uint length) {
-	return TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length);
+	return finishRender(TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length));
 }
 
 // handles window events and contains video settings
@@ -247,6 +167,7 @@ private:
 
 	struct Loader {
 		static constexpr int logSize = 18;
+		static constexpr ivec2 logMargin = ivec2(8, 4);
 
 		enum class State : uint8 {
 			start,
@@ -258,6 +179,9 @@ private:
 		};
 
 		string logStr;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+		Texture blank, title;
+#endif
 		State state = State::start;
 
 		void addLine(const string& str, WindowSys* win);
@@ -275,16 +199,20 @@ private:
 	ShaderSsao* ssao;
 	ShaderBlur* blur;
 	ShaderLight* light;
+	ShaderBrights* brights;
 	ShaderGauss* gauss;
 	ShaderFinal* sfinal;
 	ShaderSkybox* skybox;
 	ShaderGui* gui;
 	FontSet* fonts;
-	ivec2 screenView, guiView;
+	Quad wrect;
+	ivec2 screenView;
+	int windowHeight, titleBarHeight;
 	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
 	bool run;			// whether the loop in which the program runs should continue
 	uint8 cursorHeight;
+	uint8 maxMsamples;
 #ifdef __EMSCRIPTEN__
 	uptr<Loader> loader;
 	void (WindowSys::*loopFunc)();
@@ -295,14 +223,16 @@ public:
 	void close();
 
 	ivec2 getScreenView() const;
-	ivec2 getGuiView() const;
+	int getTitleBarHeight() const;
 	uint8 getCursorHeight() const;
+	ivec2 mousePos();
 	vector<ivec2> windowSizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
 	int displayID() const;
-	void setTextCapture(bool on);
+	void setTextCapture(Rect* field);
 	void setScreen();
-	void setVsync(Settings::VSync vsync);
+	void setSwapInterval();
+	void setMultisampling();
 	void setGamma(float gamma);
 	void resetSettings();
 	void reloadVaryingShaders();
@@ -318,12 +248,15 @@ public:
 	const ShaderSsao* getSsao() const;
 	const ShaderBlur* getBlur() const;
 	const ShaderLight* getLight() const;
+	const ShaderBrights* getBrights() const;
 	const ShaderGauss* getGauss() const;
 	const ShaderFinal* getSfinal() const;
 	const ShaderSkybox* getSkybox() const;
 	const ShaderGui* getGui() const;
+	const Quad* getWrect() const;
 	SDL_Window* getWindow();
 	float getDeltaSec() const;
+	uint8 getMaxMsamples() const;
 
 private:
 	void init(const Arguments& args);
@@ -335,14 +268,16 @@ private:
 #endif
 	void createWindow();
 	void destroyWindow();
-	void handleEvent(const SDL_Event& event);	// pass events to their specific handlers
+	void handleEvent(const SDL_Event& event);
 	void eventWindow(const SDL_WindowEvent& winEvent);
-	void setSwapInterval();
+	static SDL_HitTestResult SDLCALL eventWindowHit(SDL_Window* win, const SDL_Point* area, void* data);
 	bool trySetSwapInterval();
 	void setWindowMode();
 	void updateView();
+	void setTitleBarHeight();	// must be followed by updateView() to update the viewport
 	bool checkCurDisplay();
 	template <class T> static void checkResolution(T& val, const vector<T>& modes);
+	static int estimateSystemCursorSize();
 #if !defined(NDEBUG) && !defined(__APPLE__) && (!defined(OPENGLES) || OPENGLES == 32)
 #ifdef _WIN32
 	static void __stdcall debugMessage(GLenum source, GLenum type, uint id, GLenum severity, GLsizei length, const char* message, const void* userParam);
@@ -360,8 +295,8 @@ inline ivec2 WindowSys::getScreenView() const {
 	return screenView;
 }
 
-inline ivec2 WindowSys::getGuiView() const {
-	return guiView;
+inline int WindowSys::getTitleBarHeight() const {
+	return titleBarHeight;
 }
 
 inline uint8 WindowSys::getCursorHeight() const {
@@ -412,6 +347,10 @@ inline const ShaderLight* WindowSys::getLight() const {
 	return light;
 }
 
+inline const ShaderBrights* WindowSys::getBrights() const {
+	return brights;
+}
+
 inline const ShaderGauss* WindowSys::getGauss() const {
 	return gauss;
 }
@@ -428,12 +367,20 @@ inline const ShaderGui* WindowSys::getGui() const {
 	return gui;
 }
 
+inline const Quad* WindowSys::getWrect() const {
+	return &wrect;
+}
+
 inline SDL_Window* WindowSys::getWindow() {
 	return window;
 }
 
 inline float WindowSys::getDeltaSec() const {
 	return dSec;
+}
+
+inline uint8 WindowSys::getMaxMsamples() const {
+	return maxMsamples;
 }
 
 inline int WindowSys::displayID() const {

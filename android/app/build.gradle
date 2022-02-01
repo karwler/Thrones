@@ -7,13 +7,13 @@ if (buildAsApplication) {
 }
 
 android {
-	compileSdkVersion 31
+	compileSdkVersion 29
 	defaultConfig {
 		if (buildAsApplication) {
 			applicationId "org.duravia.thrones"
 		}
 		minSdkVersion 19
-		targetSdkVersion 31
+		targetSdkVersion 29
 		versionCode 7
 		versionName "0.5.3"
 		externalNativeBuild {

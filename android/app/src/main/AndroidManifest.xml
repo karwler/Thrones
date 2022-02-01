@@ -14,7 +14,7 @@
 
 	<application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:allowBackup="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:hardwareAccelerated="true">
 		<meta-data android:name="SDL_ENV.SDL_ACCELEROMETER_AS_JOYSTICK" android:value="0"/>
-		<activity android:name="Thrones" android:label="@string/app_name" android:alwaysRetainTaskState="true" android:launchMode="singleInstance" android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" android:preferMinimalPostProcessing="true" android:screenOrientation="landscape">
+		<activity android:name="Thrones" android:label="@string/app_name" android:alwaysRetainTaskState="true" android:launchMode="singleInstance" android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" android:screenOrientation="landscape">
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN" />
 				<category android:name="android.intent.category.LAUNCHER" />

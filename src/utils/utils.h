@@ -11,6 +11,8 @@ enum class UserCode : int32 {
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 void checkFramebufferStatus(const string& name);
+uint32 ceilPower2(uint32 val);
+SDL_Surface* takeScreenshot(ivec2 res);
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format == b.format && a.w == b.w && a.h == b.h && a.refresh_rate == b.refresh_rate;
@@ -23,12 +25,6 @@ bool operator<(const vec<2, T, Q>& a, const vec<2, T, Q>& b) {
 	return a.y < b.y || (a.y == b.y && a.x < b.x);
 }
 
-}
-
-inline ivec2 mousePos() {
-	ivec2 p;
-	SDL_GetMouseState(&p.x, &p.y);
-	return p;
 }
 
 inline void pushEvent(UserCode code, void* data1 = nullptr, void* data2 = nullptr) {
@@ -67,7 +63,6 @@ vector<string> sortNames(const umap<string, T>& vmap) {
 }
 
 // SDL_Rect wrapper
-
 struct Rect : SDL_Rect {
 	Rect() = default;
 	constexpr Rect(int n);
@@ -136,35 +131,30 @@ inline Rect Rect::intersect(const Rect& rect) const {
 }
 
 // OpenGL texture wrapper for widgets
-
 class Texture {
-public:
-	static constexpr GLenum texa = GL_TEXTURE0;
-
-#ifdef OPENGLES
-	static inline bool bgraSupported = false;
-#endif
 private:
+#ifdef OPENGLES
+	static constexpr GLenum textPixFormat = GL_RGBA;
+#else
+	static constexpr GLenum textPixFormat = GL_BGRA;
+#endif
+
 	GLuint id = 0;
 	ivec2 res = ivec2(0, 0);
 
 public:
 	Texture() = default;
-	Texture(SDL_Surface* img, GLenum pform);	// for images
-	Texture(SDL_Surface* img);					// for text
+	Texture(const SDL_Surface* img, GLenum pform);	// for images
+	Texture(const SDL_Surface* img, int limit, ivec2 offset);	// for text
 	Texture(array<uint8, 4> color);
 
 	void close();
 	void free();
+	void update(const SDL_Surface* img, ivec2 offset);	// for text
 
 	operator GLuint() const;
 	ivec2 getRes() const;
 	static pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
-
-	void reload(const SDL_Surface* img, GLenum pform);
-private:
-	void load(const SDL_Surface* img, GLenum pform, GLint wrap, GLint filter);
-	void upload(const SDL_Surface* img, GLenum pform);
 };
 
 inline void Texture::free() {
@@ -180,7 +170,6 @@ inline ivec2 Texture::getRes() const {
 }
 
 // OpenGL texture wrapper for 3D objects
-
 class TextureSet {
 public:
 	struct Element {
@@ -197,10 +186,6 @@ public:
 		array<pair<SDL_Surface*, GLenum>, 6> sky;	// image and format
 		ivec2 cres = ivec2(0), nres = ivec2(0);
 	};
-
-	static constexpr GLenum colorTexa = GL_TEXTURE1;
-	static constexpr GLenum normalTexa = GL_TEXTURE2;
-	static constexpr GLenum skyboxTexa = GL_TEXTURE3;
 
 private:
 	GLuint clr = 0, nrm = 0, sky = 0;
@@ -226,33 +211,46 @@ inline int TextureSet::get(const string& name) const {
 	return refs.at(name);
 }
 
-// Render data group
+// size of a widget
+struct Size {
+	enum Mode {
+		rela,	// relative to parent size
+		abso,	// relative to window height
+		calc	// use the calculation function
+	};
 
-class FrameSet {
-public:
-	static constexpr GLenum vposTexa = GL_TEXTURE4;
-	static constexpr GLenum normTexa = GL_TEXTURE5;
-	static constexpr GLenum ssaoTexa = GL_TEXTURE6;
-	static constexpr GLenum blurTexa = GL_TEXTURE7;
-	static constexpr GLenum colorTexa = GL_TEXTURE8;
-	static constexpr GLenum brightTexa = GL_TEXTURE9;
+	union {
+		float val;
+		int (*cfn)(const Widget*);
+	};
+	Mode mod;
 
-	GLuint fboGeom = 0, texPosition = 0, texNormal = 0, rboGeom = 0;
-	GLuint fboSsao = 0, texSsao = 0;
-	GLuint fboBlur = 0, texBlur = 0;
-	GLuint fboLight = 0, texColor = 0, texBright = 0, rboLight = 0;
-	array<GLuint, 2> fboGauss{}, texGauss{};
+	constexpr Size(float size = 1.f, Mode mode = rela);
+	constexpr Size(int (*cfunc)(const Widget*));
 
-	FrameSet(const Settings* sets, ivec2 res);
-
-	void free();
-
-private:
-	static GLuint makeTexture(ivec2 res, GLint iform, GLenum pform, GLenum active, GLint filter = GL_NEAREST);
+	constexpr operator float() const;
+	int operator ()(const Widget* wgt) const;
 };
 
-// for Object and Widget
+constexpr Size::Size(float size, Mode mode) :
+	val(size),
+	mod(mode)
+{}
 
+constexpr Size::Size(int (*cfunc)(const Widget*)) :
+	cfn(cfunc),
+	mod(calc)
+{}
+
+constexpr Size::operator float() const {
+	return val;
+}
+
+inline int Size::operator()(const Widget* wgt) const {
+	return cfn(wgt);
+}
+
+// for Object and Widget
 class Direction {
 public:
 	enum Dir : uint8 {
@@ -299,6 +297,7 @@ constexpr bool Direction::negative() const {
 	return !positive();
 }
 
+// base for user interactable widgets and objects
 class Interactable {
 public:
 	Interactable() = default;
@@ -309,7 +308,6 @@ public:
 	Interactable& operator=(const Interactable&) = default;
 	Interactable& operator=(Interactable&&) = default;
 
-	virtual void drawTop() const {}
 	virtual void tick(float) {}
 	virtual void onClick(ivec2, uint8) {}
 	virtual void onHold(ivec2, uint8) {}
@@ -320,7 +318,8 @@ public:
 	virtual void onScroll(ivec2) {}
 	virtual void onKeyDown(const SDL_KeyboardEvent&) {}
 	virtual void onKeyUp(const SDL_KeyboardEvent&) {}
-	virtual void onText(const char*) {}
+	virtual void onCompose(const char*, uint&) {}
+	virtual void onText(const char*, uint&) {}
 	virtual void onJButtonDown(uint8) {}
 	virtual void onJButtonUp(uint8) {}
 	virtual void onJHatDown(uint8, uint8) {}
@@ -334,6 +333,19 @@ public:
 	virtual void onNavSelect(Direction dir);
 	virtual void onCancelCapture() {}	// should only be called by the Scene when resetting the capture
 };
+
+// audio file data
+struct Sound {
+	uint8* data;
+	uint32 length;
+
+	bool convert(const SDL_AudioSpec& srcs, const SDL_AudioSpec& dsts);
+	void free();
+};
+
+inline void Sound::free() {
+	SDL_FreeWAV(data);
+}
 
 // geometry?
 

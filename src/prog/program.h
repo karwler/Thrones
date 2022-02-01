@@ -5,6 +5,48 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/fetch.h>
+#elif !defined(__ANDROID__)
+#include <curl/curl.h>
+#endif
+
+#ifndef __ANDROID__
+class WebFetchProc {
+private:
+	string url;
+	string regex;
+#ifndef __EMSCRIPTEN__
+	string libVersion;
+#endif
+	string progVersion;
+	string error;
+#ifndef __EMSCRIPTEN__
+	SDL_Thread* proc = nullptr;
+	SDL_atomic_t arun = { 0 };
+#endif
+
+public:
+	WebFetchProc(string link, string rver);
+#ifndef __EMSCRIPTEN__
+	~WebFetchProc();
+#endif
+
+	bool start();
+#ifdef __EMSCRIPTEN__
+	const string& finish(string& pver);
+#else
+	const string& finish(string& lver, string& pver);
+#endif
+private:
+#ifdef __EMSCRIPTEN__
+	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
+	static void fetchVersionFail(emscripten_fetch_t* fetch);
+#else
+	static int fetchVersion(void* data);
+	static sizet writeText(char* ptr, sizet size, sizet nmemb, void* userdata);
+	static int checkProgress(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);
+#endif
+	void pushFetchedVersion(const string& html);
+};
 #endif
 
 // handles the front-end
@@ -30,9 +72,11 @@ private:
 	Netcp* netcp = nullptr;
 	Game game;
 	GuiGen gui;
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	SDL_Thread* proc = nullptr;
+#ifndef __ANDROID__
+	uptr<WebFetchProc> wfproc;
+#ifndef __EMSCRIPTEN__
 	string curlVersion = "not found";
+#endif
 #endif
 	string chatName;
 	string latestVersion;
@@ -41,18 +85,6 @@ private:
 	static constexpr float ftimeUpdateDelay = 0.5f;
 	static constexpr float transAnimTime = 0.5f;
 	static constexpr float pieceYDown = -2.f;
-
-#ifndef __ANDROID__
-	struct WebFetchData {
-		string url;
-		string regex;
-		string libVersion;
-		string progVersion;
-		string error;
-
-		WebFetchData(string link, string rver);
-	};
-#endif
 
 public:
 	~Program();
@@ -172,6 +204,7 @@ public:
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
 	void eventShowSettings(Button* but = nullptr);
+	void eventOpenShowSettings(Button* but = nullptr);
 	void eventSetDisplay(Button* but);
 	void eventSetScreen(uint id, const string& str);
 	void eventSetWindowSize(uint id, const string& str);
@@ -180,6 +213,7 @@ public:
 	void eventSetSamples(uint id, const string& str);
 	void eventSetTexturesScaleSL(Button* but);
 	void eventSetTextureScaleLE(Button* but);
+	void eventUpdateShadowResSL(Button* but);
 	void eventSetShadowResSL(Button* but);
 	void eventSetShadowResLE(Button* but);
 	void eventSetSoftShadows(Button* but);
@@ -201,6 +235,7 @@ public:
 	void eventSetDeadzoneLE(Button* but);
 	void eventSetResolveFamily(uint id, const string& str);
 	void eventSetFont(uint id, const string& str);
+	void eventSetFontHinting(uint id, const string& str);
 	void eventSetInvertWheel(Button* but);
 	void eventAddKeyBinding(Button* but);
 	void eventSetNewBinding(Button* but);
@@ -216,6 +251,7 @@ public:
 	// other
 	void eventClosePopup(Button* but = nullptr);
 	void eventCloseScrollingPopup(Button* but = nullptr);
+	void eventMinimize(Button* but = nullptr);
 	void eventExit(Button* but = nullptr);
 	void eventSLUpdateLE(Button* but);
 	void eventPrcSliderUpdate(Button* but);
@@ -256,18 +292,9 @@ private:
 	template <class T, class... A> void setStateWithChat(A&&... args);
 	void resetLayoutsWithChat();
 	tuple<BoardObject*, Piece*, svec2> pickBob() const;	// returns selected object, occupant, position
-
-#ifdef __EMSCRIPTEN__
-	static void fetchVersionSucceed(emscripten_fetch_t* fetch);
-	static void fetchVersionFail(emscripten_fetch_t* fetch);
-#elif !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	static void openDoc(const char* file);
 	static void openDocNative(const string& path);
-	static int fetchVersion(void* data);
-	static sizet writeText(char* ptr, sizet size, sizet nmemb, void* userdata);
-#endif
-#ifndef __ANDROID__
-	static void pushFetchedVersion(const string& html, WebFetchData* wfd);
 #endif
 };
 

@@ -4,39 +4,6 @@
 #include <iostream>
 #include <fstream>
 
-// struct tm wrapper
-struct DateTime {
-	uint8 sec, min, hour;
-	uint8 day, month;
-	uint8 wday;
-	uint16 year;
-
-	DateTime() = default;
-	DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay);
-
-	static DateTime now();
-	string timeString(char ts = '-') const;
-	string dateString(char ds = '-') const;
-	string toString(char ts = '-', char sep = '_', char ds = '-') const;
-	bool datecmp(const DateTime& date) const;
-};
-
-inline string DateTime::timeString(char ts) const {
-	return toStr(hour, 2) + ts + toStr(min, 2) + ts + toStr(sec, 2);
-}
-
-inline string DateTime::dateString(char ds) const {
-	return toStr(year) + ds + toStr(month, 2) + ds + toStr(day, 2);
-}
-
-inline string DateTime::toString(char ts, char sep, char ds) const {
-	return dateString(ds) + sep + timeString(ts);
-}
-
-inline bool DateTime::datecmp(const DateTime& date) const {
-	return day == date.day && month == date.month && year == date.year;
-}
-
 // for simultaneous console and file output
 class Log {
 public:

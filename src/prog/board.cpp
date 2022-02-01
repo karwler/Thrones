@@ -1,11 +1,9 @@
 #include "board.h"
 #include "program.h"
 #include "engine/scene.h"
+#include <glm/gtc/matrix_inverse.hpp>
 
 Board::Board(Scene* sceneSys, Settings* settings) :
-	ground(vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f)),
-	board(vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f)),
-	bgrid(vec3(0.f)),
 	screen(vec3(Config::boardWidth / 2.f, screenYUp, Config::boardWidth / 2.f)),
 	tileTops{
 		BoardObject(gtop(svec2(UINT16_MAX), 0.0005f), 0.f, 0.f),
@@ -19,20 +17,17 @@ Board::Board(Scene* sceneSys, Settings* settings) :
 {
 	Mesh* meshGround = scene->mesh("ground");
 	Mesh* meshTable = scene->mesh("table");
-	Mesh* meshGrid = scene->mesh("grid");
 	Mesh* meshScreen = scene->mesh("screen");
 	Mesh* meshPlane = scene->mesh("plane");
 	Mesh* meshOutline = scene->mesh("outline");
 	meshGround->allocate(1);
 	meshTable->allocate(1);
-	meshGrid->allocate(1);
 	meshScreen->allocate(1);
 	meshPlane->allocate(tileTops.size(), true);
 	meshOutline->allocate(1);
 
-	ground.init(meshGround, 0, scene->material("ground"), scene->objTex("grass"));
-	board.init(meshTable, 0, scene->material("board"), scene->objTex("rock"));
-	bgrid.init(meshGrid, 0, scene->material("grid"), scene->objTex());
+	Object::init(meshGround, 0, vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->material("ground"), scene->objTex("grass"));
+	Object::init(meshTable, 0, vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->material("board"), scene->objTex("rock"));
 	screen.init(meshScreen, 0, scene->material("screen"), scene->objTex("wall"));
 	for (uint8 i = 0; i < tileTops.size(); ++i)
 		tileTops[i].init(meshPlane, i, scene->material("tile"), scene->objTex(TileTop(i).name()), false);
@@ -40,7 +35,6 @@ Board::Board(Scene* sceneSys, Settings* settings) :
 
 	meshGround->updateInstanceData();
 	meshTable->updateInstanceData();
-	meshGrid->updateInstanceData();
 	meshScreen->updateInstanceData();
 	meshPlane->updateInstanceData();
 	meshPlane->updateInstanceDataTop();
@@ -146,19 +140,18 @@ void Board::setPieces(Piece* pces, float rot) {
 }
 
 void Board::setBgrid() {
-	vector<Vertex> verts((config.homeSize.x + boardHeight + 2) * 2);
-	vector<uint16> elems(verts.size());
-	for (sizet i = 0; i < elems.size(); ++i)
-		elems[i] = i;
+	Mesh* mesh = scene->mesh("grid");
+	mesh->allocate(config.homeSize.x - 1 + boardHeight - 1);
+	const Material* matl = scene->material("grid");
+	int tex = scene->objTex();
+	vec3 offset(-(objectSize / 2.f), 0.f, -(objectSize / 2.f));
 
-	uint16 i = 0;
-	for (uint16 x = 1; x < config.homeSize.x; ++x)
-		for (uint16 y : { uint16(0), boardHeight })
-			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f), vec3(1.f, 0.f, 0.f));
-	for (uint16 y = 1; y < boardHeight; ++y)
-		for (uint16 x : { uint16(0), config.homeSize.x })
-			verts[i++] = Vertex(gtop(svec2(x, y), -0.018f) + vec3(-(objectSize / 2.f), 0.f, -(objectSize / 2.f)), Camera::up, vec2(0.f), vec3(1.f, 0.f, 0.f));
-	scene->mesh("grid")->updateVertexData(verts, elems);
+	uint i = 0;
+	for (uint16 x = 1; x < config.homeSize.x; ++x, ++i)
+		Object::init(mesh, i, gtop(svec2(x, 0)) + offset, vec3(0.f), vec3(1.f), matl, tex);
+	for (uint16 y = 1; y < boardHeight; ++y, ++i)
+		Object::init(mesh, i, gtop(svec2(0, y)) + offset, vec3(0.f, glm::pi<float>(), 0.f), vec3(1.f), matl, tex);
+	mesh->updateInstanceData();
 }
 
 void Board::uninitObjects() {

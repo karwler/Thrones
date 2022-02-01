@@ -1,21 +1,20 @@
 #include "audioSys.h"
 #include "fileSys.h"
-#include <iostream>
 
 AudioSys::AudioSys(const uint8& avolume) :
 	volume(avolume)
 {
-	SDL_AudioSpec spec = Sound::defaultSpec;
+	SDL_AudioSpec spec = { 22050, AUDIO_S16, 1, 0, 4096, 0, 0, nullptr, nullptr };	// TODO: adjust values
 	spec.callback = callback;
 	spec.userdata = this;
 	if (device = SDL_OpenAudioDevice(nullptr, SDL_FALSE, &spec, &aspec, SDL_AUDIO_ALLOW_ANY_CHANGE); !device)
 		throw std::runtime_error("failed to initialize audio system");
 	if (aspec.freq != spec.freq)
-		std::cout << "audio frequency changed from " << spec.freq << " to " << aspec.freq << std::endl;
+		logInfo("audio frequency changed from ", spec.freq, " to ", aspec.freq);
 	if (aspec.format != spec.format)
-		std::cout << "audio format changed from " << std::hex << std::uppercase << spec.format << " to " << aspec.format << std::nouppercase << std::dec << std::endl;
+		logInfo("audio format changed from ", toStr<16>(spec.format), " to ", aspec.format);
 	if (aspec.channels != spec.channels)
-		std::cout << "audio channels changed from " << spec.channels << " to " << aspec.channels << std::endl;
+		logInfo("audio channels changed from ", spec.channels, " to ", aspec.channels);
 	sounds = FileSys::loadAudios(aspec);
 }
 
@@ -37,7 +36,7 @@ void AudioSys::play(const string& name) {
 	SDL_PauseAudioDevice(device, SDL_FALSE);
 }
 
-void AudioSys::callback(void* udata, uint8* stream, int len) {
+void SDLCALL AudioSys::callback(void* udata, uint8* stream, int len) {
 	AudioSys* as = static_cast<AudioSys*>(udata);
 	SDL_memset(stream, 0, len);
 	if (uint32(len) > as->alen) {

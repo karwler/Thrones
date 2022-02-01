@@ -47,18 +47,10 @@ public:
 	static constexpr char fileRules[] = "rules.html";
 	static constexpr char fileDocs[] = "docs.html";
 private:
-	static constexpr char fileAudios[] = "audio.dat";
 	static constexpr char fileMaterials[] = "materials.dat";
-	static constexpr char fileObjects[] = "objects.dat";
-	static constexpr char fileShaders[] = "shaders.dat";
-	static constexpr char fileTextures[] = "textures.dat";
 	static constexpr char fileConfigs[] = "game.ini";
 	static constexpr char fileSettings[] = "setting.ini";
 	static constexpr char fileSetups[] = "setup.ini";
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
-	static constexpr char filePrimaryFont[] = "romanesque.ttf";
-	static constexpr char fileSecondaryFont[] = "merriweather.otf";
-#endif
 
 	static constexpr char iniTitleSettings[] = "Settings";
 	static constexpr char iniTitleBindings[] = "Bindings";
@@ -82,6 +74,7 @@ private:
 	static constexpr char iniKeywordDeadzone[] = "deadzone";
 	static constexpr char iniKeywordResolveFamily[] = "resolve_family";
 	static constexpr char iniKeywordFont[] = "font";
+	static constexpr char iniKeywordHinting[] = "hinting";
 	static constexpr char iniKeywordInvertWheel[] = "invert_wheel";
 	static constexpr char iniKeywordVersionLookup[] = "version_lookup";
 	static constexpr char iniKeywordAddress[] = "address";
@@ -129,22 +122,21 @@ public:
 	static vector<string> listFonts();
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
-	static vector<Mesh> loadObjects(umap<std::string, uint16>& refs);	// geometry shader must be in use
+	static vector<Mesh> loadObjects(umap<string, uint16>& refs);	// geometry shader must be in use
 	static umap<string, string> loadShaders();
 	static TextureSet loadTextures(umap<string, Texture>& texs, int scale);
 	static TextureSet reloadTextures(umap<string, Texture>& texs, int scale);
-	static vector<uint8> loadFile(const string& file);
+	static void saveScreenshot(SDL_Surface* img);
 
 #ifdef __EMSCRIPTEN__
 	static bool canRead();
 #endif
 	static string dataPath();
+	static string fontPath();
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	static string docPath();
 #endif
 private:
-	static string configPath(const char* file);
-
 	static void readSetting(void* settings, IniLine& il);
 	static void readShadows(const char* str, Settings& sets);
 	static void readColors(const char* str, Settings& sets);
@@ -159,12 +151,12 @@ private:
 	static void writeCapturers(string& text, uint16 capturers);
 	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
-	static void writeFile(const string& path, const string& text);
+	static void saveUserFile(const string& drc, const char* file, const string& text);
 	static TextureSet loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale);
-	static void loadObjectTexture(SDL_RWops* ifh, SDL_Surface* img, string&& name, GLenum ifmt, TextureSet::Import& imp, int scale);
-	static pair<SDL_Surface*, GLenum> loadImageBlock(SDL_RWops* ifh, const string& name);
-	template <class T = string> static T readFile(const string& file);
+	static void loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, string::iterator num, GLenum ifmt, TextureSet::Import& imp, int scale);
+	template <class F> static void listOperateDirectory(const string& dirPath, F func);
 	template <class T, class F> static string strJoin(const vector<T>& vec, F conv, char sep = ' ');
+	static string::iterator fileLevelPos(string& str);
 };
 
 inline string FileSys::dataPath() {
@@ -173,6 +165,10 @@ inline string FileSys::dataPath() {
 #else
 	return dirBase + "share/thrones/";
 #endif
+}
+
+inline string FileSys::fontPath() {
+	return dataPath() + "fonts/";
 }
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
@@ -184,7 +180,3 @@ inline string FileSys::docPath() {
 #endif
 }
 #endif
-
-inline string FileSys::configPath(const char* file) {
-	return dirConfig + file;
-}

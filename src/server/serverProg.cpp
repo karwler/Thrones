@@ -1,5 +1,5 @@
-#include "log.h"
 #include "server.h"
+#include "log.h"
 #include <csignal>
 #include <random>
 #ifdef _WIN32

@@ -1,5 +1,19 @@
 #include "tests.h"
 
+static void testCeilPower2() {
+	assertEqual(ceilPower2(0), 0u);
+	assertEqual(ceilPower2(1), 1u);
+	assertEqual(ceilPower2(2), 2u);
+	assertEqual(ceilPower2(3), 4u);
+	assertEqual(ceilPower2(4), 4u);
+	assertEqual(ceilPower2(12), 16u);
+	assertEqual(ceilPower2(16), 16u);
+	assertEqual(ceilPower2(24), 32u);
+	assertEqual(ceilPower2(32), 32u);
+	assertEqual(ceilPower2(1000), 1024u);
+	assertEqual(ceilPower2(1024), 1024u);
+}
+
 static void testRect() {
 	assertEqual(Rect(-1), SDL_Rect({ -1, -1, -1, -1 }));
 	assertEqual(Rect(1, 2, 3, 4), SDL_Rect({ 1, 2, 3, 4 }));
@@ -125,6 +139,7 @@ static void testSortNames() {
 
 void testUtils() {
 	puts("Running Utils tests...");
+	testCeilPower2();
 	testRect();
 	testDirection();
 	testBtom();
@@ -133,6 +148,7 @@ void testUtils() {
 	testSwap();
 	testDeltaSingle();
 	testSwapBits();
+	testCycle();
 	testUniqueSort();
 	testSortNames();
 }

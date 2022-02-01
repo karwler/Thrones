@@ -159,6 +159,7 @@ struct Binding {
 		config,
 		settings,
 		frameCounter,
+		screenshot,
 		selectNext,
 		selectPrev,
 		select0,
@@ -209,6 +210,7 @@ struct Binding {
 		"config",
 		"settings",
 		"frame_counter",
+		"screenshot",
 		"select_next",
 		"select_prev",
 		"select_0",
@@ -259,12 +261,14 @@ struct Binding {
 struct Settings {
 	enum class Screen : uint8 {
 		window,
+		borderlessWindow,
 		borderless,
 		fullscreen,
 		desktop
 	};
 	static constexpr array<const char*, sizet(Screen::desktop)+1> screenNames = {
 		"window",
+		"borderless_window",
 		"borderless",
 		"fullscreen",
 		"desktop"
@@ -279,6 +283,21 @@ struct Settings {
 		"adaptive",
 		"immediate",
 		"synchronized"
+	};
+
+	enum class Hinting : uint8 {
+		normal,
+		light,
+		mono,
+		none,
+		subpixel
+	};
+	static constexpr array<const char*, sizet(Hinting::subpixel)+1> hintingNames = {
+		"normal",
+		"light",
+		"mono",
+		"none",
+		"subpixel"
 	};
 
 	enum class Color : uint8 {
@@ -320,18 +339,21 @@ struct Settings {
 	static constexpr char defaultAddress[] = "94.16.112.206";
 	static constexpr uint8 playerNameLimit = 31;
 	static constexpr char defaultVersionLocation[] = "https://github.com/karwler/Thrones/releases";
-	static constexpr char defaultVersionRegex[] = R"r(<a\s+href="/karwler/Thrones/releases/tag/v(\d+\.\d+\.\d+(\.\d+)?)">)r";
+	static constexpr char defaultVersionRegex[] = R"r(<a\s+.*?href="/karwler/Thrones/releases/tag/v(\d+\.\d+\.\d+(\.\d+)?)".*?>)r";
 	static constexpr char defaultFont[] = "Romanesque";
 #ifdef __ANDROID__
 	static constexpr Screen defaultScreen = Screen::desktop;
-#else
+#elif defined(__EMSCRIPTEN__)
 	static constexpr Screen defaultScreen = Screen::window;
+#else
+	static constexpr Screen defaultScreen = Screen::borderlessWindow;
 #endif
 	static constexpr VSync defaultVSync = VSync::synchronized;
 	static constexpr uint8 shadowBitMax = 13;
 	static constexpr float gammaMax = 2.f;
 	static constexpr uint16 chatLinesMax = 8191;
 	static constexpr svec2 deadzoneLimit = { 256, INT16_MAX - 1 };
+	static constexpr Hinting defaultHinting = Hinting::normal;
 	static constexpr Family defaultFamily = Family::v4;
 	static constexpr Color defaultAlly = Color::brass;
 	static constexpr Color defaultEnemy = Color::tin;
@@ -363,6 +385,7 @@ struct Settings {
 	bool softShadows;
 	bool ssao;
 	bool bloom;
+	Hinting hinting;
 	uint8 avolume;
 	Color colorAlly, colorEnemy;
 	bool scaleTiles, scalePieces;

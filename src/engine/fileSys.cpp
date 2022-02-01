@@ -1,7 +1,6 @@
 #include "fileSys.h"
 #include "inputSys.h"
 #include "utils/objects.h"
-#include <iostream>
 #ifdef __APPLE__
 #include <SDL2_ttf/SDL_ttf.h>
 #else
@@ -11,11 +10,14 @@
 #include <SDL2/SDL_ttf.h>
 #endif
 #endif
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
+#ifdef __ANDROID__
+#include <jni.h>
 #elif defined(_WIN32)
 #include <windows.h>
 #else
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include <dirent.h>
 #include <sys/stat.h>
 #endif
@@ -101,7 +103,6 @@ void FileSys::init(const Arguments& args) {
 		if (const char* path = getenv("HOME"))
 			dirConfig = path + string("/.config/thrones/");
 #endif
-		createDirectories(dirConfig);
 	} else
 		dirConfig = dirBase;
 #endif
@@ -112,7 +113,7 @@ Settings FileSys::loadSettings(InputSys* input) {
 	input->clearBindings();
 	void (*reader)(void*, IniLine&) = readSetting;
 	void* data = &sets;
-	for (IniLine il : readTextLines(readFile(configPath(fileSettings)))) {
+	for (IniLine il : readTextLines(loadFile(dirConfig + fileSettings))) {
 		if (il.type == IniLine::title) {
 			bool bindings = il.prp == iniTitleBindings;
 			reader = bindings ? readBinding : readSetting;
@@ -148,7 +149,7 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 #endif
 #ifndef OPENGLES
 	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMsamples))
-		sets.msamples = std::min(sstoull(il.val), 8ull);
+		sets.msamples = sstoull(il.val);
 	else
 #endif
 	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordShadows))
@@ -181,6 +182,8 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 		sets.resolveFamily = strToEnum(Settings::familyNames, il.val, Settings::defaultFamily);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFont))
 		sets.font = il.val;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordHinting))
+		sets.hinting = strToEnum(Settings::hintingNames, il.val, Settings::defaultHinting);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordInvertWheel))
 		sets.invertWheel = stob(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAddress))
@@ -304,6 +307,7 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(text, iniKeywordDeadzone, toStr(sets.deadzone));
 	IniLine::write(text, iniKeywordResolveFamily, Settings::familyNames[uint8(sets.resolveFamily)]);
 	IniLine::write(text, iniKeywordFont, sets.font);
+	IniLine::write(text, iniKeywordHinting, Settings::hintingNames[uint8(sets.hinting)]);
 	IniLine::write(text, iniKeywordInvertWheel, btos(sets.invertWheel));
 	IniLine::write(text, iniKeywordAddress, sets.address);
 	IniLine::write(text, iniKeywordPort, sets.port);
@@ -342,13 +346,13 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 				return string();
 			}));
 	}
-	writeFile(configPath(fileSettings), text);
+	saveUserFile(dirConfig, fileSettings, text);
 }
 
 umap<string, Config> FileSys::loadConfigs() {
 	umap<string, Config> confs;
 	Config* cit = nullptr;
-	for (IniLine il : readTextLines(readFile(configPath(fileConfigs))))
+	for (IniLine il : readTextLines(loadFile(dirConfig + fileConfigs)))
 		switch (il.type) {
 		case IniLine::title:
 			if (il.prp.length() > Config::maxNameLength)
@@ -463,7 +467,7 @@ void FileSys::saveConfigs(const umap<string, Config>& confs) {
 		writeAmounts(text, iniKeywordPiece, pieceNames, cfg.pieceAmounts);
 		text += linend;
 	}
-	writeFile(configPath(fileConfigs), text);
+	saveUserFile(dirConfig, fileConfigs, text);
 }
 
 void FileSys::writeCapturers(string& text, uint16 capturers) {
@@ -485,7 +489,7 @@ void FileSys::writeAmounts(string& text, const char* word, const array<const cha
 umap<string, Setup> FileSys::loadSetups() {
 	umap<string, Setup> sets;
 	umap<string, Setup>::iterator sit;
-	for (IniLine il : readTextLines(readFile(configPath(fileSetups)))) {
+	for (IniLine il : readTextLines(loadFile(dirConfig + fileSetups))) {
 		if (il.type == IniLine::title)
 			sit = sets.emplace(std::move(il.prp), Setup()).first;
 		else if (il.type == IniLine::prpKeyVal && !sets.empty()) {
@@ -515,83 +519,35 @@ void FileSys::saveSetups(const umap<string, Setup>& sets) {
 			IniLine::write(text, iniKeywordPiece, toStr(pos), pieceNames[uint8(type)]);
 		text += linend;
 	}
-	writeFile(configPath(fileSetups), text);
+	saveUserFile(dirConfig, fileSetups, text);
 }
 
 vector<string> FileSys::listFonts() {
-#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
-	return { filePrimaryFont, fileSecondaryFont };
-#else
-	string dirpath = dataPath();
+	string dirPath = fontPath();
 	vector<string> entries;
-#ifdef _WIN32
-	WIN32_FIND_DATAW data;
-	HANDLE hFind = FindFirstFileW(sstow(dataPath() + '*').c_str(), &data);
-	if (hFind == INVALID_HANDLE_VALUE)
-		return entries;
-
-	do {
-		if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-			string ename = cwtos(data.cFileName);
-			if (TTF_Font* font = TTF_OpenFont((dirpath + ename).c_str(), fontTestHeight)) {
-				TTF_CloseFont(font);
-				entries.push_back(std::move(ename));
-			}
+	listOperateDirectory(dirPath, [&dirPath, &entries](string&& name) {
+		if (TTF_Font* font = TTF_OpenFont((dirPath + name).c_str(), fontTestHeight)) {
+			TTF_CloseFont(font);
+			entries.push_back(std::move(name));
 		}
-	} while (FindNextFileW(hFind, &data));
-	FindClose(hFind);
-#else
-	DIR* directory = opendir(dataPath().c_str());
-	if (!directory)
-		return entries;
-
-	while (dirent* entry = readdir(directory))
-		if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..") && (entry->d_type == DT_REG || entry->d_type == DT_LNK))
-			if (TTF_Font* font = TTF_OpenFont((dirpath + entry->d_name).c_str(), fontTestHeight)) {
-				TTF_CloseFont(font);
-				entries.emplace_back(entry->d_name);
-			}
-	closedir(directory);
-#endif
+	});
 	std::sort(entries.begin(), entries.end(), strnatless);
 	return entries;
-#endif
 }
 
 umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
-	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileAudios).c_str(), defaultReadMode);
-	if (!ifh) {
-		std::cerr << "failed to load sounds" << std::endl;
-		return {};
-	}
-	uint16 size;
-	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Sound> auds(size);
-
-	uint8 ibuf[audioHeaderSize];
-	Sound sound;
-	for (uint16 i = 0; i < size; ++i) {
-		SDL_RWread(ifh, ibuf, sizeof(*ibuf), audioHeaderSize);
-		string name;
-		name.resize(ibuf[0]);
-		sound.channels = ibuf[1];
-		sound.length = readMem<uint32>(ibuf + 2);
-		sound.frequency = readMem<uint16>(ibuf + 6);
-		sound.format = readMem<uint16>(ibuf + 8);
-		sound.samples = readMem<uint16>(ibuf + 10);
-
-		sound.data = static_cast<uint8*>(SDL_malloc(sound.length));
-		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
-		SDL_RWread(ifh, sound.data, sizeof(*sound.data), sound.length);
-		if (sound.convert(spec))
-			auds.emplace(std::move(name), sound);
+	string dirPath = dataPath() + "audio/";
+	umap<string, Sound> audios;
+	listOperateDirectory(dirPath, [&dirPath, &audios, spec](string&& name) {
+		Sound sound;
+		if (SDL_AudioSpec aspec; SDL_LoadWAV((dirPath + name).c_str(), &aspec, &sound.data, &sound.length) && sound.convert(aspec, spec))
+			audios.emplace(delExt(name), sound);
 		else {
 			sound.free();
-			std::cerr << "failed to load " << name << std::endl;
+			logError("failed to load audio ", name);
 		}
-	}
-	SDL_RWclose(ifh);
-	return auds;
+	});
+	return audios;
 }
 
 umap<string, Material> FileSys::loadMaterials() {
@@ -601,11 +557,10 @@ umap<string, Material> FileSys::loadMaterials() {
 
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Material> mtls;
+	umap<string, Material> mtls = { pair(string(), Material()) };
 	mtls.reserve(size + 1);
-	mtls.emplace();
 
-	uint8 len;
+	uint16 len;
 	Material matl;
 	for (uint16 i = 0; i < size; ++i) {
 		SDL_RWread(ifh, &len, sizeof(len), 1);
@@ -621,59 +576,49 @@ umap<string, Material> FileSys::loadMaterials() {
 }
 
 vector<Mesh> FileSys::loadObjects(umap<string, uint16>& refs) {
-	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileObjects).c_str(), defaultReadMode);
-	if (!ifh)
-		throw std::runtime_error("failed to load objects");
+	string dirPath = dataPath() + "objects/";
+	vector<tuple<string, uint, uint>> names;
+	listOperateDirectory(dirPath, [&names](string&& name) {
+		string::iterator num = fileLevelPos(name);
+		names.emplace_back(std::move(name), num - name.begin(), num != name.begin() && num != name.end() ? sstoul(&*num) : UINT_MAX);
+	});
+	std::sort(names.begin(), names.end(), [](const tuple<string, uint, uint>& a, const tuple<string, uint, uint>& b) -> int { return std::get<2>(a) < std::get<2>(b); });
 
-	uint16 size;
-	SDL_RWread(ifh, &size, sizeof(size), 1);
-	vector<Mesh> mshs(size);
-	refs.reserve(size + 1);
+	vector<Mesh> mshs(names.size() + 1);
+	refs.reserve(mshs.size());
+	sizet m = 0;
+	for (const auto& [name, num, level] : names) {
+		SDL_RWops* ifh = SDL_RWFromFile((dirPath + name).c_str(), defaultReadMode);
+		if (!ifh) {
+			logError("failed to load object ", name);
+			continue;
+		}
+		uint16 ibuf[2];
+		SDL_RWread(ifh, ibuf, sizeof(*ibuf), 2);
 
-	uint8 ibuf[objectHeaderSize];
-	for (uint16 i = 0; i < size; ++i) {
-		SDL_RWread(ifh, ibuf, sizeof(*ibuf), objectHeaderSize);
-		string name;
-		name.resize(ibuf[0]);
-		vector<GLushort> elems(readMem<uint16>(ibuf + 1));
-		vector<Vertex> verts(readMem<uint16>(ibuf + 3));
-
-		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
+		vector<GLushort> elems(ibuf[0]);
+		vector<Vertex> verts(ibuf[1]);
 		SDL_RWread(ifh, elems.data(), sizeof(*elems.data()), elems.size());
 		SDL_RWread(ifh, verts.data(), sizeof(*verts.data()), verts.size());
-		mshs[i].init(verts, elems);
-		refs.emplace(std::move(name), i + (i >= 2));
-	}
-	SDL_RWclose(ifh);
+		SDL_RWclose(ifh);
 
-	mshs.emplace(mshs.begin() + 2);
-	mshs[2].shape = GL_LINES;
-	mshs[2].init(vector<Vertex>(), vector<GLushort>());
-	refs.emplace("grid", 2);
+		mshs[m].init(verts, elems);
+		refs.emplace(name.substr(0, num), m);
+		++m;
+	}
+	mshs.resize(m);
 	return mshs;
 }
 
 umap<string, string> FileSys::loadShaders() {
-	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileShaders).c_str(), defaultReadMode);
-	if (!ifh)
-		throw std::runtime_error("failed to load shaders");
-
-	uint8 size;
-	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, string> shds(size);
-
-	uint8 ibuf[shaderHeaderSize];
-	for (uint8 i = 0; i < size; ++i) {
-		SDL_RWread(ifh, ibuf, sizeof(*ibuf), shaderHeaderSize);
-		string name, text;
-		name.resize(ibuf[0]);
-		text.resize(readMem<uint16>(ibuf + 1));
-
-		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
-		SDL_RWread(ifh, text.data(), sizeof(*text.data()), text.length());
-		shds.emplace(std::move(name), std::move(text));
-	}
-	SDL_RWclose(ifh);
+	string dirPath = dataPath() + "shaders/";
+	umap<string, string> shds;
+	listOperateDirectory(dirPath, [&dirPath, &shds](string&& name) {
+		if (string txt = loadFile(dirPath + name); !txt.empty())
+			shds.emplace(std::move(name), std::move(txt));
+		else
+			logError("failed to load shader ", name);
+	});
 	return shds;
 }
 
@@ -683,94 +628,127 @@ TextureSet FileSys::loadTextures(umap<string, Texture>& texs, int scale) {
 }
 
 TextureSet FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
-	return loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLenum fmt) { txv.at(name).reload(img, fmt); }, scale);
+	return loadTextures(texs, [](umap<string, Texture>&, string&&, SDL_Surface*, GLenum) {}, scale);
 }
 
 TextureSet FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale) {
-	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileTextures).c_str(), defaultReadMode);
-	if (!ifh)
-		throw std::runtime_error("failed to load textures");
+	enum TexturePlacement : uint8 {
+		TEXPLACE_NONE,
+		TEXPLACE_WIDGET,
+		TEXPLACE_OBJECT,
+		TEXPLACE_BOTH,
+		TEXPLACE_CUBE
+	};
 
-	scale = 100 / scale;
-	uint16 size;
-	SDL_RWread(ifh, &size, sizeof(size), 1);
+	string dirPath = dataPath() + "textures/";
 	TextureSet::Import imp;
+	scale = 100 / scale;
+	listOperateDirectory(dirPath, [&dirPath, &texs, &imp, inset, scale](string&& name) {
+		string::iterator num = fileLevelPos(name);
+		if (num == name.begin() || num == name.end())
+			return;
+		TexturePlacement place = TexturePlacement(*num - '0');
+		if (place > TEXPLACE_CUBE || (place == TEXPLACE_CUBE && *(num + 1) != '0'))
+			return;
 
-	uint8 ibuf[textureHeaderSize];
-	for (uint16 i = 0; i < size; ++i) {
-		SDL_RWread(ifh, ibuf, sizeof(*ibuf), textureHeaderSize);
-		string name;
-		name.resize(ibuf[1]);
-		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
+		string path = dirPath + name;
+		if (place != TEXPLACE_CUBE) {
+			auto [img, pform] = Texture::pickPixFormat(IMG_Load((path.c_str())));
+			if (!img) {
+				logError("failed to load texture ", path);
+				return;
+			}
 
-		if (ibuf[0] != TEXPLACE_CUBE) {
-			auto [img, pform] = loadImageBlock(ifh, name);
-			if (!img)
-				continue;
-
-			if (ibuf[0] == TEXPLACE_BOTH) {
-				inset(texs, string(name), img, pform);
-				loadObjectTexture(ifh, img, std::move(name), pform, imp, scale);
-			} else if (ibuf[0] & TEXPLACE_OBJECT)
-				loadObjectTexture(ifh, img, std::move(name), pform, imp, scale);
+			if (place == TEXPLACE_BOTH) {
+				inset(texs, string(name.begin(), num), img, pform);
+				loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
+			} else if (place & TEXPLACE_OBJECT)
+				loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
 			else {
-				if (ibuf[0] & TEXPLACE_WIDGET)
-					inset(texs, std::move(name), img, pform);
+				if (place & TEXPLACE_WIDGET)
+					inset(texs, string(name.begin(), num), img, pform);
 				SDL_FreeSurface(img);
 			}
-		} else
-			for (sizet s = 0; s < imp.sky.size(); ++s)
-				if (imp.sky[s] = loadImageBlock(ifh, name); !imp.sky[s].first) {
+		} else {
+			sizet ofs = num - name.begin() + 1 + dirPath.length();
+			for (sizet s = 0; s < imp.sky.size(); ++s) {
+				path[ofs] = '0' + s;
+				if (imp.sky[s] = Texture::pickPixFormat(IMG_Load(path.c_str())); !imp.sky[s].first) {
 					std::for_each(imp.sky.begin(), imp.sky.begin() + s, [](pair<SDL_Surface*, GLenum>& it) { SDL_FreeSurface(it.first); });
+					logError("failed to load cubemap side ", path);
 					break;
 				}
-	}
-	SDL_RWclose(ifh);
+			}
+		}
+	});
 	return TextureSet(std::move(imp));
 }
 
-void FileSys::loadObjectTexture(SDL_RWops* ifh, SDL_Surface* img, string&& name, GLenum ifmt, TextureSet::Import& imp, int scale) {
-	if (auto [nrm, nfmt] = loadImageBlock(ifh, name); nrm) {
+void FileSys::loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, string::iterator num, GLenum ifmt, TextureSet::Import& imp, int scale) {
+	*num = 'N';
+	string path = dirPath + name;
+	if (auto [nrm, nfmt] = Texture::pickPixFormat(IMG_Load(path.c_str())); nrm) {
 		imp.cres = glm::max(ivec2(img->w, img->h) / scale, imp.cres);
 		imp.nres = glm::max(ivec2(nrm->w, nrm->h) / scale, imp.nres);
-		imp.imgs.emplace_back(img, nrm, std::move(name), ifmt, nfmt);
-	} else
+		imp.imgs.emplace_back(img, nrm, string(name.begin(), num), ifmt, nfmt);
+	} else {
 		SDL_FreeSurface(img);
-}
-
-pair<SDL_Surface*, GLenum> FileSys::loadImageBlock(SDL_RWops* ifh, const string& name) {
-	uint32 dataSize;
-	SDL_RWread(ifh, &dataSize, sizeof(dataSize), 1);
-	vector<uint8> imgd(dataSize);
-	SDL_RWread(ifh, imgd.data(), sizeof(*imgd.data()), imgd.size());
-	SDL_Surface* img = IMG_Load_RW(SDL_RWFromConstMem(imgd.data(), imgd.size()), SDL_TRUE);
-	if (!img)
-		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
-	return Texture::pickPixFormat(img);
-}
-
-vector<uint8> FileSys::loadFile(const string& file) {
-	return readFile<vector<uint8>>(file);
-}
-
-template <class T>
-T FileSys::readFile(const string& file) {
-	T data;
-	if (SDL_RWops* ifh = SDL_RWFromFile(file.c_str(), defaultReadMode)) {
-		if (int64 len = SDL_RWsize(ifh); len != -1) {
-			data.resize(len);
-			if (sizet read = SDL_RWread(ifh, data.data(), sizeof(*data.data()), data.size()); read < data.size())
-				data.resize(read);
-		}
-		SDL_RWclose(ifh);
+		logError("failed to load normalmap ", path);
 	}
-	return data;
 }
 
-void FileSys::writeFile(const string& path, const string& text) {
+template <class F>
+void FileSys::listOperateDirectory(const string& dirPath, F func) {
+#ifdef __ANDROID__
+	JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+	jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+	jclass clazz(env->GetObjectClass(activity));
+	jmethodID methodId = env->GetMethodID(clazz, "listAssets", "(Ljava/lang/String;)[Ljava/lang/String;");
+
+	jstring path = env->NewStringUTF(dirPath.c_str());
+	jobjectArray files = static_cast<jobjectArray>(env->CallObjectMethod(activity, methodId, path));
+	for (jsize i = 0, size = env->GetArrayLength(files); i < size; ++i) {
+		jstring name = static_cast<jstring>(env->GetObjectArrayElement(files, i));
+		const char* ncvec = env->GetStringUTFChars(name, 0);
+		func(ncvec);
+		env->ReleaseStringUTFChars(name, ncvec);
+		env->DeleteLocalRef(name);
+	}
+	env->DeleteLocalRef(files);
+	env->DeleteLocalRef(path);
+	env->DeleteLocalRef(activity);
+	env->DeleteLocalRef(clazz);
+#elif defined(_WIN32)
+	WIN32_FIND_DATAW data;
+	if (HANDLE hFind = FindFirstFileW(sstow(dirPath + '*').c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				func(cwtos(data.cFileName));
+		} while (FindNextFileW(hFind, &data));
+		FindClose(hFind);
+	}
+#else
+	if (DIR* directory = opendir(dirPath.c_str())) {
+		while (dirent* entry = readdir(directory))
+			if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..") && (entry->d_type == DT_REG || entry->d_type == DT_LNK))
+				func(entry->d_name);
+		closedir(directory);
+	}
+#endif
+}
+
+void FileSys::saveUserFile(const string& drc, const char* file, const string& text) {
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	if (!createDirectories(drc)) {
+		logError("failed to create directory ", drc);
+		return;
+	}
+#endif
+
+	string path = drc + file;
 	SDL_RWops* ofh = SDL_RWFromFile(path.c_str(), defaultWriteMode);
 	if (!ofh) {
-		std::cerr << "failed to write " << path << std::endl;
+		logError("failed to write ", path);
 		return;
 	}
 	SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
@@ -799,4 +777,22 @@ string FileSys::strJoin(const vector<T>& vec, F conv, char sep) {
 	if (!str.empty())
 		str.pop_back();
 	return str;
+}
+
+string::iterator FileSys::fileLevelPos(string& str) {
+	string::reverse_iterator dot = std::find(str.rbegin(), str.rend(), '.');
+	return std::find_if_not(dot + (dot != str.rend()), str.rend(), isdigit).base();
+}
+
+void FileSys::saveScreenshot(SDL_Surface* img) {
+	if (img) {
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+		if (string path = dirConfig + "/screenshots/"; createDirectories(path)) {
+			if (IMG_SavePNG(img, (path + "thrones_" + DateTime::now().toString() + ".png").c_str()))
+				logError("failed to save screenshot: ", IMG_GetError());
+		} else
+			logError("failed to create directory ", path);
+#endif
+		SDL_FreeSurface(img);
+	}
 }

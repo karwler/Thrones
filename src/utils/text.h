@@ -1,26 +1,24 @@
 #pragma once
 
 #include "alias.h"
+#include <sstream>
 
 #ifdef _WIN32
 constexpr char linend[] = "\r\n";
 #else
 constexpr char linend[] = "\n";
 #endif
-constexpr char defaultReadMode[] = "rb";
-constexpr char defaultWriteMode[] = "wb";
 
 // utility
 
 string parentPath(const string& path);
-string filename(const string& path);
 string readWord(const char*& pos);
 string strEnclose(string str);
 string strUnenclose(const char*& str);
 int strnatcmp(const char* a, const char* b);	// natural string compare
 uint8 u8clen(char c);
 vector<string> readTextLines(const string& text);
-void createDirectories(const string& path);
+bool createDirectories(const string& path);
 
 inline bool strnatless(const string& a, const string& b) {
 	return strnatcmp(a.c_str(), b.c_str()) < 0;
@@ -34,6 +32,10 @@ inline bool isDsep(char c) {
 #endif
 }
 
+inline string appDsep(const string& str) {
+	return !str.empty() && !isDsep(str.back()) ? str : str + '/';
+}
+
 inline bool isSpace(char c) {
 	return (c > '\0' && c <= ' ') || c == 0x7F;
 }
@@ -43,12 +45,7 @@ inline bool notSpace(char c) {
 }
 
 inline string firstUpper(string str) {
-	str[0] = char(toupper(str[0]));
-	return str;
-}
-
-inline string firstLower(string str) {
-	str[0] = char(toupper(str[0]));
+	str[0] = toupper(str[0]);
 	return str;
 }
 
@@ -67,8 +64,27 @@ inline string filename(const string& path) {
 	return string(std::find_if(end, path.rend(), isDsep).base(), end.base());
 }
 
+inline bool strciEndsWith(const string& str, const char* end) {
+	sizet elen = strlen(end);
+	return str.length() >= elen ? !SDL_strcasecmp(str.c_str() + str.length() - elen, end) : false;
+}
+
 inline const char* pixelformatName(uint32 format) {
 	return SDL_GetPixelFormatName(format) + 16;	// skip "SDL_PIXELFORMAT_"
+}
+
+template <class... A>
+void logInfo(A&&... args) {
+	std::ostringstream ss;
+	(ss << ... << std::forward<A>(args));
+	SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "%s\n", ss.str().c_str());
+}
+
+template <class... A>
+void logError(A&&... args) {
+	std::ostringstream ss;
+	(ss << ... << std::forward<A>(args));
+	SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s\n", ss.str().c_str());
 }
 
 // conversions
@@ -225,7 +241,6 @@ uint8 numDigits(T num, uint8 base = 10) {
 }
 
 // command line arguments
-
 class Arguments {
 private:
 	vector<string> vals;
@@ -272,4 +287,37 @@ inline bool Arguments::hasFlag(char key) const {
 inline const char* Arguments::getOpt(char key) const {
 	umap<char, string>::const_iterator it = opts.find(key);
 	return it != opts.end() ? it->second.c_str() : nullptr;
+}
+
+// struct tm wrapper
+struct DateTime {
+	uint8 sec, min, hour;
+	uint8 day, month;
+	uint8 wday;
+	uint16 year;
+
+	DateTime() = default;
+	DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay);
+
+	static DateTime now();
+	string timeString(char ts = '-') const;
+	string dateString(char ds = '-') const;
+	string toString(char ts = '-', char sep = '_', char ds = '-') const;
+	bool datecmp(const DateTime& date) const;
+};
+
+inline string DateTime::timeString(char ts) const {
+	return toStr(hour, 2) + ts + toStr(min, 2) + ts + toStr(sec, 2);
+}
+
+inline string DateTime::dateString(char ds) const {
+	return toStr(year) + ds + toStr(month, 2) + ds + toStr(day, 2);
+}
+
+inline string DateTime::toString(char ts, char sep, char ds) const {
+	return dateString(ds) + sep + timeString(ts);
+}
+
+inline bool DateTime::datecmp(const DateTime& date) const {
+	return day == date.day && month == date.month && year == date.year;
 }

@@ -45,22 +45,6 @@ static void testReadTextLines() {
 	assertRange(readTextLines("the quick\n\nbrown\n\rfox\r\njumps\tover\rthe\v lazy dog"), vector<string>({ "the quick", "brown", "fox", "jumps\tover", "the\v lazy dog" }));
 }
 
-static void testStrcicmp() {
-	assertEqual(SDL_strcasecmp("bob", "bob"), 0);
-	assertEqual(SDL_strcasecmp("bob", "Bob"), 0);
-	assertEqual(SDL_strcasecmp("bobs", "Bob"), 's');
-	assertEqual(SDL_strcasecmp("bob", "Bobs"), -'s');
-}
-
-static void testStrncicmp() {
-	assertEqual(SDL_strncasecmp("a", "b", 0), 0);
-	assertEqual(SDL_strncasecmp("boa", "bob", 2), 0);
-	assertEqual(SDL_strncasecmp("boa", "Bob", 2), 0);
-	assertEqual(SDL_strncasecmp("boa", "Bob", 4), 'a' - 'b');
-	assertEqual(SDL_strncasecmp("bobs", "Bob", 4), 's');
-	assertEqual(SDL_strncasecmp("bob", "Bobs", 4), -'s');
-}
-
 static void testStrnatcmp() {
 	assertEqual(strnatcmp("home", "home"), 0);
 	assertGreater(strnatcmp("home", "Home"), 0);
@@ -69,6 +53,12 @@ static void testStrnatcmp() {
 	assertLess(strnatcmp("Home1", "homeA"), 0);
 	assertGreater(strnatcmp("home1b", "Home10a"), 0);
 	assertLess(strnatcmp("Home1b", "homeAa"), 0);
+}
+
+static void testAppDsep() {
+	assertEqual(appDsep(""), "/");
+	assertEqual(appDsep("/home"), "/home/");
+	assertEqual(appDsep("/home/"), "/home/");
 }
 
 static void testIsSpace() {
@@ -142,6 +132,15 @@ static void testFilename() {
 	assertEqual(filename("home/file/"), "file");
 	assertEqual(filename("home/file//"), "file");
 	assertEqual(filename("home//file//"), "file");
+}
+
+static void testStrciEndsWith() {
+	assertTrue(strciEndsWith("file.ext", ".ext"));
+	assertTrue(strciEndsWith("file.ext", ".EXT"));
+	assertTrue(strciEndsWith("file.EXT", ".ext"));
+	assertFalse(strciEndsWith("file.png", ".ext"));
+	assertFalse(strciEndsWith("file.ext", ".png"));
+	assertFalse(strciEndsWith("ext", ".png"));
 }
 
 static void testParentPath() {
@@ -281,15 +280,15 @@ void testText() {
 	testStrUnenclose();
 	testU8clen();
 	testReadTextLines();
-	testStrcicmp();
-	testStrncicmp();
 	testStrnatcmp();
+	testAppDsep();
 	testIsSpace();
 	testNotSpace();
 	testFirstUpper();
 	testTrim();
 	testDelExt();
 	testFilename();
+	testStrciEndsWith();
 	testParentPath();
 	testStrToDisp();
 	testToStr();

@@ -28,6 +28,7 @@ public:
 	static const ShaderSsao* ssao();
 	static const ShaderBlur* blur();
 	static const ShaderLight* light();
+	static const ShaderBrights* brights();
 	static const ShaderGauss* gauss();
 	static const ShaderFinal* sfinal();
 	static const ShaderSkybox* skybox();
@@ -105,6 +106,10 @@ inline const ShaderBlur* World::blur() {
 
 inline const ShaderLight* World::light() {
 	return windowSys.getLight();
+}
+
+inline const ShaderBrights* World::brights() {
+	return windowSys.getBrights();
 }
 
 inline const ShaderGauss* World::gauss() {

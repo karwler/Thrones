@@ -57,6 +57,7 @@ public:
 	void eventStopCamera();
 	void eventChat();
 	void eventFrameCounter();
+	void eventScreenshot();
 	void eventSelect0();
 	void eventSelect1();
 	void eventSelect2();
@@ -73,6 +74,7 @@ public:
 	virtual uint8 switchButtons(uint8 but);
 	virtual uptr<RootLayout> createLayout(Interactable*& selected) = 0;
 	virtual vector<Overlay*> createOverlays();
+	virtual void updateTitleBar();
 
 	void initObjectDrag(BoardObject* bob, Mesh* mesh, vec2 pos);
 
@@ -88,6 +90,7 @@ public:
 	void hideChatEmbed();
 protected:
 	void chatEmbedAxisScroll(float val);
+	static void setTitleBarInteractivity(bool settings, bool config);
 };
 
 inline Mesh* ProgState::getObjectDragMesh() {
@@ -186,6 +189,7 @@ public:
 
 	uint8 switchButtons(uint8 but) override;
 	vector<Overlay*> createOverlays() override;
+	void updateTitleBar() override;
 private:
 	void axisScroll(float val);
 };
@@ -323,6 +327,7 @@ public:
 	void eventOpenSettings() override {}
 
 	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	void updateTitleBar() override;
 };
 
 class ProgInfo : public ProgState {
@@ -336,4 +341,5 @@ public:
 	void eventOpenSettings() override {}
 
 	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	void updateTitleBar() override;
 };

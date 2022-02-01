@@ -59,23 +59,23 @@ InputSys::~InputSys() {
 		pad.close();
 }
 
-void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, bool mouse) {
+void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset, bool mouse) {
 	mouseLast = mouse;
 	mouseMove = ivec2(motion.xrel, motion.yrel);
 	moveTime = motion.timestamp;
 	if (World::scene()->camera.state != Camera::State::dragging)
-		World::scene()->onMouseMove(ivec2(motion.x, motion.y), mouseMove, motion.state);
+		World::scene()->onMouseMove(ivec2(motion.x, motion.y - yoffset), mouseMove, motion.state);
 	else {
 		vec2 rot(glm::radians(float(motion.yrel) / 2.f), glm::radians(float(-motion.xrel) / 2.f));
 		World::scene()->camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 	}
 }
 
-void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, bool mouse) {
+void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset, bool mouse) {
 	mouseLast = mouse;
 	switch (button.button) {
 	case SDL_BUTTON_LEFT: case SDL_BUTTON_RIGHT:
-		World::scene()->onMouseDown(ivec2(button.x, button.y), button.button);
+		World::scene()->onMouseDown(ivec2(button.x, button.y - yoffset), button.button);
 		break;
 	case SDL_BUTTON_MIDDLE:
 		World::state()->eventStartCamera();
@@ -88,11 +88,11 @@ void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, bool mou
 	}
 }
 
-void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, bool mouse) {
+void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset, bool mouse) {
 	mouseLast = mouse;
 	switch (button.button) {
 	case SDL_BUTTON_LEFT: case SDL_BUTTON_RIGHT:
-		World::scene()->onMouseUp(ivec2(button.x, button.y), button.button);
+		World::scene()->onMouseUp(ivec2(button.x, button.y - yoffset), button.button);
 		break;
 	case SDL_BUTTON_MIDDLE:
 		World::state()->eventStopCamera();
@@ -209,9 +209,9 @@ void InputSys::eventGamepadAxis(const SDL_ControllerAxisEvent& gaxis) {
 		checkInput(padmap, AsgGamepad(SDL_GameControllerAxis(gaxis.axis), gaxis.value >= 0), &Binding::ucall);
 }
 
-void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin) {
-	vec2 size = World::window()->getScreenView();
-	eventMouseMotion({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, false);
+void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
+	vec2 size(World::window()->getScreenView().x, windowHeight);
+	eventMouseMotion({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, yoffset, false);
 }
 
 void InputSys::eventFingerGesture(const SDL_MultiGestureEvent& ges) {
@@ -219,14 +219,14 @@ void InputSys::eventFingerGesture(const SDL_MultiGestureEvent& ges) {
 		World::scene()->camera.zoom(int(ges.dDist * float(World::window()->getScreenView().y)));
 }
 
-void InputSys::eventFingerDown(const SDL_TouchFingerEvent& fin) {
-	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getScreenView());
-	eventMouseButtonDown({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, false);
+void InputSys::eventFingerDown(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
+	ivec2 pos(fin.x * float(World::window()->getScreenView().x), fin.y * float(windowHeight));
+	eventMouseButtonDown({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, yoffset, false);
 }
 
-void InputSys::eventFingerUp(const SDL_TouchFingerEvent& fin) {
-	ivec2 pos = vec2(fin.x, fin.y) * vec2(World::window()->getScreenView());
-	eventMouseButtonUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, pos.x, pos.y }, false);
+void InputSys::eventFingerUp(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
+	ivec2 pos(fin.x * float(World::window()->getScreenView().x), fin.y * float(windowHeight));
+	eventMouseButtonUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, pos.x, pos.y }, yoffset, false);
 	World::scene()->deselect();	// deselect last Interactable because Scene::onMouseUp updates the select
 }
 
@@ -327,11 +327,16 @@ vector<SDL_Joystick*> InputSys::listJoysticks() const {
 
 void InputSys::addController(int id) {
 	if (SDL_GameController* pad = SDL_GameControllerOpen(id)) {
-		if (SDL_JoystickID jid = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)); jid < 0 || !gamepads.emplace(jid, pad).second)
+		if (SDL_JoystickID jid = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)); jid >= 0)
+			gamepads.emplace(jid, pad);
+		else
 			SDL_GameControllerClose(pad);
-	} else if (SDL_Joystick* joy = SDL_JoystickOpen(id))
-		if (SDL_JoystickID jid = SDL_JoystickInstanceID(joy); jid < 0 || SDL_JoystickNumButtons(joy) <= 0 || !joysticks.emplace(jid, joy).second)	// might be something like an accelerometer
+	} else if (SDL_Joystick* joy = SDL_JoystickOpen(id)) {
+		if (SDL_JoystickID jid = SDL_JoystickInstanceID(joy); jid >= 0)
+			joysticks.emplace(jid, joy);
+		else
 			SDL_JoystickClose(joy);
+	}
 }
 
 void InputSys::delController(SDL_JoystickID id) {

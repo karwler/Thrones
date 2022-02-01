@@ -5,7 +5,6 @@ extern int testResult;
 
 void testAlias();
 void testFileSys();
-void testOven();
 void testServer();
 void testText();
 void testUtils();

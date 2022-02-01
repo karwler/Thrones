@@ -39,10 +39,10 @@ void Navigator::navSelectOut(const vec3& pos, Direction dir) {
 
 // LAYOUT
 
-Layout::Layout(Size size, vector<Widget*>&& children, bool vert, int space) :
+Layout::Layout(const Size& size, vector<Widget*>&& children, bool vert, float space) :
 	Navigator(size),
 	widgets(std::move(children)),
-	spacing(space),
+	spaceFactor(space),
 	vertical(vert)
 {
 	initWidgets();
@@ -73,21 +73,28 @@ void Layout::postInit() {
 void Layout::calculateWidgetPositions() {
 	// get amount of space for widgets with percent size and get sum of sizes
 	ivec2 wsiz = size();
+	float scrh = float(World::window()->getScreenView().y);
+	vector<int> pixSizes(widgets.size());
+	int spacing = pixSpacing();
 	int totalSpacing = (widgets.size() - 1) * spacing;
 	int space = wsiz[vertical] > totalSpacing ? wsiz[vertical] - totalSpacing : 0;
 	float total = 0;
-	for (Widget* it : widgets) {
-		if (it->getSize().usePix)
-			space -= it->getSize().pix <= space ? it->getSize().pix : space;
-		else
-			total += it->getSize().prc;
+	for (sizet i = 0; i < widgets.size(); ++i) {
+		if (widgets[i]->getSize().mod != Size::rela) {
+			pixSizes[i] = widgets[i]->getSize().mod == Size::abso ? int(widgets[i]->getSize() * scrh) : widgets[i]->getSize()(widgets[i]);
+			space -= std::min(pixSizes[i], space);
+		} else
+			total += widgets[i]->getSize();
 	}
 
 	// calculate positions for each widget and set last poss element to end position of the last widget
 	ivec2 pos(0);
 	for (sizet i = 0; i < widgets.size(); ++i) {
 		positions[i] = pos;
-		pos[vertical] += (widgets[i]->getSize().usePix ? widgets[i]->getSize().pix : int(widgets[i]->getSize().prc * float(space) / total)) + spacing;
+		if (widgets[i]->getSize().mod != Size::rela)
+			pos[vertical] += pixSizes[i] + spacing;
+		else if (float val = widgets[i]->getSize() * float(space); val != 0.f)
+			pos[vertical] += int(val / total) + spacing;
 	}
 	positions.back() = swap(wsiz[!vertical], pos[vertical], !vertical);
 }
@@ -151,8 +158,8 @@ bool Layout::deselectWidgets() const {
 	return false;
 }
 
-void Layout::setSpacing(int space) {
-	spacing = space;
+void Layout::setSpacing(float space) {
+	spaceFactor = space;
 	onResize();
 }
 
@@ -161,11 +168,7 @@ ivec2 Layout::wgtPosition(sizet id) const {
 }
 
 ivec2 Layout::wgtSize(sizet id) const {
-	return swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - spacing, !vertical);
-}
-
-ivec2 Layout::listSize() const {
-	return positions.back() - spacing;
+	return swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - pixSpacing(), !vertical);
 }
 
 Interactable* Layout::findFirstSelectable() const {
@@ -213,6 +216,10 @@ void Layout::scanPerpendicular(int mid, Direction dir) {
 		parent->navSelectNext(index, mid, dir);
 }
 
+int Layout::pixSpacing() const {
+	return int(spaceFactor * float(World::window()->getScreenView().y));
+}
+
 void Layout::navSelectWidget(sizet id, int mid, Direction dir) {
 	if (Navigator* box = dynamic_cast<Navigator*>(widgets[id]))
 		box->navSelectFrom(mid, dir);
@@ -220,24 +227,31 @@ void Layout::navSelectWidget(sizet id, int mid, Direction dir) {
 		World::scene()->updateSelect(widgets[id]);
 }
 
+void Layout::updateTipTex() {
+	for (Widget* it : widgets)
+		it->updateTipTex();
+}
+
 // ROOT LAYOUT
 
-RootLayout::RootLayout(Size size, vector<Widget*>&& children, bool vert, int space, const vec4& color) :
+RootLayout::RootLayout(const Size& size, vector<Widget*>&& children, bool vert, float space, float topSpace, const vec4& color) :
 	Layout(size, std::move(children), vert, space),
-	bgColor(color)
+	bgColor(color),
+	topSpacingFac(topSpace)
 {}
 
 void RootLayout::draw() const {
-	Quad::draw(Rect(ivec2(0), World::window()->getScreenView()), bgColor, World::scene()->texture());	// dim other widgets
+	Quad::draw(World::sgui(), Rect(ivec2(0), World::window()->getScreenView()), bgColor, World::scene()->texture());	// dim other widgets
 	Layout::draw();
 }
 
 ivec2 RootLayout::position() const {
-	return ivec2(0);
+	return ivec2(0, pixTopSpacing());
 }
 
 ivec2 RootLayout::size() const {
-	return World::window()->getGuiView();
+	ivec2 res = World::window()->getScreenView();
+	return ivec2(res.x, res.y - pixTopSpacing());
 }
 
 void RootLayout::setSize(const Size& size) {
@@ -246,13 +260,27 @@ void RootLayout::setSize(const Size& size) {
 }
 
 Rect RootLayout::frame() const {
-	return Rect(ivec2(0), World::window()->getGuiView());
+	return rect();
+}
+
+int RootLayout::pixTopSpacing() const {
+	return World::window()->getTitleBarHeight() ? int(topSpacingFac * float(World::window()->getScreenView().y)) : 0;
+}
+
+// TITLE BAR
+
+ivec2 TitleBar::position() const {
+	return ivec2(0);
+}
+
+ivec2 TitleBar::size() const {
+	return ivec2(World::window()->getScreenView().x, World::window()->getTitleBarHeight());
 }
 
 // POPUP
 
-Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, int space, Widget* firstSelect, Type ctxType, const vec4& color) :
-	RootLayout(size.first, std::move(children), vert, space, color),
+Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, float space, float topSpace, Widget* firstSelect, Type ctxType, const vec4& color) :
+	RootLayout(size.first, std::move(children), vert, space, topSpace, color),
 	kcall(okCall),
 	ccall(cancelCall),
 	defaultSelect(firstSelect),
@@ -263,24 +291,26 @@ Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okC
 void Popup::draw() const {
 	Rect rct = rect();
 	GLuint tex = World::scene()->texture();
-	Quad::draw(Rect(ivec2(0), World::window()->getScreenView()), bgColor, tex);				// dim other widgets
-	Quad::draw(Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, tex);	// draw background
+	ivec2 res = World::window()->getScreenView();
+	int margin = int(marginFactor * float(res.y));
+	Quad::draw(World::sgui(), Rect(ivec2(0), res), bgColor, tex);				// dim other widgets
+	Quad::draw(World::sgui(), Rect(rct.pos() - margin, rct.size() + margin * 2), colorBackground, tex);	// draw background
 	Layout::draw();
 }
 
 ivec2 Popup::position() const {
-	return (World::window()->getGuiView() - size()) / 2;
+	return (World::window()->getScreenView() - size()) / 2;
 }
 
 ivec2 Popup::size() const {
-	vec2 res = World::window()->getGuiView();
-	return ivec2(relSize.usePix ? relSize.pix : int(relSize.prc * res.x), sizeY.usePix ? sizeY.pix : int(sizeY.prc * res.y));
+	vec2 res = World::window()->getScreenView();
+	return ivec2(relSize.mod != Size::calc ? int(relSize * res.x) : relSize(this), sizeY.mod != Size::calc ? int(sizeY * res.y) : sizeY(this));
 }
 
 // OVERLAY
 
-Overlay::Overlay(const pair<Size, Size>& pos, const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, bool visible, bool interactive, int space, const vec4& color) :
-	Popup(size, std::move(children), okCall, cancelCall, vert, space, nullptr, Type::overlay, vec4(0.f)),
+Overlay::Overlay(const pair<Size, Size>& pos, const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, bool visible, bool interactive, float space, float topSpace, const vec4& color) :
+	Popup(size, std::move(children), okCall, cancelCall, vert, space, topSpace, nullptr, Type::overlay, vec4(0.f)),
 	relPos(pos),
 	boxColor(color),
 	show(visible),
@@ -289,14 +319,21 @@ Overlay::Overlay(const pair<Size, Size>& pos, const pair<Size, Size>& size, vect
 
 void Overlay::draw() const {
 	GLuint tex = World::scene()->texture();
-	Quad::draw(Rect(ivec2(0), World::window()->getScreenView()), bgColor, tex);	// dim other widgets
-	Quad::draw(rect(), boxColor, tex);											// draw background
+	Quad::draw(World::sgui(), Rect(ivec2(0), World::window()->getScreenView()), bgColor, tex);	// dim other widgets
+	Quad::draw(World::sgui(), rect(), boxColor, tex);											// draw background
 	Layout::draw();
 }
 
 ivec2 Overlay::position() const {
-	vec2 res = World::window()->getGuiView();
-	return ivec2(relPos.first.usePix ? relPos.first.pix : int(relPos.first.prc * res.x), relPos.second.usePix ? relPos.second.pix : int(relPos.second.prc * res.y));
+	vec2 res = World::window()->getScreenView();
+	return ivec2(relPos.first.mod != Size::calc ? int(relPos.first * res.x) : relPos.first(this), std::max(relPos.second.mod != Size::calc ? int(relPos.second * res.y) : relPos.second(this), pixTopSpacing()));
+}
+
+ivec2 Overlay::size() const {
+	ivec2 siz = Popup::size();
+	int topSpacing = pixTopSpacing();
+	int ypos = relPos.second.mod != Size::calc ? int(relPos.second * float(World::window()->getScreenView().y)) : relPos.second(this);
+	return ivec2(siz.x, ypos >= topSpacing ? siz.y : siz.y - topSpacing + ypos);
 }
 
 void Overlay::setShow(bool yes) {
@@ -317,6 +354,11 @@ void ScrollArea::draw() const {
 void ScrollArea::tick(float dSec) {
 	Layout::tick(dSec);
 	scroll.tick(dSec, listSize(), size());
+}
+
+void ScrollArea::onResize() {
+	Layout::onResize();
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
 }
 
 void ScrollArea::postInit() {
@@ -350,7 +392,7 @@ ivec2 ScrollArea::wgtPosition(sizet id) const {
 }
 
 ivec2 ScrollArea::wgtSize(sizet id) const {
-	return Layout::wgtSize(id) - swap(scroll.barSize(listSize(), size(), vertical), 0, !vertical);
+	return Layout::wgtSize(id) - swap(ScrollBar::barSize(listSize(), size(), vertical), 0, !vertical);
 }
 
 void ScrollArea::onNavSelect(Direction dir) {

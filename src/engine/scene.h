@@ -41,39 +41,39 @@ private:
 	static constexpr float vertices[corners * vlength] = {
 		1.f, -1.f, -1.f,
 		-1.f, -1.f, -1.f,
-		-1.f,  1.f, -1.f,
-		-1.f,  1.f, -1.f,
-		1.f,  1.f, -1.f,
+		-1.f, 1.f, -1.f,
+		-1.f, 1.f, -1.f,
+		1.f, 1.f, -1.f,
 		1.f, -1.f, -1.f,
-		-1.f,  1.f, -1.f,
+		-1.f, 1.f, -1.f,
 		-1.f, -1.f, -1.f,
-		-1.f, -1.f,  1.f,
-		-1.f, -1.f,  1.f,
-		-1.f,  1.f,  1.f,
-		-1.f,  1.f, -1.f,
-		1.f,  1.f,  1.f,
-		1.f, -1.f,  1.f,
+		-1.f, -1.f, 1.f,
+		-1.f, -1.f, 1.f,
+		-1.f, 1.f, 1.f,
+		-1.f, 1.f, -1.f,
+		1.f, 1.f, 1.f,
+		1.f, -1.f, 1.f,
 		1.f, -1.f, -1.f,
 		1.f, -1.f, -1.f,
-		1.f,  1.f, -1.f,
-		1.f,  1.f,  1.f,
-		1.f,  1.f,  1.f,
-		-1.f,  1.f,  1.f,
-		-1.f, -1.f,  1.f,
-		-1.f, -1.f,  1.f,
-		1.f, -1.f,  1.f,
-		1.f,  1.f,  1.f,
-		1.f,  1.f,  1.f,
-		1.f,  1.f, -1.f,
-		-1.f,  1.f, -1.f,
-		-1.f,  1.f, -1.f,
-		-1.f,  1.f,  1.f,
-		1.f,  1.f,  1.f,
+		1.f, 1.f, -1.f,
+		1.f, 1.f, 1.f,
+		1.f, 1.f, 1.f,
+		-1.f, 1.f, 1.f,
+		-1.f, -1.f, 1.f,
+		-1.f, -1.f, 1.f,
+		1.f, -1.f, 1.f,
+		1.f, 1.f, 1.f,
+		1.f, 1.f, 1.f,
+		1.f, 1.f, -1.f,
+		-1.f, 1.f, -1.f,
+		-1.f, 1.f, -1.f,
+		-1.f, 1.f, 1.f,
+		1.f, 1.f, 1.f,
 		1.f, -1.f, -1.f,
-		-1.f, -1.f,  1.f,
+		-1.f, -1.f, 1.f,
 		-1.f, -1.f, -1.f,
-		1.f, -1.f,  1.f,
-		-1.f, -1.f,  1.f,
+		1.f, -1.f, 1.f,
+		-1.f, -1.f, 1.f,
 		1.f, -1.f, -1.f
 	};
 
@@ -89,6 +89,32 @@ public:
 inline GLuint Skybox::getVao() const {
 	return vao;
 }
+
+// render data group
+class FrameSet {
+private:
+#ifdef OPENGLES
+	static constexpr uint lightBuffers = 1;
+#else
+	static constexpr uint lightBuffers = 2;
+#endif
+
+public:
+	GLuint fboGeom = 0, texPosition = 0, texNormal = 0, rboGeom = 0;
+	GLuint fboSsao = 0, texSsao = 0;
+	GLuint fboBlur = 0, texBlur = 0;
+	array<GLuint, lightBuffers> fboLight{}, texLight{};	// first is non-multisampled destination, second is multisampled source
+	GLuint rboLight = 0;
+	array<GLuint, 2> fboGauss{}, texGauss{};
+
+	FrameSet(const Settings* sets, ivec2 res);
+
+	void free();
+
+private:
+	static GLuint makeFramebuffer(GLuint& tex, ivec2 res, GLint iform, GLenum active, const string& name);
+	static GLuint makeTexture(ivec2 res, GLint iform, GLenum active);
+};
 
 // additional data for rendering objects
 class Camera {
@@ -227,14 +253,26 @@ inline bool Animation::operator==(const Animation& ani) const {
 class Scene {
 public:
 	Camera camera = Camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup);
+
 private:
+	struct Capture {
+		Interactable* inter;
+		uint len = 0;	// composing substring length
+
+		constexpr Capture(Interactable* capture = nullptr);
+
+		constexpr operator bool() const;
+		Interactable* operator->();
+	};
+
 	Interactable* select = nullptr;	// currently selected widget/object
 	Interactable* firstSelect = nullptr;
-	Interactable* capture = nullptr;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
+	Capture capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
 	uptr<RootLayout> layout;
 	vector<Popup*> popups;
 	vector<Overlay*> overlays;
 	uptr<Context> context;
+	uptr<TitleBar> titleBar;
 	vector<Animation> animations;
 	vector<Mesh> meshes;
 	umap<string, uint16> meshRefs;
@@ -262,6 +300,7 @@ public:
 	void onMouseUp(ivec2 pos, uint8 but);
 	void onMouseWheel(ivec2 mov);
 	void onMouseLeave();
+	void onCompose(const char* str);
 	void onText(const char* str);
 	void onConfirm();
 	void onXbutConfirm();
@@ -284,6 +323,7 @@ public:
 	Interactable* getCapture() const;
 	void setCapture(Interactable* inter, bool reset = true);
 	void resetLayouts();
+	void updateTooltips();
 	RootLayout* getLayout();
 	Popup* getPopup();
 	vector<Overlay*>& getOverlays();
@@ -291,6 +331,8 @@ public:
 	void popPopup();
 	Context* getContext();
 	void setContext(uptr<Context>&& newContext);
+	TitleBar* getTitleBar();
+	void setTitleBar(uptr<TitleBar>&& bar);
 	void addAnimation(Animation&& anim);
 	void delegateStamp(Interactable* inter);
 	bool cursorInClickRange(ivec2 mPos) const;
@@ -302,12 +344,25 @@ public:
 	void updateSelect(Interactable* sel);
 	void updateSelect(ivec2 mPos);
 	void deselect();
+	Interactable* getTitleBarSelected(ivec2 tmPos);
 private:
 	Interactable* getSelected(ivec2 mPos);
 	Interactable* getScrollOrObject(ivec2 mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea(Interactable* inter) const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 };
+
+constexpr Scene::Capture::Capture(Interactable* capture) :
+	inter(capture)
+{}
+
+constexpr Scene::Capture::operator bool() const {
+	return inter;
+}
+
+inline Interactable* Scene::Capture::operator->() {
+	return inter;
+}
 
 inline Interactable* Scene::getSelect() const {
 	return select;
@@ -318,7 +373,7 @@ inline Interactable* Scene::getFirstSelect() const {
 }
 
 inline Interactable* Scene::getCapture() const {
-	return capture;
+	return capture.inter;
 }
 
 inline RootLayout* Scene::getLayout() {
@@ -335,6 +390,10 @@ inline vector<Overlay*>& Scene::getOverlays() {
 
 inline Context* Scene::getContext() {
 	return context.get();
+}
+
+inline TitleBar* Scene::getTitleBar() {
+	return titleBar.get();
 }
 
 inline bool Scene::cursorInClickRange(ivec2 mPos) const {

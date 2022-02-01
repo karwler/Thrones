@@ -5,54 +5,211 @@
 #include "engine/inputSys.h"
 #include "engine/scene.h"
 #include "engine/world.h"
-#include <iostream>
 #include <regex>
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-#include <curl/curl.h>
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
 #endif
-#endif
 
-// PROGRAM WEB FETCH DATA
+// WEB FETCH PROC
 
 #ifndef __ANDROID__
-Program::WebFetchData::WebFetchData(string link, string rver) :
+WebFetchProc::WebFetchProc(string link, string rver) :
 	url(std::move(link)),
 	regex(std::move(rver))
 {}
+
+#ifndef __EMSCRIPTEN__
+WebFetchProc::~WebFetchProc() {
+	if (proc) {
+		SDL_AtomicSet(&arun, 0);
+		SDL_WaitThread(proc, nullptr);
+	}
+}
+#endif
+
+bool WebFetchProc::start() {
+#ifdef __EMSCRIPTEN__
+	constexpr char request[] = "GET";
+	emscripten_fetch_attr_t attr;
+	emscripten_fetch_attr_init(&attr);
+	std::copy_n(request, sizeof(request), attr.requestMethod);
+	attr.userData = this;
+	attr.onsuccess = fetchVersionSucceed;
+	attr.onerror = fetchVersionFail;
+	attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+	emscripten_fetch(&attr, url.c_str());
+	return true;
+#else
+	SDL_AtomicSet(&arun, 1);
+	proc = SDL_CreateThread(fetchVersion, "", this);
+	return proc;
+#endif
+}
+
+#ifdef __EMSCRIPTEN__
+void WebFetchProc::fetchVersionSucceed(emscripten_fetch_t* fetch) {
+	static_cast<WebFetchProc*>(fetch->userData)->pushFetchedVersion(string(static_cast<const char*>(fetch->data), fetch->numBytes));
+	emscripten_fetch_close(fetch);
+}
+
+void WebFetchProc::fetchVersionFail(emscripten_fetch_t* fetch) {
+	WebFetchProc* wfp = static_cast<WebFetchProc*>(fetch->userData);
+	wfp->error = fetch->statusText;
+	pushEvent(UserCode::versionFetch, wfp);
+	emscripten_fetch_close(fetch);
+}
+
+const string& WebFetchProc::finish(string& pver) {
+	pver = std::move(progVersion);
+	return error;
+}
+#else
+const string& WebFetchProc::finish(string& lver, string& pver) {
+	SDL_WaitThread(proc, nullptr);
+	proc = nullptr;
+	lver = std::move(libVersion);
+	pver = std::move(progVersion);
+	return error;
+}
+
+int WebFetchProc::fetchVersion(void* data) {
+	SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW);
+
+	WebFetchProc* wfp = static_cast<WebFetchProc*>(data);
+	CURL* curl = nullptr;
+	void (*easy_cleanup)(CURL*) = nullptr;
+#ifdef _WIN32
+	HMODULE lib = LoadLibraryW(L"libcurl.dll");
+	FARPROC (WINAPI* const libsym)(HMODULE, const char*) = GetProcAddress;
+	string (* const liberror)() = lastErrorMessage;
+	BOOL (WINAPI* const libclose)(HMODULE) = FreeLibrary;
+#else
+	void* lib = dlopen("libcurl.so", RTLD_NOW);
+	void* (* const libsym)(void*, const char*) = dlsym;
+	char* (* const liberror)() = dlerror;
+	int (* const libclose)(void*) = dlclose;
+	FILE* dnull = fopen("/dev/null", "w");
+#endif
+	int rc = EXIT_SUCCESS;
+
+	try {
+		if (!lib)
+			throw liberror();
+		CURL* (*easy_init)() = reinterpret_cast<CURL* (*)()>(libsym(lib, "curl_easy_init"));
+		if (!easy_init)
+			throw liberror();
+		if (easy_cleanup = reinterpret_cast<void (*)(CURL*)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
+			throw liberror();
+		CURLcode(*easy_setopt)(CURL*, CURLoption, ...) = reinterpret_cast<CURLcode(*)(CURL*, CURLoption, ...)>(libsym(lib, "curl_easy_setopt"));
+		if (!easy_setopt)
+			throw liberror();
+		CURLcode(*easy_perform)(CURL*) = reinterpret_cast<CURLcode(*)(CURL*)>(libsym(lib, "curl_easy_perform"));
+		if (!easy_perform)
+			throw liberror();
+		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<const char* (*)(CURLcode)>(libsym(lib, "curl_easy_strerror"));
+
+		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<curl_version_info_data* (*)(CURLversion)>(libsym(lib, "curl_version_info"))) {
+			const curl_version_info_data* cinf = version_info(CURLVERSION_NOW);
+			string clver;
+			if (cinf->features & CURL_VERSION_IPV6)
+				clver += " IPv6,";
+			if (cinf->features & CURL_VERSION_SSL)
+				clver += " SSL,";
+			if (cinf->features & CURL_VERSION_LIBZ)
+				clver += " libz,";
+#if CURL_AT_LEAST_VERSION(7, 33, 0)
+			if (cinf->features & CURL_VERSION_HTTP2)
+				clver += " HTTP2,";
+#endif
+#if CURL_AT_LEAST_VERSION(7, 66, 0)
+			if (cinf->features & CURL_VERSION_HTTP3)
+				clver += " HTTP3,";
+#endif
+#if CURL_AT_LEAST_VERSION(7, 72, 0)
+			if (cinf->features & CURL_VERSION_UNICODE)
+				clver += " Unicode,";
+#endif
+			wfp->libVersion = clver.empty() ? cinf->version : cinf->version + string(" with") + clver.substr(0, clver.length() - 1);
+		}
+
+		if (SDL_AtomicGet(&wfp->arun)) {
+			if (curl = easy_init(); !curl)
+				throw "couldn't initialize curl";
+			string html;
+			easy_setopt(curl, CURLOPT_URL, wfp->url.data());
+			easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1l);
+			easy_setopt(curl, CURLOPT_NOSIGNAL, 1l);
+			easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeText);
+			easy_setopt(curl, CURLOPT_WRITEDATA, &html);
+			easy_setopt(curl, CURLOPT_NOPROGRESS, 0l);
+			easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, checkProgress);
+			easy_setopt(curl, CURLOPT_XFERINFODATA, wfp);
+#ifndef _WIN32
+			easy_setopt(curl, CURLOPT_STDERR, dnull);	// curl tries to output some bullshit
+#endif
+			if (CURLcode code = easy_perform(curl); code != CURLE_OK)
+				throw easy_strerror ? easy_strerror(code) : "couldn't fetch page";
+			wfp->pushFetchedVersion(html);
+		}
+	} catch (const string& err) {
+		wfp->error = err;
+		rc = EXIT_FAILURE;
+		pushEvent(UserCode::versionFetch, wfp);
+	} catch (const char* err) {
+		wfp->error = err ? err : "unknown error";
+		rc = EXIT_FAILURE;
+		pushEvent(UserCode::versionFetch, wfp);
+	}
+#ifndef _WIN32
+	if (dnull)
+		fclose(dnull);
+#endif
+	if (curl && easy_cleanup)	// check for easy_cleanup is only here to shut MSVC up
+		easy_cleanup(curl);
+	if (lib)
+		libclose(lib);
+	return rc;
+}
+
+sizet WebFetchProc::writeText(char* ptr, sizet size, sizet nmemb, void* userdata) {
+	sizet len = size * nmemb;
+	static_cast<string*>(userdata)->append(ptr, len);
+	return len;
+}
+
+int WebFetchProc::checkProgress(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+	return SDL_AtomicGet(&static_cast<WebFetchProc*>(clientp)->arun) ? CURL_PROGRESSFUNC_CONTINUE : -1;
+}
+#endif
+
+void WebFetchProc::pushFetchedVersion(const string& html) {
+	if (std::smatch sm; std::regex_search(html, sm, std::regex(regex, std::regex_constants::ECMAScript | std::regex_constants::icase)) && sm.size() >= 2) {
+		string latest = sm[1];
+		uvec4 cur = stoiv<uvec4>(Com::commonVersion, strtoul), web = stoiv<uvec4>(latest.c_str(), strtoul);
+		glm::length_t i = 0;
+		for (; i < uvec4::length() - 1 && cur[i] == web[i]; ++i);
+		if (cur[i] < web[i])
+			progVersion = "New version " + latest + " available";
+	}
+	pushEvent(UserCode::versionFetch, this);
+}
 #endif
 
 // PROGRAM
 
 Program::~Program() {
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	if (proc)
-		SDL_DetachThread(proc);
-#endif
 	delete netcp;
 	delete state;
 }
 
 void Program::start() {
-	gui.resize();
 	game.board->initObjects(false, false);	// doesn't need to be here but I like having the game board in the background
+	gui.makeTitleBar();
 	eventOpenMainMenu();
-
-#ifdef __EMSCRIPTEN__
-	if (!(World::sets()->versionLookupUrl.empty() || World::sets()->versionLookupRegex.empty())) {
-		emscripten_fetch_attr_t attr;
-		emscripten_fetch_attr_init(&attr);
-		std::copy_n("GET", 4, attr.requestMethod);
-		attr.userData = new WebFetchData(string(), World::sets()->versionLookupRegex);
-		attr.onsuccess = fetchVersionSucceed;
-		attr.onerror = fetchVersionFail;
-		attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
-		emscripten_fetch(&attr, World::sets()->versionLookupUrl.c_str());
-	}
-#elif !defined(__ANDROID__)
+#ifndef __ANDROID__
 	if (!(World::sets()->versionLookupUrl.empty() || World::sets()->versionLookupRegex.empty()))
-		proc = SDL_CreateThread(fetchVersion, "", new WebFetchData(World::sets()->versionLookupUrl, World::sets()->versionLookupRegex));
+		if (wfproc = std::make_unique<WebFetchProc>(World::sets()->versionLookupUrl, World::sets()->versionLookupRegex); !wfproc->start())
+			wfproc.reset();
 #endif
 }
 
@@ -60,22 +217,17 @@ void Program::eventUser(const SDL_UserEvent& user) {
 	switch (UserCode(user.code)) {
 #ifndef __ANDROID__
 	case UserCode::versionFetch:
-		if (WebFetchData* wfd = static_cast<WebFetchData*>(user.data1)) {
+		if (WebFetchProc* wfp = static_cast<WebFetchProc*>(user.data1)) {
 #ifdef __EMSCRIPTEN__
-			if (wfd->error.empty()) {
+			if (const string& error = wfp->finish(latestVersion); error.empty()) {
 #else
-			int rc;
-			SDL_WaitThread(proc, &rc);
-			proc = nullptr;
-			if (rc == EXIT_SUCCESS && wfd->error.empty()) {
-				curlVersion = std::move(wfd->libVersion);
+			if (const string& error = wfp->finish(curlVersion, latestVersion); error.empty()) {
 #endif
-				latestVersion = std::move(wfd->progVersion);
 				if (ProgMenu* pm = dynamic_cast<ProgMenu*>(state))
 					pm->versionNotif->setText(latestVersion);
 			} else
-				std::cerr << "version fetch failed: " << wfd->error << std::endl;
-			delete wfd;
+				logError("version fetch failed: ", error);
+			wfproc.reset();
 		}
 		break;
 #endif
@@ -95,9 +247,7 @@ void Program::tick(float dSec) {
 	if (ftimeMode != FrameTime::none)
 		if (ftimeSleep -= dSec; ftimeSleep <= 0.f) {
 			ftimeSleep = ftimeUpdateDelay;
-			GuiGen::Text txt = gui.makeFpsText(dSec);
-			static_cast<Overlay*>(state->getFpsText()->getParent())->setSize(txt.length);
-			state->getFpsText()->setText(std::move(txt.text));
+			state->getFpsText()->setText(gui.makeFpsText(dSec));
 		}
 }
 
@@ -265,10 +415,10 @@ void Program::eventRecvMessage(const uint8* data) {
 		if (Overlay* lay = dynamic_cast<Overlay*>(state->getChat()->getParent())) {
 			if (!lay->getShow())
 				state->showNotification(true);
-		} else if (!state->getChat()->getParent()->getSize().pix)
+		} else if (state->getChat()->getParent()->getSize() == 0.f)
 			state->showNotification(true);
 	} else
-		std::cout << "net message from " << msg << std::endl;
+		logInfo("unseen net message: ", msg);
 }
 
 void Program::eventExitLobby(Button*) {
@@ -830,7 +980,8 @@ void Program::eventSetupDelete(Button* but) {
 }
 
 void Program::eventShowConfig(Button*) {
-	gui.openPopupConfig(static_cast<ProgGame*>(state)->configName, game.board->config, state->mainScrollContent, dynamic_cast<ProgMatch*>(state));
+	if (!World::scene()->getPopup())
+		gui.openPopupConfig(static_cast<ProgGame*>(state)->configName, game.board->config, state->mainScrollContent, dynamic_cast<ProgMatch*>(state));
 }
 
 void Program::eventSwitchGameButtons(Button*) {
@@ -1161,69 +1312,100 @@ void Program::eventShowSettings(Button*) {
 	gui.openPopupSettings(state->mainScrollContent, state->keyBindingsStart);
 }
 
+void Program::eventOpenShowSettings(Button*) {
+	if (!World::scene()->getPopup())
+		dynamic_cast<ProgMenu*>(state) || dynamic_cast<ProgInfo*>(state) ? eventOpenSettings() : eventShowSettings();
+}
+
 void Program::eventSetDisplay(Button* but) {
-	World::sets()->display = sstoul(static_cast<LabelEdit*>(but)->getText());
-	World::window()->setScreen();
-	eventSaveSettings();
+	if (uint8 disp = sstoul(static_cast<LabelEdit*>(but)->getText()); disp != World::sets()->display) {
+		World::sets()->display = disp;
+		World::window()->setScreen();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetScreen(uint id, const string&) {
-	World::sets()->screen = Settings::Screen(id);
-	World::window()->setScreen();
-	eventSaveSettings();
+	if (Settings::Screen screen = Settings::Screen(id); screen != World::sets()->screen) {
+		World::sets()->screen = screen;
+		World::window()->setScreen();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetWindowSize(uint, const string& str) {
-	World::sets()->size = stoiv<ivec2>(str.c_str(), strtoul);
-	World::window()->setScreen();
-	eventSaveSettings();
+	if (ivec2 wsize = stoiv<ivec2>(str.c_str(), strtoul); wsize != World::sets()->size) {
+		World::sets()->size = wsize;
+		World::window()->setScreen();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetWindowMode(uint, const string& str) {
-	World::sets()->mode = GuiGen::fstrToDisp(str);
-	World::window()->setScreen();
-	eventSaveSettings();
+	if (SDL_DisplayMode mode = GuiGen::fstrToDisp(str); !memcmp(&mode, &World::sets()->mode, sizeof(mode))) {
+		World::sets()->mode = mode;
+		World::window()->setScreen();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetVsync(uint id, const string&) {
-	World::window()->setVsync(Settings::VSync(id - 1));
-	eventSaveSettings();
+	if (Settings::VSync vsync = Settings::VSync(id - 1); vsync != World::sets()->vsync) {
+		World::sets()->vsync = vsync;
+		World::window()->setSwapInterval();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetSamples(uint, const string& str) {
-	World::sets()->msamples = sstoul(str);
-	eventSaveSettings();
+	if (uint8 msamples = sstoul(str); msamples != World::sets()->msamples) {
+		World::sets()->msamples = msamples;
+		World::window()->setMultisampling();
+		World::scene()->resetFrames();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetTexturesScaleSL(Button* but) {
-	World::sets()->texScale = static_cast<Slider*>(but)->getValue();
-	World::scene()->reloadTextures();
-	but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->texScale) + '%');
-	eventSaveSettings();
+	if (uint8 tscale = static_cast<Slider*>(but)->getValue(); tscale != World::sets()->texScale) {
+		World::sets()->texScale = tscale;
+		World::scene()->reloadTextures();
+		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->texScale) + '%');
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetTextureScaleLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	World::sets()->texScale = std::clamp(sstoull(le->getText()), 1ull, 100ull);
-	World::scene()->reloadTextures();
-	le->setText(toStr(World::sets()->texScale) + '%');
-	but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(World::sets()->texScale);
-	eventSaveSettings();
+	if (uint8 tscale = std::clamp(sstoull(le->getText()), 1ull, 100ull); tscale != World::sets()->texScale) {
+		World::sets()->texScale = tscale;
+		World::scene()->reloadTextures();
+		le->setText(toStr(World::sets()->texScale) + '%');
+		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(World::sets()->texScale);
+		eventSaveSettings();
+	}
+}
+
+void Program::eventUpdateShadowResSL(Button* but) {
+	int val = static_cast<Slider*>(but)->getValue();
+	but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(val >= 0 ? uint16(std::pow(2, val)) : 0));
 }
 
 void Program::eventSetShadowResSL(Button* but) {
 	int val = static_cast<Slider*>(but)->getValue();
-	setShadowRes(val >= 0 ? uint16(std::pow(2, val)) : 0);
-	but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->shadowRes));
-	eventSaveSettings();
+	if (uint16 sres = val >= 0 ? uint16(std::pow(2, val)) : 0; sres != World::sets()->shadowRes) {
+		setShadowRes(sres);
+		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->shadowRes));
+	}
 }
 
 void Program::eventSetShadowResLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	setShadowRes(std::min(sstoull(le->getText()), 1ull << Settings::shadowBitMax));
-	le->setText(toStr(World::sets()->shadowRes));
-	but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1);
-	eventSaveSettings();
+	if (uint16 sres = std::min(sstoull(le->getText()), 1ull << Settings::shadowBitMax); sres != World::sets()->shadowRes) {
+		setShadowRes(sres);
+		le->setText(toStr(World::sets()->shadowRes));
+		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1);
+	}
 }
 
 void Program::setShadowRes(uint16 newRes) {
@@ -1254,17 +1436,20 @@ void Program::eventSetBloom(Button* but) {
 }
 
 void Program::eventSetGammaSL(Button* but) {
-	World::window()->setGamma(float(static_cast<Slider*>(but)->getValue()) / GuiGen::gammaStepFactor);
-	but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->gamma));
-	eventSaveSettings();
+	if (float gamma = float(static_cast<Slider*>(but)->getValue()) / GuiGen::gammaStepFactor; gamma != World::sets()->gamma) {
+		World::window()->setGamma(gamma);
+		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->gamma));
+	}
 }
 
 void Program::eventSetGammaLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	World::window()->setGamma(sstof(le->getText()));
-	le->setText(toStr(World::sets()->gamma));
-	but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->gamma * GuiGen::gammaStepFactor));
-	eventSaveSettings();
+	if (float gamma = sstof(le->getText()); gamma != World::sets()->gamma) {
+		World::window()->setGamma(gamma);
+		le->setText(toStr(World::sets()->gamma));
+		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->gamma * GuiGen::gammaStepFactor));
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetVolumeSL(Button* but) {
@@ -1276,13 +1461,17 @@ void Program::eventSetVolumeLE(Button* but) {
 }
 
 void Program::eventSetColorAlly(uint id, const string&) {
-	World::sets()->colorAlly = Settings::Color(id);
-	setColorPieces(World::sets()->colorAlly, game.board->getPieces().own(), game.board->getPieces().ene());
+	if (Settings::Color color = Settings::Color(id); color != World::sets()->colorAlly) {
+		World::sets()->colorAlly = color;
+		setColorPieces(color, game.board->getPieces().own(), game.board->getPieces().ene());
+	}
 }
 
 void Program::eventSetColorEnemy(uint id, const string&) {
-	World::sets()->colorEnemy = Settings::Color(id);
-	setColorPieces(World::sets()->colorEnemy, game.board->getPieces().ene(), game.board->getPieces().end());
+	if (Settings::Color color = Settings::Color(id); color != World::sets()->colorEnemy) {
+		World::sets()->colorEnemy = color;
+		setColorPieces(color, game.board->getPieces().ene(), game.board->getPieces().end());
+	}
 }
 
 void Program::setColorPieces(Settings::Color clr, Piece* pos, Piece* end) {
@@ -1308,7 +1497,7 @@ void Program::eventSetAutoVictoryPoints(Button* but) {
 
 void Program::eventSetTooltips(Button* but) {
 	World::sets()->tooltips = static_cast<CheckBox*>(but)->on;
-	resetLayoutsWithChat();
+	World::scene()->updateTooltips();
 	eventSaveSettings();
 }
 
@@ -1329,14 +1518,27 @@ void Program::eventSetDeadzoneLE(Button* but) {
 }
 
 void Program::eventSetResolveFamily(uint id, const string&) {
-	World::sets()->resolveFamily = Settings::Family(id);
-	eventSaveSettings();
+	if (Settings::Family family = Settings::Family(id); family != World::sets()->resolveFamily) {
+		World::sets()->resolveFamily = family;
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetFont(uint, const string& str) {
-	World::sets()->font = World::fonts()->init(str);
-	resetLayoutsWithChat();
-	eventSaveSettings();
+	if (string font = World::fonts()->init(str, World::sets()->hinting); font != World::sets()->font) {
+		World::sets()->font = std::move(font);
+		World::scene()->onResize();
+		eventSaveSettings();
+	}
+}
+
+void Program::eventSetFontHinting(uint id, const string&) {
+	if (Settings::Hinting hint = Settings::Hinting(id); hint != World::sets()->hinting) {
+		World::sets()->hinting = hint;
+		World::fonts()->setHinting(hint);
+		World::scene()->onResize();
+		eventSaveSettings();
+	}
 }
 
 void Program::eventSetInvertWheel(Button* but) {
@@ -1377,18 +1579,22 @@ void Program::eventDelKeyBinding(Button* but) {
 
 template <class T>
 void Program::setStandardSlider(Slider* sl, T& val) {
-	val = T(sl->getValue());
-	sl->getParent()->getWidget<LabelEdit>(sl->getIndex() + 1)->setText(toStr(val));
-	eventSaveSettings();
+	if (T nv = T(sl->getValue()); nv != val) {
+		val = nv;
+		sl->getParent()->getWidget<LabelEdit>(sl->getIndex() + 1)->setText(toStr(val));
+		eventSaveSettings();
+	}
 }
 
 template <class T>
 void Program::setStandardSlider(LabelEdit* le, T& val) {
 	Slider* sl = le->getParent()->getWidget<Slider>(le->getIndex() - 1);
-	val = T(std::clamp(sstol(le->getText()), long(sl->getMin()), long(sl->getMax())));
-	le->setText(toStr(val));
-	sl->setVal(val);
-	eventSaveSettings();
+	if (T nv = T(std::clamp(sstol(le->getText()), long(sl->getMin()), long(sl->getMax()))); nv != val) {
+		val = nv;
+		le->setText(toStr(val));
+		sl->setVal(val);
+		eventSaveSettings();
+	}
 }
 
 void Program::eventResetSettings(Button*) {
@@ -1431,7 +1637,7 @@ void Program::openDocNative(const string& path) {
 #else
 	if (int rc = system(("xdg-open " + path).c_str()))
 #endif
-		std::cerr << "failed to open file \"" << path << "\" with code " << rc << std::endl;
+		logError("failed to open file \"", path, "\" with code ", rc);
 }
 #endif
 
@@ -1444,6 +1650,10 @@ void Program::eventClosePopup(Button*) {
 void Program::eventCloseScrollingPopup(Button*) {
 	state->mainScrollContent = nullptr;
 	eventClosePopup();
+}
+
+void Program::eventMinimize(Button*) {
+	SDL_MinimizeWindow(World::window()->getWindow());
 }
 
 void Program::eventExit(Button*) {
@@ -1489,10 +1699,8 @@ void Program::eventCycleFrameCounter() {
 	if (ftimeMode = ftimeMode < FrameTime::seconds ? ftimeMode + 1 : FrameTime::none; ftimeMode == FrameTime::none)
 		box->setShow(false);
 	else {
-		GuiGen::Text txt = gui.makeFpsText(World::window()->getDeltaSec());
-		box->setSize(txt.length);
 		box->setShow(true);
-		state->getFpsText()->setText(std::move(txt.text));
+		state->getFpsText()->setText(gui.makeFpsText(World::window()->getDeltaSec()));
 		ftimeSleep = ftimeUpdateDelay;
 	}
 }
@@ -1523,121 +1731,3 @@ tuple<BoardObject*, Piece*, svec2> Program::pickBob() const {
 	BoardObject* bob = dynamic_cast<BoardObject*>(World::scene()->getSelect());
 	return tuple(bob, dynamic_cast<Piece*>(bob), bob ? game.board->ptog(bob->getPos()) : svec2(UINT16_MAX));
 }
-
-#ifdef __EMSCRIPTEN__
-void Program::fetchVersionSucceed(emscripten_fetch_t* fetch) {
-	pushFetchedVersion(string(static_cast<const char*>(fetch->data), fetch->numBytes), static_cast<WebFetchData*>(fetch->userData));
-	emscripten_fetch_close(fetch);
-}
-
-void Program::fetchVersionFail(emscripten_fetch_t* fetch) {
-	WebFetchData* wfd = static_cast<WebFetchData*>(fetch->userData);
-	wfd->error = toStr(fetch->status);
-	pushEvent(UserCode::versionFetch, wfd);
-	emscripten_fetch_close(fetch);
-}
-#elif !defined(__ANDROID__)
-int Program::fetchVersion(void* data) {
-	WebFetchData* wfd = static_cast<WebFetchData*>(data);
-	CURL* curl = nullptr;
-	void (*easy_cleanup)(CURL*);
-#ifdef _WIN32
-	HMODULE lib = LoadLibraryW(L"libcurl.dll");
-	FARPROC (__stdcall* const libsym)(HMODULE, const char*) = GetProcAddress;
-	string (*const liberror)() = lastErrorMessage;
-	BOOL (__stdcall* const libclose)(HMODULE) = FreeLibrary;
-#else
-	void* lib = dlopen("libcurl.so", RTLD_NOW);
-	void* (*const libsym)(void*, const char*) = dlsym;
-	char* (*const liberror)() = dlerror;
-	int (*const libclose)(void*) = dlclose;
-#endif
-	int rc = EXIT_SUCCESS;
-
-	try {
-		if (!lib)
-			throw liberror();
-		CURL* (*easy_init)() = reinterpret_cast<CURL* (*)()>(libsym(lib, "curl_easy_init"));
-		if (!easy_init)
-			throw liberror();
-		if (easy_cleanup = reinterpret_cast<void (*)(CURL*)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
-			throw liberror();
-		CURLcode (*easy_setopt)(CURL*, CURLoption, void*) = reinterpret_cast<CURLcode (*)(CURL*, CURLoption, void*)>(libsym(lib, "curl_easy_setopt"));
-		if (!easy_setopt)
-			throw liberror();
-		CURLcode (*easy_perform)(CURL*) = reinterpret_cast<CURLcode (*)(CURL*)>(libsym(lib, "curl_easy_perform"));
-		if (!easy_perform)
-			throw liberror();
-		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<const char* (*)(CURLcode)>(libsym(lib, "curl_easy_strerror"));
-
-		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<curl_version_info_data* (*)(CURLversion)>(libsym(lib, "curl_version_info"))) {
-			const curl_version_info_data* cinf = version_info(CURLVERSION_NOW);
-			string clver;
-			if (cinf->features & CURL_VERSION_IPV6)
-				clver += " IPv6,";
-#if CURL_AT_LEAST_VERSION(7, 10, 0)
-			if (cinf->features & CURL_VERSION_SSL)
-				clver += " SSL,";
-			if (cinf->features & CURL_VERSION_LIBZ)
-				clver += " libz,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 33, 0)
-			if (cinf->features & CURL_VERSION_HTTP2)
-				clver += " HTTP2,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 66, 0)
-			if (cinf->features & CURL_VERSION_HTTP3)
-				clver += " HTTP3,";
-#endif
-#if CURL_AT_LEAST_VERSION(7, 72, 0)
-			if (cinf->features & CURL_VERSION_UNICODE)
-				clver += " Unicode,";
-#endif
-			wfd->libVersion = clver.empty() ? cinf->version : cinf->version + string(" with") + clver.substr(0, clver.length() - 1);
-		}
-
-		if (curl = easy_init(); !curl)
-			throw "couldn't initialize curl";
-		string html;
-		easy_setopt(curl, CURLOPT_URL, wfd->url.data());
-		easy_setopt(curl, CURLOPT_FOLLOWLOCATION, reinterpret_cast<void*>(1));
-		easy_setopt(curl, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(writeText));
-		easy_setopt(curl, CURLOPT_WRITEDATA, &html);
-		if (CURLcode code = easy_perform(curl); code != CURLE_OK)
-			throw easy_strerror ? easy_strerror(code) : "couldn't fetch page";
-		pushFetchedVersion(html, wfd);
-	} catch (const string& err) {
-		wfd->error = err;
-		pushEvent(UserCode::versionFetch, wfd);
-		rc = EXIT_FAILURE;
-	} catch (const char* err) {
-		wfd->error = err ? err : "unknown error";
-		pushEvent(UserCode::versionFetch, wfd);
-		rc = EXIT_FAILURE;
-	}
-	if (curl)
-		easy_cleanup(curl);
-	if (lib)
-		libclose(lib);
-	return rc;
-}
-
-sizet Program::writeText(char* ptr, sizet size, sizet nmemb, void* userdata) {
-	sizet len = size * nmemb;
-	static_cast<string*>(userdata)->append(ptr, len);
-	return len;
-}
-#endif
-#ifndef __ANDROID__
-void Program::pushFetchedVersion(const string& html, WebFetchData* wfd) {
-	if (std::smatch sm; std::regex_search(html, sm, std::regex(wfd->regex, std::regex_constants::ECMAScript | std::regex_constants::icase)) && sm.size() >= 2) {
-		string latest = sm[1];
-		uvec4 cur = stoiv<uvec4>(Com::commonVersion, strtoul), web = stoiv<uvec4>(latest.c_str(), strtoul);
-		glm::length_t i = 0;
-		for (; i < uvec4::length() - 1 && cur[i] == web[i]; ++i);
-		if (cur[i] < web[i])
-			wfd->progVersion = "New version " + latest + " available";
-	}
-	pushEvent(UserCode::versionFetch, wfd);
-}
-#endif

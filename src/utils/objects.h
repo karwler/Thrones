@@ -28,9 +28,8 @@ private:
 	uptr<Top> top;
 	GLuint vao = 0, vbo = 0, ibo = 0, ebo = 0;
 	uint16 ecnt = 0;	// number of elements
-public:
-	uint8 shape = GL_TRIANGLES;	// GLenum for how to handle elements
 
+public:
 	void init(const vector<Vertex>& vertices, const vector<GLushort>& elements);
 	void free();
 	void draw();
@@ -85,6 +84,7 @@ public:
 	Object& operator=(Object&&) = default;
 
 	void init(Mesh* model, uint id, const Material* material, int texture, bool visible = true);
+	static void init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, int texture, bool visible = true);
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -106,8 +106,6 @@ public:
 protected:
 	void updateTransform();
 	void getTransform(mat4& model, mat3& normat);
-	void getColors(vec4& diffuse, vec4& specShine);
-	mat4 getTransform();
 };
 
 inline const vec3& Object::getPos() const {

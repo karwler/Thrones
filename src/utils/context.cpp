@@ -22,7 +22,8 @@ Context::Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2
 		if (int w = items[i].first.getRes().x + lineHeight / Label::textMarginFactor * 2 + ScrollBar::width; w > size.x)
 			size.x = w;
 	}
-	position = ivec2(calcPos(pos.x, size.x, World::window()->getGuiView().x), calcPos(pos.y, size.y, World::window()->getGuiView().y));
+	ivec2 res = World::window()->getScreenView();
+	position = ivec2(calcPos(pos.x, size.x, res.x), calcPos(pos.y, size.y, res.y));
 	onMouseMove(mPos);
 }
 
@@ -34,12 +35,12 @@ Context::~Context() {
 void Context::draw() const {
 	Rect rct = rect();
 	GLuint tex = World::scene()->texture();
-	if (Quad::draw(rct, Widget::colorDark, tex, -1.f); selected < items.size())
-		Quad::draw(Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed, tex, -1.f);
+	if (Quad::draw(World::sgui(), rct, Widget::colorDark, tex, -1.f); selected < items.size())
+		Quad::draw(World::sgui(), Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed, tex, -1.f);
 
 	mvec2 i = listSize.y <= size.y ? mvec2(0, items.size()) : mvec2(scroll.listPos.y / lineHeight, (size.y + scroll.listPos.y + lineHeight - 1) / lineHeight);
 	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + i.x * lineHeight - scroll.listPos.y); i.x < i.y; ++i.x, pos.y += lineHeight)
-		Quad::draw(Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first, -1.f);
+		Quad::draw(World::sgui(), Rect(pos, items[i.x].first.getRes()), rct, vec4(1.f), items[i.x].first, -1.f);
 	scroll.draw(listSize, position, size, true, -1.f);
 }
 

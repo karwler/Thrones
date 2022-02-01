@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oven/oven.h"
+#include "utils/utils.h"
 
 class AudioSys {
 private:
@@ -18,5 +18,5 @@ public:
 	void play(const string& name);
 
 private:
-	static void callback(void* udata, uint8* stream, int len);
+	static void SDLCALL callback(void* udata, uint8* stream, int len);
 };

@@ -1,5 +1,4 @@
 #include "log.h"
-#include <ctime>
 #ifdef _WIN32
 #include <windows.h>
 #ifndef __MINGW32__
@@ -8,24 +7,6 @@
 #else
 #include <dirent.h>
 #endif
-
-// DATE
-
-DateTime::DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay) :
-	sec(second),
-	min(minute),
-	hour(dhour),
-	day(mday),
-	month(ymonth),
-	wday(weekDay),
-	year(tyear)
-{}
-
-DateTime DateTime::now() {
-	time_t rawt = time(nullptr);
-	struct tm* tim = localtime(&rawt);
-	return DateTime(tim->tm_sec, tim->tm_min, tim->tm_hour, tim->tm_mday, tim->tm_mon + 1, tim->tm_year + 1900, tim->tm_wday ? tim->tm_wday : 7);
-}
 
 // LOG
 

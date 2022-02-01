@@ -3,264 +3,132 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
-#include <iostream>
 
 constexpr char mtlKeywordNewmtl[] = "newmtl";
-constexpr char argAudio = 'a';
 constexpr char argMaterial = 'm';
 constexpr char argObject = 'o';
 constexpr char argShader = 's';
 constexpr char argShaderE = 'S';
 constexpr char argTexture = 't';
 constexpr char argTextureR = 'T';
-constexpr char messageUsage[] = "usage: oven <-a|-m|-o|-s|-t> <destination file> <input files>";
+constexpr char messageUsage[] = "usage: oven <-m|-o|-s|-t> <destination file/directory> <input files>";
+constexpr int maxWindowIconSize = 128;
 
-// OBJ FILE DATA
-
-struct Blueprint {
-	string name;
-	vector<GLushort> elems;
-	vector<Vertex> data;
-	uint8 level;
-
-	Blueprint(string&& capt, vector<GLushort>&& elements, vector<Vertex>&& vertices, uint8 lvl);
-
-	bool empty() const;
-};
-
-Blueprint::Blueprint(string&& capt, vector<GLushort>&& elements, vector<Vertex>&& vertices, uint8 lvl) :
-	name(std::move(capt)),
-	elems(std::move(elements)),
-	data(std::move(vertices)),
-	level(lvl)
-{}
-
-bool Blueprint::empty() const {
-	return elems.empty() || data.empty();
-}
-
-// TEXTURE FILE DATA
-
-struct PixelData {
-	vector<uint8> data;
-	ivec2 res = ivec2(0);
-	SDL_PixelFormatEnum format;
-
-	PixelData() = default;
-	PixelData(vector<uint8>&& pdata, ivec2 resolution, SDL_PixelFormatEnum pixelformat);
-};
-
-PixelData::PixelData(vector<uint8>&& pdata, ivec2 resolution, SDL_PixelFormatEnum pixelformat) :
-	data(std::move(pdata)),
-	res(resolution),
-	format(pixelformat)
-{}
-
-struct Image {
-	string name;
-	vector<PixelData> pdat;
-	TexturePlacement place;
-
-	Image(string&& fname, vector<PixelData>&& data, TexturePlacement tpl);
-};
-
-Image::Image(string&& fname, vector<PixelData>&& data, TexturePlacement tpl) :
-	name(std::move(fname)),
-	pdat(std::move(data)),
-	place(tpl)
-{}
-
-// UTILITY
-
-template <class T = string>
-T loadFile(const string& path) {
-	T data;
-#ifdef _WIN32
-	if (FILE* ifh = _wfopen(sstow(path).c_str(), L"rb")) {
-#else
-	if (FILE* ifh = fopen(path.c_str(), defaultReadMode)) {
-#endif
-		if (!fseek(ifh, 0, SEEK_END))
-			if (long len = ftell(ifh); len != -1 && !fseek(ifh, 0, SEEK_SET)) {
-				data.resize(ulong(len));
-				if (sizet red = fread(data.data(), sizeof(*data.data()), data.size(), ifh); red < data.size())
-					data.resize(red);
-			}
-		fclose(ifh);
-	}
-	return data;
-}
-
-// AUDIOS
-
-static void loadWav(const char* file, vector<pair<string, Sound>>& auds) {
-	Sound sound;
-	if (SDL_AudioSpec spec; SDL_LoadWAV(file, &spec, &sound.data, &sound.length)) {
-		if (sound.set(spec); sound.convert(Sound::defaultSpec))
-			auds.emplace_back(filename(delExt(file)), sound);
-		else {
-			sound.free();
-			std::cerr << "error: couldn't convert " << file << linend << SDL_GetError() << std::endl;
+static void processMaterials(const vector<string>& files, const string& dest) {
+	vector<pair<string, Material>> mtls = { pair(string(), Material()) };
+	for (const string& file : files) {
+		vector<string> lines = readTextLines(loadFile(file));
+		if (lines.empty()) {
+			logError("failed to read ", file);
+			continue;
 		}
+
+		for (const string& line : lines) {
+			if (sizet len = strlen(mtlKeywordNewmtl); !SDL_strncasecmp(line.c_str(), mtlKeywordNewmtl, len)) {
+				if (pair<string, Material> next(trim(line.substr(len)), Material()); mtls.back().first.empty())
+					mtls.back() = std::move(next);
+				else
+					mtls.push_back(std::move(next));
+			} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
+				if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
+					mtls.back().second.color = stofv<vec4>(&line[2], strtof, 1.f);
+				else if (c1 == 'S')
+					mtls.back().second.spec = stofv<vec3>(&line[2], strtof, 1.f);
+			} else if (c0 == 'N') {
+				if (toupper(line[1]) == 'S')
+					mtls.back().second.shine = sstof(&line[2]) / 1000.f * 128.f;
+			} else if (c0 == 'D')
+				mtls.back().second.color.a = sstof(&line[1]);
+			else if (c0 == 'T' && toupper(line[1]) == 'R')
+				mtls.back().second.color.a = 1.f - sstof(&line[2]);	// inverse of d
+		}
+		if (mtls.back().first.empty())
+			mtls.pop_back();
+	}
+	if (mtls.size() > UINT16_MAX) {
+		logError("the material count exceeds ", UINT16_MAX);
+		return;
+	}
+
+	if (SDL_RWops* ofh = SDL_RWFromFile(dest.c_str(), defaultWriteMode)) {
+		uint16 mamt = mtls.size();
+		SDL_RWwrite(ofh, &mamt, sizeof(mamt), 1);
+		for (const auto& [name, matl] : mtls) {
+			uint16 nlen = name.length();
+			SDL_RWwrite(ofh, &nlen, sizeof(nlen), 1);
+			SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
+			SDL_RWwrite(ofh, &matl, sizeof(float), sizeof(Material) / sizeof(float));
+		}
+		SDL_RWclose(ofh);
 	} else
-		std::cerr << "error: couldn't read " << file << linend << SDL_GetError() << std::endl;
+		logError("failed to write ", dest);
 }
 
-static void writeAudios(const char* file, vector<pair<string, Sound>>& auds) {
-	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
-	if (!ofh) {
-		std::cerr << "error: couldn't write " << file << std::endl;
-		return;
-	}
-	uint8 obuf[audioHeaderSize];
-	writeMem(obuf, uint16(auds.size()));
-	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
-
-	for (auto& [name, sound] : auds) {
-		obuf[0] = name.length();
-		obuf[1] = sound.channels;
-		writeMem(obuf + 2, sound.length);
-		writeMem(obuf + 6, sound.frequency);
-		writeMem(obuf + 8, sound.format);
-		writeMem(obuf + 10, sound.samples);
-
-		SDL_RWwrite(ofh, obuf, sizeof(*obuf), audioHeaderSize);
-		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
-		SDL_RWwrite(ofh, sound.data, sizeof(*sound.data), sound.length);
-		sound.free();
-	}
-	SDL_RWclose(ofh);
-}
-
-// MATERIALS
-
-static void loadMtl(const char* file, vector<pair<string, Material>>& mtls) {
-	vector<string> lines = readTextLines(loadFile(file));
-	if (lines.empty()) {
-		std::cerr << "error: couldn't read " << file << std::endl;
-		return;
-	}
-	mtls.emplace_back();
-
-	for (const string& line : lines) {
-		if (sizet len = strlen(mtlKeywordNewmtl); !SDL_strncasecmp(line.c_str(), mtlKeywordNewmtl, len)) {
-			if (pair<string, Material> next(trim(line.substr(len)), Material()); mtls.back().first.empty())
-				mtls.back() = std::move(next);
-			else
-				mtls.push_back(std::move(next));
-		} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
-			if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
-				mtls.back().second.color = stofv<vec4>(&line[2], strtof, 1.f);
-			else if (c1 == 'S')
-				mtls.back().second.spec = stofv<vec3>(&line[2], strtof, 1.f);
-		} else if (c0 == 'N') {
-			if (toupper(line[1]) == 'S')
-				mtls.back().second.shine = sstof(&line[2]) / 1000.f * 128.f;
-		} else if (c0 == 'D')
-			mtls.back().second.color.a = sstof(&line[1]);
-		else if (c0 == 'T' && toupper(line[1]) == 'R')
-			mtls.back().second.color.a = 1.f - sstof(&line[2]);	// inverse of d
-	}
-	if (mtls.back().first.empty())
-		mtls.pop_back();
-}
-
-static void writeMaterials(const char* file, vector<pair<string, Material>>& mtls) {
-	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
-	if (!ofh) {
-		std::cerr << "error: couldn't write " << file << std::endl;
-		return;
-	}
-	uint16 mamt = mtls.size();
-	SDL_RWwrite(ofh, &mamt, sizeof(mamt), 1);
-
-	for (const auto& [name, matl] : mtls) {
-		uint8 nlen = name.length();
-		SDL_RWwrite(ofh, &nlen, sizeof(nlen), 1);
-		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
-		SDL_RWwrite(ofh, &matl, sizeof(float), sizeof(Material) / sizeof(float));
-	}
-	SDL_RWclose(ofh);
-}
-
-// OBJECTS
-
-static void loadObj(const char* file, vector<Blueprint>& bprs) {
-	uint8 level = UINT8_MAX;
+static void processObject(const string& file, const string& dest) {
 	string name = filename(delExt(file));
 	if (name.empty()) {
-		std::cerr << "error: empty object name in " << file << std::endl;
+		logError("empty object name in ", file);
 		return;
-	}
-	if (isdigit(name.back()) && name.length() > 1) {
-		level = name.back() - '0';
-		name.pop_back();
 	}
 
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(file, aiProcess_CalcTangentSpace | aiProcess_JoinIdenticalVertices | aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_PreTransformVertices | aiProcess_ImproveCacheLocality | aiProcess_FlipUVs | aiProcess_FlipWindingOrder);
 	if (!(scene && scene->HasMeshes())) {
-		std::cerr << "error: failed to read " << name << std::endl;
+		logError("failed to read ", name, ": ", importer.GetErrorString());
 		return;
 	}
 
-	const aiMesh* mesh = scene->mMeshes[0];
-	if (!(mesh->HasPositions() && mesh->HasFaces())) {
-		std::cerr << "error: insufficient data in mesh " << name << std::endl;
-		return;
-	}
+	for (uint m = 0; m < scene->mNumMeshes; ++m) {
+		const aiMesh* mesh = scene->mMeshes[m];
+		if (!(mesh->HasPositions() && mesh->HasFaces())) {
+			logError("insufficient data in mesh ", name, "::", mesh->mName.C_Str());
+			continue;
+		}
+		if (mesh->mNumVertices > UINT16_MAX) {
+			logError("the vertex count of ", name, "::", mesh->mName.C_Str(), " exceeds ", UINT16_MAX);
+			continue;
+		}
+		if (mesh->mNumFaces * 3 > UINT16_MAX) {
+			logError("the element count of ", name, "::", mesh->mName.C_Str(), " exceeds ", UINT16_MAX);
+			continue;
+		}
 
-	vector<Vertex> verts(mesh->mNumVertices);
-	for (uint i = 0; i < mesh->mNumVertices; ++i) {
-		verts[i].pos = vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
-		verts[i].nrm = vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z);
-		if (mesh->HasTextureCoords(0) && mesh->HasTangentsAndBitangents()) {
-			verts[i].tuv = vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y);
-			verts[i].tng = vec3(mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z);
-		} else {
-			verts[i].tuv = vec2(0.f);
-			verts[i].tng = vec3(0.f);
+		vector<Vertex> verts(mesh->mNumVertices);
+		for (uint i = 0; i < mesh->mNumVertices; ++i) {
+			verts[i].pos = vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+			verts[i].nrm = vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z);
+			if (mesh->HasTextureCoords(0) && mesh->HasTangentsAndBitangents()) {
+				verts[i].tuv = vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y);
+				verts[i].tng = vec3(mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z);
+			} else {
+				verts[i].tuv = vec2(0.f);
+				verts[i].tng = vec3(0.f);
+			}
+		}
+
+		vector<GLushort> elems(mesh->mNumFaces * 3);
+		uint i = 0;
+		for (uint j = 0; i < mesh->mNumFaces; ++i, j += 3) {
+			if (mesh->mFaces[i].mNumIndices == 3)
+				std::copy_n(mesh->mFaces[i].mIndices, 3, elems.begin() + j);
+			else {
+				logError("invalid number of face indices ", mesh->mFaces[i].mNumIndices, " in ", name, "::", mesh->mName.C_Str());
+				break;
+			}
+		}
+		if (i == mesh->mNumFaces) {
+			string dname = !mesh->mName.length || !SDL_strcasecmp(mesh->mName.C_Str(), "defaultobject") ? std::move(name) : mesh->mName.C_Str() + string(std::find_if_not(name.rbegin(), name.rend(), isdigit).base(), name.end());
+			if (SDL_RWops* ofh = SDL_RWFromFile((dest + dname + ".dat").c_str(), defaultWriteMode)) {
+				uint16 obuf[2] = { uint16(elems.size()), uint16(verts.size()) };
+				SDL_RWwrite(ofh, obuf, sizeof(*obuf), 2);
+				SDL_RWwrite(ofh, elems.data(), sizeof(*elems.data()), elems.size());
+				SDL_RWwrite(ofh, verts.data(), sizeof(*verts.data()), verts.size());
+				SDL_RWclose(ofh);
+			} else
+				logError("failed to write object ", dname);
 		}
 	}
-
-	vector<GLushort> elems(mesh->mNumFaces * 3);
-	for (uint i = 0, j = 0; i < mesh->mNumFaces; ++i, j += 3) {
-		if (mesh->mFaces[i].mNumIndices == 3)
-			std::copy_n(mesh->mFaces[i].mIndices, 3, elems.begin() + j);
-		else
-			std::cerr << "invalid number of face indices " << mesh->mFaces[i].mNumIndices << " in " << name << std::endl;
-	}
-	bprs.emplace_back(std::move(name), std::move(elems), std::move(verts), level);
 }
-
-static void writeObjects(const char* file, vector<Blueprint>& bprs) {
-	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
-	if (!ofh) {
-		std::cerr << "error: couldn't write " << file << std::endl;
-		return;
-	}
-	std::sort(bprs.begin(), bprs.end(), [](const Blueprint& a, const Blueprint& b) -> bool { return a.level < b.level; });
-	uint8 obuf[objectHeaderSize];
-	writeMem(obuf, uint16(bprs.size()));
-	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
-
-	for (const Blueprint& it : bprs) {
-		if (it.data.size() > 64000)
-			std::cout << "warning: " << it.name << "'s size of " << it.data.size() << " exceeds 8000 vertices" << std::endl;
-
-		obuf[0] = it.name.length();
-		writeMem(obuf + 1, uint16(it.elems.size()));
-		writeMem(obuf + 3, uint16(it.data.size()));
-
-		SDL_RWwrite(ofh, obuf, sizeof(*obuf), objectHeaderSize);
-		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
-		SDL_RWwrite(ofh, it.elems.data(), sizeof(*it.elems.data()), it.elems.size());
-		SDL_RWwrite(ofh, it.data.data(), sizeof(*it.data.data()), it.data.size());
-	}
-	SDL_RWclose(ofh);
-}
-
-// SHADERS
 
 #ifdef NDEBUG
 static bool checkText(char c) {
@@ -272,7 +140,7 @@ static bool checkSpace(char c) {
 }
 #endif
 
-static void loadGlsl(const char* file, vector<pairStr>& srcs, bool gles) {
+static void processShader(const string& file, const string& dest, bool gles) {
 	string text = trim(loadFile(file));
 #ifdef NDEBUG
 	bool keepLF = false;
@@ -311,146 +179,55 @@ static void loadGlsl(const char* file, vector<pairStr>& srcs, bool gles) {
 			text.replace(p, text.find('\n', p) - p + 1, "300 es\nprecision highp float;precision highp int;precision highp sampler2D;precision highp sampler2DArray;precision highp samplerCube;");
 		}
 	}
-	if (!text.empty())
-		srcs.emplace_back(filename(file), std::move(text));
+
+	if (string name = filename(file); !text.empty()) {
+		if (SDL_RWops* ofh = SDL_RWFromFile((dest + name).c_str(), defaultWriteMode)) {
+			SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
+			SDL_RWclose(ofh);
+		} else
+			logError("failed to write shader ", name);
+	} else
+		logError("no text for shader ", name);
 }
 
-static void writeShaders(const char* file, vector<pairStr>& srcs) {
-	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
-	if (!ofh) {
-		std::cerr << "error: couldn't write " << file << std::endl;
+static void processTexture(const string& file, const string& dest, bool gles) {
+	SDL_Surface* img = IMG_Load(file.c_str());
+	if (!img) {
+		logError("failed to load ", file, ": ", IMG_GetError());
 		return;
 	}
-	uint8 obuf[shaderHeaderSize] = { uint8(srcs.size()) };
-	SDL_RWwrite(ofh, obuf, sizeof(*obuf), 1);
 
-	for (const auto& [name, text] : srcs) {
-		obuf[0] = name.length();
-		writeMem(obuf + 1, uint16(text.length()));
-
-		SDL_RWwrite(ofh, obuf, sizeof(*obuf), shaderHeaderSize);
-		SDL_RWwrite(ofh, name.c_str(), sizeof(*name.c_str()), name.length());
-		SDL_RWwrite(ofh, text.c_str(), sizeof(*text.c_str()), text.length());
-	}
-	SDL_RWclose(ofh);
-}
-
-// TEXTURES
-
-static PixelData loadImageFile(const char* file, const string& name, bool gles) {
-	vector<uint8> data = loadFile<vector<uint8>>(file);
-	SDL_Surface* img = IMG_Load_RW(SDL_RWFromConstMem(data.data(), data.size()), SDL_TRUE);
-	if (!img) {
-		std::cerr << "failed to load " << name << ": " << IMG_GetError() << std::endl;
-		return PixelData();
-	}
-
-	bool renew = gles;
-	if (renew)
+	if (gles) {
 		if (img = scaleSurface(img, 2); !img)
-			return PixelData();
-	if (img->format->BytesPerPixel < 4) {
+			return;
+	} else if (strciEndsWith(file, ".svg") && (img->w > maxWindowIconSize || img->h > maxWindowIconSize))
+		if (img = scaleSurface(img, ivec2(maxWindowIconSize)); !img)
+			return;
+
+	string name = filename(delExt(file));
+	if (img->format->BytesPerPixel != 4) {
 		SDL_Surface* dst = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_RGBA32, 0);
 		SDL_FreeSurface(img);
 		if (!dst) {
-			std::cerr << "failed to convert " << name << ": " << SDL_GetError() << std::endl;
-			return PixelData();
+			logError("failed to convert ", file, ": ", SDL_GetError());
+			return;
 		}
 		img = dst;
-		renew = true;
 	}
-
-	if (renew) {
-		data.resize(sizet(img->pitch) * sizet(img->h) * 2);	// double the size just in case it ends up big
-		SDL_RWops* dw = SDL_RWFromMem(data.data(), data.size());
-		if (IMG_SavePNG_RW(img, dw, SDL_FALSE)) {
-			SDL_RWclose(dw);
-			SDL_FreeSurface(img);
-			std::cerr << "failed to save " << name << ": " << IMG_GetError() << std::endl;
-			return PixelData();
-		}
-		data.resize(SDL_RWtell(dw));
-		SDL_RWclose(dw);
-	}
-	PixelData pret(std::move(data), ivec2(img->w, img->h), SDL_PixelFormatEnum(img->format->format));
+	if (IMG_SavePNG(img, (dest + name + ".png").c_str()))
+		logError("failed to write write texture ", name, ": ", IMG_GetError());
 	SDL_FreeSurface(img);
-	return pret;
 }
 
-static void loadImg(const char* file, vector<Image>& imgs, bool gles) {
-	string name = filename(delExt(file));
-	string::iterator num = std::find_if_not(name.rbegin(), name.rend(), isdigit).base();
-	if (num == name.begin() || num == name.end()) {
-		std::cerr << "invalid texture name: " << name << std::endl;
-		return;
-	}
-	TexturePlacement place = TexturePlacement(*num - '0');
-	if (place > TEXPLACE_CUBE || (place == TEXPLACE_CUBE ? *(num + 1) < '0' || *(num + 1) > '5' || num + 2 != name.end() : num + 1 != name.end())) {
-		std::cerr << "texture placement out of bounds: " << name << std::endl;
-		return;
-	}
-	name.erase(num, name.end());
+template <class F, class... A>
+void process(const char* dest, const vector<string>& files, F proc, A... args) {
+	if (createDirectories(dest)) {
+		string dirPath = appDsep(dest);
+		for (const string& it : files)
+			proc(it, dirPath, std::forward<A>(args)...);
+	} else
+		logError("failed to create directory ", dest);
 
-	vector<PixelData> pdat(place != TEXPLACE_CUBE ? place & TEXPLACE_OBJECT ? 2 : 1 : 6);
-	if (place != TEXPLACE_CUBE) {
-		pdat[0] = loadImageFile(file, name, gles);
-		if (pdat[0].data.empty())
-			return;
-
-		if (place & TEXPLACE_OBJECT) {
-			string normalFile = file;
-			normalFile[normalFile.rfind('.')-1] = 'N';
-			pdat[1] = loadImageFile(normalFile.c_str(), name, gles);
-		}
-	} else {
-		string cubeFile = file;
-		sizet idid = cubeFile.rfind('.') - 1;
-		for (uint8 i = 0; i < pdat.size(); ++i) {
-			cubeFile[idid] = '0' + i;
-			if (pdat[i] = loadImageFile(cubeFile.c_str(), name, gles); pdat[i].data.empty())
-				return;
-		}
-	}
-	imgs.emplace_back(std::move(name), std::move(pdat), place);
-}
-
-static void writeImages(const char* file, vector<Image>& imgs) {
-	SDL_RWops* ofh = SDL_RWFromFile(file, defaultWriteMode);
-	if (!ofh) {
-		std::cerr << SDL_GetError() << std::endl;
-		return;
-	}
-	uint8 obuf[textureHeaderSize];
-	writeMem(obuf, uint16(imgs.size()));
-	SDL_RWwrite(ofh, obuf, sizeof(uint16), 1);
-
-	for (Image& it : imgs) {
-		obuf[0] = it.place;
-		obuf[1] = it.name.length();
-
-		SDL_RWwrite(ofh, obuf, sizeof(*obuf), textureHeaderSize);
-		SDL_RWwrite(ofh, it.name.c_str(), sizeof(*it.name.c_str()), it.name.length());
-		for (const PixelData& pd : it.pdat) {
-			uint32 dataSize = pd.data.size();
-			SDL_RWwrite(ofh, &dataSize, sizeof(dataSize), 1);
-			SDL_RWwrite(ofh, pd.data.data(), sizeof(*pd.data.data()), pd.data.size());
-		}
-	}
-	SDL_RWclose(ofh);
-}
-
-// PROGRAM
-
-template <class T, class F, class... A>
-void process(const char* dest, const vector<string>& files, F loader, void (*writer)(const char*, vector<T>&), A... args) {
-	vector<T> dats;
-	for (const string& it : files)
-		loader(it.c_str(), dats, args...);
-
-	if (!dats.empty())
-		writer(dest, dats);
-	else
-		std::cout << "nothing to write for " << dest << std::endl;
 }
 
 #if defined(_WIN32) && !defined(__MINGW32__)
@@ -459,28 +236,26 @@ int wmain(int argc, wchar** argv) {
 int main(int argc, char** argv) {
 #endif
 	if (SDL_Init(0) || IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG) {
-		std::cerr << SDL_GetError() << std::endl;
+		logError(SDL_GetError());
 		return -1;
 	}
 
-	if (Arguments arg(argc, argv, {}, { argAudio, argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
-		std::cout << "no input files" << linend << messageUsage << std::endl;
-	else if (const char* dest = arg.getOpt(argAudio))
-		process(dest, arg.getVals(), loadWav, writeAudios);
-	else if (dest = arg.getOpt(argMaterial); dest)
-		process(dest, arg.getVals(), loadMtl, writeMaterials);
+	if (Arguments arg(argc, argv, {}, { argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
+		logInfo("no input files\n", messageUsage);
+	else if (const char* dest = arg.getOpt(argMaterial); dest)
+		processMaterials(arg.getVals(), dest);
 	else if (dest = arg.getOpt(argObject); dest)
-		process(dest, arg.getVals(), loadObj, writeObjects);
+		process(dest, arg.getVals(), processObject);
 	else if (dest = arg.getOpt(argShader); dest)
-		process(dest, arg.getVals(), loadGlsl, writeShaders, false);
+		process(dest, arg.getVals(), processShader, false);
 	else if (dest = arg.getOpt(argShaderE); dest)
-		process(dest, arg.getVals(), loadGlsl, writeShaders, true);
+		process(dest, arg.getVals(), processShader, true);
 	else if (dest = arg.getOpt(argTexture); dest)
-		process(dest, arg.getVals(), loadImg, writeImages, false);
+		process(dest, arg.getVals(), processTexture, false);
 	else if (dest = arg.getOpt(argTextureR); dest)
-		process(dest, arg.getVals(), loadImg, writeImages, true);
+		process(dest, arg.getVals(), processTexture, true);
 	else
-		std::cout << "error: invalid mode" << linend << messageUsage << std::endl;
+		logInfo("invalid mode\n", messageUsage);
 
 	IMG_Quit();
 	SDL_Quit();

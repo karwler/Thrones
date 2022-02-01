@@ -129,6 +129,10 @@ void Binding::init(Type type) {
 		bcall = &ProgState::eventFrameCounter;
 		ucall = nullptr;
 		break;
+	case Type::screenshot:
+		bcall = &ProgState::eventScreenshot;
+		ucall = nullptr;
+		break;
 	case Type::selectNext:
 		bcall = &ProgState::eventSelectNext;
 		ucall = nullptr;
@@ -350,6 +354,11 @@ void Binding::reset(Binding::Type type) {
 		joys = { JoystickButton::rs };
 		gpds = { SDL_CONTROLLER_BUTTON_RIGHTSTICK };
 		break;
+	case Type::screenshot:
+		keys = { SDL_SCANCODE_F12 };
+		joys.clear();
+		gpds.clear();
+		break;
 	case Type::selectNext:
 		keys.clear();
 		joys = { JoystickButton::lb, JoystickButton::lt };
@@ -476,6 +485,7 @@ Settings::Settings() :
 	ssao(true),
 	bloom(true),
 #endif
+	hinting(defaultHinting),
 	avolume(0),
 	colorAlly(defaultAlly),
 	colorEnemy(defaultEnemy),

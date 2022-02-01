@@ -50,9 +50,9 @@
 		<li>FreeType</li>
 		<li>libcurl (optional)</li>
 		<li>libpng</li>
-		<li>SDL2 2.0.18</li>
+		<li>SDL2 2.0.20</li>
 		<li>SDL2_image 2.0.5</li>
-		<li>SDL2_ttf 2.0.15</li>
+		<li>SDL2_ttf 2.0.18</li>
 		<li>zlib</li>
 	</ul>
 	<h3>macOS</h3>
@@ -132,6 +132,8 @@
 	<p>The server's address to connect to when clicking "Connect".</p>
 	<h3>Port</h3>
 	<p>The server's port to connect to when clicking "Connect".</p>
+	<h3>Name</h3>
+	<p>The username to use in a server. If no name is set, the user will be given a random identifier.</p>
 	<h3>Display</h3>
 	<p>The index of what display to place the window on. Choosing a non-primary display can break the rendering on some systems.</p>
 	<h3>Screen</h3>
@@ -139,6 +141,10 @@
 		<tr>
 			<td>window</td>
 			<td>regular decorated window</td>
+		</tr>
+		<tr>
+			<td>borderless window</td>
+			<td>borderless window with a custom title bar</td>
 		</tr>
 		<tr>
 			<td>borderless</td>
@@ -163,6 +169,10 @@
 	<p>The width/height of the light's shadow cubemap texture. Shadows are disabled if set to 0 or under OpenGL ES.</p>
 	<h3>Soft shadows</h3>
 	<p>Blur the edges of shadows.</p>
+	<h3>SSAO</h3>
+	<p>Render with screen space ambient occlusion.</p>
+	<h3>Bloom</h3>
+	<p>Renders a light blur around bright areas.</p>
 	<h3>Texture scale</h3>
 	<p>Scale of texture sizes.</p>
 	<h3>VSync</h3>
@@ -183,7 +193,7 @@
 	<h3>Gamma</h3>
 	<p>Aka. brightness. Doesn't work on some systems.</p>
 	<h3>Volume</h3>
-	<p>Volume of sound effects. Disabled by default because the sound effects are terrible and annoying.</p>
+	<p>Audio volume of sound effects. Disabled by default because the sound effects are terrible and annoying.</p>
 	<h3>Color ally</h3>
 	<p>Color of own pieces.</p>
 	<h3>Color enemy</h3>
@@ -192,6 +202,8 @@
 	<p>When enabled, the amounts of home and middle tiles will be adjusted accordingly when changing the homeland size. "New_amount_of_each_tile = old_amount * new_area / old_area", the area values referring to either the homeland area for homeland tiles or the width of the board for middle row tiles.</p>
 	<h3>Scale pieces</h3>
 	<p>When enabled, the amounts of a player's pieces will be adjusted accordingly when changing the homeland size. "New_amount_of_each_piece = old_amount * new_area / old_area" floored, the area values referring to the homeland area.</p>
+	<h3>Auto victory points</h3>
+	<p>Automatically adjust the game configuration when toggling the victory points game variant.</p>
 	<h3>Show tooltips</h3>
 	<p>Display widgets' tooltips when hovering over them with the cursor.</p>
 	<h3>Chat line limit</h3>
@@ -213,8 +225,10 @@
 			<td>Use only IPv6 for resolving host addresses.</td>
 		</tr>
 	</table>
-	<h3>Regular font</h3>
-	<p>The standard font is Romanesque and the alternative is Merriweather, which supports a larger character set.</p>
+	<h3>Font</h3>
+	<p>Set the font of the UI and its hinting. The standard font is Romanesque and the alternative are Merriweather and Kurinto, which support a larger character set.</p>
+	<h3>Invert mouse wheel</h3>
+	<p>Whether to invert the motion of the mouse wheel.</p>
 	<h3>Key bindings</h3>
 	<p>A table of all key bindings. The first column lists keyboard bindings, the second lists joystick bindings and the third lists gamepad bindings. A binding can be edited by left clicking the field or deleted by right clicking it. The plus buttons on the right can be used to add new key bindings.</p>
 	<table class="listing">
@@ -329,6 +343,10 @@
 		<tr>
 			<td>Frame counter</td>
 			<td>Cycle through the frame counter overlay's modes. Those being frames per second, tick duration in ms and off.</td>
+		</tr>
+		<tr>
+			<td>Screenshot</td>
+			<td>Take a screenshot and save it to the game's preferences directory.</td>
 		</tr>
 		<tr>
 			<td>Select next</td>
@@ -539,8 +557,12 @@
 			<td>Exit the game.</td>
 		</tr>
 		<tr>
+			<td>Settings</td>
+			<td>Open a settings dialog. This button is moved to the title bar when using borderless window mode.</td>
+		</tr>
+		<tr>
 			<td>Config</td>
-			<td>View the current game configuration.</td>
+			<td>View the current game configuration. This button is moved to the title bar when using borderless window mode.</td>
 		</tr>
 		<tr>
 			<td>Save</td>
@@ -589,8 +611,12 @@
 			<td>Surrender to the opponent. If playing on a multi-room server, this button will just finish the match, rather than abort it and exit the room.</td>
 		</tr>
 		<tr>
+			<td>Settings</td>
+			<td>Open a settings dialog. This button is moved to the title bar when using borderless window mode.</td>
+		</tr>
+		<tr>
 			<td>Config</td>
-			<td>View the current game configuration.</td>
+			<td>View the current game configuration. This button is moved to the title bar when using borderless window mode.</td>
 		</tr>
 		<tr>
 			<td>Chat</td>

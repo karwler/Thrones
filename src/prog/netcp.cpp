@@ -1,7 +1,6 @@
 #include "netcp.h"
 #include "program.h"
 #include "progs.h"
-#include <iostream>
 using namespace Com;
 
 // CONNECTOR
@@ -230,7 +229,7 @@ bool Netcp::tickValidate() {
 
 	bool nameClash;
 	for (bool fin = recvb.recvData(sock.fd);;)
-		switch (recvb.recvConn(sock.fd, webs, nameClash, [](const string&) -> bool { return true; })) {
+		switch (Buffer::Init ic = recvb.recvConn(sock.fd, webs, nameClash, [](const string&) -> bool { return true; }); ic) {
 		case Buffer::Init::wait:
 			if (fin)
 				throw Error(msgConnectionLost);
@@ -245,6 +244,7 @@ bool Netcp::tickValidate() {
 		case Buffer::Init::error:
 			closeSocket(sock.fd);
 			tickproc = &Netcp::tickDiscard;
+			logError(ic == Buffer::Init::version ? "rejected connection: invalid guest version" : "rejected connection: invalid data");
 			return false;
 		}
 }
@@ -311,7 +311,7 @@ void NetcpHost::tick() {
 			sock.fd = acceptSocket(serv.fd);
 			tickproc = &NetcpHost::tickValidate;
 		} catch (const Error& err) {
-			std::cerr << "failed to connect guest: " << err.what() << std::endl;
+			logError("failed to connect guest: ", err.what());
 		}
 	}
 }

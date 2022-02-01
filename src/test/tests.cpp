@@ -19,7 +19,6 @@ bool operator!=(const IniLine& a, const IniLine& b) {
 int main() {
 	testAlias();
 	testFileSys();
-	testOven();
 	testServer();
 	testText();
 	testUtils();

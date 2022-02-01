@@ -1,7 +1,5 @@
 #include "server.h"
 #include "utils/text.h"
-#include <ctime>
-#include <iostream>
 #include <random>
 
 namespace Com {
@@ -287,9 +285,7 @@ ulong generateRandomSeed() {
 	try {
 		std::random_device rd;
 		return rd();
-	} catch (...) {
-		std::cerr << "failed to use random_device" << std::endl;
-	}
+	} catch (...) {}
 	return time(nullptr);
 }
 
@@ -479,8 +475,6 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs, bool& nameError, bool (*
 		eraseFront(rend - data.get());
 		webs = true;
 		return Init::cont; }
-	default:
-		std::cerr << "invalid init code '" << uint(dc) << '\'' << std::endl;
 	}
 	clear();
 	return Init::error;

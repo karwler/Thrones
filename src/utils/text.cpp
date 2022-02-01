@@ -1,4 +1,5 @@
 #include "text.h"
+#include <ctime>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -128,15 +129,26 @@ vector<string> readTextLines(const string& text) {
 	return lines;
 }
 
-void createDirectories(const string& path) {
-	for (string::const_iterator end = std::find_if_not(path.begin(), path.end(), isDsep); end != path.end(); end = std::find_if_not(end, path.end(), isDsep)) {
-		end = std::find_if(end, path.end(), isDsep);
+bool createDirectories(const string& path) {
+	bool ok = true;
 #ifdef _WIN32
-		CreateDirectoryW(sstow(string(path.begin(), end)).c_str(), nullptr);
+	wstring wpath = sstow(path);
+	if (DWORD rc = GetFileAttributesW(wpath.c_str()); rc == INVALID_FILE_ATTRIBUTES || !(rc & FILE_ATTRIBUTE_DIRECTORY))
+		for (wstring::iterator end = std::find_if_not(wpath.begin(), wpath.end(), isDsep); end != wpath.end(); end = std::find_if_not(end, wpath.end(), isDsep)) {
+			end = std::find_if(end, wpath.end(), isDsep);
+			wchar tmp = *end;
+			*end = '\0';
+			ok = CreateDirectoryW(wpath.c_str(), nullptr);
+			*end = tmp;
+		}
 #else
-		mkdir(string(path.begin(), end).c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	if (struct stat ps; stat(path.c_str(), &ps) || (ps.st_mode & S_IFMT) != S_IFDIR)
+		for (string::const_iterator end = std::find_if_not(path.begin(), path.end(), isDsep); end != path.end(); end = std::find_if_not(end, path.end(), isDsep)) {
+			end = std::find_if(end, path.end(), isDsep);
+			ok = !mkdir(string(path.begin(), end).c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+		}
 #endif
-	}
+	return ok;
 }
 
 SDL_DisplayMode strToDisp(const string& str) {
@@ -222,4 +234,22 @@ void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>
 			vals.push_back(conv(argv[i] + (argv[i][0] == '\\' && (argv[i][1] == '-' || argv[i][1] == '\\'))));
 	}
 	vals.shrink_to_fit();
+}
+
+// DATE TIME
+
+DateTime::DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay) :
+	sec(second),
+	min(minute),
+	hour(dhour),
+	day(mday),
+	month(ymonth),
+	wday(weekDay),
+	year(tyear)
+{}
+
+DateTime DateTime::now() {
+	time_t rawt = time(nullptr);
+	struct tm* tim = localtime(&rawt);
+	return DateTime(tim->tm_sec, tim->tm_min, tim->tm_hour, tim->tm_mday, tim->tm_mon + 1, tim->tm_year + 1900, tim->tm_wday ? tim->tm_wday : 7);
 }

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10.2)
+cmake_minimum_required(VERSION 3.16.0)
 project(Thrones LANGUAGES CXX)
 if(CMAKE_CONFIGURATION_TYPES)
 	set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
@@ -43,6 +43,7 @@ set(ASSET_OBJ
 	"rsc/objects/dragon.obj"
 	"rsc/objects/elephant.obj"
 	"rsc/objects/fortress4.obj"
+	"rsc/objects/grid2.obj"
 	"rsc/objects/ground0.obj"
 	"rsc/objects/lancer.obj"
 	"rsc/objects/outline6.obj"
@@ -58,6 +59,7 @@ set(ASSET_OBJ
 
 set(ASSET_SHD
 	"rsc/shaders/blur.frag"
+	"rsc/shaders/brights.frag"
 	"rsc/shaders/depth.frag"
 	"rsc/shaders/depth.vert"
 	"rsc/shaders/final.frag"
@@ -77,45 +79,55 @@ set(ASSET_IMG
 	"rsc/textures/assault1.png"
 	"rsc/textures/catapult1.png"
 	"rsc/textures/city2.png"
+	"rsc/textures/cityN.png"
 	"rsc/textures/conspire1.png"
 	"rsc/textures/crossbowmen1.png"
 	"rsc/textures/deceive1.png"
 	"rsc/textures/dragon1.png"
 	"rsc/textures/elephant1.png"
 	"rsc/textures/farm2.png"
+	"rsc/textures/farmN.png"
 	"rsc/textures/forest3.png"
+	"rsc/textures/forestN.png"
 	"rsc/textures/fortress2.png"
+	"rsc/textures/fortressN.png"
 	"rsc/textures/grass2.png"
+	"rsc/textures/grassN.png"
 	"rsc/textures/hasten1.png"
 	"rsc/textures/lancer1.png"
 	"rsc/textures/metal2.png"
+	"rsc/textures/metalN.png"
 	"rsc/textures/mountain3.png"
+	"rsc/textures/mountainN.png"
 	"rsc/textures/plains3.png"
+	"rsc/textures/plainsN.png"
 	"rsc/textures/rangers1.png"
 	"rsc/textures/reticle2.png"
+	"rsc/textures/reticleN.png"
 	"rsc/textures/rock2.png"
+	"rsc/textures/rockN.png"
 	"rsc/textures/sky40.png"
+	"rsc/textures/sky41.png"
+	"rsc/textures/sky42.png"
+	"rsc/textures/sky43.png"
+	"rsc/textures/sky44.png"
+	"rsc/textures/sky45.png"
 	"rsc/textures/spearmen1.png"
 	"rsc/textures/throne1.png"
 	"rsc/textures/title1.png"
 	"rsc/textures/trebuchet1.png"
 	"rsc/textures/wall2.png"
+	"rsc/textures/wallN.png"
 	"rsc/textures/warhorse1.png"
-	"rsc/textures/water3.png")
+	"rsc/textures/water3.png"
+	"rsc/textures/waterN.png")
 
-foreach(IMG IN LISTS ASSET_IMG)
-	list(APPEND DATA_SRC "${IMG}")
-	if(IMG MATCHES "[a-zA-Z/]+[23]\.[a-zA-Z]+")
-		string(REGEX REPLACE "[23]" "N" NIMG "${IMG}")
-		list(APPEND DATA_SRC "${NIMG}")
-	elseif(IMG MATCHES "[a-zA-Z/]+40\.[a-zA-Z]+")
-		foreach(INUM RANGE 1 5)
-			string(REPLACE "40" "4${INUM}" NIMG "${IMG}")
-			list(APPEND DATA_SRC "${NIMG}")
-		endforeach()
-	endif()
-endforeach()
-list(APPEND DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD})
+set(ASSET_IMG_EXT
+	${ASSET_IMG}
+	"rsc/textures/cog1.svg"
+	"rsc/textures/wrench1.svg")
+
+set(DATA_SRC ${ASSET_WAV} ${ASSET_DAT} ${ASSET_MTL} ${ASSET_OBJ} ${ASSET_SHD} ${ASSET_IMG_EXT})
 
 set(THRONES_SRC
 	"src/engine/audioSys.cpp"
@@ -126,6 +138,8 @@ set(THRONES_SRC
 	"src/engine/inputSys.h"
 	"src/engine/scene.cpp"
 	"src/engine/scene.h"
+	"src/engine/shaders.cpp"
+	"src/engine/shaders.h"
 	"src/engine/windowSys.cpp"
 	"src/engine/windowSys.h"
 	"src/engine/world.cpp"
@@ -221,13 +235,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
 	set(ARCH CACHE STRING "CPU type to pass to Clang's or GCC's \"-march\" option")
 endif()
 set(EMBASE "${CMAKE_BINARY_DIR}" CACHE STRING "Location where to put the assets built by ${EDATA_NAME}")
-set(VER_SDL "2.0.18" CACHE STRING "SDL2 version.")
+set(VER_SDL "2.0.20" CACHE STRING "SDL2 version.")
 set(VER_IMG "2.0.5" CACHE STRING "SDL2_image version.")
-set(VER_TTF "2.0.15" CACHE STRING "SDL2_ttf version.")
+set(VER_TTF "2.0.18" CACHE STRING "SDL2_ttf version.")
 set(VER_GLEW "2.2.0" CACHE STRING "GLEW version.")
 set(VER_GLM "0.9.9.8" CACHE STRING "glm version.")
 set(VER_ASSIMP "5.1.4" CACHE STRING "assimp version.")
-set(VER_CURL "7.80.0" CACHE STRING "libcurl version.")
+set(VER_CURL "7.81.0" CACHE STRING "libcurl version.")
 set(DIR_LIB "${CMAKE_SOURCE_DIR}/lib")
 set(DIR_RSC "${CMAKE_SOURCE_DIR}/rsc")
 
@@ -501,7 +515,7 @@ endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
 	set(CXX_FLG_ANY "-Wall -Wextra -pedantic-errors -Wdouble-promotion -Wfloat-conversion -Wformat=2 -Wmissing-declarations -Wold-style-cast -Wshadow -Wunreachable-code -Wno-implicit-fallthrough -Wno-old-style-cast -Wno-switch")
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wcast-align=strict -Wduplicated-cond -Wno-maybe-uninitialized")
+		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wcast-align=strict -Wduplicated-cond -Wno-maybe-uninitialized -Wno-volatile")
 	else()
 		set(CXX_FLG_ANY "${CXX_FLG_ANY} -Wcast-align -Wimplicit-int-float-conversion -Wnull-dereference -Wover-aligned -Wshadow-all -Wno-final-dtor-non-final-class -Wno-unused-private-field")
 	endif()
@@ -583,6 +597,7 @@ if(EMSCRIPTEN)
 	return()
 endif()
 add_dependencies(${PROJECT_NAME} ${DATA_NAME})
+set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DPI_AWARE "PerMonitor")
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
@@ -605,7 +620,7 @@ else()
 		setCommonTargetProperties(${PROJECT_NAME} "${PBOUT_DIR}")
 
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/libfreetype-6.dll" "${BIN_TTF}/zlib1.dll" "${PBOUT_DIR}")
+							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_TTF}/SDL2_ttf.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_IMG}/zlib1.dll" "${PBOUT_DIR}")
 		if(MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 								COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_CURL}/libcurl.dll" "${PBOUT_DIR}")
@@ -645,29 +660,31 @@ endif()
 
 # game data copier targets
 
-function(addDataCopierTarget TARGET_NAME TEXTRA DST_DATA OPT_SHD OPT_IMG)
+function(addDataCopierTarget TARGET_NAME TEXTRA DST_DATA OPT_SHD OPT_IMG ASS_IMG)
+	set(DST_FONT "${DST_DATA}/fonts")
+	set(DST_AUDIO "${DST_DATA}/audio")
 	add_custom_target(${TARGET_NAME} ${TEXTRA} SOURCES ${DATA_SRC}
-						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST_DATA}"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/merriweather.otf" "${DIR_RSC}/data/romanesque.ttf" "${DST_DATA}"
-						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -a "${DST_DATA}/audio.dat" ${ASSET_WAV}
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST_FONT}" "${DST_AUDIO}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/kurinto.ttf" "${DIR_RSC}/data/merriweather.otf" "${DIR_RSC}/data/romanesque.ttf" "${DST_FONT}"
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${ASSET_WAV} "${DST_AUDIO}"
 						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -m "${DST_DATA}/materials.dat" ${ASSET_MTL}
-						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -o "${DST_DATA}/objects.dat" ${ASSET_OBJ}
-						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST_DATA}/shaders.dat" ${ASSET_SHD}
-						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_IMG} "${DST_DATA}/textures.dat" ${ASSET_IMG}
+						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -o "${DST_DATA}/objects/" ${ASSET_OBJ}
+						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST_DATA}/shaders/" ${ASSET_SHD}
+						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_IMG} "${DST_DATA}/textures/" ${ASS_IMG}
 						WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 	add_dependencies(${TARGET_NAME} ${OVEN_NAME})
 endfunction()
 
 if(OPENGLES)
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "-T")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "-T" "${ASSET_IMG_EXT}")
 else()
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t" "${ASSET_IMG_EXT}")
 endif()
 add_custom_command(TARGET ${DATA_NAME} POST_BUILD
 					COMMAND "${CMAKE_COMMAND}" -E make_directory "${LICN_DIR}"
 					COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/doc" "${DOCS_DIR}"
 					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/${PROJECT_NAME_LOWER}.png" "${DIR_RSC}/data/cursor.png" "${DATA_DIR}"
-					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/LICENSE.Merriweather.txt" "${LICN_DIR}"
+					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/Copyrights.Kurinto.txt" "${DIR_RSC}/data/LICENSE.Merriweather.txt" "${LICN_DIR}"
 					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_LIB}/glm/copying.txt" "${LICN_DIR}/COPYING.glm.txt")
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	add_custom_command(TARGET ${DATA_NAME} POST_BUILD
@@ -675,7 +692,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${LIC_SDL}/COPYING.txt" "${LICN_DIR}/LICENSE.SDL.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${LIC_IMG}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_image.txt"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${LIC_TTF}/COPYING.txt" "${LICN_DIR}/COPYING.SDL_ttf.txt"
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_IMG}/LICENSE.png.txt" "${BIN_TTF}/LICENSE.freetype.txt" "${BIN_TTF}/LICENSE.zlib.txt" "${LICN_DIR}")
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_IMG}/LICENSE.png.txt" "${BIN_TTF}/LICENSE.freetype.txt" "${BIN_TTF}/LICENSE.harfbuzz.txt" "${BIN_TTF}/LICENSE.zlib.txt" "${LICN_DIR}")
 	if(MSVC)
 		add_custom_command(TARGET ${DATA_NAME} POST_BUILD
 							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_CURL}/COPYING" "${LICN_DIR}/COPYING.curl.txt")
@@ -698,10 +715,10 @@ else()
 							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_GLEW}/LICENSE.txt" "${LICN_DIR}/LICENSE.glew.txt")
 	endif()
 endif()
-addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T")
+addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "${ASSET_IMG}")
 
 get_filename_component(EMS_DIR "${EMBASE}" ABSOLUTE)
-addDataCopierTarget(${EDATA_NAME} "" "${EMS_DIR}/share" "-S" "-T")
+addDataCopierTarget(${EDATA_NAME} "" "${EMS_DIR}/share" "-S" "-T" "${ASSET_IMG}")
 add_custom_command(TARGET ${EDATA_NAME} POST_BUILD
 					COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/doc" "${EMS_DIR}/doc"
 					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/${PROJECT_NAME_LOWER}.png" "${EMS_DIR}")
@@ -742,7 +759,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		file(GLOB ASSIMP_DLL "${DIR_ASSIMP}/bin/libassimp*.dll")
 	endif()
 	add_custom_command(TARGET ${OVEN_NAME} POST_BUILD
-						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_TTF}/zlib1.dll" "${ASSIMP_DLL}" "${CMAKE_BINARY_DIR}")
+						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_IMG}/libpng16-16.dll" "${BIN_IMG}/zlib1.dll" "${ASSIMP_DLL}" "${CMAKE_BINARY_DIR}")
 endif()
 
 # tests

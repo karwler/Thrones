@@ -1,5 +1,6 @@
 #include "engine/scene.h"
 #include "engine/inputSys.h"
+#include "engine/shaders.h"
 #include "engine/world.h"
 #include "prog/board.h"
 #include "prog/progs.h"
@@ -128,13 +129,13 @@ void Mesh::setElementData(const vector<GLushort>& elements) {
 
 void Mesh::draw() {
 	glBindVertexArray(vao);
-	glDrawElementsInstanced(shape, ecnt, GL_UNSIGNED_SHORT, nullptr, GLsizei(instanceData.size()));
+	glDrawElementsInstanced(GL_TRIANGLES, ecnt, GL_UNSIGNED_SHORT, nullptr, GLsizei(instanceData.size()));
 }
 
 void Mesh::drawTop() {
 	glBindVertexArray(top->vao);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-	glDrawElements(shape, ecnt, GL_UNSIGNED_SHORT, nullptr);
+	glDrawElements(GL_TRIANGLES, ecnt, GL_UNSIGNED_SHORT, nullptr);
 }
 
 void Mesh::updateVertexData(const vector<Vertex>& vertices, const vector<GLushort>& elements) {
@@ -196,10 +197,15 @@ void Object::init(Mesh* model, uint id, const Material* material, int texture, b
 	mesh = model;
 	matl = material;
 	meshIndex = id;
+	init(model, id, pos, rot, scl, material, texture, visible);
+}
 
-	Mesh::Instance& ins = mesh->getInstance(meshIndex);
-	getTransform(ins.model, ins.normat);
-	getColors(ins.diffuse, ins.specShine);
+void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, int texture, bool visible) {
+	Mesh::Instance& ins = model->getInstance(id);
+	ins.model = getTransform(pos, rot, scl);
+	ins.normat = glm::inverseTranspose(mat3(ins.model));
+	ins.diffuse = material->color;
+	ins.specShine = vec4(material->spec, material->shine);
 	ins.texid = texture;
 	ins.show = visible;
 }
@@ -259,13 +265,9 @@ void Object::getTransform(mat4& model, mat3& normat) {
 void Object::setMaterial(const Material* material) {
 	matl = material;
 	Mesh::Instance& ins = mesh->getInstance(meshIndex);
-	getColors(ins.diffuse, ins.specShine);
+	ins.diffuse = matl->color;
+	ins.specShine = vec4(matl->spec, matl->shine);
 	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(ins.diffuse) + sizeof(ins.specShine));
-}
-
-void Object::getColors(vec4& diffuse, glm::vec4& specShine) {
-	diffuse = matl->color;
-	specShine = vec4(matl->spec, matl->shine);
 }
 
 void Object::setTexture(int texture) {

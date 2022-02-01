@@ -19,7 +19,7 @@ private:
 	vec2 bobOffset;		// offset for gtop
 	vec4 boardBounds;
 
-	Object ground, board, bgrid, screen;
+	Object screen;
 	TileCol tiles;
 	array<BoardObject, TileTop::none> tileTops;
 	Object pxpad;

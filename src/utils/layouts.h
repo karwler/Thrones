@@ -23,11 +23,11 @@ class Layout : public Navigator {
 protected:
 	vector<Widget*> widgets;
 	vector<ivec2> positions;	// widgets' positions. one element larger than widgets. last element is layout's size
-	int spacing;		// space between widgets
+	float spaceFactor;		// factor for space between widgets
 	bool vertical;		// how to arrange widgets
 
 public:
-	Layout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0);
+	Layout(const Size& size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, float space = 0.f);
 	~Layout() override;
 
 	void draw() const override;
@@ -38,18 +38,20 @@ public:
 	void navSelectFrom(int mid, Direction dir) override;
 	virtual void navSelectNext(sizet id, int mid, Direction dir);
 	Interactable* findFirstSelectable() const override;
+	void updateTipTex() override;
 
 	template <class T = Widget> T* getWidget(sizet id) const;
 	const vector<Widget*>& getWidgets() const;
 	void setWidgets(vector<Widget*>&& wgts);
 	void insertWidget(sizet id, Widget* wgt);
 	void deleteWidget(sizet id);
-	void setSpacing(int space);
+	void setSpacing(float space);
 	bool getVertical() const;
 	virtual ivec2 wgtPosition(sizet id) const;
 	virtual ivec2 wgtSize(sizet id) const;
 protected:
 	virtual ivec2 listSize() const;
+	int pixSpacing() const;
 
 private:
 	void calculateWidgetPositions();
@@ -79,6 +81,10 @@ inline bool Layout::getVertical() const {
 	return vertical;
 }
 
+inline ivec2 Layout::listSize() const {
+	return positions.back() - pixSpacing();
+}
+
 // top level layout
 class RootLayout : public Layout {
 public:
@@ -86,9 +92,10 @@ public:
 
 protected:
 	vec4 bgColor;
+	float topSpacingFac;
 
 public:
-	RootLayout(Size size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, int space = 0, const vec4& color = vec4(0.f));
+	RootLayout(const Size& size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, float space = 0.f, float topSpace = 0.f, const vec4& color = vec4(0.f));
 	~RootLayout() override = default;
 
 	void draw() const override;
@@ -96,7 +103,23 @@ public:
 	ivec2 size() const override;
 	void setSize(const Size& size) override;
 	Rect frame() const override;
+protected:
+	int pixTopSpacing() const;
 };
+
+// custom title bar
+class TitleBar : public RootLayout {
+public:
+	TitleBar(vector<Widget*>&& children = vector<Widget*>(), bool vert = false, float space = 0.f, const vec4& color = Widget::colorDark);
+	~TitleBar() override = default;
+
+	ivec2 position() const override;
+	ivec2 size() const override;
+};
+
+inline TitleBar::TitleBar(vector<Widget*>&& children, bool vert, float space, const vec4& color) :
+	RootLayout(0.f, std::move(children), vert, space, 0.f, color)
+{}
 
 // layout with background with free position/size (shouldn't have a parent)
 class Popup : public RootLayout {
@@ -115,11 +138,11 @@ protected:
 private:
 	Type type;
 
-	static constexpr int margin = 5;
+	static constexpr float marginFactor = 1.f / 144.f;
 	static constexpr vec4 colorBackground = { 0.42f, 0.05f, 0.f, 1.f };
 
 public:
-	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, int space = 0, Widget* firstSelect = nullptr, Type ctxType = Type::generic, const vec4& color = uniformBgColor);
+	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, float space = 0.f, float topSpace = 0.f, Widget* firstSelect = nullptr, Type ctxType = Type::generic, const vec4& color = uniformBgColor);
 	~Popup() override = default;
 
 	void draw() const override;
@@ -140,11 +163,12 @@ private:
 	bool show, interact;
 
 public:
-	Overlay(const pair<Size, Size>& pos = pair(0.f, 0.f), const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, bool visible = false, bool interactive = true, int space = 0, const vec4& color = vec4(0.f));
+	Overlay(const pair<Size, Size>& pos = pair(0.f, 0.f), const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, bool visible = false, bool interactive = true, float space = 0.f, float topSpace = 0.f, const vec4& color = vec4(0.f));
 	~Overlay() override = default;
 
 	void draw() const override;
 	ivec2 position() const override;
+	ivec2 size() const override;
 
 	bool getShow() const;
 	void setShow(bool yes);
@@ -170,6 +194,7 @@ public:
 
 	void draw() const override;
 	void tick(float dSec) override;
+	void onResize() override;
 	void postInit() override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
@@ -206,5 +231,5 @@ inline int ScrollArea::wgtRPos(sizet id) const {
 }
 
 inline int ScrollArea::wgtREnd(sizet id) const {
-	return positions[id+1][vertical] - spacing;
+	return positions[id+1][vertical] - pixSpacing();
 }

@@ -2,22 +2,10 @@
 
 #include "types.h"
 #include "utils/settings.h"
-#include "utils/text.h"
+#include "utils/utils.h"
 
 class GuiGen {
 public:
-	struct Text {
-		string text;
-		int length, height;
-
-		Text(string str, int sh);
-
-		static int strLen(const char* str, int height);
-		static int strLen(const string& str, int height);
-		template <class T> static int maxLen(T pos, T end, int height);
-		static int maxLen(const initlist<initlist<const char*>>& lists, int height);
-	};
-
 	struct ConfigIO {
 		CheckBox* victoryPoints;
 		LabelEdit* victoryPointsNum;
@@ -79,24 +67,24 @@ public:
 	static constexpr char rv2iSeparator[] = " x ";
 	static constexpr char msgFavorPick[] = "Pick a fate's favor";
 	static constexpr char msgPickPiece[] = "Pick piece (";
-	static constexpr float chatEmbedSize = 0.5f;
+	static constexpr Size chatEmbedSize = { 0.5f, Size::rela };
 	static constexpr char chatPrefix[] = ": ";
 private:
 	static constexpr uint16 chatCharLimit = 16384 - Settings::playerNameLimit - 3;	// subtract prefix length
 
-	int smallHeight, lineHeight, superHeight, tooltipHeight;
-	int lineSpacing, superSpacing, iconSize;
-	uint tooltipLimit;
+	static constexpr Size smallHeight = { 1.f / 36.f, Size::abso };	// 20p	(values are in relation to 720p height)
+	static constexpr Size lineHeight = { 1.f / 24.f, Size::abso };	// 30p
+	static constexpr Size superHeight = { 1.f / 18.f, Size::abso };	// 40p
+	static constexpr Size iconSize = { 1.f / 11.f, Size::abso };	// 64p
+	static constexpr float lineSpacing = 1.f / 144.f;	// 5p
+	static constexpr float superSpacing = 1.f / 72.f;	// 10p
 
 public:
-	void resize();
 	int getLineHeight() const;
-	Texture makeTooltip(const char* text) const;
-	Texture makeTooltipL(const char* text) const;
 
-	void openPopupMessage(string msg, BCall ccal, string ctxt = "Okay") const;
-	void openPopupChoice(string msg, BCall kcal, BCall ccal) const;
-	void openPopupInput(string msg, string text, BCall kcal, uint16 limit = UINT16_MAX) const;
+	void openPopupMessage(string msg, BCall ccal, string&& ctxt = "Okay") const;
+	void openPopupChoice(string&& msg, BCall kcal, BCall ccal) const;
+	void openPopupInput(string&& msg, string text, BCall kcal, uint16 limit = UINT16_MAX) const;
 	void openPopupFavorPick(uint16 availableFF) const;
 	void openPopupConfig(const string& configName, const Config& cfg, ScrollArea*& configList, bool match) const;
 	void openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const;
@@ -105,15 +93,16 @@ public:
 	void openPopupSettings(ScrollArea*& content, sizet& bindingsStart) const;
 	void openPopupKeyGetter(Binding::Type bind) const;
 
+	void makeTitleBar() const;
 	vector<Widget*> createChat(TextBox*& chatBox, bool overlay) const;
 	Overlay* createNotification(Overlay*& notification) const;
 	Overlay* createFpsCounter(Label*& fpsText) const;
-	Text makeFpsText(float dSec) const;
+	string makeFpsText(float dSec) const;
 	Label* createRoom(string&& name, bool open) const;
 	Overlay* createGameMessage(Label*& message, bool setup) const;
 	Overlay* createGameChat(TextBox*& chatBox) const;
 	vector<Widget*> createBottomIcons(bool tiles) const;
-	int keyGetLineSize(Binding::Type bind) const;
+	Size keyGetLineSize(Binding::Type bind) const;
 	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
 
 	uptr<RootLayout> makeMainMenu(Interactable*& selected, LabelEdit*& pname, Label*& versionNotif) const;
@@ -129,9 +118,11 @@ public:
 	static string pieceTotalString(const Config& cfg);
 	static SDL_DisplayMode fstrToDisp(const string& str);
 private:
+	template <class T> static int txtMaxLen(T pos, T end, float hfac);
+	static int txtMaxLen(const initlist<initlist<const char*>>& lists, float hfac);
 	static string dispToFstr(const SDL_DisplayMode& mode);
 	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const;
-	static string bindingToFstr(Binding::Type bind);
+	template <bool upper = true, class T, sizet S> static string enameToFstr(T val, const array<const char*, S>& names);
 	static string versionText(const SDL_version& ver);
 	static string ibtos(int val);
 	vector<Widget*> createConfigList(ConfigIO& wio, const Config& cfg, bool active, bool match) const;
@@ -139,25 +130,17 @@ private:
 	void setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) const;
 	ScrollArea* createSettingsList(sizet& bindingsStart) const;
 
-	void appendProgram(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
-	void appendSystem(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
-	void appendCurrentDisplay(vector<Widget*>& lines, int width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
-	void appendDisplay(vector<Widget*>& lines, int i, int width, initlist<const char*>::iterator args) const;
-	void appendPower(vector<Widget*>& lines, int width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
-	void appendAudioDevices(vector<Widget*>& lines, int width, initlist<const char*>::iterator& titles, int iscapture) const;
-	void appendDrivers(vector<Widget*>& lines, int width, initlist<const char*>::iterator& titles, int (*limit)(), const char* (*value)(int)) const;
-	void appendDisplays(vector<Widget*>& lines, int argWidth, int dispWidth, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
-	void appendRenderers(vector<Widget*>& lines, int width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
-	void appendControllers(vector<Widget*>& lines, int width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
+	void appendProgram(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
+	void appendSystem(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
+	void appendCurrentDisplay(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
+	void appendDisplay(vector<Widget*>& lines, int i, const Size& width, initlist<const char*>::iterator args) const;
+	void appendPower(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator& args, initlist<const char*>::iterator& titles) const;
+	void appendAudioDevices(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator& titles, int iscapture) const;
+	void appendDrivers(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator& titles, int (*limit)(), const char* (*value)(int)) const;
+	void appendDisplays(vector<Widget*>& lines, const Size& argWidth, const Size& dispWidth, const Size& argDispWidth, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
+	void appendRenderers(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
+	void appendControllers(vector<Widget*>& lines, const Size& width, initlist<const char*>::iterator args, initlist<const char*>::iterator& titles) const;
 };
-
-inline int GuiGen::Text::strLen(const string& str, int height) {
-	return strLen(str.c_str(), height);
-}
-
-inline int GuiGen::getLineHeight() const {
-	return lineHeight;
-}
 
 inline string GuiGen::tileFortressString(const Config& cfg) {
 	return toStr(cfg.countFreeTiles());

@@ -33,8 +33,7 @@ flat in vec4 fragSpecShine;
 flat in int fragTexid;
 flat in int fragShow;
 
-layout (location = 0) out vec4 fragColor;
-layout (location = 1) out vec4 brightColor;
+out vec4 fragColor;
 
 float calcShadowHard() {
 	vec3 fragToLight = fragPos - lightPos;
@@ -76,5 +75,4 @@ void main() {
 	float shadow = 1.0;	// appropiate function is automatically placed during startup
 	float ssao = 1.0;	// ^
 	fragColor = vec4((ambient + (diffuse + specular) * shadow) / attenuation * ssao, color.a);
-	brightColor = dot(fragColor.rgb, vec3(0.2126, 0.7152, 0.0722)) < 0.9 ? vec4(0.0, 0.0, 0.0, fragColor.a) : fragColor;
 }

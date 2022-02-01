@@ -1,29 +1,32 @@
 #include "engine/scene.h"
 #include "engine/inputSys.h"
+#include "engine/shaders.h"
 #include "engine/world.h"
 #include "prog/progs.h"
 
-// SCROLL
+// SCROLL BAR
 
 void ScrollBar::draw(ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z) const {
 	GLuint tex = World::scene()->texture();
-	Quad::draw(barRect(listSize, pos, size, vert), Widget::colorDark, tex, z);		// bar
-	Quad::draw(sliderRect(listSize, pos, size, vert), Widget::colorLight, tex, z);	// slider
+	Quad::draw(World::sgui(), barRect(listSize, pos, size, vert), Widget::colorDark, tex, z);		// bar
+	Quad::draw(World::sgui(), sliderRect(listSize, pos, size, vert), Widget::colorLight, tex, z);	// slider
 }
 
 void ScrollBar::draw(const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z) const {
 	GLuint tex = World::scene()->texture();
-	Quad::draw(barRect(listSize, pos, size, vert), frame, Widget::colorDark, tex, z);		// bar
-	Quad::draw(sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, tex, z);	// slider
+	Quad::draw(World::sgui(), barRect(listSize, pos, size, vert), frame, Widget::colorDark, tex, z);		// bar
+	Quad::draw(World::sgui(), sliderRect(listSize, pos, size, vert), frame, Widget::colorLight, tex, z);	// slider
 }
 
-void ScrollBar::tick(float dSec, ivec2 listSize, ivec2 size) {
+bool ScrollBar::tick(float dSec, ivec2 listSize, ivec2 size) {
 	if (motion != vec2(0.f)) {
 		moveListPos(motion, listSize, size);
 		throttleMotion(motion.x, dSec);
 		throttleMotion(motion.y, dSec);
 		World::scene()->updateSelect();
+		return true;
 	}
+	return false;
 }
 
 void ScrollBar::hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) {
@@ -48,7 +51,7 @@ void ScrollBar::drag(ivec2 mPos, ivec2 mMov, ivec2 listSize, ivec2 pos, ivec2 si
 
 void ScrollBar::undrag(uint8 mBut, bool vert) {
 	if (mBut == SDL_BUTTON_LEFT) {
-		if (!World::scene()->cursorInClickRange(mousePos()) && !draggingSlider)
+		if (!World::scene()->cursorInClickRange(World::window()->mousePos()) && !draggingSlider)
 			motion = World::input()->getMouseMove() * swap(0, -1, !vert);
 		World::scene()->setCapture(nullptr);	// should call cancelDrag through the captured widget
 	}
@@ -89,39 +92,6 @@ Rect ScrollBar::sliderRect(ivec2 listSize, ivec2 pos, ivec2 size, bool vert) con
 	return vert ? Rect(pos.x + size.x - bs, sp, bs, ss) : Rect(sp, pos.y + size.y - bs, ss, bs);
 }
 
-// QUAD
-
-Quad::Quad() {
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-	glEnableVertexAttribArray(Shader::uvloc);
-	glVertexAttribPointer(Shader::uvloc, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-}
-
-Quad::~Quad() {
-	glBindVertexArray(vao);
-	glDisableVertexAttribArray(Shader::vpos);
-	glDisableVertexAttribArray(Shader::uvloc);
-	glDeleteBuffers(1, &vbo);
-	glDeleteVertexArrays(1, &vao);
-}
-
-void Quad::draw(const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
-	glUniform4f(World::sgui()->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
-	glUniform4fv(World::sgui()->uvrc, 1, glm::value_ptr(uvrect));
-	glUniform1f(World::sgui()->zloc, z);
-	glUniform4fv(World::sgui()->color, 1, glm::value_ptr(color));
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
-}
-
 // WIDGET
 
 ivec2 Widget::position() const {
@@ -152,22 +122,24 @@ void Widget::setParent(Layout* pnt, sizet id) {
 
 // BUTTON
 
-Button::Button(Size size, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
+Button::Button(const Size& size, BCall leftCall, BCall rightCall, string&& tooltip, float dim, GLuint tex, const vec4& clr) :
 	Widget(size),
 	lcall(leftCall),
 	rcall(rightCall),
 	color(clr),
 	dimFactor(dim, dim, dim, 1.f),
-	tipTex(tooltip),
+	tipStr(std::move(tooltip)),
 	bgTex(tex ? tex : World::scene()->texture())
-{}
+{
+	updateTipTex();
+}
 
 Button::~Button() {
 	tipTex.close();
 }
 
 void Button::draw() const {
-	Quad::draw(rect(), frame(), color * dimFactor, bgTex);
+	Quad::draw(World::sgui(), rect(), frame(), color * dimFactor, bgTex);
 }
 
 void Button::onClick(ivec2, uint8 mBut) {
@@ -198,33 +170,59 @@ void Button::drawTooltip() const {
 		return;
 
 	int ofs = World::window()->getCursorHeight() + cursorMargin;
-	ivec2 pos = mousePos() + ivec2(0, ofs);
+	ivec2 pos = World::window()->mousePos() + ivec2(0, ofs);
 	ivec2 siz = tipTex.getRes() + tooltipMargin * 2;
-	if (pos.x + siz.x > World::window()->getGuiView().x)
-		pos.x = World::window()->getGuiView().x - siz.x;
-	if (pos.y + siz.y > World::window()->getGuiView().y)
+	ivec2 res = World::window()->getScreenView();
+	if (pos.x + siz.x > res.x)
+		pos.x = res.x - siz.x;
+	if (pos.y + siz.y > res.y)
 		pos.y = pos.y - ofs - siz.y;
 
-	Quad::draw(Rect(pos, siz), colorTooltip, World::scene()->texture(), -1.f);
-	Quad::draw(Rect(pos + tooltipMargin, tipTex.getRes()), vec4(1.f), tipTex, -1.f);
+	Quad::draw(World::sgui(), Rect(pos, siz), colorTooltip, World::scene()->texture(), -1.f);
+	Quad::draw(World::sgui(), Rect(pos + tooltipMargin, tipTex.getRes()), vec4(1.f), tipTex, -1.f);
 }
 
-void Button::setTooltip(const Texture& tooltip) {
+void Button::setTooltip(string&& tooltip) {
+	tipStr = std::move(tooltip);
 	tipTex.close();
-	tipTex = tooltip;
+	updateTipTex();
+}
+
+void Button::updateTipTex() {
+	if (!World::sets()->tooltips) {
+		tipTex.close();
+		return;
+	}
+
+	float resy = float(World::window()->getScreenView().y);
+	int theight = int(tooltipHeightFactor * resy);
+	uint tlimit = uint(tooltipLimitFactor * resy);
+	if (tipStr.find('\n') >= tipStr.length())
+		tipTex = World::fonts()->render(tipStr.c_str(), theight, tlimit);
+	else {
+		uint width = 0;
+		for (char* pos = tipStr.data(); *pos;) {
+			sizet len = strcspn(pos, "\n");
+			if (uint siz = World::fonts()->length(pos, theight, len); siz > width)
+				if (width = std::min(siz, tlimit); width == tlimit)
+					break;
+			pos += pos[len] ? len + 1 : len;
+		}
+		tipTex = World::fonts()->render(tipStr.c_str(), theight, width);
+	}
 }
 
 // CHECK BOX
 
-CheckBox::CheckBox(Size size, bool checked, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
-	Button(size, leftCall, rightCall, tooltip, dim, tex, clr),
+CheckBox::CheckBox(const Size& size, bool checked, BCall leftCall, BCall rightCall, string&& tooltip, float dim, GLuint tex, const vec4& clr) :
+	Button(size, leftCall, rightCall, std::move(tooltip), dim, tex, clr),
 	on(checked)
 {}
 
 void CheckBox::draw() const {
 	Rect frm = frame();
-	Quad::draw(rect(), frm, color * dimFactor, bgTex);								// draw background
-	Quad::draw(boxRect(), frm, boxColor() * dimFactor, World::scene()->texture());	// draw checkbox
+	Quad::draw(World::sgui(), rect(), frm, color * dimFactor, bgTex);								// draw background
+	Quad::draw(World::sgui(), boxRect(), frm, boxColor() * dimFactor, World::scene()->texture());	// draw checkbox
 }
 
 void CheckBox::onClick(ivec2 mPos, uint8 mBut) {
@@ -241,8 +239,8 @@ Rect CheckBox::boxRect() const {
 
 // SLIDER
 
-Slider::Slider(Size size, int val, int minimum, int maximum, int navStep, BCall finishCall, BCall updateCall, const Texture& tooltip, float dim, GLuint tex, const vec4& clr) :
-	Button(size, finishCall, updateCall, tooltip, dim, tex, clr),
+Slider::Slider(const Size& size, int val, int minimum, int maximum, int navStep, BCall finishCall, BCall updateCall, string&& tooltip, float dim, GLuint tex, const vec4& clr) :
+	Button(size, finishCall, updateCall, std::move(tooltip), dim, tex, clr),
 	value(val),
 	vmin(minimum),
 	vmax(maximum),
@@ -253,9 +251,9 @@ Slider::Slider(Size size, int val, int minimum, int maximum, int navStep, BCall 
 void Slider::draw() const {
 	Rect frm = frame();
 	GLuint tex = World::scene()->texture();
-	Quad::draw(rect(), frm, color * dimFactor, bgTex);			// background
-	Quad::draw(barRect(), frm, colorDark * dimFactor, tex);		// bar
-	Quad::draw(sliderRect(), frm, colorLight * dimFactor, tex);	// slider
+	Quad::draw(World::sgui(), rect(), frm, color * dimFactor, bgTex);			// background
+	Quad::draw(World::sgui(), barRect(), frm, colorDark * dimFactor, tex);		// bar
+	Quad::draw(World::sgui(), sliderRect(), frm, colorLight * dimFactor, tex);	// slider
 }
 
 void Slider::onHold(ivec2 mPos, uint8 mBut) {
@@ -353,13 +351,14 @@ void Slider::setSlider(int xpos) {
 
 Rect Slider::barRect() const {
 	ivec2 siz = size();
-	int height = siz.y / 2;
-	return Rect(position() + siz.y / barMarginFactor, ivec2(siz.x - height, height));
+	int height = siz.y / (barMarginFactor / 2);
+	return Rect(position() + siz.y / barMarginFactor, siz.x - height, height);
 }
 
 Rect Slider::sliderRect() const {
 	ivec2 pos = position(), siz = size();
-	return Rect(sliderPos(), pos.y, siz.y / sliderWidthFactor, siz.y);
+	int margin = siz.y / barMarginFactor;
+	return Rect(sliderPos(), pos.y + margin / 2, siz.y / sliderWidthFactor, siz.y - margin);
 }
 
 int Slider::sliderPos() const {
@@ -374,8 +373,15 @@ int Slider::sliderLim() const {
 
 // LABEL
 
-Label::Label(Size size, string line, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
-	Button(size, leftCall, rightCall, tooltip, dim, tex, clr),
+Label::Label(const Size& size, string line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Button(size, leftCall, rightCall, std::move(tooltip), dim, tex, clr),
+	text(std::move(line)),
+	halign(align),
+	showBG(bg)
+{}
+
+Label::Label(string line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Button(precalcWidth, leftCall, rightCall, std::move(tooltip), dim, tex, clr),
 	text(std::move(line)),
 	halign(align),
 	showBG(bg)
@@ -389,9 +395,9 @@ void Label::draw() const {
 	Rect rbg = rect();
 	Rect frm = frame();
 	if (showBG)
-		Quad::draw(rbg, frm, color * dimFactor, bgTex);
+		Quad::draw(World::sgui(), rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
-		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
+		Quad::draw(World::sgui(), textRect(), textFrame(rbg, frm), dimFactor, textTex);
 }
 
 void Label::onResize() {
@@ -412,21 +418,26 @@ void Label::setText(const string& str) {
 	updateTextTex();
 }
 
-ivec2 Label::textOfs(ivec2 res, Alignment align, ivec2 pos, ivec2 siz, int margin) {
+Rect Label::textFrame(const Rect& rbg, const Rect& frm) {
+	int margin = rbg.h / textMarginFactor;
+	return Rect(rbg.x + margin, rbg.y, rbg.w - margin * 2, rbg.h).intersect(frm);
+}
+
+ivec2 Label::textOfs(int resx, Alignment align, ivec2 pos, int sizx, int margin) {
 	switch (align) {
 	case Alignment::left:
 		return ivec2(pos.x + margin, pos.y);
 	case Alignment::center:
-		return ivec2(pos.x + (siz.x - res.x) / 2, pos.y);
+		return ivec2(pos.x + (sizx - resx) / 2, pos.y);
 	case Alignment::right:
-		return ivec2(pos.x + siz.x - res.x - margin, pos.y);
+		return ivec2(pos.x + sizx - resx - margin, pos.y);
 	}
 	return pos;
 }
 
 ivec2 Label::textPos() const {
 	ivec2 siz = size();
-	return textOfs(textTex.getRes(), halign, position(), siz, siz.y / textMarginFactor);
+	return textOfs(textTex.getRes().x, halign, position(), siz.x, siz.y / textMarginFactor);
 }
 
 void Label::updateTextTex() {
@@ -434,29 +445,52 @@ void Label::updateTextTex() {
 	textTex = World::fonts()->render(text.c_str(), size().y);
 }
 
+int Label::precalcWidth(const Widget* self) {
+	return txtLen(static_cast<const Label*>(self)->text, self->size().y);	// at this point the height should already be calculated
+}
+
+int Label::txtLen(const char* str, int height) {
+	return World::fonts()->length(str, height) + height / textMarginFactor * 2;
+}
+
+int Label::txtLen(const char* str, float hfac) {
+	int height = int(std::ceil(hfac * float(World::window()->getScreenView().y)));	// this function is more of an estimate for a parent's size, so let's just ceil this bitch
+	return World::fonts()->length(str, height) + height / textMarginFactor * 2;
+}
+
 // TEXT BOX
 
-TextBox::TextBox(Size size, int lineH, string lines, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, uint16 lineL, bool stickTop, bool bg, GLuint tex, const vec4& clr) :
-	Label(size, std::move(lines), leftCall, rightCall, tooltip, dim, Alignment::left, bg, tex, clr),
+TextBox::TextBox(const Size& size, float lineH, string lines, BCall leftCall, BCall rightCall, string&& tooltip, float dim, uint16 lineL, bool stickTop, bool bg, GLuint tex, const vec4& clr) :
+	Label(size, std::move(lines), leftCall, rightCall, std::move(tooltip), dim, Alignment::left, bg, tex, clr),
 	alignTop(stickTop),
-	lineHeight(lineH),
+	lineHeightFactor(lineH),
 	lineLim(lineL)
 {
 	cutLines();
+}
+
+TextBox::~TextBox() {
+	SDL_FreeSurface(textImg);
 }
 
 void TextBox::draw() const {
 	Rect rbg = rect();
 	Rect frm = frame();
 	if (showBG)
-		Quad::draw(rbg, frm, color * dimFactor, bgTex);
+		Quad::draw(World::sgui(), rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
-		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
+		Quad::draw(World::sgui(), textRect(), textFrame(rbg, frm), dimFactor, textTex);
 	scroll.draw(rbg, textTex.getRes(), rbg.pos(), rbg.size(), true);
 }
 
 void TextBox::tick(float dSec) {
-	scroll.tick(dSec, textTex.getRes(), size());
+	if (scroll.tick(dSec, textTex.getRes(), size()))
+		textTex.update(textImg, scroll.listPos);
+}
+
+void TextBox::onResize() {
+	Label::onResize();
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(textTex.getRes(), size()));
 }
 
 void TextBox::postInit() {
@@ -470,6 +504,7 @@ void TextBox::onHold(ivec2 mPos, uint8 mBut) {
 
 void TextBox::onDrag(ivec2 mPos, ivec2 mMov) {
 	scroll.drag(mPos, mMov, textTex.getRes(), position(), size(), true);
+	textTex.update(textImg, scroll.listPos);
 }
 
 void TextBox::onUndrag(uint8 mBut) {
@@ -478,6 +513,7 @@ void TextBox::onUndrag(uint8 mBut) {
 
 void TextBox::onScroll(ivec2 wMov) {
 	scroll.scroll(wMov, textTex.getRes(), size(), true);
+	textTex.update(textImg, scroll.listPos);
 }
 
 void TextBox::onCancelCapture() {
@@ -489,12 +525,7 @@ bool TextBox::selectable() const {
 }
 
 ivec2 TextBox::textPos() const {
-	return textOfs(textTex.getRes(), halign, position(), size(), lineHeight / textMarginFactor) - scroll.listPos;
-}
-
-void TextBox::updateTextTex() {
-	textTex.close();
-	textTex = World::fonts()->render(text.c_str(), lineHeight, size().x - lineHeight / textMarginFactor * 2 - ScrollBar::width);
+	return textOfs(textTex.getRes().x, halign, position(), size().x, pixLineHeight() / textMarginFactor) - scroll.listPos;
 }
 
 void TextBox::setText(string&& str) {
@@ -530,9 +561,18 @@ string TextBox::moveText() {
 	return str;
 }
 
+void TextBox::updateTextTex() {
+	textTex.close();
+	SDL_FreeSurface(textImg);
+	int lineHeight = pixLineHeight();
+	textTex = World::fonts()->render(text.c_str(), lineHeight, size().x - lineHeight / textMarginFactor * 2 - ScrollBar::width, textImg, scroll.listPos);
+}
+
 void TextBox::updateListPos() {
-	if (ivec2 siz = size(); !alignTop && siz.x && siz.y)
-		scroll.listPos = scroll.listLim(textTex.getRes(), siz);
+	if (ivec2 siz = size(); !alignTop && siz.x && siz.y) {
+		scroll.listPos = ScrollBar::listLim(textTex.getRes(), siz);
+		textTex.update(textImg, scroll.listPos);
+	}
 }
 
 void TextBox::cutLines() {
@@ -544,10 +584,14 @@ void TextBox::cutLines() {
 			}
 }
 
+int TextBox::pixLineHeight() const {
+	return int(lineHeightFactor * float(World::window()->getScreenView().y));
+}
+
 // ICON
 
-Icon::Icon(Size size, string line, BCall leftCall, BCall rightCall, BCall holdCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr, bool select) :
-	Label(size, std::move(line), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
+Icon::Icon(const Size& size, string line, BCall leftCall, BCall rightCall, BCall holdCall, string&& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr, bool select) :
+	Label(size, std::move(line), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	selected(select),
 	hcall(holdCall)
 {}
@@ -556,18 +600,18 @@ void Icon::draw() const {
 	Rect rbg = rect();
 	Rect frm = frame();
 	if (showBG)
-		Quad::draw(rbg, frm, color * dimFactor, bgTex);
+		Quad::draw(World::sgui(), rbg, frm, color * dimFactor, bgTex);
 	if (textTex)
-		Quad::draw(textRect(), rbg.intersect(frm), dimFactor, textTex);
+		Quad::draw(World::sgui(), textRect(), textFrame(rbg, frm), dimFactor, textTex);
 
 	if (selected) {
 		int olSize = std::min(rbg.w, rbg.h) / outlineFactor;
 		vec4 clr = colorLight * dimFactor;
 		GLuint tex = World::scene()->texture();
-		Quad::draw(Rect(rbg.pos(), ivec2(rbg.w, olSize)), frm, clr, tex);
-		Quad::draw(Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), frm, clr, tex);
-		Quad::draw(Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
-		Quad::draw(Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
+		Quad::draw(World::sgui(), Rect(rbg.pos(), ivec2(rbg.w, olSize)), frm, clr, tex);
+		Quad::draw(World::sgui(), Rect(rbg.x, rbg.y + rbg.h - olSize, rbg.w, olSize), frm, clr, tex);
+		Quad::draw(World::sgui(), Rect(rbg.x, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
+		Quad::draw(World::sgui(), Rect(rbg.x + rbg.w - olSize, rbg.y + olSize, olSize, rbg.h - olSize * 2), frm, clr, tex);
 	}
 }
 
@@ -582,8 +626,8 @@ bool Icon::selectable() const {
 
 // COMBO BOX
 
-ComboBox::ComboBox(Size size, string curOpt, vector<string> opts, CCall optCall, BCall leftCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
-	Label(size, std::move(curOpt), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
+ComboBox::ComboBox(const Size& size, string curOpt, vector<string> opts, CCall optCall, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Label(size, std::move(curOpt), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	options(std::move(opts)),
 	ocall(optCall)
 {}
@@ -617,8 +661,8 @@ void ComboBox::set(vector<string>&& opts, const string& name) {
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(Size size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, const Texture& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, GLuint tex, const vec4& clr) :
-	Label(size, std::move(line), leftCall, rightCall, tooltip, dim, align, bg, tex, clr),
+LabelEdit::LabelEdit(const Size& size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, string&& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Label(size, std::move(line), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	oldText(text),
 	ecall(retCall),
 	ccall(cancCall),
@@ -628,15 +672,21 @@ LabelEdit::LabelEdit(Size size, string line, BCall leftCall, BCall rightCall, BC
 	cutText();
 }
 
-void LabelEdit::drawTop() const {
+LabelEdit::~LabelEdit() {
+	SDL_FreeSurface(textImg);
+}
+
+void LabelEdit::drawTop() {
 	ivec2 ps = position(), sz = size();
-	Quad::draw(Rect(caretPos() + ps.x + sz.y / textMarginFactor, ps.y, caretWidth, sz.y), frame(), colorLight, World::scene()->texture());
+	int margin = sz.y / textMarginFactor;
+	Quad::draw(World::sgui(), Rect(std::min(caretPos(), sz.x - margin * 2 - caretWidth) + ps.x + margin, ps.y + margin / 2, caretWidth, sz.y - margin), frame(), colorLight, World::scene()->texture());
 }
 
 void LabelEdit::onClick(ivec2, uint8 mBut) {
 	if (mBut == SDL_BUTTON_LEFT && (lcall || ecall)) {
 		setCPos(text.length());
-		World::window()->setTextCapture(true);
+		Rect field = rect();
+		World::window()->setTextCapture(&field);
 		World::scene()->setCapture(this);
 	} else if (mBut == SDL_BUTTON_RIGHT)
 		World::prun(rcall, this);
@@ -728,7 +778,8 @@ void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
 	case Binding::Type::textPaste:
 		if (kmodCtrl(mod) || joypad)
 			if (char* str = SDL_GetClipboardText()) {
-				onText(str);
+				uint garbagio = 0;
+				onText(str, garbagio);
 				SDL_free(str);
 			}
 		break;
@@ -762,22 +813,33 @@ void LabelEdit::onInput(Binding::Type bind, uint16 mod, bool joypad) {
 	}
 }
 
-void LabelEdit::onText(const char* str) {
+void LabelEdit::onCompose(const char* str, uint& len) {
+	text.erase(cpos, len);
+	len = strlen(str);
+	text.insert(cpos, str, len);
+	updateTextTex();
+}
+
+void LabelEdit::onText(const char* str, uint& len) {
+	text.erase(cpos, len);
 	sizet slen = strlen(str);
 	if (sizet avail = limit - text.length(); slen > avail)
 		slen = cutLength(str, avail);
 	text.insert(cpos, str, slen);
 	updateTextTex();
 	setCPos(cpos + slen);
+	len = 0;
 }
 
 void LabelEdit::onCancelCapture() {
-	if (!chatMode) {
+	viewPos = texiPos = 0;
+	if (chatMode)
+		textTex.update(textImg, ivec2(texiPos, 0));
+	else {
 		text = oldText;
 		updateTextTex();
 	}
-	textOfs = 0;
-	World::window()->setTextCapture(false);
+	World::window()->setTextCapture(nullptr);
 }
 
 void LabelEdit::setText(string&& str) {
@@ -794,9 +856,9 @@ void LabelEdit::setText(const string& str) {
 }
 
 void LabelEdit::onTextReset() {
-	updateTextTex();
 	cpos = text.length();
-	textOfs = 0;
+	viewPos = texiPos = 0;
+	updateTextTex();
 }
 
 sizet LabelEdit::cutLength(const char* str, sizet lim) {
@@ -816,21 +878,59 @@ void LabelEdit::cutText() {
 
 void LabelEdit::setCPos(uint16 cp) {
 	cpos = cp;
-	if (int cl = caretPos(); cl < 0)
-		textOfs -= cl;
-	else {
-		ivec2 siz = size();
-		if (int ce = cl + caretWidth, sx = siz.x - siz.y / textMarginFactor * 2; ce > sx)
-			textOfs -= ce - sx;
+	ivec2 siz = size();
+	if (int cl = caretPos(); shiftText(cl, caretWidth, viewPos, siz.x - siz.y / textMarginFactor * 2, texiPos, textTex.getRes().x, textImg ? textImg->w : 0))
+		textTex.update(textImg, ivec2(texiPos, 0));
+}
+
+bool LabelEdit::shiftText(int cp, int cs, int& vp, int vs, int& tp, int ts, int is) {
+	if (cp + cs > vs) {
+		if (vs -= cs; vp + cp <= ts)
+			vp += cp - vs;
+		else {
+			int tn = tp + ts - vs;
+			if (tn + ts <= is)
+				vp = 0;
+			else {
+				tn = is - ts;
+				vp -= tn - tp;
+			}
+			tp = tn;
+			return true;
+		}
+	} else if (cp < 0) {
+		if (vp >= -cp)
+			vp += cp;
+		else {
+			if (int tb = ts - vs; tp >= tb) {
+				tp -= tb;
+				vp = tb;
+			} else {
+				vp += tp;
+				tp = 0;
+			}
+			return true;
+		}
 	}
+	return false;
 }
 
 ivec2 LabelEdit::textPos() const {
-	return Label::textPos() + ivec2(textOfs, 0);
+	return Label::textPos() - ivec2(viewPos, 0);
 }
 
-int LabelEdit::caretPos() const {
-	return World::fonts()->length(text.substr(0, cpos).c_str(), size().y) + textOfs;
+void LabelEdit::updateTextTex() {
+	textTex.close();
+	SDL_FreeSurface(textImg);
+	textTex = World::fonts()->render(text.c_str(), size().y, textImg, ivec2(texiPos, 0));
+}
+
+int LabelEdit::caretPos() {
+	char tmp = text[cpos];
+	text[cpos] = '\0';
+	int sublen = World::fonts()->length(text.c_str(), size().y);
+	text[cpos] = tmp;
+	return sublen - viewPos - texiPos;
 }
 
 void LabelEdit::confirm() {
@@ -839,10 +939,12 @@ void LabelEdit::confirm() {
 		text.clear();
 		onTextReset();
 	} else {
-		World::window()->setTextCapture(false);
+		viewPos = texiPos = 0;
+		textTex.update(textImg, ivec2(texiPos, 0));
+
+		World::window()->setTextCapture(nullptr);
 		World::scene()->setCapture(nullptr, false);
 	}
-	textOfs = 0;
 	World::prun(lcall, this);
 }
 
@@ -885,8 +987,8 @@ bool LabelEdit::selectable() const {
 
 // KEY GETTER
 
-KeyGetter::KeyGetter(Size size, Binding::Accept atype, Binding::Type binding, sizet keyId, BCall exitCall, BCall rightCall, const Texture& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
-	Label(size, bindingText(atype, binding, keyId), exitCall, rightCall, tooltip, dim, align, bg, tex, clr),
+KeyGetter::KeyGetter(const Size& size, Binding::Accept atype, Binding::Type binding, sizet keyId, BCall exitCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, GLuint tex, const vec4& clr) :
+	Label(size, bindingText(atype, binding, keyId), exitCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	accept(atype),
 	bind(binding),
 	kid(keyId)

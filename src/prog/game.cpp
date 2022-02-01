@@ -5,7 +5,6 @@
 #include "engine/scene.h"
 #include "engine/world.h"
 #include <ctime>
-#include <iostream>
 
 Game::Game() :
 	board(new Board(World::scene(), World::sets())),

@@ -120,9 +120,9 @@ public:
 	InputSys();
 	~InputSys();
 
-	void eventMouseMotion(const SDL_MouseMotionEvent& motion, bool mouse = true);
-	void eventMouseButtonDown(const SDL_MouseButtonEvent& button, bool mouse = true);
-	void eventMouseButtonUp(const SDL_MouseButtonEvent& button, bool mouse = true);
+	void eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset, bool mouse = true);
+	void eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset, bool mouse = true);
+	void eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset, bool mouse = true);
 	void eventMouseWheel(const SDL_MouseWheelEvent& wheel);
 	void eventKeyDown(const SDL_KeyboardEvent& key);
 	void eventKeyUp(const SDL_KeyboardEvent& key);
@@ -133,10 +133,10 @@ public:
 	void eventGamepadButtonDown(const SDL_ControllerButtonEvent& gbutton);
 	void eventGamepadButtonUp(const SDL_ControllerButtonEvent& gbutton);
 	void eventGamepadAxis(const SDL_ControllerAxisEvent& gaxis);
-	void eventFingerMove(const SDL_TouchFingerEvent& fin);
+	void eventFingerMove(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight);
 	void eventFingerGesture(const SDL_MultiGestureEvent& ges);
-	void eventFingerDown(const SDL_TouchFingerEvent& fin);
-	void eventFingerUp(const SDL_TouchFingerEvent& fin);
+	void eventFingerDown(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight);
+	void eventFingerUp(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight);
 	void eventMouseLeave();
 	void simulateMouseMove();
 	void tick();

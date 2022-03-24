@@ -103,15 +103,11 @@
 	<table class="listing">
 		<tr>
 			<td>Linux/Windows</td>
-			<td>Thrones/data</td>
+			<td>Thrones/share/thrones</td>
 		</tr>
 		<tr>
 			<td>macOS</td>
 			<td>Thrones.app/Contents/Resources</td>
-		</tr>
-		<tr>
-			<td>Web</td>
-			<td>Indexed DB /data</td>
 		</tr>
 	</table>
 	<p>Either behavior can be explicitly set by running the game with the "-e 0|1" option:</p>
@@ -125,6 +121,7 @@
 			<td>save externally</td>
 		</tr>
 	</table>
+	<p>By default the game bypasses the X11 compositor. The compositor can be kept enabled by running the game with the "-k" flag.</p>
 
 	<h2 id="h2_1">2.1 Settings</h2>
 	<p>Game client settings are stored in "setting.ini" and can be edited in the "Settings" menu.</p>

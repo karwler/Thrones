@@ -10,37 +10,79 @@
 #include <winsock2.h>
 #endif
 
-// QUAD
+// LOADER
 
-void Quad::init() {
+void Loader::init(ShaderStartup* stlog, WindowSys* win) {
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
-
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
 	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-	glEnableVertexAttribArray(Shader::uvloc);
-	glVertexAttribPointer(Shader::uvloc, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
+	glVertexAttribPointer(Shader::vpos, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(uptrt(0)));
+
+	shader = stlog;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	if (win->getTitleBarHeight()) {
+		glActiveTexture(Shader::stlogTexa);
+		blank.init(Widget::colorDark);
+		title.init(win->getFonts()->render((string("Thrones v") + Com::commonVersion + " loading...").c_str(), win->getTitleBarHeight(), win->getScreenView().x), win->getScreenView());
+		glActiveTexture(Shader::texa);
+	}
+#endif
 }
 
-void Quad::free() {
+void Loader::free() {
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	title.free();
+	blank.free();
+#endif
+	delete shader;
+
 	glBindVertexArray(vao);
 	glDisableVertexAttribArray(Shader::vpos);
-	glDisableVertexAttribArray(Shader::uvloc);
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 }
 
-void Quad::draw(const ShaderGui* sgui, const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z) {
-	glUniform4f(sgui->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
-	glUniform4fv(sgui->uvrc, 1, glm::value_ptr(uvrect));
-	glUniform1f(sgui->zloc, z);
-	glUniform4fv(sgui->color, 1, glm::value_ptr(color));
+void Loader::addLine(const string& str, WindowSys* win) {
+	ivec2 wres = win->getScreenView();
+	logStr += str + '\n';
+	if (uint lines = std::count(logStr.begin(), logStr.end(), '\n'), maxl = (wres.y - logMargin.y * 2) / logSize; lines > maxl) {
+		sizet end = 0;
+		for (uint i = lines - maxl; i; --i)
+			end = logStr.find_first_of('\n', end) + 1;
+		logStr.erase(0, end);
+	}
+
+	glActiveTexture(Shader::stlogTexa);
+	if (Texture tex; tex.init(win->getFonts()->render(logStr.c_str(), logSize, wres.x), wres)) {
+		glUseProgram(*shader);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glBindVertexArray(vao);
+		draw(Rect(logMargin, tex.getRes()), tex);
+
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+		if (title) {
+			vec2 hres = vec2(wres) / 2.f;
+			glUniform2f(shader->pview, hres.x, float(win->getTitleBarHeight()) / 2.f);
+			glViewport(0, wres.y, wres.x, win->getTitleBarHeight());
+			draw(Rect(0, 0, wres.x, win->getTitleBarHeight()), blank);
+			draw(Rect((wres.x - title.getRes().x) / 2, 0, title.getRes()), title);
+			glUniform2fv(shader->pview, 1, glm::value_ptr(hres));
+			glViewport(0, 0, wres.x, wres.y);
+		}
+#endif
+		SDL_GL_SwapWindow(win->getWindow());
+		tex.free();
+	}
+	glActiveTexture(Shader::texa);
+}
+
+void Loader::draw(const Rect& rect, GLuint tex) {
+	glUniform4f(shader->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, Quad::corners);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, corners);
 }
 
 // FONT SET
@@ -163,56 +205,6 @@ void FontSet::setHinting(Settings::Hinting hint) {
 #endif
 }
 
-Texture FontSet::render(const char* text, int height, SDL_Surface*& img, ivec2 offset) {
-	img = TTF_RenderUTF8_Blended(getFont(height), text, textColor);
-	return Texture(img, maxTexSize, offset);
-}
-
-Texture FontSet::render(const char* text, int height, uint length, SDL_Surface*& img, ivec2 offset) {
-	img = TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length);
-	return Texture(img, maxTexSize, offset);
-}
-
-Texture FontSet::finishRender(SDL_Surface* img) {
-	Texture tex(img, maxTexSize, ivec2(0));
-	SDL_FreeSurface(img);
-	return tex;
-}
-
-// LOADER
-
-void WindowSys::Loader::addLine(const string& str, WindowSys* win) {
-	ivec2 wres = win->getScreenView();
-	logStr += str + '\n';
-	if (uint lines = std::count(logStr.begin(), logStr.end(), '\n'), maxl = (wres.y - logMargin.y * 2) / logSize; lines > maxl) {
-		sizet end = 0;
-		for (uint i = lines - maxl; i; --i)
-			end = logStr.find_first_of('\n', end) + 1;
-		logStr.erase(0, end);
-	}
-
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	if (Texture tex = win->getFonts()->render(logStr.c_str(), logSize, wres.x)) {
-		glUseProgram(*win->getGui());
-		glBindVertexArray(win->getWrect()->getVao());
-		Quad::draw(win->getGui(), Rect(logMargin, tex.getRes()), vec4(1.f), tex);
-		tex.free();
-
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-		if (title) {
-			vec2 hres = wres / 2;
-			glViewport(0, wres.y, wres.x, win->getTitleBarHeight());
-			glUniform2f(win->getGui()->pview, hres.x, float(win->getTitleBarHeight() / 2));
-			Quad::draw(win->getGui(), Rect(0, 0, wres.x, win->getTitleBarHeight()), Widget::colorDark, blank);
-			Quad::draw(win->getGui(), Rect((wres.x - title.getRes().x) / 2, 0, title.getRes()), vec4(1.f), title);
-			glUniform2fv(win->getGui()->pview, 1, glm::value_ptr(hres));
-			glViewport(0, 0, wres.x, wres.y);
-		}
-#endif
-	}
-	SDL_GL_SwapWindow(win->getWindow());
-}
-
 // WINDOW SYS
 
 int WindowSys::start(const Arguments& args) {
@@ -310,6 +302,10 @@ void WindowSys::init(const Arguments& args) {
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
 	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	if (args.hasFlag(Settings::argCompositor))
+		SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+#endif
 	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER))
 		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
 	if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG)
@@ -374,13 +370,7 @@ void WindowSys::load(Loader* loader) {
 		sets = new Settings(FileSys::loadSettings(inputSys));
 		fonts = new FontSet;
 		sets->font = fonts->init(sets->font, sets->hinting);
-		createWindow();
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-		if (titleBarHeight) {
-			loader->blank = Texture({ 255, 255, 255, 255 });
-			loader->title = fonts->render((string("Thrones v") + Com::commonVersion + " loading...").c_str(), titleBarHeight, screenView.x);
-		}
-#endif
+		loader->init(createWindow(), this);
 		loader->addLine("loading audio", this);
 		break;
 	case Loader::State::audio:
@@ -396,14 +386,12 @@ void WindowSys::load(Loader* loader) {
 		scene->loadObjects();
 		loader->addLine("loading textures", this);
 		break;
-	case Loader::State::textures:
-		scene->loadTextures();
+	case Loader::State::textures: {
+		ivec2 maxWin = windowSizes().back();
+		scene->loadTextures(ceilPower2(std::max(maxWin.x, maxWin.y)));
 		loader->addLine("starting", this);
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-		loader->title.close();
-		loader->blank.close();
-#endif
-		break;
+		loader->free();
+		break; }
 	case Loader::State::program:
 #ifdef __EMSCRIPTEN__
 		loader.reset();
@@ -411,12 +399,13 @@ void WindowSys::load(Loader* loader) {
 #endif
 		program = new Program;
 		program->start();
+		setTitleBarHitTest();
 		oldTime = SDL_GetTicks();
 	}
 	++loader->state;
 }
 
-void WindowSys::createWindow() {
+ShaderStartup* WindowSys::createWindow() {
 	uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 	switch (sets->screen) {
 	case Settings::Screen::borderlessWindow: case Settings::Screen::borderless:
@@ -462,7 +451,7 @@ void WindowSys::createWindow() {
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y + titleBarHeight);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		if (sets->screen == Settings::Screen::borderlessWindow)
-			SDL_SetWindowHitTest(window, eventWindowHit, this);
+			SDL_SetWindowHitTest(window, eventWindowHitStartup, this);
 	} else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 #endif
@@ -477,17 +466,8 @@ void WindowSys::createWindow() {
 	}
 #endif
 	if (SDL_Surface* icon = IMG_Load((FileSys::dataPath() + fileCursor).c_str())) {
-		int oheight = icon->h;
-		if (int size = ceilPower2(std::max(icon->w, icon->h)); size != icon->w || size != icon->h)
-			if (SDL_Surface* lrg = SDL_CreateRGBSurfaceWithFormat(0, size, size, icon->format->BitsPerPixel, icon->format->format)) {
-				Rect rect(0, 0, icon->w, icon->h);
-				SDL_FillRect(lrg, nullptr, 0);
-				SDL_BlitSurface(icon, nullptr, lrg, &rect);
-				SDL_FreeSurface(icon);
-				icon = lrg;
-			}
 		if (SDL_Cursor* cursor = SDL_CreateColorCursor(icon, 0, 0)) {
-			cursorHeight = oheight;
+			cursorHeight = icon->h;
 			SDL_SetCursor(cursor);
 		}
 		SDL_FreeSurface(icon);
@@ -520,7 +500,6 @@ void WindowSys::createWindow() {
 #endif
 	if (glGetIntegerv(GL_MAX_TEXTURE_SIZE, gvals); gvals[0] < std::max(wsizes.back().x, wsizes.back().y))
 		throw std::runtime_error("texture size is limited to " + toStr(gvals[0]));
-	fonts->setMaxTexSize(gvals[0], std::max(wsizes.back().x, wsizes.back().y));
 	if (glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, gvals); gvals[0] < largestObjTexture)
 		throw std::runtime_error("texture size is limited to " + toStr(gvals[0]));
 	if (glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, gvals); gvals[0] < 1 << Settings::shadowBitMax)
@@ -557,16 +536,13 @@ void WindowSys::createWindow() {
 	sfinal = new ShaderFinal(sources.at(ShaderFinal::fileVert), sources.at(ShaderFinal::fileFrag), sets);
 	skybox = new ShaderSkybox(sources.at(ShaderSkybox::fileVert), sources.at(ShaderSkybox::fileFrag));
 	gui = new ShaderGui(sources.at(ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
-	wrect.init();
 
-	// init startup log
-	glActiveTexture(Shader::texa);
-	glUseProgram(*gui);
-	glUniform2f(gui->pview, float(screenView.x) / 2.f, float(screenView.y) / 2.f);
+	ShaderStartup* stlog = new ShaderStartup(sources.at(ShaderStartup::fileVert), sources.at(ShaderStartup::fileFrag));
+	glUniform2f(stlog->pview, float(screenView.x) / 2.f, float(screenView.y) / 2.f);
+	return stlog;
 }
 
 void WindowSys::destroyWindow() {
-	wrect.free();
 	delete gui;
 	delete skybox;
 	delete sfinal;
@@ -579,6 +555,7 @@ void WindowSys::destroyWindow() {
 	delete geom;
 	SDL_GL_DeleteContext(context);
 	SDL_DestroyWindow(window);
+	SDL_FreeCursor(SDL_GetCursor());
 }
 
 void WindowSys::handleEvent(const SDL_Event& event) {
@@ -679,7 +656,11 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 
 SDL_HitTestResult SDLCALL WindowSys::eventWindowHit(SDL_Window*, const SDL_Point* area, void* data) {
 	WindowSys* ws = static_cast<WindowSys*>(data);
-	return area->y >= ws->titleBarHeight || !ws->scene || ws->scene->getTitleBarSelected(ivec2(area->x, area->y)) ? SDL_HITTEST_NORMAL : SDL_HITTEST_DRAGGABLE;
+	return area->y >= ws->titleBarHeight || ws->scene->getTitleBarSelected(ivec2(area->x, area->y)) ? SDL_HITTEST_NORMAL : SDL_HITTEST_DRAGGABLE;
+}
+
+SDL_HitTestResult SDLCALL WindowSys::eventWindowHitStartup(SDL_Window*, const SDL_Point* area, void* data) {
+	return area->y >= static_cast<WindowSys*>(data)->titleBarHeight ? SDL_HITTEST_NORMAL : SDL_HITTEST_DRAGGABLE;
 }
 
 ivec2 WindowSys::mousePos() {
@@ -747,19 +728,17 @@ void WindowSys::setWindowMode() {
 		SDL_SetWindowBordered(window, SDL_bool(sets->screen == Settings::Screen::window));
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y + titleBarHeight);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
-		sets->screen == Settings::Screen::borderlessWindow ? SDL_SetWindowHitTest(window, eventWindowHit, this) : SDL_SetWindowHitTest(nullptr, nullptr, nullptr);
 		break;
 	case Settings::Screen::fullscreen:
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-		SDL_SetWindowHitTest(nullptr, nullptr, nullptr);
 		break;
 	case Settings::Screen::desktop:
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
 		SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		SDL_SetWindowHitTest(nullptr, nullptr, nullptr);
 	}
+	setTitleBarHitTest();
 	updateView();
 #endif
 }
@@ -787,6 +766,13 @@ void WindowSys::setTitleBarHeight() {
 	} else
 		titleBarHeight = 0;
 #endif
+}
+
+void WindowSys::setTitleBarHitTest() {
+	if (sets->screen == Settings::Screen::borderlessWindow)
+		SDL_SetWindowHitTest(window, eventWindowHit, this);
+	else
+		SDL_SetWindowHitTest(nullptr, nullptr, nullptr);
 }
 
 void WindowSys::setGamma(float gamma) {
@@ -890,7 +876,7 @@ void WindowSys::debugMessage(GLenum source, GLenum type, uint id, GLenum severit
 		return;
 	std::ostringstream ss("Debug message ");
 	ss << id << ": " <<  message;
-	if (size_t mlen = strlen(message); mlen && message[mlen-1] != '\n')
+	if (sizet mlen = strlen(message); mlen && message[mlen-1] != '\n')
 		ss << '\n';
 
 	switch (source) {

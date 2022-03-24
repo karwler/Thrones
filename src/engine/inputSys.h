@@ -111,7 +111,7 @@ private:
 	mumap<SDL_Scancode, Binding::Type> keymap;
 	mumap<AsgJoystick, Binding::Type> joymap;
 	mumap<AsgGamepad, Binding::Type> padmap;
-	ivec2 mouseMove = { 0, 0 };	// last recorded cursor position difference
+	ivec2 mouseMove = ivec2(0);	// last recorded cursor position difference
 	uint32 moveTime = 0;		// timestamp of last recorded mouseMove
 
 	static constexpr uint32 moveTimeout = 50;

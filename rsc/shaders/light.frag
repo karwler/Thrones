@@ -30,7 +30,7 @@ in vec3 tanViewPos;
 in vec3 tanFragPos;
 flat in vec4 fragDiffuse;
 flat in vec4 fragSpecShine;
-flat in int fragTexid;
+flat in uvec2 fragTexid;
 flat in int fragShow;
 
 out vec4 fragColor;
@@ -61,14 +61,14 @@ void main() {
 		return;
 	}
 
-	vec3 normal = normalize(texture(normaMap, vec3(fragUV, fragTexid)).xyz * 2.0 - 1.0);
+	vec3 normal = normalize(texture(normaMap, vec3(fragUV, fragTexid.y)).xyz * 2.0 - 1.0);
 	vec3 lightDir = tanLightPos - tanFragPos;
 	float lightDist = length(lightDir);
 	float attenuation = 1.0 + lightLinear * lightDist + lightQuadratic * (lightDist * lightDist);
 	vec3 viewDir = normalize(tanViewPos - tanFragPos);
 	lightDir = normalize(lightDir);
 
-	vec4 color = texture(colorMap, vec3(fragUV, fragTexid)) * fragDiffuse;
+	vec4 color = texture(colorMap, vec3(fragUV, fragTexid.x)) * fragDiffuse;
 	vec3 ambient = color.rgb * lightAmbient;
 	vec3 diffuse = color.rgb * lightDiffuse * max(dot(normal, lightDir), 0.0);
 	vec3 specular = fragSpecShine.rgb * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), fragSpecShine.a);

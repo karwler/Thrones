@@ -66,7 +66,7 @@ void FileSys::init(const Arguments& args) {
 		dirConfig = path + string("/");
 #elif defined(__EMSCRIPTEN__)
 	dirBase = "/";
-	dirConfig = "/data/";
+	dirConfig = dirBase;
 	EM_ASM(
 		FS.mkdir('/data');
 		FS.mount(IDBFS, {}, '/data');
@@ -104,7 +104,7 @@ void FileSys::init(const Arguments& args) {
 			dirConfig = path + string("/.config/thrones/");
 #endif
 	} else
-		dirConfig = dirBase;
+		dirConfig = dataPath();
 #endif
 }
 
@@ -622,78 +622,76 @@ umap<string, string> FileSys::loadShaders() {
 	return shds;
 }
 
-TextureSet FileSys::loadTextures(umap<string, Texture>& texs, int scale) {
-	texs = { pair(string(), Texture({ 255, 255, 255, 255 })) };
-	return loadTextures(texs, [](umap<string, Texture>& txv, string&& name, SDL_Surface* img, GLenum fmt) { txv.emplace(std::move(name), Texture(img, fmt)); }, scale);
-}
-
-TextureSet FileSys::reloadTextures(umap<string, Texture>& texs, int scale) {
-	return loadTextures(texs, [](umap<string, Texture>&, string&&, SDL_Surface*, GLenum) {}, scale);
-}
-
-TextureSet FileSys::loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale) {
-	enum TexturePlacement : uint8 {
-		TEXPLACE_NONE,
-		TEXPLACE_WIDGET,
-		TEXPLACE_OBJECT,
-		TEXPLACE_BOTH,
-		TEXPLACE_CUBE
-	};
-
-	string dirPath = dataPath() + "textures/";
+umap<string, TexLoc> FileSys::loadTextures(TextureSet& tset, TextureCol& tcol, float scale, int recomTexSize) {
+	string dirPath = texturePath();
 	TextureSet::Import imp;
-	scale = 100 / scale;
-	listOperateDirectory(dirPath, [&dirPath, &texs, &imp, inset, scale](string&& name) {
-		string::iterator num = fileLevelPos(name);
-		if (num == name.begin() || num == name.end())
-			return;
-		TexturePlacement place = TexturePlacement(*num - '0');
-		if (place > TEXPLACE_CUBE || (place == TEXPLACE_CUBE && *(num + 1) != '0'))
-			return;
-
-		string path = dirPath + name;
-		if (place != TEXPLACE_CUBE) {
-			auto [img, pform] = Texture::pickPixFormat(IMG_Load((path.c_str())));
-			if (!img) {
-				logError("failed to load texture ", path);
-				return;
-			}
-
-			if (place == TEXPLACE_BOTH) {
-				inset(texs, string(name.begin(), num), img, pform);
-				loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
-			} else if (place & TEXPLACE_OBJECT)
-				loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
-			else {
-				if (place & TEXPLACE_WIDGET)
-					inset(texs, string(name.begin(), num), img, pform);
-				SDL_FreeSurface(img);
-			}
-		} else {
-			sizet ofs = num - name.begin() + 1 + dirPath.length();
-			for (sizet s = 0; s < imp.sky.size(); ++s) {
-				path[ofs] = '0' + s;
-				if (imp.sky[s] = Texture::pickPixFormat(IMG_Load(path.c_str())); !imp.sky[s].first) {
-					std::for_each(imp.sky.begin(), imp.sky.begin() + s, [](pair<SDL_Surface*, GLenum>& it) { SDL_FreeSurface(it.first); });
-					logError("failed to load cubemap side ", path);
-					break;
-				}
-			}
+	vector<TextureCol::Element> icns;
+	listOperateDirectory(dirPath, [&dirPath, &imp, &icns, scale](string&& name) {
+		if (auto [place, num, path] = beginTextureLoad(dirPath, name, false); place != Texplace::none) {
+			if (place != Texplace::cube) {
+				if (auto [img, pform] = pickPixFormat(IMG_Load((path.c_str()))); img) {
+					if (place & Texplace::object)
+						loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
+					if (place & Texplace::widget)
+						icns.emplace_back(name.substr(0, num), img, pform, place == Texplace::widget, strciEndsWith(path, ".svg"));
+				} else
+					logError("failed to load texture ", path);
+			} else
+				loadSkyTextures(imp, path, dirPath, num);
 		}
 	});
-	return TextureSet(std::move(imp));
+	umap<string, TexLoc> trefs = tcol.init(std::move(icns), recomTexSize);	// TextureSet does some funky stuff to the surfaces, so this one needs to go first
+	tset.init(std::move(imp));
+	return trefs;
 }
 
-void FileSys::loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, string::iterator num, GLenum ifmt, TextureSet::Import& imp, int scale) {
-	*num = 'N';
+void FileSys::reloadTextures(TextureSet& tset, float scale) {
+	string dirPath = texturePath();
+	TextureSet::Import imp;
+	listOperateDirectory(dirPath, [&dirPath, &imp, scale](string&& name) {
+		if (auto [place, num, path] = beginTextureLoad(dirPath, name, true); place != Texplace::none) {
+			if (place != Texplace::cube) {
+				if (auto [img, pform] = pickPixFormat(IMG_Load((path.c_str()))); img)
+					loadObjectTexture(img, dirPath, name, num, pform, imp, scale);
+				else
+					logError("failed to load texture ", path);
+			} else
+				loadSkyTextures(imp, path, dirPath, num);
+		}
+	});
+	tset.free();
+	tset.init(std::move(imp));
+}
+
+tuple<FileSys::Texplace, sizet, string> FileSys::beginTextureLoad(const string& dirPath, string& name, bool noWidget) {
+	string::iterator num = fileLevelPos(name);
+	if (num == name.begin() || num == name.end())
+		return tuple(Texplace::none, string::npos, string());
+	Texplace place = Texplace(*num - '0');
+	if ((noWidget && place == Texplace::widget) || place > Texplace::cube || (place == Texplace::cube && *(num + 1) != '0'))
+		return tuple(Texplace::none, string::npos, string());
+	return tuple(place, num - name.begin(), dirPath + name);
+}
+
+void FileSys::loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, sizet num, GLenum ifmt, TextureSet::Import& imp, float scale) {
+	name[num] = 'N';
 	string path = dirPath + name;
-	if (auto [nrm, nfmt] = Texture::pickPixFormat(IMG_Load(path.c_str())); nrm) {
-		imp.cres = glm::max(ivec2(img->w, img->h) / scale, imp.cres);
-		imp.nres = glm::max(ivec2(nrm->w, nrm->h) / scale, imp.nres);
-		imp.imgs.emplace_back(img, nrm, string(name.begin(), num), ifmt, nfmt);
-	} else {
-		SDL_FreeSurface(img);
-		logError("failed to load normalmap ", path);
+	auto [nrm, nfmt] = pickPixFormat(IMG_Load(path.c_str()));
+	if (nrm)
+		imp.nres = std::max(imp.nres, int(float(std::max(nrm->w, nrm->h)) * scale));
+	imp.cres = std::max(imp.cres, int(float(std::max(img->w, img->h)) / scale));
+	imp.imgs.emplace_back(img, nrm, name.substr(0, num), ifmt, nfmt);
+}
+
+void FileSys::loadSkyTextures(TextureSet::Import& imp, string& path, const string& dirPath, sizet num) {
+	sizet ofs = num + 1 + dirPath.length();
+	for (sizet s = 0; s < imp.sky.size(); ++s) {
+		path[ofs] = '0' + s;
+		if (imp.sky[s] = pickPixFormat(IMG_Load(path.c_str())); !imp.sky[s].first) {
+			std::for_each(imp.sky.begin(), imp.sky.begin() + s, [](pair<SDL_Surface*, GLenum>& it) { SDL_FreeSurface(it.first); });
+			logError("failed to load cubemap side ", path);
+			break;
+		}
 	}
 }
 
@@ -784,11 +782,11 @@ string::iterator FileSys::fileLevelPos(string& str) {
 	return std::find_if_not(dot + (dot != str.rend()), str.rend(), isdigit).base();
 }
 
-void FileSys::saveScreenshot(SDL_Surface* img) {
+void FileSys::saveScreenshot(SDL_Surface* img, const string& desc) {
 	if (img) {
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		if (string path = dirConfig + "/screenshots/"; createDirectories(path)) {
-			if (IMG_SavePNG(img, (path + "thrones_" + DateTime::now().toString() + ".png").c_str()))
+			if (IMG_SavePNG(img, (path + "thrones_" + (desc.empty() ? DateTime::now().toString() : desc) + ".png").c_str()))
 				logError("failed to save screenshot: ", IMG_GetError());
 		} else
 			logError("failed to create directory ", path);

@@ -108,6 +108,14 @@ private:
 	static constexpr char iniKeywordWinThrone[] = "win_thrones";
 	static constexpr char iniKeywordCapturers[] = "capturers";
 
+	enum class Texplace : uint8 {
+		none,
+		widget,
+		object,
+		both,
+		cube
+	};
+
 	static inline string dirBase, dirConfig;
 
 public:
@@ -124,9 +132,9 @@ public:
 	static umap<string, Material> loadMaterials();
 	static vector<Mesh> loadObjects(umap<string, uint16>& refs);	// geometry shader must be in use
 	static umap<string, string> loadShaders();
-	static TextureSet loadTextures(umap<string, Texture>& texs, int scale);
-	static TextureSet reloadTextures(umap<string, Texture>& texs, int scale);
-	static void saveScreenshot(SDL_Surface* img);
+	static umap<string, TexLoc> loadTextures(TextureSet& tset, TextureCol& tcol, float scale, int recomTexSize);
+	static void reloadTextures(TextureSet& tset, float scale);
+	static void saveScreenshot(SDL_Surface* img, const string& desc = string());
 
 #ifdef __EMSCRIPTEN__
 	static bool canRead();
@@ -136,7 +144,10 @@ public:
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	static string docPath();
 #endif
+	static const string& getDirConfig();
 private:
+	static string texturePath();
+
 	static void readSetting(void* settings, IniLine& il);
 	static void readShadows(const char* str, Settings& sets);
 	static void readColors(const char* str, Settings& sets);
@@ -152,11 +163,14 @@ private:
 	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
 	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
 	static void saveUserFile(const string& drc, const char* file, const string& text);
-	static TextureSet loadTextures(umap<string, Texture>& texs, void (*inset)(umap<string, Texture>&, string&&, SDL_Surface*, GLenum), int scale);
-	static void loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, string::iterator num, GLenum ifmt, TextureSet::Import& imp, int scale);
+	static tuple<Texplace, sizet, string> beginTextureLoad(const string& dirPath, string& name, bool noWidget);
+	static void loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, sizet num, GLenum ifmt, TextureSet::Import& imp, float scale);
+	static void loadSkyTextures(TextureSet::Import& imp, string& path, const string& dirPath, sizet num);
 	template <class F> static void listOperateDirectory(const string& dirPath, F func);
 	template <class T, class F> static string strJoin(const vector<T>& vec, F conv, char sep = ' ');
 	static string::iterator fileLevelPos(string& str);
+
+	friend bool operator&(Texplace a, Texplace b);
 };
 
 inline string FileSys::dataPath() {
@@ -180,3 +194,15 @@ inline string FileSys::docPath() {
 #endif
 }
 #endif
+
+inline string FileSys::texturePath() {
+	return dataPath() + "textures/";
+}
+
+inline const string& FileSys::getDirConfig() {
+	return dirConfig;
+}
+
+inline bool operator&(FileSys::Texplace a, FileSys::Texplace b) {
+	return std::underlying_type_t<FileSys::Texplace>(a) & std::underlying_type_t<FileSys::Texplace>(b);
+}

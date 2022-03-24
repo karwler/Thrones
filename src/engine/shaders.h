@@ -9,17 +9,19 @@ public:
 	static constexpr GLuint normat0 = 8, normat1 = 9, normat2 = 10;
 	static constexpr GLuint diffuse = 11, specShine = 12, texid = 13, show = 14;
 
-	static constexpr GLenum texa = GL_TEXTURE0;			// general purpose and for widget textures
-	static constexpr GLenum colorTexa = GL_TEXTURE1;	// color texture of 3D objects
-	static constexpr GLenum normalTexa = GL_TEXTURE2;	// normal texture of 3D objects
-	static constexpr GLenum skyboxTexa = GL_TEXTURE3;	// skybox texture
+	static constexpr GLenum texa = GL_TEXTURE0;			// widget textures for ShderGui
+	static constexpr GLenum colorTexa = GL_TEXTURE1;	// color texture of 3D objects for ShaderLight
+	static constexpr GLenum normalTexa = GL_TEXTURE2;	// normal texture of 3D objects for ShaderLight
+	static constexpr GLenum skyboxTexa = GL_TEXTURE3;	// skybox texture for ShaderSkybox
 	static constexpr GLenum vposTexa = GL_TEXTURE4;		// vertex vectors output by ShaderGeom
 	static constexpr GLenum normTexa = GL_TEXTURE5;		// normal vectors output by ShaderGeom
 	static constexpr GLenum ssaoTexa = GL_TEXTURE6;		// SSAO map output by ShaderSsao
 	static constexpr GLenum blurTexa = GL_TEXTURE7;		// SSAO blur map output by ShaderBlur
 	static constexpr GLenum sceneTexa = GL_TEXTURE8;	// scene colors output by ShaderLight
-	static constexpr GLenum depthTexa = GL_TEXTURE9;	// shadow map
-	static constexpr GLenum noiseTexa = GL_TEXTURE10;	// noise map for SSAO
+	static constexpr GLenum gaussTexa = GL_TEXTURE9;	// blurred bright colors in scene by ShaderBrights and ShaderGauss for ShaderFinal
+	static constexpr GLenum depthTexa = GL_TEXTURE10;	// shadow map by ShaderDepth
+	static constexpr GLenum noiseTexa = GL_TEXTURE11;	// noise map for ShaderSsao
+	static constexpr GLenum stlogTexa = GL_TEXTURE12;	// startup log texture for ShaderStartup
 
 protected:
 	GLuint program;
@@ -155,8 +157,19 @@ public:
 	static constexpr char fileVert[] = "gui.vert";
 	static constexpr char fileFrag[] = "gui.frag";
 
-	GLint pview, rect, uvrc, zloc;
-	GLint color;
+	static constexpr GLuint rect = 1, uvrc = 2, zloc = 3;
+
+	GLint pview;
 
 	ShaderGui(const string& srcVert, const string& srcFrag);
+};
+
+class ShaderStartup : public Shader {
+public:
+	static constexpr char fileVert[] = "startup.vert";
+	static constexpr char fileFrag[] = "startup.frag";
+
+	GLint pview, rect;
+
+	ShaderStartup(const string& srcVert, const string& srcFrag);
 };

@@ -12,7 +12,7 @@ layout (location = 4) in mat4 model;
 layout (location = 8) in mat3 normat;
 layout (location = 11) in vec4 diffuse;
 layout (location = 12) in vec4 specShine;
-layout (location = 13) in int texid;
+layout (location = 13) in uvec2 texid;
 layout (location = 14) in int show;
 
 out vec3 fragPos;
@@ -22,7 +22,7 @@ out vec3 tanViewPos;
 out vec3 tanFragPos;
 flat out vec4 fragDiffuse;
 flat out vec4 fragSpecShine;
-flat out int fragTexid;
+flat out uvec2 fragTexid;
 flat out int fragShow;
 
 void main() {

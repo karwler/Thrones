@@ -125,7 +125,7 @@ public:
 	void updateTileInstances(Tile* til, Mesh* old);
 
 private:
-	void setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, int tex);
+	void setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, uvec2 tex);
 	void setMidFortressTiles();
 	void setPieces(Piece* pces, float rot);
 	void setBgrid();

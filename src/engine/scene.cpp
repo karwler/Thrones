@@ -111,7 +111,7 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 
 	if (sets->bloom)
 		for (sizet i = 0; i < fboGauss.size(); ++i)
-			fboGauss[i] = makeFramebuffer(texGauss[i], res, GL_RGBA16F, Shader::texa, "gauss buffer " + toStr(i));
+			fboGauss[i] = makeFramebuffer(texGauss[i], res, GL_RGBA16F, Shader::gaussTexa, "gauss buffer " + toStr(i));
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glActiveTexture(Shader::texa);
 }
@@ -395,16 +395,23 @@ void Animation::append(Animation& ani) {
 Scene::Scene() :
 	light(World::sets()->shadowRes),
 	frames(World::sets(), World::window()->getScreenView())
-{}
+{
+	wgtTops.initBuffer();
+	wgtTops.allocate(numWgtTops);
+	wgtTops.updateInstanceData(0, numWgtTops);
+}
 
 Scene::~Scene() {
+	layout.reset();	// needs to happen before texCol gets freed
 	setPtrVec(popups);
 	setPtrVec(overlays);
+	context.reset();
+	titleBar.reset();
 	texSet.free();
-	for (auto& [name, tex] : texes)
-		tex.free();
+	texCol.free();
 	for (Mesh& it : meshes)
 		it.free();
+	wgtTops.freeBuffer();
 	frames.free();
 	light.free();
 }
@@ -485,9 +492,11 @@ void Scene::draw() {
 		glUseProgram(*World::brights());
 		glBindFramebuffer(GL_FRAMEBUFFER, frames.fboGauss[0]);
 		glClear(GL_COLOR_BUFFER_BIT);
+		glBindVertexArray(scrFrame.getVao());
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
 
 		glUseProgram(*World::gauss());
+		glActiveTexture(Shader::gaussTexa);
 		for (uint i = 0; i < 10; ++i) {
 			bool vertical = i % 2;
 			glBindFramebuffer(GL_FRAMEBUFFER, frames.fboGauss[!vertical]);
@@ -496,6 +505,7 @@ void Scene::draw() {
 			glBindTexture(GL_TEXTURE_2D, frames.texGauss[vertical]);
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
 		}
+		glActiveTexture(Shader::texa);
 	}
 	glUseProgram(*World::sfinal());
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -504,7 +514,6 @@ void Scene::draw() {
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
 
 	glUseProgram(*World::sgui());
-	glBindVertexArray(World::window()->getWrect()->getVao());
 	layout->draw();
 	for (Overlay* it : overlays)
 		if (it->getShow())
@@ -512,12 +521,17 @@ void Scene::draw() {
 	for (Popup* it : popups)
 		it->draw();
 	if (context)
-		context->draw();
+		context->drawInstances();
 	else {
+		uint icnt = 0;
 		if (Widget* wgt = dynamic_cast<Widget*>(capture.inter))
-			wgt->drawTop();
+			icnt = wgt->setTopInstances(wgtTops, icnt);
 		if (Button* but = dynamic_cast<Button*>(select); but && World::input()->mouseLast)
-			but->drawTooltip();
+			icnt = but->setTooltipInstances(wgtTops, icnt);
+		if (icnt) {
+			wgtTops.updateInstance(0, icnt);
+			wgtTops.drawInstances(icnt);
+		}
 	}
 
 	if (titleBar) {
@@ -551,6 +565,7 @@ void Scene::onResize() {
 	resetFrames();
 	camera.updateProjection();
 	camera.updateView();
+	World::pgui()->calsSizes();
 	layout->onResize();
 	for (Popup* it : popups)
 		it->onResize();
@@ -670,13 +685,12 @@ void Scene::loadObjects() {
 	matls = FileSys::loadMaterials();
 }
 
-void Scene::loadTextures() {
-	texSet = FileSys::loadTextures(texes, World::sets()->texScale);
+void Scene::loadTextures(int recomTexSize) {
+	texColRefs = FileSys::loadTextures(texSet, texCol, float(World::sets()->texScale) / 100.f, recomTexSize);
 }
 
 void Scene::reloadTextures() {
-	texSet.free();
-	texSet = FileSys::reloadTextures(texes, World::sets()->texScale);
+	FileSys::reloadTextures(texSet, float(World::sets()->texScale) / 100.f);
 }
 
 void Scene::reloadShader() {
@@ -801,17 +815,19 @@ void Scene::updateSelect() {
 
 void Scene::updateSelect(Interactable* sel) {
 	if (sel != select) {
+		std::swap(select, sel);
+		if (sel)
+			sel->onUnhover();
 		if (select)
-			select->onUnhover();
-		if (select = sel; select)
 			select->onHover();
 	}
 }
 
 void Scene::deselect() {
 	if (select) {
-		select->onUnhover();
+		Interactable* old = select;	// select must be nullptr during onUnhover because of checks
 		select = nullptr;
+		old->onUnhover();
 	}
 }
 

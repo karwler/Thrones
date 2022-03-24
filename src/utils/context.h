@@ -3,23 +3,25 @@
 #include "widgets.h"
 
 // context menu for right click or combo box
-class Context : public Interactable {
+class Context : public Interactable, public Quad {
 private:
+	static constexpr uint bgInst = 0;
+	static constexpr uint selInst = 1;
+
+	int lineHeight;
 	ivec2 position, size;
 	ivec2 listSize;
 	CCall call;
 	Interactable* parent;	// the instance that got clicked (nullptr in case of blank right click)
-	vector<pair<Texture, string>> items;
+	vector<pair<TexLoc, string>> items;
 	ScrollBar scroll;
-	uint selected;
-	int lineHeight;
+	uint selected = UINT_MAX;
 
 public:
 	Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2 pos, int lineH, Widget* owner = nullptr, int width = 0);
 	~Context() override;
 
 	void onMouseMove(ivec2 mPos);
-	void draw() const;
 	void tick(float dSec) override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
@@ -34,13 +36,12 @@ public:
 	Interactable* getParent() const;
 
 private:
+	void updateInstances();
+	void setSelectedInstance();
+	uint getSelected(ivec2 mPos) const;
 	int itemPos(sizet id) const;
 	static int calcPos(int pos, int& siz, int limit);
 };
-
-inline void Context::onMouseMove(ivec2 mPos) {
-	selected = rect().contain(mPos) ? (mPos.y - position.y + scroll.listPos.y) / lineHeight : UINT_MAX;
-}
 
 inline Rect Context::rect() const {
 	return Rect(position, size);
@@ -48,6 +49,10 @@ inline Rect Context::rect() const {
 
 inline Interactable* Context::getParent() const {
 	return parent;
+}
+
+inline uint Context::getSelected(ivec2 mPos) const {
+	return rect().contain(mPos) ? (mPos.y - position.y + scroll.listPos.y) / lineHeight : UINT_MAX;
 }
 
 inline int Context::itemPos(sizet id) const {

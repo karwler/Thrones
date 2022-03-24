@@ -91,11 +91,13 @@ ShaderSsao::ShaderSsao(const string& srcVert, const string& srcFrag) :
 	glActiveTexture(noiseTexa);
 	glGenTextures(1, &texNoise);
 	glBindTexture(GL_TEXTURE_2D, texNoise);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 4, 4, 0, GL_RGB, GL_FLOAT, noise);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 4, 4, 0, GL_RGB, GL_FLOAT, noise);
 	glActiveTexture(texa);
 }
 
@@ -142,14 +144,14 @@ ShaderGauss::ShaderGauss(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader gauss"),
 	horizontal(glGetUniformLocation(program, "horizontal"))
 {
-	glUniform1i(glGetUniformLocation(program, "colorMap"), texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "colorMap"), gaussTexa - GL_TEXTURE0);
 }
 
 ShaderFinal::ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets) :
 	Shader(srcVert, editSource(srcFrag, sets), "Shader final")
 {
 	glUniform1i(glGetUniformLocation(program, "sceneMap"), sceneTexa - GL_TEXTURE0);
-	glUniform1i(glGetUniformLocation(program, "bloomMap"), texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "bloomMap"), gaussTexa - GL_TEXTURE0);
 }
 
 string ShaderFinal::editSource(const string& src, const Settings* sets) {
@@ -172,11 +174,15 @@ ShaderSkybox::ShaderSkybox(const string& srcVert, const string& srcFrag) :
 
 ShaderGui::ShaderGui(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader GUI"),
-	pview(glGetUniformLocation(program, "pview")),
-	rect(glGetUniformLocation(program, "rect")),
-	uvrc(glGetUniformLocation(program, "uvrc")),
-	zloc(glGetUniformLocation(program, "zloc")),
-	color(glGetUniformLocation(program, "color"))
+	pview(glGetUniformLocation(program, "pview"))
 {
-	glUniform1i(glGetUniformLocation(program, "texsamp"), texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "colorMap"), texa - GL_TEXTURE0);
+}
+
+ShaderStartup::ShaderStartup(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader startup"),
+	pview(glGetUniformLocation(program, "pview")),
+	rect(glGetUniformLocation(program, "rect"))
+{
+	glUniform1i(glGetUniformLocation(program, "colorMap"), stlogTexa - GL_TEXTURE0);
 }

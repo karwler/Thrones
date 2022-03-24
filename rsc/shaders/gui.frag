@@ -1,12 +1,13 @@
 #version 330 core
 
-uniform vec4 color;
-uniform sampler2D texsamp;
+uniform sampler2DArray colorMap;
 
 in vec2 fragUV;
+flat in vec4 fragDiffuse;
+flat in uint fragTexid;
 
 out vec4 fragColor;
 
 void main() {
-	fragColor = texture(texsamp, fragUV) * color;
+	fragColor = texture(colorMap, vec3(fragUV, fragTexid)) * fragDiffuse;
 }

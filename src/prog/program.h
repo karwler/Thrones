@@ -204,7 +204,6 @@ public:
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
 	void eventShowSettings(Button* but = nullptr);
-	void eventOpenShowSettings(Button* but = nullptr);
 	void eventSetDisplay(Button* but);
 	void eventSetScreen(uint id, const string& str);
 	void eventSetWindowSize(uint id, const string& str);
@@ -246,6 +245,7 @@ public:
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void eventOpenRules(Button* but = nullptr);
 	void eventOpenDocs(Button* but = nullptr);
+	void eventOpenFiles(Button* but = nullptr);
 #endif
 
 	// other
@@ -293,7 +293,7 @@ private:
 	void resetLayoutsWithChat();
 	tuple<BoardObject*, Piece*, svec2> pickBob() const;	// returns selected object, occupant, position
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	static void openDoc(const char* file);
+	static void openDoc(const string& file);
 	static void openDocNative(const string& path);
 #endif
 };

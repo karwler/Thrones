@@ -8,7 +8,7 @@
 // PROGRAM STATE
 
 void ProgState::chatEmbedAxisScroll(float val) {
-	if (chatBox && chatBox->getParent()->getSize() > 0.f)
+	if (chatBox && chatBox->getParent()->sizeValid())
 		chatBox->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
@@ -95,6 +95,16 @@ void ProgState::eventScreenshot() {
 	FileSys::saveScreenshot(takeScreenshot(World::window()->getScreenView()));
 }
 
+void ProgState::eventPeekUiTextures() {
+	vector<SDL_Surface*> imgs = World::scene()->getTexCol()->peekMemory();
+	for (sizet i = 0; i < imgs.size(); ++i)
+		FileSys::saveScreenshot(imgs[i], "uimem" + toStr(i));
+
+	imgs = World::scene()->getTexCol()->peekTexture();
+	for (sizet i = 0; i < imgs.size(); ++i)
+		FileSys::saveScreenshot(imgs[i], "uitex" + toStr(i));
+}
+
 void ProgState::eventSelect0() {
 	eventSetSelected(0);
 }
@@ -162,7 +172,7 @@ void ProgState::updateTitleBar() {
 void ProgState::setTitleBarInteractivity(bool settings, bool config) {
 	if (World::scene()->getTitleBar()) {
 		Button* bsets = World::scene()->getTitleBar()->getWidget<Button>(0);
-		bsets->lcall = settings ? &Program::eventOpenShowSettings : nullptr;
+		bsets->lcall = settings ? &Program::eventShowSettings : nullptr;
 		bsets->setDim(settings ? 1.f : GuiGen::defaultDim);
 
 		Button* bcfgs = World::scene()->getTitleBar()->getWidget<Button>(1);
@@ -196,7 +206,7 @@ void ProgState::showNotification(bool yes) const {
 
 tuple<string, bool, bool> ProgState::chatState() {
 	Overlay* lay = chatBox ? dynamic_cast<Overlay*>(chatBox->getParent()) : nullptr;
-	return tuple(chatBox ? chatBox->moveText() : string(), showNotification(), lay ? lay->getShow() : chatBox && chatBox->getParent()->getSize() > 0.f);
+	return tuple(chatBox ? chatBox->moveText() : string(), showNotification(), lay ? lay->getShow() : chatBox && chatBox->getParent()->sizeValid());
 }
 
 void ProgState::chatState(string&& text, bool notif, bool show) {
@@ -213,8 +223,8 @@ void ProgState::chatState(string&& text, bool notif, bool show) {
 }
 
 void ProgState::toggleChatEmbedShow(bool forceShow) {
-	if (chatBox->getParent()->getSize() == 0.f || forceShow) {
-		chatBox->getParent()->setSize(GuiGen::chatEmbedSize);
+	if (!chatBox->getParent()->sizeValid() || forceShow) {
+		chatBox->getParent()->setSize(World::pgui()->getSize(GuiGen::SizeRef::chatEmbed));
 		if (!forceShow) {
 			LabelEdit* le = chatBox->getParent()->getWidget<LabelEdit>(chatBox->getIndex() + 1);
 			le->onClick(le->position(), SDL_BUTTON_LEFT);
@@ -334,10 +344,7 @@ void ProgRoom::eventScrollDown(float val) {
 }
 
 uptr<RootLayout> ProgRoom::createLayout(Interactable*& selected) {
-	uptr<RootLayout> root = World::pgui()->makeRoom(selected, wio, rio, chatBox, configName, confs, startConfig);
-	updateStartButton();
-	updateDelButton();
-	return root;
+	return World::pgui()->makeRoom(selected, wio, rio, chatBox, configName, confs, startConfig);
 }
 
 void ProgRoom::updateStartButton() {
@@ -367,25 +374,25 @@ void ProgRoom::updateDelButton() {
 }
 
 void ProgRoom::updateConfigWidgets(const Config& cfg) {
-	wio.victoryPoints->on = cfg.opts & Config::victoryPoints;
+	wio.victoryPoints->setOn(cfg.opts & Config::victoryPoints);
 	wio.victoryPointsNum->setText(toStr(cfg.victoryPointsNum));
-	wio.vpEquidistant->on = cfg.opts & Config::victoryPointsEquidistant;
-	wio.ports->on = cfg.opts & Config::ports;
-	wio.rowBalancing->on = cfg.opts & Config::rowBalancing;
-	wio.homefront->on = cfg.opts & Config::homefront;
-	wio.setPieceBattle->on = cfg.opts & Config::setPieceBattle;
+	wio.vpEquidistant->setOn(cfg.opts & Config::victoryPointsEquidistant);
+	wio.ports->setOn(cfg.opts & Config::ports);
+	wio.rowBalancing->setOn(cfg.opts & Config::rowBalancing);
+	wio.homefront->setOn(cfg.opts & Config::homefront);
+	wio.setPieceBattle->setOn(cfg.opts & Config::setPieceBattle);
 	wio.setPieceBattleNum->setText(toStr(cfg.setPieceBattleNum));
 	wio.width->setText(toStr(cfg.homeSize.x));
 	wio.height->setText(toStr(cfg.homeSize.y));
 	if (World::program()->info & Program::INF_HOST)
 		wio.battleSL->setVal(cfg.battlePass);
 	wio.battleLE->setText(toStr(cfg.battlePass) + '%');
-	wio.favorTotal->on = cfg.opts & Config::favorTotal;
+	wio.favorTotal->setOn(cfg.opts & Config::favorTotal);
 	wio.favorLimit->setText(toStr(cfg.favorLimit));
-	wio.firstTurnEngage->on = cfg.opts & Config::firstTurnEngage;
-	wio.terrainRules->on = cfg.opts & Config::terrainRules;
-	wio.dragonLate->on = cfg.opts & Config::dragonLate;
-	wio.dragonStraight->on = cfg.opts & Config::dragonStraight;
+	wio.firstTurnEngage->setOn(cfg.opts & Config::firstTurnEngage);
+	wio.terrainRules->setOn(cfg.opts & Config::terrainRules);
+	wio.dragonLate->setOn(cfg.opts & Config::dragonLate);
+	wio.dragonStraight->setOn(cfg.opts & Config::dragonStraight);
 	setAmtSliders(cfg, cfg.tileAmounts.data(), wio.tiles.data(), wio.tileFortress, tileLim, cfg.opts & Config::rowBalancing ? cfg.homeSize.y : 0, &Config::countFreeTiles, GuiGen::tileFortressString);
 	setAmtSliders(cfg, cfg.middleAmounts.data(), wio.middles.data(), wio.middleFortress, tileLim, 0, &Config::countFreeMiddles, GuiGen::middleFortressString);
 	setAmtSliders(cfg, cfg.pieceAmounts.data(), wio.pieces.data(), wio.pieceTotal, pieceLim, 0, &Config::countFreePieces, GuiGen::pieceTotalString);
@@ -394,7 +401,7 @@ void ProgRoom::updateConfigWidgets(const Config& cfg) {
 	wio.winThrone->setText(toStr(cfg.winThrone));
 	updateWinSlider(wio.winThrone, cfg.winThrone, cfg.pieceAmounts[uint8(PieceType::throne)]);
 	for (uint8 i = 0; i < pieceLim; ++i)
-		wio.capturers[i]->selected = cfg.capturers & (1 << i);
+		wio.capturers[i]->setSelected(cfg.capturers & (1 << i));
 }
 
 void ProgRoom::setAmtSliders(const Config& cfg, const uint16* amts, LabelEdit** wgts, Label* total, uint8 cnt, uint16 min, uint16 (Config::*counter)() const, string (*totstr)(const Config&)) {
@@ -442,7 +449,7 @@ void ProgGame::axisScroll(float val) {
 }
 
 uint8 ProgGame::switchButtons(uint8 but) {
-	if (bswapIcon->selected) {
+	if (bswapIcon->getSelected()) {
 		if (but == SDL_BUTTON_LEFT)
 			return SDL_BUTTON_RIGHT;
 		if (but == SDL_BUTTON_RIGHT)
@@ -473,7 +480,10 @@ void ProgSetup::eventEscape() {
 }
 
 void ProgSetup::eventEnter() {
-	bswapIcon->selected ? handleClearing() : handlePlacing();
+	if (bswapIcon->getSelected())
+		handleClearing();
+	else
+		handlePlacing();
 }
 
 void ProgSetup::eventWheel(int ymov) {
@@ -481,7 +491,7 @@ void ProgSetup::eventWheel(int ymov) {
 }
 
 void ProgSetup::eventDrag(uint32 mStat) {
-	if (bswapIcon->selected)
+	if (bswapIcon->getSelected())
 		mStat = swapBits(mStat, SDL_BUTTON_LEFT - 1, SDL_BUTTON_RIGHT - 1);
 
 	uint8 curButton = mStat & SDL_BUTTON_LMASK ? SDL_BUTTON_LEFT : mStat & SDL_BUTTON_RMASK ? SDL_BUTTON_RIGHT : 0;
@@ -507,7 +517,10 @@ void ProgSetup::eventFinish() {
 }
 
 void ProgSetup::eventDelete() {
-	bswapIcon->selected ? handlePlacing() : handleClearing();
+	if (bswapIcon->getSelected())
+		handlePlacing();
+	else
+		handleClearing();
 }
 
 void ProgSetup::eventSelectNext() {
@@ -520,9 +533,9 @@ void ProgSetup::eventSelectPrev() {
 
 void ProgSetup::eventSetSelected(uint8 sel) {
 	if (sel < counters.size()) {
-		sio.icons->getWidget<Icon>(iselect + 1)->selected = false;
+		sio.icons->getWidget<Icon>(iselect + 1)->setSelected(false);
 		iselect = sel;
-		sio.icons->getWidget<Icon>(iselect + 1)->selected = true;
+		sio.icons->getWidget<Icon>(iselect + 1)->setSelected(true);
 	}
 }
 
@@ -573,7 +586,7 @@ void ProgSetup::setStage(ProgSetup::Stage stg) {
 	iselect = 0;
 	if (stage <= Stage::pieces) {
 		sio.icons->setWidgets(World::pgui()->createBottomIcons(tiles));
-		sio.icons->getWidget<Icon>(iselect + 1)->selected = true;	// like eventSetSelected but without crashing
+		sio.icons->getWidget<Icon>(iselect + 1)->setSelected(true);	// like eventSetSelected but without crashing
 		for (sizet i = 0; i < counters.size(); ++i)
 			switchIcon(i, counters[i]);
 	} else
@@ -666,18 +679,18 @@ void ProgMatch::eventEngage() {
 }
 
 void ProgMatch::eventDestroyOn() {
-	mio.destroy->selected = true;
+	mio.destroy->setSelected(true);
 	World::game()->board->setPxpadPos(dynamic_cast<Piece*>(World::scene()->getCapture()));
 }
 
 void ProgMatch::eventDestroyOff() {
-	mio.destroy->selected = false;
+	mio.destroy->setSelected(false);
 	World::game()->board->setPxpadPos(nullptr);
 }
 
 void ProgMatch::eventDestroyToggle() {
-	mio.destroy->selected = !mio.destroy->selected;
-	World::game()->board->setPxpadPos(mio.destroy->selected ? dynamic_cast<Piece*>(World::scene()->getCapture()) : nullptr);
+	mio.destroy->setSelected(!mio.destroy->getSelected());
+	World::game()->board->setPxpadPos(mio.destroy->getSelected() ? dynamic_cast<Piece*>(World::scene()->getCapture()) : nullptr);
 }
 
 void ProgMatch::eventHasten() {
@@ -716,18 +729,18 @@ void ProgMatch::eventCameraRight(float val) {
 }
 
 void ProgMatch::setIcons(Favor favor, Icon* homefront) {
-	if (mio.establish && mio.establish->selected && mio.establish != homefront)
-		mio.establish->selected = false;
-	if (mio.rebuild && mio.rebuild->selected && mio.rebuild != homefront)
-		mio.rebuild->selected = false;
-	if (mio.spawn && mio.spawn->selected && mio.spawn != homefront) {
+	if (mio.establish && mio.establish->getSelected() && mio.establish != homefront)
+		mio.establish->setSelected(false);
+	if (mio.rebuild && mio.rebuild->getSelected() && mio.rebuild != homefront)
+		mio.rebuild->setSelected(false);
+	if (mio.spawn && mio.spawn->getSelected() && mio.spawn != homefront) {
 		if (mio.spawn != homefront)
-			mio.spawn->selected = false;
+			mio.spawn->setSelected(false);
 		World::game()->board->resetTilesAfterSpawn();
 	}
-	if (mio.dragon && mio.dragon->selected) {
+	if (mio.dragon && mio.dragon->getSelected()) {
 		if (mio.dragon != homefront)
-			mio.dragon->selected = false;
+			mio.dragon->setSelected(false);
 		World::scene()->setCapture(nullptr);	// stop dragging dragon
 	}
 
@@ -739,11 +752,11 @@ void ProgMatch::setIcons(Favor favor, Icon* homefront) {
 Favor ProgMatch::selectFavorIcon(Favor& type) {
 	Favor old = favorIconSelect();
 	if (old != Favor::none && old != type)
-		mio.favors[uint8(old)]->selected = false;
+		mio.favors[uint8(old)]->setSelected(false);
 	if (type != Favor::none) {
 		if (mio.favors[uint8(type)])
-			mio.favors[uint8(type)]->selected = mio.favors[uint8(type)]->lcall && !mio.favors[uint8(type)]->selected;
-		if (!(mio.favors[uint8(type)] && mio.favors[uint8(type)]->selected))
+			mio.favors[uint8(type)]->setSelected(mio.favors[uint8(type)]->lcall && !mio.favors[uint8(type)]->getSelected());
+		if (!(mio.favors[uint8(type)] && mio.favors[uint8(type)]->getSelected()))
 			type = Favor::none;
 	}
 	return old;
@@ -766,7 +779,7 @@ void ProgMatch::updateFavorIcon(Favor type, bool on) {
 }
 
 Favor ProgMatch::favorIconSelect() const {
-	return Favor(std::find_if(mio.favors.begin(), mio.favors.end(), [](Icon* it) -> bool { return it && it->selected; }) - mio.favors.begin());
+	return Favor(std::find_if(mio.favors.begin(), mio.favors.end(), [](Icon* it) -> bool { return it && it->getSelected(); }) - mio.favors.begin());
 }
 
 void ProgMatch::updateVictoryPoints(uint16 own, uint16 ene) {
@@ -793,22 +806,22 @@ void ProgMatch::updateIcons(bool fcont) {
 	bool regular = World::game()->getMyTurn() && !xmov;
 	bool canSpawn = regular && std::none_of(World::game()->getOwnRec().actors.begin(), World::game()->getOwnRec().actors.end(), [](const pair<Piece*, Action>& pa) -> bool { return pa.second; });
 	if (mio.establish) {
-		mio.establish->selected = false;
+		mio.establish->setSelected(false);
 		mio.establish->lcall = regular ? BCall(&Program::eventEstablish) : nullptr;
 		mio.establish->setDim(regular ? 1.f : GuiGen::defaultDim);
 	}
 	if (mio.rebuild) {
-		mio.rebuild->selected = false;
+		mio.rebuild->setSelected(false);
 		mio.rebuild->lcall = regular ? BCall(&Program::eventRebuildTile) : nullptr;
 		mio.rebuild->setDim(regular ? 1.f : GuiGen::defaultDim);
 	}
 	if (mio.spawn) {
-		mio.spawn->selected = false;
+		mio.spawn->setSelected(false);
 		mio.spawn->lcall = canSpawn ? BCall(&Program::eventOpenSpawner) : nullptr;
 		mio.spawn->setDim(canSpawn ? 1.f : GuiGen::defaultDim);
 	}
 	if (mio.dragon) {
-		mio.dragon->selected = false;
+		mio.dragon->setSelected(false);
 		mio.dragon->lcall = canSpawn ? &Program::eventClickPlaceDragon : nullptr;
 		mio.dragon->hcall = canSpawn ? &Program::eventHoldPlaceDragon : nullptr;
 		mio.dragon->setDim(canSpawn ? 1.f : GuiGen::defaultDim);
@@ -826,7 +839,11 @@ void ProgMatch::updateIcons(bool fcont) {
 
 bool ProgMatch::selectHomefrontIcon(Icon* ico) {
 	setIcons(Favor::none, ico);	// takes care of resetting the pieces, thus no need to reset for the establishIcon or rebuildIcon
-	return ico ? (ico->selected = !ico->selected) : false;
+	if (ico) {
+		ico->setSelected(!ico->getSelected());
+		return ico->getSelected();
+	}
+	return false;
 }
 
 uptr<RootLayout> ProgMatch::createLayout(Interactable*& selected) {

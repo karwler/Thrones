@@ -10,9 +10,8 @@ constexpr char argObject = 'o';
 constexpr char argShader = 's';
 constexpr char argShaderE = 'S';
 constexpr char argTexture = 't';
-constexpr char argTextureR = 'T';
-constexpr char messageUsage[] = "usage: oven <-m|-o|-s|-t> <destination file/directory> <input files>";
-constexpr int maxWindowIconSize = 128;
+constexpr char optScale = 'd';
+constexpr char messageUsage[] = "usage: oven <-m|-o|-s|-S|-t> [-d texture scale] <destination file/directory> <input files>";
 
 static void processMaterials(const vector<string>& files, const string& dest) {
 	vector<pair<string, Material>> mtls = { pair(string(), Material()) };
@@ -190,31 +189,16 @@ static void processShader(const string& file, const string& dest, bool gles) {
 		logError("no text for shader ", name);
 }
 
-static void processTexture(const string& file, const string& dest, bool gles) {
+static void processTexture(const string& file, const string& dest, int scale) {
 	SDL_Surface* img = IMG_Load(file.c_str());
 	if (!img) {
 		logError("failed to load ", file, ": ", IMG_GetError());
 		return;
 	}
-
-	if (gles) {
-		if (img = scaleSurface(img, 2); !img)
+	if (scale >= 2)
+		if (img = scaleSurface(img, ivec2(img->w, img->h) / scale); !img)
 			return;
-	} else if (strciEndsWith(file, ".svg") && (img->w > maxWindowIconSize || img->h > maxWindowIconSize))
-		if (img = scaleSurface(img, ivec2(maxWindowIconSize)); !img)
-			return;
-
-	string name = filename(delExt(file));
-	if (img->format->BytesPerPixel != 4) {
-		SDL_Surface* dst = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_RGBA32, 0);
-		SDL_FreeSurface(img);
-		if (!dst) {
-			logError("failed to convert ", file, ": ", SDL_GetError());
-			return;
-		}
-		img = dst;
-	}
-	if (IMG_SavePNG(img, (dest + name + ".png").c_str()))
+	if (string name = filename(delExt(file)); IMG_SavePNG(img, (dest + name + ".png").c_str()))
 		logError("failed to write write texture ", name, ": ", IMG_GetError());
 	SDL_FreeSurface(img);
 }
@@ -240,7 +224,7 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	if (Arguments arg(argc, argv, {}, { argMaterial, argObject, argShader, argShaderE, argTexture, argTextureR }); arg.getVals().empty())
+	if (Arguments arg(argc, argv, {}, { argMaterial, argObject, argShader, argShaderE, argTexture, optScale }); arg.getVals().empty())
 		logInfo("no input files\n", messageUsage);
 	else if (const char* dest = arg.getOpt(argMaterial); dest)
 		processMaterials(arg.getVals(), dest);
@@ -250,11 +234,10 @@ int main(int argc, char** argv) {
 		process(dest, arg.getVals(), processShader, false);
 	else if (dest = arg.getOpt(argShaderE); dest)
 		process(dest, arg.getVals(), processShader, true);
-	else if (dest = arg.getOpt(argTexture); dest)
-		process(dest, arg.getVals(), processTexture, false);
-	else if (dest = arg.getOpt(argTextureR); dest)
-		process(dest, arg.getVals(), processTexture, true);
-	else
+	else if (dest = arg.getOpt(argTexture); dest) {
+		const char* scl = arg.getOpt(optScale);
+		process(dest, arg.getVals(), processTexture, scl ? sstoul(scl) : 0);
+	} else
 		logInfo("invalid mode\n", messageUsage);
 
 	IMG_Quit();

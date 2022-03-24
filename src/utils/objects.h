@@ -14,7 +14,7 @@ public:
 		mat3 normat;
 		vec4 diffuse;
 		vec4 specShine;	// RGB = specular, A = shininess
-		int texid;
+		uvec2 texid;	// x = color, y = normal
 		bool show;
 	};
 
@@ -34,7 +34,6 @@ public:
 	void free();
 	void draw();
 	void drawTop();
-	void updateVertexData(const vector<Vertex>& vertices, const vector<GLushort>& elements);
 	void allocate(uint size, bool setTop = false);
 	uint insert(const Instance& data);
 	Instance erase(uint id);
@@ -50,8 +49,6 @@ private:
 	void setVertexAttrib();
 	void setInstanceAttrib();
 	void disableAttrib();
-	void setVertexData(const vector<Vertex>& vertices);
-	void setElementData(const vector<GLushort>& elements);
 };
 
 inline Mesh::Instance& Mesh::getInstance(uint id) {
@@ -83,8 +80,8 @@ public:
 	Object& operator=(const Object&) = default;
 	Object& operator=(Object&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, int texture, bool visible = true);
-	static void init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, int texture, bool visible = true);
+	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible = true);
+	static void init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, uvec2 texture, bool visible = true);
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -100,7 +97,7 @@ public:
 
 	Mesh* getMesh();
 	void setMaterial(const Material* material);
-	void setTexture(int texture);
+	void setTexture(uvec2 texture);
 	bool getShow() const;
 	void setShow(bool visible);
 protected:
@@ -144,7 +141,7 @@ public:
 
 	static constexpr float noEngageAlpha = 0.6f;
 protected:
-	static constexpr vec4 moveColorFactor = { 1.f, 1.f, 1.f, 0.9f };
+	static constexpr vec4 moveColorFactor = vec4(1.f, 1.f, 1.f, 0.9f);
 
 	bool leftDrag;
 	bool topDepth;
@@ -165,7 +162,7 @@ public:
 	BoardObject& operator=(const BoardObject&) = default;
 	BoardObject& operator=(BoardObject&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, int texture, bool visible = true, float alpha = 1.f);
+	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible = true, float alpha = 1.f);
 	virtual float getTopY();
 
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
@@ -190,7 +187,7 @@ public:
 	void setAlphaFactor(float alpha);
 
 protected:
-	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, int texture, bool depth = true);
+	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool depth = true);
 
 private:
 	float emissionFactor();
@@ -381,7 +378,7 @@ public:
 	Piece& operator=(const Piece&) = default;
 	Piece& operator=(Piece&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, int texture, bool visible, PieceType iniType);
+	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, PieceType iniType);
 	float getTopY() override;
 
 	void onHold(ivec2 mPos, uint8 mBut) override;

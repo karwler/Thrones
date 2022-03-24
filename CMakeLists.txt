@@ -73,6 +73,8 @@ set(ASSET_SHD
 	"rsc/shaders/light.vert"
 	"rsc/shaders/skybox.frag"
 	"rsc/shaders/skybox.vert"
+	"rsc/shaders/startup.frag"
+	"rsc/shaders/startup.vert"
 	"rsc/shaders/ssao.frag")
 
 set(ASSET_IMG
@@ -93,6 +95,7 @@ set(ASSET_IMG
 	"rsc/textures/fortressN.png"
 	"rsc/textures/grass2.png"
 	"rsc/textures/grassN.png"
+	"rsc/textures/grid2.png"
 	"rsc/textures/hasten1.png"
 	"rsc/textures/lancer1.png"
 	"rsc/textures/metal2.png"
@@ -103,7 +106,6 @@ set(ASSET_IMG
 	"rsc/textures/plainsN.png"
 	"rsc/textures/rangers1.png"
 	"rsc/textures/reticle2.png"
-	"rsc/textures/reticleN.png"
 	"rsc/textures/rock2.png"
 	"rsc/textures/rockN.png"
 	"rsc/textures/sky40.png"
@@ -660,25 +662,34 @@ endif()
 
 # game data copier targets
 
-function(addDataCopierTarget TARGET_NAME TEXTRA DST_DATA OPT_SHD OPT_IMG ASS_IMG)
+function(addDataCopierTarget TARGET_NAME TEXTRA DST_DATA OPT_SHD ASS_IMG IMG_SCALE)
 	set(DST_FONT "${DST_DATA}/fonts")
 	set(DST_AUDIO "${DST_DATA}/audio")
+	set(DST_TEXS "${DST_DATA}/textures")
 	add_custom_target(${TARGET_NAME} ${TEXTRA} SOURCES ${DATA_SRC}
-						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST_FONT}" "${DST_AUDIO}"
+						COMMAND "${CMAKE_COMMAND}" -E make_directory "${DST_FONT}" "${DST_AUDIO}" "${DST_TEXS}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/kurinto.ttf" "${DIR_RSC}/data/merriweather.otf" "${DIR_RSC}/data/romanesque.ttf" "${DST_FONT}"
 						COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${ASSET_WAV} "${DST_AUDIO}"
 						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -m "${DST_DATA}/materials.dat" ${ASSET_MTL}
 						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -o "${DST_DATA}/objects/" ${ASSET_OBJ}
 						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_SHD} "${DST_DATA}/shaders/" ${ASSET_SHD}
-						COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" ${OPT_IMG} "${DST_DATA}/textures/" ${ASS_IMG}
 						WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+	if(${IMG_SCALE} LESS_EQUAL 1)
+		add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+							COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${ASS_IMG} "${DST_TEXS}"
+							WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+	else()
+		add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+							COMMAND "${CMAKE_BINARY_DIR}/${OVEN_NAME}" -t ${IMG_SCALE} "${DST_TEXS}" ${ASS_IMG}
+							WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+	endif()
 	add_dependencies(${TARGET_NAME} ${OVEN_NAME})
 endfunction()
 
 if(OPENGLES)
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "-T" "${ASSET_IMG_EXT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-S" "${ASSET_IMG_EXT}" "2")
 else()
-	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "-t" "${ASSET_IMG_EXT}")
+	addDataCopierTarget(${DATA_NAME} "ALL" "${DATA_DIR}" "-s" "${ASSET_IMG_EXT}" "0")
 endif()
 add_custom_command(TARGET ${DATA_NAME} POST_BUILD
 					COMMAND "${CMAKE_COMMAND}" -E make_directory "${LICN_DIR}"
@@ -715,10 +726,10 @@ else()
 							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_GLEW}/LICENSE.txt" "${LICN_DIR}/LICENSE.glew.txt")
 	endif()
 endif()
-addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "-T" "${ASSET_IMG}")
+addDataCopierTarget(${ADATA_NAME} "" "${DIR_PAND}/app/src/main/assets" "-S" "${ASSET_IMG}" "2")
 
 get_filename_component(EMS_DIR "${EMBASE}" ABSOLUTE)
-addDataCopierTarget(${EDATA_NAME} "" "${EMS_DIR}/share" "-S" "-T" "${ASSET_IMG}")
+addDataCopierTarget(${EDATA_NAME} "" "${EMS_DIR}/share" "-S" "${ASSET_IMG}" "2")
 add_custom_command(TARGET ${EDATA_NAME} POST_BUILD
 					COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/doc" "${EMS_DIR}/doc"
 					COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${DIR_RSC}/data/${PROJECT_NAME_LOWER}.png" "${EMS_DIR}")

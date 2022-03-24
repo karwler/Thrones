@@ -12,11 +12,24 @@
 #endif
 #endif
 
-// vertex data for widgets
-class Quad {
+// startup loading information and rendering
+class Loader {
 public:
-	static constexpr uint corners = 4;
+	enum class State : uint8 {
+		start,
+		audio,
+		objects,
+		textures,
+		program,
+		done
+	};
+
+	State state = State::start;
+
 private:
+	static constexpr int logSize = 18;
+	static constexpr ivec2 logMargin = ivec2(8, 4);
+	static constexpr uint corners = 4;
 	static constexpr uint stride = 2;
 	static constexpr float vertices[corners * stride] = {
 		0.f, 0.f,
@@ -26,29 +39,19 @@ private:
 	};
 
 	GLuint vao, vbo;
+	string logStr;
+	ShaderStartup* shader;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	Texture blank, title;
+#endif
 
 public:
-	void init();
+	void init(ShaderStartup* stlog, WindowSys* win);
 	void free();
-
-	GLuint getVao() const;
-	static void draw(const ShaderGui* sgui, const Rect& rect, const vec4& color, GLuint tex, float z = 0.f);
-	static void draw(const ShaderGui* sgui, const Rect& rect, const Rect& frame, const vec4& color, GLuint tex, float z = 0.f);
-	static void draw(const ShaderGui* sgui, const Rect& rect, const vec4& uvrect, const vec4& color, GLuint tex, float z = 0.f);
+	void addLine(const string& str, WindowSys* win);
+private:
+	void draw(const Rect& rect, GLuint tex);
 };
-
-inline GLuint Quad::getVao() const {
-	return vao;
-}
-
-inline void Quad::draw(const ShaderGui* sgui, const Rect& rect, const vec4& color, GLuint tex, float z) {
-	draw(sgui, rect, vec4(0.f, 0.f, 1.f, 1.f), color, tex, z);
-}
-
-inline void Quad::draw(const ShaderGui* sgui, const Rect& rect, const Rect& frame, const vec4& color, GLuint tex, float z) {
-	Rect isct = rect.intersect(frame);
-	draw(sgui, isct, vec4(float(isct.x - rect.x) / float(rect.w), float(isct.y - rect.y) / float(rect.h), float(isct.w) / float(rect.w), float(isct.h) / float(rect.h)), color, tex, z);
-}
 
 // loads different font sizes from one font and handles basic log display
 class FontSet {
@@ -69,7 +72,6 @@ private:
 	Settings::Hinting hinting;
 #endif
 	float heightScale;	// for scaling down font size to fit requested height
-	int maxTexSize;
 
 public:
 	~FontSet();
@@ -82,18 +84,13 @@ public:
 	int length(char* text, int height, sizet length);
 	bool hasGlyph(uint16 ch);
 	void setHinting(Settings::Hinting hinting);
-	int getMaxTexSize() const;
-	void setMaxTexSize(int texLimit, int winLimit);
-	Texture render(const char* text, int height);
-	Texture render(const char* text, int height, SDL_Surface*& img, ivec2 offset);
-	Texture render(const char* text, int height, uint length);
-	Texture render(const char* text, int height, uint length, SDL_Surface*& img, ivec2 offset);
+	SDL_Surface* render(const char* text, int height);
+	SDL_Surface* render(const char* text, int height, uint length);
 
 private:
 	TTF_Font* load(const string& name);
 	TTF_Font* findFile(const string& name, const vector<string>& available);
 	TTF_Font* getFont(int height);
-	Texture finishRender(SDL_Surface* img);
 };
 
 inline FontSet::~FontSet() {
@@ -104,20 +101,12 @@ inline FontSet::~FontSet() {
 #endif
 }
 
-inline int FontSet::getMaxTexSize() const {
-	return maxTexSize;
+inline SDL_Surface* FontSet::render(const char* text, int height) {
+	return TTF_RenderUTF8_Blended(getFont(height), text, textColor);
 }
 
-inline void FontSet::setMaxTexSize(int texLimit, int winLimit) {
-	maxTexSize = std::min(texLimit, int(ceilPower2(winLimit)));
-}
-
-inline Texture FontSet::render(const char* text, int height) {
-	return finishRender(TTF_RenderUTF8_Blended(getFont(height), text, textColor));
-}
-
-inline Texture FontSet::render(const char* text, int height, uint length) {
-	return finishRender(TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length));
+inline SDL_Surface* FontSet::render(const char* text, int height, uint length) {
+	return TTF_RenderUTF8_Blended_Wrapped(getFont(height), text, textColor, length);
 }
 
 // handles window events and contains video settings
@@ -165,28 +154,6 @@ private:
 		ivec2(15360, 8640)
 	};
 
-	struct Loader {
-		static constexpr int logSize = 18;
-		static constexpr ivec2 logMargin = ivec2(8, 4);
-
-		enum class State : uint8 {
-			start,
-			audio,
-			objects,
-			textures,
-			program,
-			done
-		};
-
-		string logStr;
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-		Texture blank, title;
-#endif
-		State state = State::start;
-
-		void addLine(const string& str, WindowSys* win);
-	};
-
 	AudioSys* audio;
 	InputSys* inputSys;
 	Program* program;
@@ -205,7 +172,6 @@ private:
 	ShaderSkybox* skybox;
 	ShaderGui* gui;
 	FontSet* fonts;
-	Quad wrect;
 	ivec2 screenView;
 	int windowHeight, titleBarHeight;
 	uint32 oldTime;
@@ -253,7 +219,6 @@ public:
 	const ShaderFinal* getSfinal() const;
 	const ShaderSkybox* getSkybox() const;
 	const ShaderGui* getGui() const;
-	const Quad* getWrect() const;
 	SDL_Window* getWindow();
 	float getDeltaSec() const;
 	uint8 getMaxMsamples() const;
@@ -266,15 +231,17 @@ private:
 #else
 	void load(Loader* loader);
 #endif
-	void createWindow();
+	ShaderStartup* createWindow();
 	void destroyWindow();
 	void handleEvent(const SDL_Event& event);
 	void eventWindow(const SDL_WindowEvent& winEvent);
 	static SDL_HitTestResult SDLCALL eventWindowHit(SDL_Window* win, const SDL_Point* area, void* data);
+	static SDL_HitTestResult SDLCALL eventWindowHitStartup(SDL_Window* win, const SDL_Point* area, void* data);
 	bool trySetSwapInterval();
 	void setWindowMode();
 	void updateView();
 	void setTitleBarHeight();	// must be followed by updateView() to update the viewport
+	void setTitleBarHitTest();
 	bool checkCurDisplay();
 	template <class T> static void checkResolution(T& val, const vector<T>& modes);
 	static int estimateSystemCursorSize();
@@ -365,10 +332,6 @@ inline const ShaderSkybox* WindowSys::getSkybox() const {
 
 inline const ShaderGui* WindowSys::getGui() const {
 	return gui;
-}
-
-inline const Quad* WindowSys::getWrect() const {
-	return &wrect;
 }
 
 inline SDL_Window* WindowSys::getWindow() {

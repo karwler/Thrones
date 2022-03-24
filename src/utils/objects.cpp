@@ -14,7 +14,8 @@ void Mesh::init(const vector<Vertex>& vertices, const vector<GLushort>& elements
 	glBindVertexArray(vao);
 
 	glGenBuffers(1, &vbo);
-	setVertexData(vertices);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(*vertices.data())), vertices.data(), GL_STATIC_DRAW);
 	setVertexAttrib();
 
 	glGenBuffers(1, &ibo);
@@ -22,7 +23,8 @@ void Mesh::init(const vector<Vertex>& vertices, const vector<GLushort>& elements
 	setInstanceAttrib();
 
 	glGenBuffers(1, &ebo);
-	setElementData(elements);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(elements.size() * sizeof(*elements.data())), elements.data(), GL_STATIC_DRAW);
 }
 
 void Mesh::initTop() {
@@ -92,7 +94,7 @@ void Mesh::setInstanceAttrib() {
 	glVertexAttribPointer(Shader::specShine, decltype(Instance::specShine)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, specShine)));
 	glVertexAttribDivisor(Shader::specShine, 1);
 	glEnableVertexAttribArray(Shader::texid);
-	glVertexAttribIPointer(Shader::texid, 1, GL_INT, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, texid)));
+	glVertexAttribIPointer(Shader::texid, decltype(Instance::texid)::length(), GL_UNSIGNED_INT, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, texid)));
 	glVertexAttribDivisor(Shader::texid, 1);
 	glEnableVertexAttribArray(Shader::show);
 	glVertexAttribIPointer(Shader::show, 1, GL_BYTE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, show)));
@@ -117,16 +119,6 @@ void Mesh::disableAttrib() {
 	glDisableVertexAttribArray(Shader::vpos);
 }
 
-void Mesh::setVertexData(const vector<Vertex>& vertices) {
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(*vertices.data())), vertices.data(), GL_STATIC_DRAW);
-}
-
-void Mesh::setElementData(const vector<GLushort>& elements) {
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(elements.size() * sizeof(*elements.data())), elements.data(), GL_STATIC_DRAW);
-}
-
 void Mesh::draw() {
 	glBindVertexArray(vao);
 	glDrawElementsInstanced(GL_TRIANGLES, ecnt, GL_UNSIGNED_SHORT, nullptr, GLsizei(instanceData.size()));
@@ -138,28 +130,26 @@ void Mesh::drawTop() {
 	glDrawElements(GL_TRIANGLES, ecnt, GL_UNSIGNED_SHORT, nullptr);
 }
 
-void Mesh::updateVertexData(const vector<Vertex>& vertices, const vector<GLushort>& elements) {
-	ecnt = elements.size();
-	setVertexData(vertices);
-	setElementData(elements);
-}
-
 void Mesh::updateInstance(uint id, iptrt loffs, sizet size) {
+	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, ibo);
-	glBufferSubData(GL_ARRAY_BUFFER, iptrt(id * sizeof(*instanceData.data())) + loffs, GLsizei(size), reinterpret_cast<uint8*>(&instanceData[id]) + loffs);
+	glBufferSubData(GL_ARRAY_BUFFER, iptrt(id * sizeof(Instance)) + loffs, GLsizei(size), reinterpret_cast<uint8*>(&instanceData[id]) + loffs);
 }
 
 void Mesh::updateInstanceData() {
+	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, ibo);
-	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(instanceData.size() * sizeof(*instanceData.data())), instanceData.data(), GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(instanceData.size() * sizeof(Instance)), instanceData.data(), GL_DYNAMIC_DRAW);
 }
 
 void Mesh::updateInstanceTop(iptrt loffs, sizet size) {
+	glBindVertexArray(top->vao);
 	glBindBuffer(GL_ARRAY_BUFFER, top->ibo);
 	glBufferSubData(GL_ARRAY_BUFFER, loffs, GLsizei(size), reinterpret_cast<uint8*>(&top->data) + loffs);
 }
 
 void Mesh::updateInstanceDataTop() {
+	glBindVertexArray(top->vao);
 	glBindBuffer(GL_ARRAY_BUFFER, top->ibo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(top->data), &top->data, GL_DYNAMIC_DRAW);
 }
@@ -193,14 +183,14 @@ Object::Object(const vec3& position, const vec3& rotation, const vec3& scale, bo
 	rigid(interactive)
 {}
 
-void Object::init(Mesh* model, uint id, const Material* material, int texture, bool visible) {
+void Object::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible) {
 	mesh = model;
 	matl = material;
 	meshIndex = id;
 	init(model, id, pos, rot, scl, material, texture, visible);
 }
 
-void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, int texture, bool visible) {
+void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, uvec2 texture, bool visible) {
 	Mesh::Instance& ins = model->getInstance(id);
 	ins.model = getTransform(pos, rot, scl);
 	ins.normat = glm::inverseTranspose(mat3(ins.model));
@@ -270,7 +260,7 @@ void Object::setMaterial(const Material* material) {
 	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(ins.diffuse) + sizeof(ins.specShine));
 }
 
-void Object::setTexture(int texture) {
+void Object::setTexture(uvec2 texture) {
 	mesh->getInstance(meshIndex).texid = texture;
 	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, texid), sizeof(Mesh::Instance::texid));
 }
@@ -282,7 +272,7 @@ void Object::setShow(bool visible) {
 
 // BOARD OBJECT
 
-void BoardObject::init(Mesh* model, uint id, const Material* material, int texture, bool visible, float alpha) {
+void BoardObject::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, float alpha) {
 	mesh = model;
 	matl = material;
 	meshIndex = id;
@@ -296,7 +286,7 @@ void BoardObject::init(Mesh* model, uint id, const Material* material, int textu
 	ins.show = visible;
 }
 
-void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, int texture, bool depth) {
+void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool depth) {
 	topDepth = depth;
 
 	vec3 isct = World::scene()->rayXZIsct(World::scene()->pickerRay(mPos));
@@ -533,7 +523,7 @@ void TileCol::update(const Config& conf) {
 
 // PIECE
 
-void Piece::init(Mesh* model, uint id, const Material* material, int texture, bool visible, PieceType iniType) {
+void Piece::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, PieceType iniType) {
 	type = iniType;
 	BoardObject::init(model, id, material, texture, visible);
 }

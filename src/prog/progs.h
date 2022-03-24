@@ -58,6 +58,7 @@ public:
 	void eventChat();
 	void eventFrameCounter();
 	void eventScreenshot();
+	void eventPeekUiTextures();
 	void eventSelect0();
 	void eventSelect1();
 	void eventSelect2();

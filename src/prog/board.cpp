@@ -81,7 +81,7 @@ void Board::initObjects(bool regular, bool initPieces) {
 	// prepare objects for setup
 	tiles.update(config);
 	const Material* matl = scene->material("empty");
-	int tex = scene->objTex(tileNames[uint8(TileType::empty)]);
+	uvec2 tex = scene->objTex(tileNames[uint8(TileType::empty)]);
 	Mesh* mesh = scene->mesh("tile");
 	mesh->allocate(tiles.getSize(), true);
 
@@ -117,7 +117,7 @@ void Board::initObjects(bool regular, bool initPieces) {
 	}
 }
 
-void Board::setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, int tex) {
+void Board::setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, uvec2 tex) {
 	for (uint16 y = yofs; y < yofs + config.homeSize.y; ++y)
 		for (uint16 x = 0; x < config.homeSize.x; ++x, ++id) {
 			tiles[id] = Tile(gtop(svec2(x, y)), objectSize);
@@ -143,14 +143,13 @@ void Board::setBgrid() {
 	Mesh* mesh = scene->mesh("grid");
 	mesh->allocate(config.homeSize.x - 1 + boardHeight - 1);
 	const Material* matl = scene->material("grid");
-	int tex = scene->objTex();
-	vec3 offset(-(objectSize / 2.f), 0.f, -(objectSize / 2.f));
+	uvec2 tex = scene->objTex("grid");
 
 	uint i = 0;
-	for (uint16 x = 1; x < config.homeSize.x; ++x, ++i)
-		Object::init(mesh, i, gtop(svec2(x, 0)) + offset, vec3(0.f), vec3(1.f), matl, tex);
-	for (uint16 y = 1; y < boardHeight; ++y, ++i)
-		Object::init(mesh, i, gtop(svec2(0, y)) + offset, vec3(0.f, glm::pi<float>(), 0.f), vec3(1.f), matl, tex);
+	for (uint x = 1; x < config.homeSize.x; ++x, ++i)
+		Object::init(mesh, i, vec3(float(x) * objectSize + tilesOffset.x, 0.f, 0.f), vec3(0.f), vec3(objectSize, 1.f, Config::boardWidth), matl, tex);
+	for (uint y = 1; y < boardHeight; ++y, ++i)
+		Object::init(mesh, i, vec3(0.f, 0.f, float(y) * objectSize + tilesOffset.y), vec3(0.f, glm::half_pi<float>(), 0.f), vec3(objectSize, 1.f, Config::boardWidth), matl, tex);
 	mesh->updateInstanceData();
 }
 

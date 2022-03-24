@@ -3,9 +3,9 @@
 template <class C>
 void World::setArgs(int argc, const C* const* argv) {
 #ifdef NDEBUG
-	args.setArgs(argc, argv, {}, { Settings::argExternal });
+	args.setArgs(argc, argv, {}, { Settings::argExternal, Settings::argCompositor });
 #else
-	args.setArgs(argc, argv, { Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
+	args.setArgs(argc, argv, { Settings::argConsole, Settings::argCompositor, Settings::argSetup }, { Settings::argExternal });
 #endif
 }
 

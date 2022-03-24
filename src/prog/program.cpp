@@ -204,6 +204,7 @@ Program::~Program() {
 
 void Program::start() {
 	game.board->initObjects(false, false);	// doesn't need to be here but I like having the game board in the background
+	gui.initSizes();	// redundant because it happens again in eventOpenMainMenu but makeTitleBar needs it
 	gui.makeTitleBar();
 	eventOpenMainMenu();
 #ifndef __ANDROID__
@@ -415,7 +416,7 @@ void Program::eventRecvMessage(const uint8* data) {
 		if (Overlay* lay = dynamic_cast<Overlay*>(state->getChat()->getParent())) {
 			if (!lay->getShow())
 				state->showNotification(true);
-		} else if (state->getChat()->getParent()->getSize() == 0.f)
+		} else if (!state->getChat()->getParent()->sizeValid())
 			state->showNotification(true);
 	} else
 		logInfo("unseen net message: ", msg);
@@ -519,33 +520,34 @@ void Program::eventUpdateConfig(Button*) {
 	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), tileLim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
 	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), pieceLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
 	cfg.homeSize = newHome;
-	cfg.opts = ph->wio.victoryPoints->on ? cfg.opts | Config::victoryPoints : cfg.opts & ~Config::victoryPoints;
+	cfg.opts = ph->wio.victoryPoints->getOn() ? cfg.opts | Config::victoryPoints : cfg.opts & ~Config::victoryPoints;
 	cfg.victoryPointsNum = sstol(ph->wio.victoryPointsNum->getText());
-	cfg.opts = ph->wio.vpEquidistant->on ? cfg.opts | Config::victoryPointsEquidistant : cfg.opts & ~Config::victoryPointsEquidistant;
-	cfg.opts = ph->wio.ports->on ? cfg.opts | Config::ports : cfg.opts & ~Config::ports;
-	cfg.opts = ph->wio.rowBalancing->on ? cfg.opts | Config::rowBalancing : cfg.opts & ~Config::rowBalancing;
-	cfg.opts = ph->wio.homefront->on ? cfg.opts | Config::homefront : cfg.opts & ~Config::homefront;
-	cfg.opts = ph->wio.setPieceBattle->on ? cfg.opts | Config::setPieceBattle : cfg.opts & ~Config::setPieceBattle;
+	cfg.opts = ph->wio.vpEquidistant->getOn() ? cfg.opts | Config::victoryPointsEquidistant : cfg.opts & ~Config::victoryPointsEquidistant;
+	cfg.opts = ph->wio.ports->getOn() ? cfg.opts | Config::ports : cfg.opts & ~Config::ports;
+	cfg.opts = ph->wio.rowBalancing->getOn() ? cfg.opts | Config::rowBalancing : cfg.opts & ~Config::rowBalancing;
+	cfg.opts = ph->wio.homefront->getOn() ? cfg.opts | Config::homefront : cfg.opts & ~Config::homefront;
+	cfg.opts = ph->wio.setPieceBattle->getOn() ? cfg.opts | Config::setPieceBattle : cfg.opts & ~Config::setPieceBattle;
 	cfg.setPieceBattleNum = sstol(ph->wio.setPieceBattleNum->getText());
 	cfg.battlePass = sstol(ph->wio.battleLE->getText());
-	cfg.opts = ph->wio.favorTotal->on ? cfg.opts | Config::favorTotal : cfg.opts & ~Config::favorTotal;
+	cfg.opts = ph->wio.favorTotal->getOn() ? cfg.opts | Config::favorTotal : cfg.opts & ~Config::favorTotal;
 	cfg.favorLimit = sstol(ph->wio.favorLimit->getText());
-	cfg.opts = ph->wio.firstTurnEngage->on ? cfg.opts | Config::firstTurnEngage : cfg.opts & ~Config::firstTurnEngage;
-	cfg.opts = ph->wio.terrainRules->on ? cfg.opts | Config::terrainRules : cfg.opts & ~Config::terrainRules;
-	cfg.opts = ph->wio.dragonLate->on ? cfg.opts | Config::dragonLate : cfg.opts & ~Config::dragonLate;
-	cfg.opts = ph->wio.dragonStraight->on ? cfg.opts | Config::dragonStraight : cfg.opts & ~Config::dragonStraight;
+	cfg.opts = ph->wio.firstTurnEngage->getOn() ? cfg.opts | Config::firstTurnEngage : cfg.opts & ~Config::firstTurnEngage;
+	cfg.opts = ph->wio.terrainRules->getOn() ? cfg.opts | Config::terrainRules : cfg.opts & ~Config::terrainRules;
+	cfg.opts = ph->wio.dragonLate->getOn() ? cfg.opts | Config::dragonLate : cfg.opts & ~Config::dragonLate;
+	cfg.opts = ph->wio.dragonStraight->getOn() ? cfg.opts | Config::dragonStraight : cfg.opts & ~Config::dragonStraight;
 	cfg.winThrone = sstol(ph->wio.winThrone->getText());
 	cfg.winFortress = sstol(ph->wio.winFortress->getText());
 	cfg.capturers = 0;
 	for (uint8 i = 0; i < pieceLim; ++i)
-		cfg.capturers |= uint16(ph->wio.capturers[i]->selected) << i;
+		cfg.capturers |= uint16(ph->wio.capturers[i]->getSelected()) << i;
 	cfg.checkValues();
 	ph->updateConfigWidgets(cfg);
 	postConfigUpdate();
 }
 
 void Program::eventUpdateConfigI(Button* but) {
-	static_cast<Icon*>(but)->selected = !static_cast<Icon*>(but)->selected;
+	Icon* ico = static_cast<Icon*>(but);
+	ico->setSelected(!ico->getSelected());
 	eventUpdateConfig();
 }
 
@@ -555,7 +557,7 @@ void Program::eventUpdateConfigV(Button* but) {
 		Config& cfg = ph->confs[ph->configName->getText()];
 		uint16 tils = cfg.countTiles(), mids = cfg.countMiddles();
 		const char* num;
-		if (static_cast<CheckBox*>(but)->on) {
+		if (static_cast<CheckBox*>(but)->getOn()) {
 			if (uint16 must = cfg.homeSize.x * cfg.homeSize.y; tils < must)
 				Config::ceilAmounts(tils, must, cfg.tileAmounts.data(), cfg.tileAmounts.size() - 1);
 			if (uint16 must = (cfg.homeSize.x - cfg.homeSize.x / 3) / 2; mids > must)
@@ -986,7 +988,7 @@ void Program::eventShowConfig(Button*) {
 
 void Program::eventSwitchGameButtons(Button*) {
 	ProgGame* pg = static_cast<ProgGame*>(state);
-	pg->bswapIcon->selected = !pg->bswapIcon->selected;
+	pg->bswapIcon->setSelected(!pg->bswapIcon->getSelected());
 }
 
 // GAME MATCH
@@ -1052,7 +1054,7 @@ void Program::eventCancelDestroy(Button*) {
 }
 
 void Program::eventClickPlaceDragon(Button* but) {
-	static_cast<Icon*>(but)->selected = true;
+	static_cast<Icon*>(but)->setSelected(true);
 	Tile* til = game.board->getTiles().own();
 	for (; til != game.board->getTiles().end() && til->getType() != TileType::fortress; ++til);
 	Piece* pce = game.board->findOccupant(til);
@@ -1062,7 +1064,7 @@ void Program::eventClickPlaceDragon(Button* but) {
 }
 
 void Program::eventHoldPlaceDragon(Button* but) {
-	static_cast<Icon*>(but)->selected = true;
+	static_cast<Icon*>(but)->setSelected(true);
 	Piece* pce = getUnplacedDragon();
 	World::scene()->delegateStamp(pce);
 	pce->startKeyDrag(SDL_BUTTON_LEFT);
@@ -1185,7 +1187,7 @@ void Program::eventClosePopupResetIcons(Button*) {
 void Program::eventPieceStart(BoardObject* obj, uint8 mBut) {
 	ProgMatch* pm = static_cast<ProgMatch*>(state);
 	Piece* pce = static_cast<Piece*>(obj);
-	game.board->setPxpadPos(pm->getDestroyIcon()->selected ? pce : nullptr);
+	game.board->setPxpadPos(pm->getDestroyIcon()->getSelected() ? pce : nullptr);
 	mBut == SDL_BUTTON_LEFT ? game.board->highlightMoveTiles(pce, game.getEneRec(), pm->favorIconSelect()) : game.board->highlightEngageTiles(pce);
 }
 
@@ -1309,12 +1311,12 @@ void Program::eventOpenSettings(Button*) {
 }
 
 void Program::eventShowSettings(Button*) {
-	gui.openPopupSettings(state->mainScrollContent, state->keyBindingsStart);
-}
-
-void Program::eventOpenShowSettings(Button*) {
-	if (!World::scene()->getPopup())
-		dynamic_cast<ProgMenu*>(state) || dynamic_cast<ProgInfo*>(state) ? eventOpenSettings() : eventShowSettings();
+	if (!World::scene()->getPopup()) {
+		if (!(dynamic_cast<ProgMenu*>(state) || dynamic_cast<ProgInfo*>(state)))
+			gui.openPopupSettings(state->mainScrollContent, state->keyBindingsStart);
+		else
+			eventOpenSettings();
+	}
 }
 
 void Program::eventSetDisplay(Button* but) {
@@ -1416,20 +1418,20 @@ void Program::setShadowRes(uint16 newRes) {
 }
 
 void Program::eventSetSoftShadows(Button* but) {
-	World::sets()->softShadows = static_cast<CheckBox*>(but)->on;
+	World::sets()->softShadows = static_cast<CheckBox*>(but)->getOn();
 	World::scene()->reloadShader();
 	eventSaveSettings();
 }
 
 void Program::eventSetSsao(Button* but) {
-	World::sets()->ssao = static_cast<CheckBox*>(but)->on;
+	World::sets()->ssao = static_cast<CheckBox*>(but)->getOn();
 	World::scene()->reloadShader();
 	World::scene()->resetFrames();
 	eventSaveSettings();
 }
 
 void Program::eventSetBloom(Button* but) {
-	World::sets()->bloom = static_cast<CheckBox*>(but)->on;
+	World::sets()->bloom = static_cast<CheckBox*>(but)->getOn();
 	World::scene()->reloadShader();
 	World::scene()->resetFrames();
 	eventSaveSettings();
@@ -1481,22 +1483,22 @@ void Program::setColorPieces(Settings::Color clr, Piece* pos, Piece* end) {
 }
 
 void Program::eventSetScaleTiles(Button* but) {
-	World::sets()->scaleTiles = static_cast<CheckBox*>(but)->on;
+	World::sets()->scaleTiles = static_cast<CheckBox*>(but)->getOn();
 	eventSaveSettings();
 }
 
 void Program::eventSetScalePieces(Button* but) {
-	World::sets()->scalePieces = static_cast<CheckBox*>(but)->on;
+	World::sets()->scalePieces = static_cast<CheckBox*>(but)->getOn();
 	eventSaveSettings();
 }
 
 void Program::eventSetAutoVictoryPoints(Button* but) {
-	World::sets()->autoVictoryPoints = static_cast<CheckBox*>(but)->on;
+	World::sets()->autoVictoryPoints = static_cast<CheckBox*>(but)->getOn();
 	eventSaveSettings();
 }
 
 void Program::eventSetTooltips(Button* but) {
-	World::sets()->tooltips = static_cast<CheckBox*>(but)->on;
+	World::sets()->tooltips = static_cast<CheckBox*>(but)->getOn();
 	World::scene()->updateTooltips();
 	eventSaveSettings();
 }
@@ -1542,7 +1544,7 @@ void Program::eventSetFontHinting(uint id, const string&) {
 }
 
 void Program::eventSetInvertWheel(Button* but) {
-	World::sets()->invertWheel = static_cast<CheckBox*>(but)->on;
+	World::sets()->invertWheel = static_cast<CheckBox*>(but)->getOn();
 	eventSaveSettings();
 }
 
@@ -1612,20 +1614,23 @@ void Program::eventOpenInfo(Button*) {
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 void Program::eventOpenRules(Button*) {
-	openDoc(FileSys::fileRules);
+	openDoc(FileSys::docPath() + FileSys::fileRules);
 }
 
 void Program::eventOpenDocs(Button*) {
-	openDoc(FileSys::fileDocs);
+	openDoc(FileSys::docPath() + FileSys::fileDocs);
 }
 
-void Program::openDoc(const char* file) {
-	string path = FileSys::docPath() + file;
+void Program::eventOpenFiles(Button*) {
+	openDoc(FileSys::getDirConfig());
+}
+
+void Program::openDoc(const string& file) {
 #if SDL_VERSION_ATLEAST(2, 0, 14)
-	if (SDL_OpenURL(("file://" + path).c_str()))
-		openDocNative(path);
+	if (SDL_OpenURL(("file://" + file).c_str()))
+		openDocNative(file);
 #else
-	openDocNative(path);
+	openDocNative(file);
 #endif
 }
 

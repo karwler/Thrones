@@ -478,7 +478,7 @@ void Game::recvSetup(const uint8* data) {
 	}
 	uint8 t = 0;
 	const Material* matl = World::scene()->material(Settings::colorNames[uint8(World::sets()->colorEnemy)]);
-	int tex = World::scene()->objTex("metal");
+	uvec2 tex = World::scene()->objTex("metal");
 	for (uint16 i = 0, c = 0; i < board->getPieces().getNum(); ++i, ++c) {
 		for (; c >= board->enePieceAmts[t]; ++t, c = 0);
 		board->getPieces().ene(i)->init(meshes[t], board->enePieceAmts[t] + c, matl, tex, true, PieceType(t));

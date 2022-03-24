@@ -130,14 +130,13 @@ public:
 	static constexpr float zfar = 100.f;
 	static constexpr float pmaxSetup = -glm::half_pi<float>() + glm::pi<float>() / 10.f, pmaxMatch = -glm::half_pi<float>() + glm::pi<float>() / 20.f;
 	static constexpr float ymaxSetup = glm::pi<float>() / 6.f, ymaxMatch = glm::pi<float>() * 2.f;
-	static constexpr vec3 posSetup = { Config::boardWidth / 2.f, 9.f, Config::boardWidth / 2.f + 9.f };
-	static constexpr vec3 posMatch = { Config::boardWidth / 2.f, 12.f, Config::boardWidth / 2.f + 10.f };
-	static constexpr vec3 latSetup = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 2.5f };
-	static constexpr vec3 latMatch = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 1.f };
-	static constexpr vec3 up = { 0.f, 1.f, 0.f };
-	static constexpr vec3 center = { Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f };
+	static constexpr vec3 posSetup = vec3(Config::boardWidth / 2.f, 9.f, Config::boardWidth / 2.f + 9.f);
+	static constexpr vec3 posMatch = vec3(Config::boardWidth / 2.f, 12.f, Config::boardWidth / 2.f + 10.f);
+	static constexpr vec3 latSetup = vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 2.5f);
+	static constexpr vec3 latMatch = vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f + 1.f);
+	static constexpr vec3 up = vec3(0.f, 1.f, 0.f);
+	static constexpr vec3 center = vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f);
 
-	State state = State::stationary;
 	float pmax, ymax;
 private:
 	vec2 prot;			// pitch and yaw record of position relative to lat
@@ -146,8 +145,9 @@ private:
 	float defaultPdst;
 	vec3 pos, lat;
 	mat4 proj;
-
 public:
+	State state = State::stationary;
+
 	Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax);
 
 	void updateView() const;
@@ -251,19 +251,20 @@ inline bool Animation::operator==(const Animation& ani) const {
 
 // handles more back-end UI interactions, works with widgets (UI elements), and contains Program and Library
 class Scene {
-public:
-	Camera camera = Camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup);
-
 private:
 	struct Capture {
 		Interactable* inter;
-		uint len = 0;	// composing substring length
+		sizet len = 0;	// composing substring length
 
 		constexpr Capture(Interactable* capture = nullptr);
 
 		constexpr operator bool() const;
 		Interactable* operator->();
 	};
+
+	static constexpr float clickThreshold = 8.f;
+	static constexpr int scrollFactorWheel = 140;
+	static constexpr uint numWgtTops = 3;	// can't be more than 3 instances (one for LabelEdit caret and two for tooltip)
 
 	Interactable* select = nullptr;	// currently selected widget/object
 	Interactable* firstSelect = nullptr;
@@ -277,16 +278,18 @@ private:
 	vector<Mesh> meshes;
 	umap<string, uint16> meshRefs;
 	umap<string, Material> matls;
-	umap<string, Texture> texes;
+	umap<string, TexLoc> texColRefs;
 	TextureSet texSet;
+	TextureCol texCol;
 	Light light;
 	ClickStamp cstamp;	// data about last mouse click
 	FrameSet frames;
 	Frame scrFrame;
 	Skybox skybox;
-
-	static constexpr float clickThreshold = 8.f;
-	static constexpr int scrollFactorWheel = 140;
+public:
+	Camera camera = Camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup);
+private:
+	Quad wgtTops;
 
 public:
 	Scene();
@@ -310,10 +313,10 @@ public:
 	Mesh* mesh(const string& name);
 	const Material* material(const string& name) const;
 	void loadObjects();
-	const Texture* getTex(const string& name) const;
-	GLuint texture(const string& name = string()) const;
-	int objTex(const string& name = string()) const;
-	void loadTextures();
+	TextureCol* getTexCol();
+	const TexLoc& wgtTex(const string& name = string()) const;
+	uvec2 objTex(const string& name = string()) const;
+	void loadTextures(int recomTexSize);
 	void reloadTextures();
 	void reloadShader();
 	void resetShadows();
@@ -424,14 +427,14 @@ inline const Material* Scene::material(const string& name) const {
 	return &matls.at(name);
 }
 
-inline const Texture* Scene::getTex(const string& name) const {
-	return &texes.at(name);
+inline TextureCol* Scene::getTexCol() {
+	return &texCol;
 }
 
-inline GLuint Scene::texture(const string& name) const {
-	return texes.at(name);
+inline const TexLoc& Scene::wgtTex(const string& name) const {
+	return texColRefs.at(name);
 }
 
-inline int Scene::objTex(const string& name) const {
+inline uvec2 Scene::objTex(const string& name) const {
 	return texSet.get(name);
 }

@@ -96,8 +96,8 @@ struct Config {
 	static constexpr uint8 maxNameLength = 63;
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;
-	static constexpr svec2 minHomeSize = { 5, 2 };
-	static constexpr svec2 maxHomeSize = { 101, 50 };
+	static constexpr svec2 minHomeSize = svec2(5, 2);
+	static constexpr svec2 maxHomeSize = svec2(101, 50);
 	static constexpr uint16 maxFavorMax = UINT16_MAX / 4;
 
 	svec2 homeSize = { 9, 4 };	// neither width nor height shall exceed UINT8_MAX

@@ -12,6 +12,7 @@ enum class UserCode : int32 {
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 void checkFramebufferStatus(const string& name);
 uint32 ceilPower2(uint32 val);
+pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
 SDL_Surface* takeScreenshot(ivec2 res);
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
@@ -76,6 +77,8 @@ struct Rect : SDL_Rect {
 	ivec2& size();
 	ivec2 size() const;
 	ivec2 end() const;
+	int* data();
+	const int* data() const;
 
 	bool contain(ivec2 point) const;
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
@@ -121,6 +124,14 @@ inline ivec2 Rect::end() const {
 	return pos() + size();
 }
 
+inline int* Rect::data() {
+	return reinterpret_cast<int*>(this);
+}
+
+inline const int* Rect::data() const {
+	return reinterpret_cast<const int*>(this);
+}
+
 inline bool Rect::contain(ivec2 point) const {
 	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
@@ -130,31 +141,100 @@ inline Rect Rect::intersect(const Rect& rect) const {
 	return SDL_IntersectRect(this, &rect, &isct) ? isct : Rect(0);
 }
 
-// OpenGL texture wrapper for widgets
+// SDL_FRect wrapper
+struct Rectf : SDL_FRect {
+	Rectf() = default;
+	constexpr Rectf(float n);
+	constexpr Rectf(float px, float py, float sw, float sh);
+	constexpr Rectf(float px, float py, vec2 size);
+	constexpr Rectf(vec2 pos, float sw, float sh);
+	constexpr Rectf(vec2 pos, vec2 size);
+	constexpr Rectf(const Rect& rect);
+
+	vec2& pos();
+	vec2 pos() const;
+	vec2& size();
+	vec2 size() const;
+	vec2 end() const;
+	float* data();
+	const float* data() const;
+};
+
+constexpr Rectf::Rectf(float n) :
+	SDL_FRect{ n, n, n, n }
+{}
+
+constexpr Rectf::Rectf(float px, float py, float sw, float sh) :
+	SDL_FRect{ px, py, sw, sh }
+{}
+
+constexpr Rectf::Rectf(float px, float py, vec2 size) :
+	SDL_FRect{ px, py, size.x, size.y }
+{}
+
+constexpr Rectf::Rectf(vec2 pos, float sw, float sh) :
+	SDL_FRect{ pos.x, pos.y, sw, sh }
+{}
+
+constexpr Rectf::Rectf(vec2 pos, vec2 size) :
+	SDL_FRect{ pos.x, pos.y, size.x, size.y }
+{}
+
+constexpr Rectf::Rectf(const Rect& rect) :
+	SDL_FRect{ float(rect.x), float(rect.y), float(rect.w), float(rect.h) }
+{}
+
+inline vec2& Rectf::pos() {
+	return *reinterpret_cast<vec2*>(this);
+}
+
+inline vec2 Rectf::pos() const {
+	return vec2(x, y);
+}
+
+inline vec2& Rectf::size() {
+	return reinterpret_cast<vec2*>(this)[1];
+}
+
+inline vec2 Rectf::size() const {
+	return vec2(w, h);
+}
+
+inline vec2 Rectf::end() const {
+	return pos() + size();
+}
+
+inline float* Rectf::data() {
+	return reinterpret_cast<float*>(this);
+}
+
+inline const float* Rectf::data() const {
+	return reinterpret_cast<const float*>(this);
+}
+
+// basic dirty texture wrapper for logger
 class Texture {
-private:
+public:
 #ifdef OPENGLES
 	static constexpr GLenum textPixFormat = GL_RGBA;
 #else
 	static constexpr GLenum textPixFormat = GL_BGRA;
 #endif
 
+private:
 	GLuint id = 0;
-	ivec2 res = ivec2(0, 0);
+	ivec2 res = ivec2(0);
 
 public:
-	Texture() = default;
-	Texture(const SDL_Surface* img, GLenum pform);	// for images
-	Texture(const SDL_Surface* img, int limit, ivec2 offset);	// for text
-	Texture(array<uint8, 4> color);
-
-	void close();
+	void init(const vec4& color);
+	bool init(SDL_Surface* img, ivec2 limit);
 	void free();
-	void update(const SDL_Surface* img, ivec2 offset);	// for text
 
 	operator GLuint() const;
 	ivec2 getRes() const;
-	static pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
+
+private:
+	void upload(void* pixels, int rowLen, GLint format, GLenum type);
 };
 
 inline void Texture::free() {
@@ -169,7 +249,89 @@ inline ivec2 Texture::getRes() const {
 	return res;
 }
 
-// OpenGL texture wrapper for 3D objects
+// texture location in TextureCol
+struct TexLoc {
+	uint tid;
+	Rect rct;
+
+	constexpr TexLoc(uint page = 0, const Rect& posize = Rect(0, 0, 2, 2));
+
+	constexpr bool blank() const;
+};
+
+constexpr TexLoc::TexLoc(uint page, const Rect& posize) :
+	tid(page),
+	rct(posize)
+{}
+
+constexpr bool TexLoc::blank() const {
+	return !(tid || rct.x || rct.y);
+}
+
+// texture collection for widgets
+class TextureCol {
+public:
+	static constexpr TexLoc blank = TexLoc(0, Rect(0, 0, 2, 2));
+
+	struct Element {
+		string name;
+		SDL_Surface* image;
+		GLenum format;
+		bool freeImg;
+		bool minSize;
+
+		Element(string&& texName, SDL_Surface* img, GLenum pformat, bool freeImage, bool minimizeSize);
+	};
+
+private:
+	struct Find {
+		uint page, index;
+		Rect rect;
+
+		Find() = default;
+		Find(uint pg, uint id, const Rect& posize);
+	};
+
+	static constexpr uint pageNumStep = 4;
+
+	GLuint tex;
+	int res;
+	uint pageReserve;
+	vector<vector<Rect>> pages;
+
+public:
+	umap<string, TexLoc> init(vector<Element>&& imgs, int recommendSize);
+	void free();
+
+	int getRes() const;
+	TexLoc insert(SDL_Surface* img);
+	TexLoc insert(const SDL_Surface* img, ivec2 size, ivec2 offset = ivec2(0));
+	void replace(TexLoc& loc, SDL_Surface* img);
+	void replace(TexLoc& loc, const SDL_Surface* img, ivec2 size, ivec2 offset = ivec2(0));
+	void erase(TexLoc& loc);
+
+	vector<SDL_Surface*> peekMemory() const;
+	vector<SDL_Surface*> peekTexture() const;
+private:
+	void uploadSubTex(const SDL_Surface* img, ivec2 offset, const Rect& loc, uint page);
+	pair<vector<Rect>::iterator, bool> findReplaceable(const TexLoc& loc, ivec2& size);	// returns previous location and whether it can be replaced
+	Find findLocation(ivec2 size) const;
+	void maybeResize();
+	void calcPageReserve();
+
+	void assertIntegrity();	// TODO: remove
+	static void assertIntegrity(const vector<Rect>& page, const Rect& nrect);	// TODO: remove
+};
+
+inline int TextureCol::getRes() const {
+	return res;
+}
+
+inline void TextureCol::calcPageReserve() {
+	pageReserve = (pages.size() / pageNumStep + 1) * pageNumStep;
+}
+
+// texture wrapper for 3D objects
 class TextureSet {
 public:
 	struct Element {
@@ -184,67 +346,72 @@ public:
 	struct Import {
 		vector<Element> imgs;
 		array<pair<SDL_Surface*, GLenum>, 6> sky;	// image and format
-		ivec2 cres = ivec2(0), nres = ivec2(0);
+		int cres = 2, nres = 2;
 	};
 
 private:
 	GLuint clr = 0, nrm = 0, sky = 0;
-	umap<string, int> refs;
+	umap<string, uvec2> refs;
 
 public:
-	TextureSet() = default;
-	TextureSet(Import&& imp);
-
+	void init(Import&& imp);
 	void free();
-	operator GLuint() const;
-	int get(const string& name = string()) const;
+
+	uvec2 get(const string& name = string()) const;
 
 private:
-	static void loadTexArray(GLuint& tex, Import& imp, ivec2 res, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank, GLenum active);
+	static void loadTexArray(GLuint& tex, Import& imp, int res, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank, GLenum active);
 };
 
-inline TextureSet::operator GLuint() const {
-	return clr;
-}
-
-inline int TextureSet::get(const string& name) const {
+inline uvec2 TextureSet::get(const string& name) const {
 	return refs.at(name);
 }
 
 // size of a widget
 struct Size {
-	enum Mode {
+	enum Mode : uint8 {
 		rela,	// relative to parent size
-		abso,	// relative to window height
+		abso,	// relative to widow height
+		pref,	// reference to variable pixel value
+		pixv,	// absolute pixel value (mainly for 0)
 		calc	// use the calculation function
 	};
 
 	union {
-		float val;
+		float rel;
+		const int* ptr;
+		int pix;
 		int (*cfn)(const Widget*);
 	};
 	Mode mod;
 
 	constexpr Size(float size = 1.f, Mode mode = rela);
+	constexpr Size(const int* iptr);
+	constexpr Size(int pixa);
 	constexpr Size(int (*cfunc)(const Widget*));
 
-	constexpr operator float() const;
-	int operator ()(const Widget* wgt) const;
+	int operator()(const Widget* wgt) const;
 };
 
 constexpr Size::Size(float size, Mode mode) :
-	val(size),
+	rel(size),
 	mod(mode)
+{}
+
+constexpr Size::Size(const int* iptr) :
+	ptr(iptr),
+	mod(pref)
+{}
+
+constexpr Size::Size(int pixa) :
+	pix(pixa),
+	mod(pixv)
 {}
 
 constexpr Size::Size(int (*cfunc)(const Widget*)) :
 	cfn(cfunc),
 	mod(calc)
 {}
-
-constexpr Size::operator float() const {
-	return val;
-}
 
 inline int Size::operator()(const Widget* wgt) const {
 	return cfn(wgt);
@@ -318,8 +485,8 @@ public:
 	virtual void onScroll(ivec2) {}
 	virtual void onKeyDown(const SDL_KeyboardEvent&) {}
 	virtual void onKeyUp(const SDL_KeyboardEvent&) {}
-	virtual void onCompose(const char*, uint&) {}
-	virtual void onText(const char*, uint&) {}
+	virtual void onCompose(const char*, sizet&) {}
+	virtual void onText(const char*, sizet&) {}
 	virtual void onJButtonDown(uint8) {}
 	virtual void onJButtonUp(uint8) {}
 	virtual void onJHatDown(uint8, uint8) {}

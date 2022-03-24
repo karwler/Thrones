@@ -160,6 +160,7 @@ struct Binding {
 		settings,
 		frameCounter,
 		screenshot,
+		peekTextures,
 		selectNext,
 		selectPrev,
 		select0,
@@ -211,6 +212,7 @@ struct Binding {
 		"settings",
 		"frame_counter",
 		"screenshot",
+		"peek_textures",
 		"select_next",
 		"select_prev",
 		"select_0",
@@ -352,13 +354,14 @@ struct Settings {
 	static constexpr uint8 shadowBitMax = 13;
 	static constexpr float gammaMax = 2.f;
 	static constexpr uint16 chatLinesMax = 8191;
-	static constexpr svec2 deadzoneLimit = { 256, INT16_MAX - 1 };
+	static constexpr svec2 deadzoneLimit = svec2(256, INT16_MAX - 1);
 	static constexpr Hinting defaultHinting = Hinting::normal;
 	static constexpr Family defaultFamily = Family::v4;
 	static constexpr Color defaultAlly = Color::brass;
 	static constexpr Color defaultEnemy = Color::tin;
 
 	static constexpr char argExternal = 'e';
+	static constexpr char argCompositor = 'k';
 #ifndef NDEBUG
 	static constexpr char argConsole = 'c';
 	static constexpr char argSetup = 's';

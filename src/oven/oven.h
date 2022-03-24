@@ -49,10 +49,7 @@ struct Vertex {
 // other functions
 
 SDL_Surface* scaleSurface(SDL_Surface* img, ivec2 res);
-
-inline SDL_Surface* scaleSurface(SDL_Surface* img, int div) {
-	return div <= 1 || !img || img->w <= 1 || img->h <= 1 ? img : scaleSurface(img, ivec2(img->w, img->h) / div);
-}
+SDL_Surface* scaleSurfaceCopy(SDL_Surface* img, ivec2 res);
 
 template <class T = string>
 T loadFile(const string& file) {

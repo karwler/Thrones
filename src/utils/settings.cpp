@@ -133,6 +133,10 @@ void Binding::init(Type type) {
 		bcall = &ProgState::eventScreenshot;
 		ucall = nullptr;
 		break;
+	case Type::peekTextures:
+		bcall = &ProgState::eventPeekUiTextures;
+		ucall = nullptr;
+		break;
 	case Type::selectNext:
 		bcall = &ProgState::eventSelectNext;
 		ucall = nullptr;
@@ -356,6 +360,11 @@ void Binding::reset(Binding::Type type) {
 		break;
 	case Type::screenshot:
 		keys = { SDL_SCANCODE_F12 };
+		joys.clear();
+		gpds.clear();
+		break;
+	case Type::peekTextures:
+		keys = { SDL_SCANCODE_F10 };
 		joys.clear();
 		gpds.clear();
 		break;

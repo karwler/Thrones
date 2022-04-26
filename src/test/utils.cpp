@@ -1,17 +1,13 @@
 #include "tests.h"
 
-static void testCeilPower2() {
-	assertEqual(ceilPower2(0), 0u);
-	assertEqual(ceilPower2(1), 1u);
-	assertEqual(ceilPower2(2), 2u);
-	assertEqual(ceilPower2(3), 4u);
-	assertEqual(ceilPower2(4), 4u);
-	assertEqual(ceilPower2(12), 16u);
-	assertEqual(ceilPower2(16), 16u);
-	assertEqual(ceilPower2(24), 32u);
-	assertEqual(ceilPower2(32), 32u);
-	assertEqual(ceilPower2(1000), 1024u);
-	assertEqual(ceilPower2(1024), 1024u);
+static void testUniqueSort() {
+	vector<int> vals{ 4, 8, 2, 5, 5, 0, 9, 6, 7, 2, 1, 4, 3 };
+	assertRange(uniqueSort(vals), vector<int>({ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
+}
+
+static void testSortNames() {
+	umap<string, int> vals = { pair("a01", 0), pair("zb", 0), pair("a1", 0), pair("Zb", 0), pair("a10", 0) };
+	assertRange(sortNames(vals), vector<string>({ "a01", "a1", "a10", "Zb", "zb" }));
 }
 
 static void testRect() {
@@ -127,19 +123,24 @@ static void testCycle() {
 	assertEqual(cycle(2u, 3u, -4), 1u);
 }
 
-static void testUniqueSort() {
-	vector<int> vals{ 4, 8, 2, 5, 5, 0, 9, 6, 7, 2, 1, 4, 3 };
-	assertRange(uniqueSort(vals), vector<int>({ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
-}
-
-static void testSortNames() {
-	umap<string, int> vals = { pair("a01", 0), pair("zb", 0), pair("a1", 0), pair("Zb", 0), pair("a10", 0) };
-	assertRange(sortNames(vals), vector<string>({ "a01", "a1", "a10", "Zb", "zb" }));
+static void testCeilPower2() {
+	assertEqual(ceilPower2(0), 0u);
+	assertEqual(ceilPower2(1), 1u);
+	assertEqual(ceilPower2(2), 2u);
+	assertEqual(ceilPower2(3), 4u);
+	assertEqual(ceilPower2(4), 4u);
+	assertEqual(ceilPower2(12), 16u);
+	assertEqual(ceilPower2(16), 16u);
+	assertEqual(ceilPower2(24), 32u);
+	assertEqual(ceilPower2(32), 32u);
+	assertEqual(ceilPower2(1000), 1024u);
+	assertEqual(ceilPower2(1024), 1024u);
 }
 
 void testUtils() {
 	puts("Running Utils tests...");
-	testCeilPower2();
+	testUniqueSort();
+	testSortNames();
 	testRect();
 	testDirection();
 	testBtom();
@@ -149,6 +150,5 @@ void testUtils() {
 	testDeltaSingle();
 	testSwapBits();
 	testCycle();
-	testUniqueSort();
-	testSortNames();
+	testCeilPower2();
 }

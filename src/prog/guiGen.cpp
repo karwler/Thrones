@@ -35,11 +35,14 @@ void GuiGen::initSizes() {
 	assignSizeFunc(SizeRef::tooltipHeight, []() -> int { return int(tooltipHeight * float(World::window()->getScreenView().y)); });
 	assignSizeFunc(SizeRef::tooltipLimit, []() -> int { return int(tooltipLimit * float(World::window()->getScreenView().x)); });
 	assignSizeFunc(SizeRef::chatEmbed, []() -> int { return int(chatEmbed * float(World::window()->getScreenView().x)); });
+	for (sizet i = sizet(SizeRef::menuSideWidth); i < sizes.size(); ++i)
+		sizes[i].second = nullptr;
 }
 
-void GuiGen::calsSizes() {
+void GuiGen::calcSizes() {
 	for (auto& [size, func] : sizes)
-		size = func();
+		if (func)
+			size = func();
 }
 
 void GuiGen::openPopupMessage(string msg, BCall ccal, string&& ctxt) const {
@@ -240,7 +243,7 @@ uptr<RootLayout> GuiGen::makeLobby(Interactable*& selected, TextBox*& chatBox, S
 	// root layout
 	vector<Widget*> root = {
 		new Layout(1.f, std::move(cont), false, getSize(SizeRef::superSpacing)),
-		new Layout(getSize(SizeRef::chatEmbed), { createChat(chatBox, false) })
+		new Layout(getSize(SizeRef::chatEmbed), createChat(chatBox, false))
 	};
 	return std::make_unique<RootLayout>(1.f, std::move(root), true, getSize(SizeRef::superSpacing), lineSpacing, RootLayout::uniformBgColor);
 }
@@ -262,6 +265,7 @@ uptr<RootLayout> GuiGen::makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO
 		top0 = {
 			new Label("Back", &Program::eventOpenMainMenu),
 			new Label("Setup", &Program::eventOpenSetup),
+			new Label("Recs", &Program::eventOpenPopupRecords),
 			rio.start = new Label(1.f, "Open", &Program::eventHostServer, nullptr, string(), 1.f, Label::Alignment::center),
 			new Label("Port:"),
 			new LabelEdit(getSize(SizeRef::roomPortWidth), World::sets()->port, &Program::eventUpdatePort)
@@ -318,9 +322,11 @@ uptr<RootLayout> GuiGen::makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO
 
 vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool active, bool match) {
 	BCall update = active ? &Program::eventUpdateConfig : nullptr;
+	BCall rupdate = active ? &Program::eventSetConfigRecord : nullptr;	// TODO: specifically outside of setup and match
 	BCall iupdate = active ? &Program::eventUpdateConfigI : nullptr;
 	BCall vupdate = active ? &Program::eventUpdateConfigV : nullptr;
 	initlist<const char*> txs = {
+		"Record",
 		"Victory points",
 		"Ports",
 		"Row balancing",
@@ -358,6 +364,11 @@ vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool 
 	Size amtWidth = update ? getSize(SizeRef::configAmtWidth) : Size(1.f);
 
 	vector<vector<Widget*>> lines0 = { {
+		new Label(getSize(SizeRef::configDescWidth), *itxs++),
+		new CheckBox(getSize(SizeRef::lineHeight), cfg.record, rupdate, rupdate, "Record the next match"),
+		new Label("name:"),
+		new LabelEdit(1.f, cfg.recordName, update ? &Program::eventSetConfigRecordName : nullptr, nullptr, nullptr, nullptr, "Name of the saved record")
+	}, {
 		new Label(getSize(SizeRef::configDescWidth), *itxs++),
 		wio.victoryPoints = new CheckBox(getSize(SizeRef::lineHeight), cfg.opts & Config::victoryPoints, vupdate, vupdate, "Use the victory points game variant"),
 		wio.victoryPointsNum = new LabelEdit(1.f, toStr(cfg.victoryPointsNum), update, nullptr, nullptr, nullptr, "Number of victory points required to win"),
@@ -500,7 +511,7 @@ void GuiGen::setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) co
 
 // SETUP
 
-uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch) {
+uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex) {
 	initlist<const char*> sidt = {
 		"Exit",
 		"Save",
@@ -508,9 +519,9 @@ uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*&
 		"Delete",
 		"Back",
 		"Chat",
-		"Settings",
+		"Settings",	// width placeholders just in case for when setting nextIcon's text later
 		"Config",
-		"Finish"	// width placeholder just in case for when setting nextIcon's text later
+		"Finish"
 	};
 	initlist<const char*>::iterator isidt = sidt.begin();
 
@@ -530,15 +541,14 @@ uptr<RootLayout> GuiGen::makeSetup(Interactable*& selected, SetupIO& sio, Icon*&
 	if (World::netcp())
 		wgts.insert(wgts.begin() + 3, new Label(getSize(SizeRef::lineHeight), *isidt, &Program::eventToggleChat, nullptr, "Toggle chat"));
 	++isidt;
+	confSetsIndex = 1;
 	if (!World::window()->getTitleBarHeight()) {
-		wgts.insert(wgts.begin() + 1, {
-			new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventShowSettings, nullptr, "Open settings"),
-			new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventShowConfig, nullptr, "Show current game configuration"),
-		});
+		array<Widget*, 2> buts = createConfSetsButtons();
+		wgts.insert(wgts.begin() + confSetsIndex, buts.begin(), buts.end());
 	}
 
 	vector<Widget*> side = {
-		new Layout(getSize(SizeRef::setupSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing)),
+		sideBar = new Layout(getSize(SizeRef::setupSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing)),
 		planeSwitch = new Navigator()
 	};
 
@@ -612,7 +622,7 @@ void GuiGen::openPopupConfig(const string& configName, const Config& cfg, Scroll
 		configList = new ScrollArea(1.f, createConfigList(wio, cfg, false, match), true, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), std::move(bot), false)
 	};
-	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, getSize(SizeRef::lineSpacing), 0.f, nullptr, Popup::Type::config));
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, getSize(SizeRef::lineSpacing), 0.f, nullptr, Popup::Type::config));	// TODO: why scrolling popup?
 }
 
 void GuiGen::openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const {
@@ -671,7 +681,7 @@ void GuiGen::openPopupPiecePicker(uint16 piecePicksLeft) const {
 
 // MATCH
 
-uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons) {
+uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex) {
 	initlist<const char*> sidt = {
 		"Exit",
 		"Surrender",
@@ -679,11 +689,11 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		"Engage",
 		"Destroy",
 		"Finish",
-		"Settings",
-		"Config",
 		"Establish",
 		"Rebuild",
-		"Spawn"
+		"Spawn",
+		"Settings",	// width placeholders
+		"Config"
 	};
 	initlist<const char*>::iterator isidt = sidt.begin();
 
@@ -703,19 +713,17 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		mio.turn = new Label(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, "Finish current turn")
 	};
 	selected = mio.turn;
+	confSetsIndex = 2;
 	if (!World::window()->getTitleBarHeight()) {
-		left.insert(left.begin() + 2, {
-			new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventShowSettings, nullptr, "Open settings"),
-			new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventShowConfig, nullptr, "Show current game configuration"),
-		});
-	} else
-		isidt += 2;
+		array<Widget*, 2> buts = createConfSetsButtons();
+		left.insert(left.begin() + confSetsIndex, buts.begin(), buts.end());
+	}
 
 	if (World::game()->board->config.opts & Config::homefront) {
 		left.insert(left.end() - 1, {
-			mio.establish = new Icon(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, nullptr, "Respawn a piece"),
+			mio.establish = new Icon(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, nullptr, "Establish a farm or city"),
 			mio.rebuild = new Icon(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, nullptr, "Rebuild a fortress or farm"),
-			mio.spawn = new Icon(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, nullptr, "Establish a farm or city")
+			mio.spawn = new Icon(getSize(SizeRef::lineHeight), *isidt++, nullptr, nullptr, nullptr, "Respawn a piece")
 		});
 	} else
 		mio.rebuild = mio.establish = mio.spawn = nullptr;
@@ -740,7 +748,7 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 
 	// root layout
 	vector<Widget*> cont = {
-		new Layout(getSize(SizeRef::matchSideWidth), std::move(left), true, getSize(SizeRef::lineSpacing)),
+		sideBar = new Layout(getSize(SizeRef::matchSideWidth), std::move(left), true, getSize(SizeRef::lineSpacing)),
 		nullptr
 	};
 	if (World::game()->board->config.opts & Config::victoryPoints) {
@@ -763,6 +771,67 @@ uptr<RootLayout> GuiGen::makeMatch(Interactable*& selected, MatchIO& mio, Icon*&
 		cont.back() = planeSwitch = new Navigator();
 	}
 	return std::make_unique<RootLayout>(1.f, std::move(cont), false, 0, lineSpacing);	// interactive icons need to be updated once the game match has been set up
+}
+
+// RECORD
+
+void GuiGen::openPopupRecords() const {
+	vector<string> files = FileSys::listFiles(FileSys::recordPath());
+	vector<Widget*> mid(files.size());
+	for (sizet i = 0; i < mid.size(); ++i)
+		mid[i] = new Label(getSize(SizeRef::lineSpacing), std::move(files[i]), &Program::eventOpenRecord, &Program::eventDelRecord);	// TODO: separate delete button
+
+	vector<Widget*> bot = {
+		new Widget(),
+		new Label(1.f, "Close", &Program::eventClosePopup, nullptr, string(), 1.f, Label::Alignment::center),
+		new Widget()
+	};
+	vector<Widget*> con = {
+		new Label(getSize(SizeRef::lineHeight), "Records", nullptr, nullptr, string(), 1.f, Label::Alignment::center),
+		new ScrollArea(1.f, std::move(mid), true, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), std::move(bot), false)
+	};
+	World::scene()->pushPopup(std::make_unique<Popup>(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, getSize(SizeRef::lineSpacing), 0.f, nullptr, Popup::Type::config));	// TODO: why scrolling popup?
+}
+
+uptr<RootLayout> GuiGen::makeRecord(Interactable*& selected, Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex) {
+	initlist<const char*> sidt = {
+		"Exit",
+		"Back",
+		"Next",
+		"Settings",
+		"Config"
+	};
+	initlist<const char*>::iterator isidt = sidt.begin();
+
+	initSizes();
+	assignSizeFunc(SizeRef::recordSideWidth, [sidt]() -> int { return txtMaxLen(sidt.begin(), sidt.end(), lineHeight); });
+
+	// sidebar
+	vector<Widget*> wgts = {
+		new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventAbortGame, nullptr, "Exit the game"),
+		back = new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventRecordPrevAction, nullptr, "Go to previous action"),
+		next = new Label(getSize(SizeRef::lineHeight), *isidt++, &Program::eventRecordNextAction, nullptr, "Go to next action")
+	};
+	selected = wgts.back();
+	confSetsIndex = 1;
+	if (!World::window()->getTitleBarHeight()) {
+		array<Widget*, 2> buts = createConfSetsButtons();
+		wgts.insert(wgts.begin() + confSetsIndex, buts.begin(), buts.end());
+	}
+
+	// root layout
+	vector<Widget*> cont = {
+		sideBar = new Layout(getSize(SizeRef::recordSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing))
+	};
+	return std::make_unique<RootLayout>(1.f, std::move(cont), false, 0, lineSpacing);
+}
+
+array<Widget*, 2> GuiGen::createConfSetsButtons() const {
+	return {
+		new Label(getSize(SizeRef::lineHeight), "Settings", &Program::eventShowSettings, nullptr, "Open settings"),
+		new Label(getSize(SizeRef::lineHeight), "Config", &Program::eventShowConfig, nullptr, "Show current game configuration"),
+	};
 }
 
 void GuiGen::openPopupSpawner() const {
@@ -876,6 +945,7 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		"Texture scale",
 		"VSync",
 		"Gamma",
+		"FOV",
 		"Volume",
 		"Color ally",
 		"Color enemy",
@@ -905,6 +975,7 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		"Synchronized: on\n"
 		"Adaptive: on and smooth (works on fewer computers)";
 	constexpr char gammaTip[] = "Brightness";
+	constexpr char fovTip[] = "Vertical field of view";
 	constexpr char volumeTip[] = "Audio volume";
 	constexpr char chatTip[] = "Line break limit of a chat box";
 	constexpr char deadzTip[] = "Controller axis deadzone";
@@ -945,15 +1016,19 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		new CheckBox(getSize(SizeRef::lineHeight), World::sets()->bloom, &Program::eventSetBloom, &Program::eventSetBloom, "Brighten and blur bright areas")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new Slider(1.f, World::sets()->texScale, 1, 100, 10, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, scaleTip),
+		new Slider(1.f, World::sets()->texScale, 1, 100, 5, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, scaleTip),
 		new LabelEdit(getSize(SizeRef::settingsSlleWidth), toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, scaleTip)
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new ComboBox(1.f, Settings::vsyncNames[uint8(World::sets()->vsync+1)], vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), &Program::eventSetVsync, nullptr, nullptr, vsyncTip)
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), int(gammaStepFactor), &Program::eventSaveSettings, &Program::eventSetGammaSL, gammaTip),
+		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), 1, &Program::eventSaveSettings, &Program::eventSetGammaSL, gammaTip),
 		new LabelEdit(getSize(SizeRef::settingsSlleWidth), toStr(World::sets()->gamma), &Program::eventSetGammaLE, nullptr, nullptr, nullptr, gammaTip)
+	}, {
+		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
+		new Slider(1.f, int(World::sets()->fov * fovStepFactor), int(Settings::fovLimit.x * fovStepFactor), int(Settings::fovLimit.y * fovStepFactor), 1, &Program::eventSaveSettings, &Program::eventSetFovSL, fovTip),
+		new LabelEdit(getSize(SizeRef::settingsSlleWidth), toStr(World::sets()->fov), &Program::eventSetFovLE, nullptr, nullptr, nullptr, fovTip)
 	}, World::audio() ? vector<Widget*>{
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new Slider(1.f, World::sets()->avolume, 0, SDL_MIX_MAXVOLUME, 8, &Program::eventSetVolumeSL, &Program::eventSLUpdateLE, volumeTip),
@@ -1101,16 +1176,12 @@ uptr<RootLayout> GuiGen::makeInfo(Interactable*& selected, ScrollArea*& content)
 		"Version",			// program
 		"Path",
 		"Platform",
-		"OpenGL",
 		"Channels",
 		"Framebuffer size",
 		"Double buffer",
 		"Depth buffer size",
 		"Stencil buffer size",
-		"Accumulator",
 		"Stereo 3D",
-		"Multisample buffers",
-		"Multisamples",
 		"Hardware acceleration",
 		"Context version",
 		"Context flags",
@@ -1233,7 +1304,7 @@ void GuiGen::appendProgram(vector<Widget*>& lines, initlist<const char*>::iterat
 	}
 	args++;
 
-	int red, green, blue, alpha, buffer, dbuffer, depth, stencil, stereo, msbuffers, msamples, accvisual, vmaj, vmin, cflags, cprofile, swcc, srgb, crb;
+	int red, green, blue, alpha, buffer, dbuffer, depth, stencil, stereo, accvisual, vmaj, vmin, cflags, cprofile, swcc, srgb, crb;
 	SDL_GL_GetAttribute(SDL_GL_RED_SIZE, &red);
 	SDL_GL_GetAttribute(SDL_GL_GREEN_SIZE, &green);
 	SDL_GL_GetAttribute(SDL_GL_BLUE_SIZE, &blue);
@@ -1243,8 +1314,6 @@ void GuiGen::appendProgram(vector<Widget*>& lines, initlist<const char*>::iterat
 	SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &depth);
 	SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, &stencil);
 	SDL_GL_GetAttribute(SDL_GL_STEREO, &stereo);
-	SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &msbuffers);
-	SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &msamples);
 	SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL, &accvisual);
 	SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &vmaj);
 	SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &vmin);
@@ -1276,12 +1345,11 @@ void GuiGen::appendProgram(vector<Widget*>& lines, initlist<const char*>::iterat
 	else
 		sflags.pop_back();
 
+	string rbehavior = crb == SDL_GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH ? "Flush" : crb == SDL_GL_CONTEXT_RELEASE_BEHAVIOR_NONE ? "None" : toStr<16>(uint(crb));
 	SDL_version slver, scver, icver, tcver;
 	SDL_GetVersion(&slver);
 	SDL_VERSION(&scver)
-	const SDL_version* ilver = IMG_Linked_Version();
 	SDL_IMAGE_VERSION(&icver)
-	const SDL_version* tlver = TTF_Linked_Version();
 	SDL_TTF_VERSION(&tcver)
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	array<string, 4> compVers = {
@@ -1306,21 +1374,19 @@ void GuiGen::appendProgram(vector<Widget*>& lines, initlist<const char*>::iterat
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, toStr(depth)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, toStr(stencil)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, ibtos(stereo)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, toStr(msbuffers)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, toStr(msamples)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, ibtos(accvisual)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, std::move(cvers)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, std::move(sflags)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, ibtos(swcc)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, ibtos(srgb)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, ibtos(crb)) }, false, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, std::move(rbehavior)) }, false, getSize(SizeRef::lineSpacing)),
 #if !defined(OPENGLES) && !defined(__APPLE__)
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, reinterpret_cast<const char*>(glewGetString(GLEW_VERSION))) }, false, getSize(SizeRef::lineSpacing)),
 #endif
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, toStr(GLM_VERSION_MAJOR) + '.' + toStr(GLM_VERSION_MINOR) + '.' + toStr(GLM_VERSION_PATCH) + '.' + toStr(GLM_VERSION_REVISION)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(versionText(slver)), new Label(1.f, SDL_GetRevision()), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*ilver)), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*tlver)), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(slver)), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*IMG_Linked_Version())), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*TTF_Linked_Version())), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, World::program()->getCurlVersion()), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
 #endif

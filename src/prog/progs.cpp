@@ -165,7 +165,7 @@ vector<Overlay*> ProgState::createOverlays() {
 	};
 }
 
-void ProgState::updateTitleBar() {
+void ProgState::updateTitleBar(bool) {
 	setTitleBarInteractivity(true, false);
 }
 
@@ -469,8 +469,16 @@ vector<Overlay*> ProgGame::createOverlays() {
 	return ProgState::createOverlays();
 }
 
-void ProgGame::updateTitleBar() {
+void ProgGame::updateTitleBar(bool hadTitleBar) {
 	setTitleBarInteractivity(true, true);
+	if (!hadTitleBar && World::window()->getTitleBarHeight()) {
+		array<Widget*, 2> buts = World::pgui()->createConfSetsButtons();
+		sideBar->insertWidget(confSetsIndex, buts[0]);
+		sideBar->insertWidget(confSetsIndex + 1, buts[1]);
+	} else if (hadTitleBar && !World::window()->getTitleBarHeight()) {
+		sideBar->deleteWidget(confSetsIndex + 1);
+		sideBar->deleteWidget(confSetsIndex);
+	}
 }
 
 // PROG SETUP
@@ -626,7 +634,7 @@ void ProgSetup::handleClearing() {
 }
 
 uptr<RootLayout> ProgSetup::createLayout(Interactable*& selected) {
-	return World::pgui()->makeSetup(selected, sio, bswapIcon, planeSwitch);
+	return World::pgui()->makeSetup(selected, sio, bswapIcon, planeSwitch, sideBar, confSetsIndex);
 }
 
 Icon* ProgSetup::getIcon(uint8 type) const {
@@ -847,7 +855,29 @@ bool ProgMatch::selectHomefrontIcon(Icon* ico) {
 }
 
 uptr<RootLayout> ProgMatch::createLayout(Interactable*& selected) {
-	return World::pgui()->makeMatch(selected, mio, bswapIcon, planeSwitch, unplacedDragons);
+	return World::pgui()->makeMatch(selected, mio, bswapIcon, planeSwitch, unplacedDragons, sideBar, confSetsIndex);
+}
+
+// PROG RECORD
+
+ProgRecord::ProgRecord(RecordReader&& rr, string&& config) :
+	ProgGame(std::move(config)),
+	reader(std::move(rr))
+{}
+
+uptr<RootLayout> ProgRecord::createLayout(Interactable*& selected) {
+	return World::pgui()->makeRecord(selected, back, next, sideBar, confSetsIndex);
+}
+
+vector<Overlay*> ProgRecord::createOverlays() {
+	return { World::pgui()->createGameMessage(message, false) };
+}
+
+void ProgRecord::setButtons(bool canBack, bool canNext) {
+	back->setDim(canBack ? 1.f : GuiGen::defaultDim);
+	back->lcall = canBack ? &Program::eventRecordPrevAction : nullptr;
+	next->setDim(canNext ? 1.f : GuiGen::defaultDim);
+	next->lcall = canNext ? &Program::eventRecordNextAction : nullptr;
 }
 
 // PROG SETTINGS
@@ -864,7 +894,7 @@ uptr<RootLayout> ProgSettings::createLayout(Interactable*& selected) {
 	return World::pgui()->makeSettings(selected, mainScrollContent, keyBindingsStart);
 }
 
-void ProgSettings::updateTitleBar() {
+void ProgSettings::updateTitleBar(bool) {
 	setTitleBarInteractivity(false, false);
 }
 
@@ -890,6 +920,6 @@ uptr<RootLayout> ProgInfo::createLayout(Interactable*& selected) {
 	return World::pgui()->makeInfo(selected, mainScrollContent);
 }
 
-void ProgInfo::updateTitleBar() {
+void ProgInfo::updateTitleBar(bool) {
 	setTitleBarInteractivity(true, false);
 }

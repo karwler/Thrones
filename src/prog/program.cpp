@@ -459,6 +459,21 @@ void Program::eventHostServer(Button*) {
 	connect(false, "Waiting for player...");
 }
 
+void Program::eventOpenPopupRecords(Button*) {
+#ifdef __EMSCRIPTEN__
+	if (!FileSys::canRead())
+		return gui.openPopupMessage("Waiting for files to sync", &Program::eventClosePopup);
+#endif
+	gui.openPopupRecords();
+}
+
+void Program::eventDelRecord(Button* but) {
+	if (const string& file = static_cast<Label*>(but)->getText(); !remove(file.c_str()))
+		but->getParent()->deleteWidget(but->getIndex());
+	else
+		gui.openPopupMessage("Failed to delete file", &Program::eventClosePopup);
+}
+
 void Program::eventSwitchConfig(uint, const string& str) {
 	setSaveConfig(str, false);
 }
@@ -510,6 +525,18 @@ void Program::setSaveConfig(const string& name, bool save) {
 	pr->configName->set(sortNames(pr->confs), name);
 	pr->updateDelButton();
 	pr->updateConfigWidgets(cfg);
+}
+
+void Program::eventSetConfigRecord(Button* but) {
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
+	pr->confs[pr->configName->getText()].record = static_cast<CheckBox*>(but)->getOn();
+	FileSys::saveConfigs(pr->confs);
+}
+
+void Program::eventSetConfigRecordName(Button* but) {
+	ProgRoom* pr = static_cast<ProgRoom*>(state);
+	pr->confs[pr->configName->getText()].recordName = static_cast<LabelEdit*>(but)->getText();
+	FileSys::saveConfigs(pr->confs);
 }
 
 void Program::eventUpdateConfig(Button*) {
@@ -906,17 +933,17 @@ void Program::eventSetupPickPiece(Button* but) {
 
 void Program::eventSetupNew(Button* but) {
 	const string& name = (dynamic_cast<LabelEdit*>(but) ? static_cast<LabelEdit*>(but) : but->getParent()->getWidget<LabelEdit>(but->getIndex() - 1))->getText();
-	popuplateSetup(static_cast<ProgSetup*>(state)->setups.insert_or_assign(name, Setup()).first->second);
+	populateSetup(static_cast<ProgSetup*>(state)->setups.insert_or_assign(name, Setup()).first->second);
 }
 
 void Program::eventSetupSave(Button* but) {
 	umap<string, Setup>& setups = static_cast<ProgSetup*>(state)->setups;
 	Setup& stp = setups.find(static_cast<Label*>(but)->getText())->second;
 	stp.clear();
-	popuplateSetup(stp);
+	populateSetup(stp);
 }
 
-void Program::popuplateSetup(Setup& setup) {
+void Program::populateSetup(Setup& setup) {
 	for (Tile* it = game.board->getTiles().own(); it != game.board->getTiles().end(); ++it)
 		if (it->getType() < TileType::fortress) {
 			svec2 pos = game.board->ptog(it->getPos());
@@ -995,9 +1022,13 @@ void Program::eventSwitchGameButtons(Button*) {
 
 void Program::eventOpenMatch() {
 	ProgSetup* ps = static_cast<ProgSetup*>(state);
-	game.board->prepareMatch(game.getMyTurn(), ps->rcvMidBuffer.data());
+	game.prepareMatch(ps->rcvMidBuffer.data());
 	setStateWithChat<ProgMatch>(std::move(ps->configName));
 	game.prepareTurn(false);
+	playGameStartAnimations();
+}
+
+void Program::playGameStartAnimations() const {
 	World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYDown, game.board->getScreen()->getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
 	World::scene()->addAnimation(Animation(&World::scene()->camera, std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
 	World::scene()->camera.pmax = Camera::pmaxMatch;
@@ -1258,7 +1289,19 @@ void Program::uninitGame() {
 void Program::finishMatch(Record::Info win) {
 	if (info & INF_UNIQ)
 		disconnect();
-	gui.openPopupMessage(win == Record::win ? "You win" : win == Record::loose ? "You lose" : "You tied", &Program::eventPostFinishMatch);
+	gui.openPopupMessage(winMessage(win), &Program::eventPostFinishMatch);
+}
+
+string Program::winMessage(Record::Info win) {
+	switch (win) {
+	case Record::win:
+		return "You win";
+	case Record::loose:
+		return "You lose";
+	case Record::tie:
+		return "You tied";
+	}
+	return "Invalid finish";
 }
 
 void Program::eventPostFinishMatch(Button*) {
@@ -1302,6 +1345,63 @@ void Program::showGameError(const Com::Error& err) {
 	netcp = nullptr;
 	uninitGame();
 	gui.openPopupMessage(err.what(), (info & (INF_HOST | INF_UNIQ)) == (INF_HOST | INF_UNIQ) ? &Program::eventOpenHostMenu : &Program::eventOpenMainMenu);
+}
+
+// GAME RECORD
+
+void Program::eventOpenRecord(Button* but) {
+	try {
+		RecConfig cfg;
+		RecordReader rr(static_cast<Label*>(but)->getText(), cfg);
+		setState<ProgRecord>(std::move(rr), std::move(cfg.name));
+		game.board->config = cfg;
+		game.board->ownPieceAmts = cfg.ownPieceAmts;
+		game.board->enePieceAmts = cfg.enePieceAmts;
+		game.board->initObjects(true);
+		for (sizet i = 0; i < cfg.tiles.size(); ++i)
+			game.board->getTiles()[i].setType(cfg.tiles[i]);
+		for (sizet i = 0; i < cfg.pieces.size(); ++i) {
+			Piece& pce = game.board->getPieces()[i];
+			pce.setPos(game.board->gtop(cfg.pieces[i]));
+			if (!game.board->pieceOnBoard(&pce))
+				pce.setShow(false);
+		}
+		playGameStartAnimations();
+	} catch (const std::runtime_error& err) {
+		gui.openPopupMessage(err.what(), &Program::eventClosePopup);
+	}
+}
+
+void Program::eventRecordPrevAction(Button*) {
+	executeRecordAction(static_cast<ProgRecord*>(state)->reader.prevAction());
+}
+
+void Program::eventRecordNextAction(Button*) {
+	executeRecordAction(static_cast<ProgRecord*>(state)->reader.nextAction());
+}
+
+void Program::executeRecordAction(const RecAction& action) {
+	ProgRecord* pr = static_cast<ProgRecord*>(state);
+	pr->setButtons(action.prev, action.next);
+	switch (action.type) {
+	case RecAction::piece:
+		game.board->getPieces()[action.aid].setPos(game.board->gtop(action.loc));
+		break;
+	case RecAction::tile:
+		game.board->getTiles()[action.aid].setType(TileType(action.loc.x));
+		break;
+	case RecAction::breach:
+		game.board->getTiles()[action.aid].setBreached(action.loc.x);
+		break;
+	case RecAction::top:
+		game.board->setTileTop(action.aid, inRange(action.loc, svec2(0), game.board->boardLimit()) ? game.board->getTile(action.loc) : nullptr);
+		break;
+	case RecAction::finish:
+		pr->message->setText(winMessage(Record::Info(action.aid)));
+		break;
+	}
+	if (!action.next && action.type != RecAction::finish)
+		pr->message->setText(winMessage(Record::Info::none));
 }
 
 // SETTINGS
@@ -1450,6 +1550,25 @@ void Program::eventSetGammaLE(Button* but) {
 		World::window()->setGamma(gamma);
 		le->setText(toStr(World::sets()->gamma));
 		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->gamma * GuiGen::gammaStepFactor));
+		eventSaveSettings();
+	}
+}
+
+void Program::eventSetFovSL(Button* but) {
+	if (double fov = double(static_cast<Slider*>(but)->getValue()) / GuiGen::fovStepFactor; fov != World::sets()->fov) {
+		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
+		World::scene()->camera.setFov(float(glm::radians(World::sets()->fov)));
+		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->fov));
+	}
+}
+
+void Program::eventSetFovLE(Button* but) {
+	LabelEdit* le = static_cast<LabelEdit*>(but);
+	if (double fov = sstod(le->getText()); fov != World::sets()->fov) {
+		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
+		World::scene()->camera.setFov(float(glm::radians(World::sets()->fov)));
+		le->setText(toStr(World::sets()->fov));
+		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->fov * GuiGen::fovStepFactor));
 		eventSaveSettings();
 	}
 }

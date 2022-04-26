@@ -164,6 +164,8 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 		sets.vsync = strToEnum(Settings::vsyncNames, il.val, Settings::defaultVSync + 1) - 1;
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordGamma))
 		sets.gamma = std::clamp(sstof(il.val), 0.f, Settings::gammaMax);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFov))
+		sets.fov = std::clamp(sstod(il.val), Settings::fovLimit.x, Settings::fovLimit.y);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAVolume))
 		sets.avolume = std::min(sstoull(il.val), ullong(SDL_MIX_MAXVOLUME));
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordColors))
@@ -298,6 +300,7 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(text, iniKeywordTexScale, toStr(sets.texScale));
 	IniLine::write(text, iniKeywordVsync, Settings::vsyncNames[uint8(sets.vsync+1)]);
 	IniLine::write(text, iniKeywordGamma, toStr(sets.gamma));
+	IniLine::write(text, iniKeywordFov, toStr(sets.fov));
 	IniLine::write(text, iniKeywordAVolume, toStr(sets.avolume));
 	IniLine::write(text, iniKeywordColors, string(Settings::colorNames[uint8(sets.colorAlly)]) + ' ' + Settings::colorNames[uint8(sets.colorEnemy)]);
 	IniLine::write(text, iniKeywordScales, string(btos(sets.scaleTiles)) + ' ' + btos(sets.scalePieces));
@@ -360,73 +363,79 @@ umap<string, Config> FileSys::loadConfigs() {
 			cit = &confs.emplace(std::move(il.prp), Config()).first->second;
 			break;
 		case IniLine::prpVal:
-			if (!cit)
-				break;
-			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVictoryPoints))
-				readVictoryPoints(il.val.c_str(), cit);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPorts))
-				cit->opts = stob(il.val) ? cit->opts | Config::ports : cit->opts & ~Config::ports;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordRowBalancing))
-				cit->opts = stob(il.val) ? cit->opts | Config::rowBalancing : cit->opts & ~Config::rowBalancing;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordHomefront))
-				cit->opts = stob(il.val) ? cit->opts | Config::homefront : cit->opts & ~Config::homefront;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSetPieceBattle))
-				readSetPieceBattle(il.val.c_str(), cit);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBoardSize))
-				cit->homeSize = stoiv<svec2>(il.val.c_str(), strtol);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBattlePass))
-				cit->battlePass = std::min(sstoull(il.val), ullong(Config::randomLimit));
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFavorLimit))
-				readFavorLimit(il.val.c_str(), cit);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFirstTurnEngage))
-				cit->opts = stob(il.val) ? cit->opts | Config::firstTurnEngage : cit->opts & ~Config::firstTurnEngage;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTerrainRules))
-				cit->opts = stob(il.val) ? cit->opts | Config::terrainRules : cit->opts & ~Config::terrainRules;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonLate))
-				cit->opts = stob(il.val) ? cit->opts | Config::dragonLate : cit->opts & ~Config::dragonLate;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonStraight))
-				cit->opts = stob(il.val) ? cit->opts | Config::dragonStraight : cit->opts & ~Config::dragonStraight;
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinFortress))
-				cit->winFortress = sstol(il.val);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinThrone))
-				cit->winThrone = sstol(il.val);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordCapturers))
-				cit->capturers = readCapturers(il.val);
+			if (cit)
+				readConfigPrpVal(il, *cit);
 			break;
 		case IniLine::prpKeyVal:
-			if (!cit)
-				break;
-			if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile))
-				readAmount(il, tileNames, cit->tileAmounts);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle))
-				readAmount(il, tileNames, cit->middleAmounts);
-			else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
-				readAmount(il, pieceNames, cit->pieceAmounts);
+			if (cit)
+				readConfigPrpKeyVal(il, *cit);
 		}
 	return !confs.empty() ? confs : umap<string, Config>{ pair(Config::defaultName, Config()) };
 }
 
-void FileSys::readVictoryPoints(const char* str, Config* cfg) {
-	if (string word = readWord(str); !word.empty())
-		cfg->opts = stob(word) ? cfg->opts | Config::victoryPoints : cfg->opts & ~Config::victoryPoints;
-	if (string word = readWord(str); !word.empty())
-		cfg->victoryPointsNum = sstol(word);
-	if (string word = readWord(str); !word.empty())
-		cfg->opts = stob(word) ? cfg->opts | Config::victoryPointsEquidistant : cfg->opts & ~Config::victoryPointsEquidistant;
+void FileSys::readConfigPrpVal(const IniLine& il, Config& cfg) {
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVictoryPoints))
+		readVictoryPoints(il.val.c_str(), cfg);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPorts))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::ports : cfg.opts & ~Config::ports;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordRowBalancing))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::rowBalancing : cfg.opts & ~Config::rowBalancing;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordHomefront))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::homefront : cfg.opts & ~Config::homefront;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSetPieceBattle))
+		readSetPieceBattle(il.val.c_str(), cfg);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBoardSize))
+		cfg.homeSize = stoiv<svec2>(il.val.c_str(), strtol);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordBattlePass))
+		cfg.battlePass = std::min(sstoull(il.val), ullong(Config::randomLimit));
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFavorLimit))
+		readFavorLimit(il.val.c_str(), cfg);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFirstTurnEngage))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::firstTurnEngage : cfg.opts & ~Config::firstTurnEngage;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTerrainRules))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::terrainRules : cfg.opts & ~Config::terrainRules;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonLate))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::dragonLate : cfg.opts & ~Config::dragonLate;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordDragonStraight))
+		cfg.opts = stob(il.val) ? cfg.opts | Config::dragonStraight : cfg.opts & ~Config::dragonStraight;
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinFortress))
+		cfg.winFortress = sstol(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordWinThrone))
+		cfg.winThrone = sstol(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordCapturers))
+		cfg.capturers = readCapturers(il.val);
 }
 
-void FileSys::readSetPieceBattle(const char* str, Config* cfg) {
-	if (string word = readWord(str); !word.empty())
-		cfg->opts = stob(word) ? cfg->opts | Config::setPieceBattle : cfg->opts & ~Config::setPieceBattle;
-	if (string word = readWord(str); !word.empty())
-		cfg->setPieceBattleNum = sstol(word);
+void FileSys::readConfigPrpKeyVal(const IniLine& il, Config& cfg) {
+	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTile))
+		readAmount(il, tileNames, cfg.tileAmounts);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMiddle))
+		readAmount(il, tileNames, cfg.middleAmounts);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordPiece))
+		readAmount(il, pieceNames, cfg.pieceAmounts);
 }
 
-void FileSys::readFavorLimit(const char* str, Config* cfg) {
+void FileSys::readVictoryPoints(const char* str, Config& cfg) {
 	if (string word = readWord(str); !word.empty())
-		cfg->favorLimit = sstol(word);
+		cfg.opts = stob(word) ? cfg.opts | Config::victoryPoints : cfg.opts & ~Config::victoryPoints;
 	if (string word = readWord(str); !word.empty())
-		cfg->opts = stob(word) ? cfg->opts | Config::favorTotal : cfg->opts & ~Config::favorTotal;
+		cfg.victoryPointsNum = sstol(word);
+	if (string word = readWord(str); !word.empty())
+		cfg.opts = stob(word) ? cfg.opts | Config::victoryPointsEquidistant : cfg.opts & ~Config::victoryPointsEquidistant;
+}
+
+void FileSys::readSetPieceBattle(const char* str, Config& cfg) {
+	if (string word = readWord(str); !word.empty())
+		cfg.opts = stob(word) ? cfg.opts | Config::setPieceBattle : cfg.opts & ~Config::setPieceBattle;
+	if (string word = readWord(str); !word.empty())
+		cfg.setPieceBattleNum = sstol(word);
+}
+
+void FileSys::readFavorLimit(const char* str, Config& cfg) {
+	if (string word = readWord(str); !word.empty())
+		cfg.favorLimit = sstol(word);
+	if (string word = readWord(str); !word.empty())
+		cfg.opts = stob(word) ? cfg.opts | Config::favorTotal : cfg.opts & ~Config::favorTotal;
 }
 
 uint16 FileSys::readCapturers(const string& line) {
@@ -437,37 +446,35 @@ uint16 FileSys::readCapturers(const string& line) {
 	return capturers;
 }
 
-template <sizet N, sizet S>
-void FileSys::readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts) {
-	if (uint8 id = strToEnum<uint8>(names, il.key); id < amts.size())
-		amts[id] = sstol(il.val);
-}
-
 void FileSys::saveConfigs(const umap<string, Config>& confs) {
 	string text;
 	for (auto& [name, cfg] : confs) {
 		IniLine::write(text, name);
-		IniLine::write(text, iniKeywordVictoryPoints, string(btos(cfg.opts & Config::victoryPoints)) + ' ' + toStr(cfg.victoryPointsNum) + ' ' + btos(cfg.opts & Config::victoryPointsEquidistant));
-		IniLine::write(text, iniKeywordPorts, btos(cfg.opts & Config::ports));
-		IniLine::write(text, iniKeywordRowBalancing, btos(cfg.opts & Config::rowBalancing));
-		IniLine::write(text, iniKeywordHomefront, btos(cfg.opts & Config::homefront));
-		IniLine::write(text, iniKeywordSetPieceBattle, string(btos(cfg.opts & Config::setPieceBattle)) + ' ' + toStr(cfg.setPieceBattleNum));
-		IniLine::write(text, iniKeywordBoardSize, toStr(cfg.homeSize));
-		IniLine::write(text, iniKeywordBattlePass, toStr(cfg.battlePass));
-		IniLine::write(text, iniKeywordFavorLimit, toStr(cfg.favorLimit) + ' ' + btos(cfg.opts & Config::favorTotal));
-		IniLine::write(text, iniKeywordFirstTurnEngage, btos(cfg.opts & Config::firstTurnEngage));
-		IniLine::write(text, iniKeywordTerrainRules, btos(cfg.opts & Config::terrainRules));
-		IniLine::write(text, iniKeywordDragonLate, btos(cfg.opts & Config::dragonLate));
-		IniLine::write(text, iniKeywordDragonStraight, btos(cfg.opts & Config::dragonStraight));
-		IniLine::write(text, iniKeywordWinFortress, toStr(cfg.winFortress));
-		IniLine::write(text, iniKeywordWinThrone, toStr(cfg.winThrone));
-		writeCapturers(text, cfg.capturers);
-		writeAmounts(text, iniKeywordTile, tileNames, cfg.tileAmounts);
-		writeAmounts(text, iniKeywordMiddle, tileNames, cfg.middleAmounts);
-		writeAmounts(text, iniKeywordPiece, pieceNames, cfg.pieceAmounts);
-		text += linend;
+		writeConfig(text, cfg);
 	}
 	saveUserFile(dirConfig, fileConfigs, text);
+}
+
+void FileSys::writeConfig(string& text, const Config& cfg) {
+	IniLine::write(text, iniKeywordVictoryPoints, string(btos(cfg.opts & Config::victoryPoints)) + ' ' + toStr(cfg.victoryPointsNum) + ' ' + btos(cfg.opts & Config::victoryPointsEquidistant));
+	IniLine::write(text, iniKeywordPorts, btos(cfg.opts & Config::ports));
+	IniLine::write(text, iniKeywordRowBalancing, btos(cfg.opts & Config::rowBalancing));
+	IniLine::write(text, iniKeywordHomefront, btos(cfg.opts & Config::homefront));
+	IniLine::write(text, iniKeywordSetPieceBattle, string(btos(cfg.opts & Config::setPieceBattle)) + ' ' + toStr(cfg.setPieceBattleNum));
+	IniLine::write(text, iniKeywordBoardSize, toStr(cfg.homeSize));
+	IniLine::write(text, iniKeywordBattlePass, toStr(cfg.battlePass));
+	IniLine::write(text, iniKeywordFavorLimit, toStr(cfg.favorLimit) + ' ' + btos(cfg.opts & Config::favorTotal));
+	IniLine::write(text, iniKeywordFirstTurnEngage, btos(cfg.opts & Config::firstTurnEngage));
+	IniLine::write(text, iniKeywordTerrainRules, btos(cfg.opts & Config::terrainRules));
+	IniLine::write(text, iniKeywordDragonLate, btos(cfg.opts & Config::dragonLate));
+	IniLine::write(text, iniKeywordDragonStraight, btos(cfg.opts & Config::dragonStraight));
+	IniLine::write(text, iniKeywordWinFortress, toStr(cfg.winFortress));
+	IniLine::write(text, iniKeywordWinThrone, toStr(cfg.winThrone));
+	writeCapturers(text, cfg.capturers);
+	writeAmounts(text, iniKeywordTile, tileNames, cfg.tileAmounts);
+	writeAmounts(text, iniKeywordMiddle, tileNames, cfg.middleAmounts);
+	writeAmounts(text, iniKeywordPiece, pieceNames, cfg.pieceAmounts);
+	text += linend;
 }
 
 void FileSys::writeCapturers(string& text, uint16 capturers) {
@@ -478,12 +485,6 @@ void FileSys::writeCapturers(string& text, uint16 capturers) {
 	if (!str.empty())
 		str.pop_back();
 	IniLine::write(text, iniKeywordCapturers, str);
-}
-
-template <sizet N, sizet S>
-void FileSys::writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts) {
-	for (sizet i = 0; i < amts.size(); ++i)
-		IniLine::write(text, word, names[i], toStr(amts[i]));
 }
 
 umap<string, Setup> FileSys::loadSetups() {
@@ -735,6 +736,34 @@ void FileSys::listOperateDirectory(const string& dirPath, F func) {
 #endif
 }
 
+vector<string> FileSys::listFiles(const string& dirPath) {
+	vector<string> entries;
+#ifdef _WIN32
+	WIN32_FIND_DATAW data;
+	if (HANDLE hFind = FindFirstFileW(sstow(dirPath + '*').c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L"..") && !(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				entries.push_back(cwtos(data.cFileName));
+		} while (FindNextFileW(hFind, &data));
+		FindClose(hFind);
+	}
+#else
+	if (DIR* directory = opendir(dirPath.c_str())) {
+		while (dirent* entry = readdir(directory))
+			if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) {
+				if (entry->d_type == DT_REG)
+					entries.emplace_back(entry->d_name);
+				else if (entry->d_type == DT_LNK)
+					if (struct stat ps; !stat((dirPath + entry->d_name).c_str(), &ps) && (ps.st_mode & S_IFMT) == S_IFREG)
+						entries.emplace_back(entry->d_name);
+			}
+		closedir(directory);
+	}
+#endif
+	std::sort(entries.begin(), entries.end(), strnatless);
+	return entries;
+}
+
 void FileSys::saveUserFile(const string& drc, const char* file, const string& text) {
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	if (!createDirectories(drc)) {
@@ -785,7 +814,7 @@ string::iterator FileSys::fileLevelPos(string& str) {
 void FileSys::saveScreenshot(SDL_Surface* img, const string& desc) {
 	if (img) {
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-		if (string path = dirConfig + "/screenshots/"; createDirectories(path)) {
+		if (string path = dirConfig + "screenshots/"; createDirectories(path)) {
 			if (IMG_SavePNG(img, (path + "thrones_" + (desc.empty() ? DateTime::now().toString() : desc) + ".png").c_str()))
 				logError("failed to save screenshot: ", IMG_GetError());
 		} else

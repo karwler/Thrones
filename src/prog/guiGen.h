@@ -3,6 +3,7 @@
 #include "types.h"
 #include "utils/settings.h"
 #include "utils/utils.h"
+#include <functional>
 
 class GuiGen {
 public:
@@ -29,6 +30,7 @@ public:
 		setupSideWidth,
 		matchSideWidth,
 		matchPointsLen,
+		recordSideWidth,
 		settingsSideWidth,
 		settingsDescWidth,
 		settingsAddWidth,
@@ -98,6 +100,7 @@ public:
 
 	static constexpr float defaultDim = 0.5f;
 	static constexpr float gammaStepFactor = 10.f;
+	static constexpr double fovStepFactor = 10.0;
 	static constexpr char rv2iSeparator[] = " x ";
 	static constexpr char msgFavorPick[] = "Pick a fate's favor";
 	static constexpr char msgPickPiece[] = "Pick piece (";
@@ -122,7 +125,7 @@ private:
 
 public:
 	void initSizes();
-	void calsSizes();
+	void calcSizes();
 	const int* getSize(SizeRef id) const;
 
 	void openPopupMessage(string msg, BCall ccal, string&& ctxt = "Okay") const;
@@ -130,6 +133,7 @@ public:
 	void openPopupInput(string&& msg, string text, BCall kcal, uint16 limit = UINT16_MAX) const;
 	void openPopupFavorPick(uint16 availableFF) const;
 	void openPopupConfig(const string& configName, const Config& cfg, ScrollArea*& configList, bool match);
+	void openPopupRecords() const;
 	void openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const;
 	void openPopupPiecePicker(uint16 piecePicksLeft) const;
 	void openPopupSpawner() const;
@@ -145,14 +149,16 @@ public:
 	Overlay* createGameMessage(Label*& message, bool setup) const;
 	Overlay* createGameChat(TextBox*& chatBox) const;
 	vector<Widget*> createBottomIcons(bool tiles) const;
+	array<Widget*, 2> createConfSetsButtons() const;
 	Size keyGetLineSize(Binding::Type bind) const;
 	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
 
 	uptr<RootLayout> makeMainMenu(Interactable*& selected, LabelEdit*& pname, Label*& versionNotif);
 	uptr<RootLayout> makeLobby(Interactable*& selected, TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff);
 	uptr<RootLayout> makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO& rio, TextBox*& chatBox, ComboBox*& configName, const umap<string, Config>& confs, const string& startConfig);
-	uptr<RootLayout> makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch);
-	uptr<RootLayout> makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons);
+	uptr<RootLayout> makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex);
+	uptr<RootLayout> makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex);
+	uptr<RootLayout> makeRecord(Interactable*& selected, Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex);
 	uptr<RootLayout> makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart);
 	uptr<RootLayout> makeInfo(Interactable*& selected, ScrollArea*& content);
 

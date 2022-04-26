@@ -46,7 +46,7 @@ void Context::updateInstances() {
 
 	uint id = selInst + 1;
 	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + vis.x * lineHeight - scroll.listPos.y); vis.x < vis.y; ++vis.x, ++id, pos.y += lineHeight)
-		setInstance(id, Rect(pos, items[vis.x].first.rct.size()), rct, vec4(1.f), items[vis.x].first, -1.f);
+		setInstance(id, Rect(pos, items[vis.x].first.rct.size()), rct, vec4(1.f), items[vis.x].first, -1.f);	// TODO: what's even the point of z?
 	scroll.setInstances(this, id, listSize, position, size, true, -1.f);
 	updateInstanceData(0, instanceData.size());
 }

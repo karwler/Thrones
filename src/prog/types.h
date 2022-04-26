@@ -102,6 +102,7 @@ struct Config {
 
 	svec2 homeSize = { 9, 4 };	// neither width nor height shall exceed UINT8_MAX
 	uint8 battlePass = randomLimit / 2;
+	bool record = false;
 	Option opts = favorTotal | terrainRules | dragonStraight;
 	uint16 victoryPointsNum = 21;
 	uint16 setPieceBattleNum = 10;
@@ -112,6 +113,7 @@ struct Config {
 	uint16 winThrone = 1;
 	uint16 winFortress = 1;
 	uint16 capturers = 1 << uint8(PieceType::throne);	// bitmask of piece types that can capture fortresses
+	string recordName;
 
 	Config& checkValues();
 	uint16 dataSize(const string& name) const;

@@ -41,16 +41,6 @@ void checkFramebufferStatus(const string& name) {
 	}
 }
 
-uint32 ceilPower2(uint32 val) {
-	--val;
-	val |= val >> 1;
-	val |= val >> 2;
-	val |= val >> 8;
-	val |= val >> 4;
-	val |= val >> 16;
-	return val + 1;
-}
-
 pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img) {
 	if (!img)
 		return pair(img, GL_NONE);
@@ -493,4 +483,16 @@ bool Sound::convert(const SDL_AudioSpec& srcs, const SDL_AudioSpec& dsts) {
 	SDL_memcpy(data, cvt.buf, length);
 	SDL_free(cvt.buf);
 	return true;
+}
+
+// MATH
+
+uint32 ceilPower2(uint32 val) {
+	--val;
+	val |= val >> 1;
+	val |= val >> 2;
+	val |= val >> 8;
+	val |= val >> 4;
+	val |= val >> 16;
+	return val + 1;
 }

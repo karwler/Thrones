@@ -136,6 +136,8 @@ public:
 	static constexpr char fileVert[] = "frame.vert";
 	static constexpr char fileFrag[] = "final.frag";
 
+	GLint gamma;
+
 	ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets);
 
 private:

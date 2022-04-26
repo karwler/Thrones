@@ -64,7 +64,7 @@ uint16 Board::initConfig(const Config& cfg) {
 	return piecePicksLeft;
 }
 
-void Board::initObjects(bool regular, bool initPieces) {
+void Board::initObjects(bool regular, bool basicInitPieces, bool initAllPieces) {
 	boardHeight = config.homeSize.y * 2 + 1;
 	objectSize = Config::boardWidth / float(std::max(config.homeSize.x, boardHeight));
 	tilesOffset = (Config::boardWidth - objectSize * vec2(config.homeSize.x, boardHeight)) / 2.f;
@@ -92,7 +92,7 @@ void Board::initObjects(bool regular, bool initPieces) {
 	mesh->updateInstanceDataTop();
 	setMidFortressTiles();
 
-	if (initPieces) {
+	if (basicInitPieces) {
 		pieces.update(config, regular);
 		setPieces(pieces.own(), glm::pi<float>());
 		setPieces(pieces.ene(), 0.f);
@@ -100,7 +100,7 @@ void Board::initObjects(bool regular, bool initPieces) {
 		Mesh* meshes[pieceNames.size()];
 		for (uint8 i = 0; i < pieceNames.size(); ++i) {
 			meshes[i] = scene->mesh(pieceNames[i]);
-			meshes[i]->allocate(ownPieceAmts[i], true);
+			meshes[i]->allocate(!initAllPieces ? ownPieceAmts[i] : ownPieceAmts[i] + enePieceAmts[i], true);
 		}
 
 		matl = scene->material(Settings::colorNames[uint8(sets->colorAlly)]);
@@ -110,10 +110,22 @@ void Board::initObjects(bool regular, bool initPieces) {
 			for (; c >= ownPieceAmts[t]; ++t, c = 0);
 			pieces.own(i)->init(meshes[t], c, matl, tex, false, PieceType(t));
 		}
+		if (initAllPieces)
+			initEnePieces(meshes);
 		for (Mesh* it : meshes) {
 			it->updateInstanceData();
 			it->updateInstanceDataTop();
 		}
+	}
+}
+
+void Board::initEnePieces(Mesh** meshes) {
+	const Material* matl = scene->material(Settings::colorNames[uint8(sets->colorEnemy)]);
+	uvec2 tex = scene->objTex("metal");
+	uint8 t = 0;
+	for (uint16 i = 0, c = 0; i < pieces.getNum(); ++i, ++c) {
+		for (; c >= enePieceAmts[t]; ++t, c = 0);
+		pieces.ene(i)->init(meshes[t], enePieceAmts[t] + c, matl, tex, true, PieceType(t));
 	}
 }
 
@@ -544,8 +556,13 @@ TileTop Board::findTileTop(const Tile* tile) {
 }
 
 void Board::setTileTop(TileTop top, const Tile* tile) {
-	tileTops[top].setPos(vec3(tile->getPos().x, tileTops[top].getPos().y, tile->getPos().z));
-	tileTops[top].setShow(true);
+	if (tile) {
+		tileTops[top].setPos(vec3(tile->getPos().x, tileTops[top].getPos().y, tile->getPos().z));
+		tileTops[top].setShow(true);
+	} else {
+		tileTops[top].setPos(gtop(svec2(UINT16_MAX)));
+		tileTops[top].setShow(false);
+	}
 }
 
 void Board::selectEstablishers() {

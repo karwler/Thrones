@@ -455,7 +455,6 @@ ShaderStartup* WindowSys::createWindow() {
 	} else if (sets->screen == Settings::Screen::fullscreen)
 		SDL_SetWindowDisplayMode(window, &sets->mode);
 #endif
-	SDL_SetWindowBrightness(window, sets->gamma);
 
 	// load icons
 #ifndef __ANDROID__
@@ -536,6 +535,7 @@ ShaderStartup* WindowSys::createWindow() {
 	sfinal = new ShaderFinal(sources.at(ShaderFinal::fileVert), sources.at(ShaderFinal::fileFrag), sets);
 	skybox = new ShaderSkybox(sources.at(ShaderSkybox::fileVert), sources.at(ShaderSkybox::fileFrag));
 	gui = new ShaderGui(sources.at(ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
+	setGamma(sets->gamma);
 
 	ShaderStartup* stlog = new ShaderStartup(sources.at(ShaderStartup::fileVert), sources.at(ShaderStartup::fileFrag));
 	glUniform2f(stlog->pview, float(screenView.x) / 2.f, float(screenView.y) / 2.f);
@@ -709,13 +709,14 @@ bool WindowSys::trySetSwapInterval() {
 }
 
 void WindowSys::setScreen() {
+	bool hadTitleBar = titleBarHeight;
 	if (sets->display >= SDL_GetNumVideoDisplays())
 		sets->display = 0;
 	checkResolution(sets->size, windowSizes());
 	checkResolution(sets->mode, displayModes());
 	setWindowMode();
 	program->getGui()->makeTitleBar();
-	program->getState()->updateTitleBar();
+	program->getState()->updateTitleBar(hadTitleBar);
 	scene->onResize();
 }
 
@@ -777,7 +778,8 @@ void WindowSys::setTitleBarHitTest() {
 
 void WindowSys::setGamma(float gamma) {
 	sets->gamma = std::clamp(gamma, 0.f, Settings::gammaMax);
-	SDL_SetWindowBrightness(window, sets->gamma);
+	glUseProgram(*sfinal);
+	glUniform1f(sfinal->gamma, 1.f / sets->gamma);
 }
 
 void WindowSys::resetSettings() {
@@ -790,7 +792,7 @@ void WindowSys::resetSettings() {
 	checkCurDisplay();
 	setMultisampling();
 	setSwapInterval();
-	SDL_SetWindowBrightness(window, sets->gamma);
+	setGamma(sets->gamma);
 	setScreen();
 }
 

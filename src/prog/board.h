@@ -32,7 +32,8 @@ public:
 	Board(Scene* sceneSys, Settings* settings);
 
 	uint16 initConfig(const Config& cfg);	// returns number of pieces left to pick
-	void initObjects(bool regular, bool initPieces = true);
+	void initObjects(bool regular, bool basicInitPieces = true, bool initAllPieces = false);
+	void initEnePieces(Mesh** meshes);
 #ifndef NDEBUG
 	void initDummyObjects();
 #endif
@@ -121,6 +122,7 @@ public:
 	uint16 invertId(uint16 i) const;
 	uint16 tileId(const Tile* tile) const;
 	uint16 inverseTileId(const Tile* tile) const;
+	uint16 pieceId(const Piece* piece) const;
 	uint16 inversePieceId(Piece* piece) const;
 	void updateTileInstances(Tile* til, Mesh* old);
 
@@ -263,6 +265,10 @@ inline uint16 Board::tileId(const Tile* tile) const {
 
 inline uint16 Board::inverseTileId(const Tile* tile) const {
 	return tiles.end() - tile - 1;
+}
+
+inline uint16 Board::pieceId(const Piece* piece) const {
+	return piece - pieces.begin();
 }
 
 inline uint16 Board::inversePieceId(Piece* piece) const {

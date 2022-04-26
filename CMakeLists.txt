@@ -160,6 +160,8 @@ set(THRONES_SRC
 	"src/prog/program.h"
 	"src/prog/progs.cpp"
 	"src/prog/progs.h"
+	"src/prog/recorder.cpp"
+	"src/prog/recorder.h"
 	"src/prog/types.cpp"
 	"src/prog/types.h"
 	"src/server/server.cpp"

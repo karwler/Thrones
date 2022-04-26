@@ -125,7 +125,6 @@ public:
 		dragging	// user is moving it
 	};
 
-	static constexpr float fov = glm::radians(35.f);
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
 	static constexpr float pmaxSetup = -glm::half_pi<float>() + glm::pi<float>() / 10.f, pmaxMatch = -glm::half_pi<float>() + glm::pi<float>() / 20.f;
@@ -145,13 +144,15 @@ private:
 	float defaultPdst;
 	vec3 pos, lat;
 	mat4 proj;
+	float fov;
 public:
 	State state = State::stationary;
 
-	Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax);
+	Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax);
 
 	void updateView() const;
-	void updateProjection();
+	void updateProjection();	// call updateView afterwards
+	void setFov(float vfov);
 	const vec3& getPos() const;
 	const vec3& getLat() const;
 	void setPos(const vec3& newPos, const vec3& newLat);
@@ -287,7 +288,7 @@ private:
 	Frame scrFrame;
 	Skybox skybox;
 public:
-	Camera camera = Camera(Camera::posSetup, Camera::latSetup, Camera::pmaxSetup, Camera::ymaxSetup);
+	Camera camera;
 private:
 	Quad wgtTops;
 

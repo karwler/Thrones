@@ -25,6 +25,17 @@ void Game::finishSetup() {
 	vpOwn = vpEne = 0;
 }
 
+void Game::prepareMatch(TileType* buf) {
+	board->prepareMatch(myTurn, buf);
+	if (board->config.record) {
+		try {
+			recWriter = std::make_unique<RecordWriter>(World::state<ProgGame>()->configName, board);
+		} catch (const std::runtime_error& err) {
+			logError(err.what());
+		}
+	}
+}
+
 void Game::finishFavor(Favor next, Favor previous) {
 	if (previous != Favor::none) {
 		if (lastFavorUsed) {
@@ -350,6 +361,7 @@ bool Game::checkWin() {
 void Game::doWin(Record::Info win) {
 	ownRec.info = win;
 	endTurn();
+	capRec(win);
 	World::program()->finishMatch(win);
 }
 
@@ -358,6 +370,7 @@ void Game::surrender() {
 	sendb.push(uint8(Record::loose));
 	sendb.push({ uint16(UINT16_MAX), uint16(0) });
 	World::netcp()->sendData(sendb);
+	capRec(Record::loose);
 	World::program()->finishMatch(Record::loose);
 }
 
@@ -472,17 +485,10 @@ void Game::recvSetup(const uint8* data) {
 
 	Mesh* meshes[pieceNames.size()];
 	for (uint8 i = 0; i < pieceNames.size(); ++i) {
-		uint total = board->ownPieceAmts[i] + board->enePieceAmts[i];
 		meshes[i] = World::scene()->mesh(pieceNames[i]);
-		meshes[i]->allocate(total, true);
+		meshes[i]->allocate(board->ownPieceAmts[i] + board->enePieceAmts[i], true);
 	}
-	uint8 t = 0;
-	const Material* matl = World::scene()->material(Settings::colorNames[uint8(World::sets()->colorEnemy)]);
-	uvec2 tex = World::scene()->objTex("metal");
-	for (uint16 i = 0, c = 0; i < board->getPieces().getNum(); ++i, ++c) {
-		for (; c >= board->enePieceAmts[t]; ++t, c = 0);
-		board->getPieces().ene(i)->init(meshes[t], board->enePieceAmts[t] + c, matl, tex, true, PieceType(t));
-	}
+	board->initEnePieces(meshes);
 	for (Mesh* it : meshes)
 		it->updateInstanceData();
 	for (uint16 i = 0; i < board->getPieces().getNum(); ++i) {
@@ -506,9 +512,12 @@ void Game::recvSetup(const uint8* data) {
 
 void Game::recvMove(const uint8* data) {
 	Piece& pce = board->getPieces()[Com::read16(data)];
-	uint16 pos = Com::read16(data + sizeof(uint16));
-	if (pce.updatePos(board->idToPos(pos)); pce.getType() == PieceType::throne && board->getTiles()[pos].getType() == TileType::fortress)
-		pce.lastFortress = pos;
+	uint16 id = Com::read16(data + sizeof(uint16));
+	svec2 pos = board->idToPos(id);
+	capRec(&pce, pos);
+	pce.updatePos(pos);
+	if (pce.getType() == PieceType::throne && board->getTiles()[id].getType() == TileType::fortress)
+		pce.lastFortress = id;
 }
 
 void Game::placePiece(Piece* piece, svec2 pos) {
@@ -516,6 +525,7 @@ void Game::placePiece(Piece* piece, svec2 pos) {
 		if (piece->lastFortress = fid; availableFF < std::accumulate(favorsLeft.begin(), favorsLeft.end(), uint16(0)))
 			++availableFF;
 
+	capRec(piece, pos);
 	piece->updatePos(pos, true);
 	sendb.pushHead(Com::Code::move);
 	sendb.push({ board->inversePieceId(piece), board->invertId(board->posToId(pos)) });
@@ -526,14 +536,19 @@ void Game::recvKill(const uint8* data) {
 	Piece* pce = &board->getPieces()[Com::read16(data)];
 	if (board->isOwnPiece(pce))
 		board->setPxpadPos(pce);
+	capRec(pce);
 	pce->updatePos();
 }
 
 void Game::recvBreach(const uint8* data) {
-	board->getTiles()[Com::read16(data)].setBreached(data[sizeof(uint16)]);
+	uint16 id = Com::read16(data);
+	bool yes = data[sizeof(uint16)];
+	capRec(&board->getTiles()[id], yes);
+	board->getTiles()[id].setBreached(yes);
 }
 
 void Game::removePiece(Piece* piece) {
+	capRec(piece);
 	piece->updatePos();
 	sendb.pushHead(Com::Code::kill);
 	sendb.push(board->inversePieceId(piece));
@@ -541,6 +556,7 @@ void Game::removePiece(Piece* piece) {
 }
 
 void Game::breachTile(Tile* tile, bool yes) {
+	capRec(tile, yes);
 	tile->setBreached(yes);
 	sendb.pushHead(Com::Code::breach);
 	sendb.push(board->inverseTileId(tile));
@@ -549,21 +565,55 @@ void Game::breachTile(Tile* tile, bool yes) {
 }
 
 void Game::recvTile(const uint8* data) {
-	uint16 pos = Com::read16(data);
-	if (board->getTiles()[pos].setType(TileType(data[sizeof(uint16)] & 0xF)); board->getTiles()[pos].getType() == TileType::fortress)
-		if (Piece* pce = board->findOccupant(board->idToPos(pos)); pce && pce->getType() == PieceType::throne)
-			pce->lastFortress = pos;
-	if (TileTop top = TileTop(data[sizeof(uint16)] >> 4); top != TileTop::none)
-		board->setTileTop(top, &board->getTiles()[pos]);
+	uint16 id = Com::read16(data);
+	TileType type = TileType(data[sizeof(uint16)] & 0xF);
+	capRec(&board->getTiles()[id], type);
+	if (board->getTiles()[id].setType(type); board->getTiles()[id].getType() == TileType::fortress)
+		if (Piece* pce = board->findOccupant(board->idToPos(id)); pce && pce->getType() == PieceType::throne)
+			pce->lastFortress = id;
+	if (TileTop top = TileTop(data[sizeof(uint16)] >> 4); top != TileTop::none) {
+		capRec(top, &board->getTiles()[id]);
+		board->setTileTop(top, &board->getTiles()[id]);
+	}
 }
 
 void Game::changeTile(Tile* tile, TileType type, TileTop top) {
-	if (tile->setType(type); top != TileTop::none)
+	capRec(tile, type);
+	tile->setType(type);
+	if (top != TileTop::none) {
+		capRec(top, tile);
 		board->setTileTop(top, tile);
+	}
 	sendb.pushHead(Com::Code::tile);
 	sendb.push(board->inverseTileId(tile));
 	sendb.push(uint8(uint8(type) | (top.invert() << 4)));
 	World::netcp()->sendData(sendb);
+}
+
+void Game::capRec(Piece* piece, svec2 pos) {
+	if (recWriter)
+		recWriter->piece(board->pieceId(piece), board->ptog(piece->getPos()), pos);
+}
+
+void Game::capRec(Tile* tile, TileType type) {
+	if (recWriter)
+		recWriter->tile(board->tileId(tile), tile->getType(), type);
+}
+
+void Game::capRec(Tile* tile, bool breach) {
+	if (recWriter)
+		recWriter->breach(board->tileId(tile), tile->getBreached(), breach);
+}
+
+void Game::capRec(TileTop top, Tile* tile) {
+	if (recWriter)
+		recWriter->top(top, board->ptog(board->getTileTop(top)->getPos()), board->ptog(tile->getPos()));
+}
+
+void Game::capRec(Record::Info info) {
+	if (recWriter)
+		recWriter->finish(info);
+	recWriter.reset();
 }
 
 #ifndef NDEBUG

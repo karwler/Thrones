@@ -469,6 +469,7 @@ Settings::Settings() :
 	versionLookupUrl(defaultVersionLocation),
 	versionLookupRegex(defaultVersionRegex),
 	font(defaultFont),
+	fov(35.0),
 	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
 	size(1280, 720),
 	gamma(1.f),

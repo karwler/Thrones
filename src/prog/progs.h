@@ -1,6 +1,7 @@
 #pragma once
 
 #include "guiGen.h"
+#include "recorder.h"
 
 // for handling program state specific things that occur in all states
 class ProgState {
@@ -75,7 +76,7 @@ public:
 	virtual uint8 switchButtons(uint8 but);
 	virtual uptr<RootLayout> createLayout(Interactable*& selected) = 0;
 	virtual vector<Overlay*> createOverlays();
-	virtual void updateTitleBar();
+	virtual void updateTitleBar(bool hadTitleBar);
 
 	void initObjectDrag(BoardObject* bob, Mesh* mesh, vec2 pos);
 
@@ -176,21 +177,25 @@ private:
 
 class ProgGame : public ProgState {
 public:
-	Navigator* planeSwitch;
-	Label* message;
-	Icon* bswapIcon;
+	Navigator* planeSwitch = nullptr;
+	Label* message = nullptr;
+	Icon* bswapIcon = nullptr;
 	string configName;
+protected:
+	Layout* sideBar;
+	sizet confSetsIndex;
 
+public:
 	ProgGame(string config);
 	~ProgGame() override = default;
 
 	void eventScrollUp(float val) override;
 	void eventScrollDown(float val) override;
-	virtual void eventOpenConfig() override;
+	void eventOpenConfig() override;
 
 	uint8 switchButtons(uint8 but) override;
 	vector<Overlay*> createOverlays() override;
-	void updateTitleBar() override;
+	void updateTitleBar(bool hadTitleBar) override;
 private:
 	void axisScroll(float val);
 };
@@ -319,6 +324,23 @@ inline const Icon* ProgMatch::getDestroyIcon() const {
 	return mio.destroy;
 }
 
+class ProgRecord : public ProgGame {
+public:
+	RecordReader reader;	// TODO: use this and the buttons
+private:
+	Label* back;
+	Label* next;
+
+public:
+	ProgRecord(RecordReader&& rr, string&& config);
+	~ProgRecord() override = default;
+
+	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	vector<Overlay*> createOverlays() override;
+
+	void setButtons(bool canBack, bool canNext);
+};
+
 class ProgSettings : public ProgState {
 public:
 	~ProgSettings() override = default;
@@ -328,7 +350,7 @@ public:
 	void eventOpenSettings() override {}
 
 	uptr<RootLayout> createLayout(Interactable*& selected) override;
-	void updateTitleBar() override;
+	void updateTitleBar(bool hadTitleBar) override;
 };
 
 class ProgInfo : public ProgState {
@@ -342,5 +364,5 @@ public:
 	void eventOpenSettings() override {}
 
 	uptr<RootLayout> createLayout(Interactable*& selected) override;
-	void updateTitleBar() override;
+	void updateTitleBar(bool hadTitleBar) override;
 };

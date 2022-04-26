@@ -11,7 +11,6 @@ enum class UserCode : int32 {
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
 void checkFramebufferStatus(const string& name);
-uint32 ceilPower2(uint32 val);
 pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
 SDL_Surface* takeScreenshot(ivec2 res);
 
@@ -514,7 +513,9 @@ inline void Sound::free() {
 	SDL_FreeWAV(data);
 }
 
-// geometry?
+// math
+
+uint32 ceilPower2(uint32 val);
 
 template <class T>
 T btom(bool fwd) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "prog/types.h"
+#include "recorder.h"
 #include "server/server.h"
 #include <random>
 
@@ -16,6 +16,7 @@ private:
 	std::default_random_engine randGen;
 	std::uniform_int_distribution<uint> randDist;
 	Com::Buffer sendb;
+	uptr<RecordWriter> recWriter;
 
 	Record ownRec, eneRec;	// what happened during this/previous turn
 	bool anyFavorUsed, lastFavorUsed;
@@ -27,6 +28,7 @@ public:
 	~Game();
 
 	void finishSetup();
+	void prepareMatch(TileType* buf);
 	void finishFavor(Favor next, Favor previous);
 	void setNoEngage(Piece* piece);
 	bool getMyTurn() const;
@@ -71,6 +73,12 @@ private:
 	void removePiece(Piece* piece);				// remove from board
 	void breachTile(Tile* tile, bool yes = true);
 	static string actionRecordMsg(Action action, bool self);
+
+	void capRec(Piece* piece, svec2 pos = svec2(UINT16_MAX));
+	void capRec(Tile* tile, TileType type);
+	void capRec(Tile* tile, bool breach);
+	void capRec(TileTop top, Tile* tile);
+	void capRec(Record::Info info);
 
 #ifndef NDEBUG
 	Piece* readCommandPieceId(const char*& cmd);

@@ -65,6 +65,7 @@ private:
 	static constexpr char iniKeywordSsao[] = "ssao";
 	static constexpr char iniKeywordBloom[] = "bloom";
 	static constexpr char iniKeywordGamma[] = "gamma";
+	static constexpr char iniKeywordFov[] = "fov";
 	static constexpr char iniKeywordAVolume[] = "volume";
 	static constexpr char iniKeywordColors[] = "colors";
 	static constexpr char iniKeywordScales[] = "scales";
@@ -124,7 +125,12 @@ public:
 	static Settings loadSettings(InputSys* input);
 	static void saveSettings(const Settings& sets, const InputSys* input);
 	static umap<string, Config> loadConfigs();
+	static void readConfigPrpVal(const IniLine& il, Config& cfg);
+	static void readConfigPrpKeyVal(const IniLine& il, Config& cfg);
 	static void saveConfigs(const umap<string, Config>& confs);
+	static void writeConfig(string& text, const Config& cfg);
+	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
+	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
 	static umap<string, Setup> loadSetups();
 	static void saveSetups(const umap<string, Setup>& sets);
 	static vector<string> listFonts();
@@ -135,6 +141,7 @@ public:
 	static umap<string, TexLoc> loadTextures(TextureSet& tset, TextureCol& tcol, float scale, int recomTexSize);
 	static void reloadTextures(TextureSet& tset, float scale);
 	static void saveScreenshot(SDL_Surface* img, const string& desc = string());
+	static vector<string> listFiles(const string& dirPath);
 
 #ifdef __EMSCRIPTEN__
 	static bool canRead();
@@ -145,6 +152,7 @@ public:
 	static string docPath();
 #endif
 	static const string& getDirConfig();
+	static string recordPath();
 private:
 	static string texturePath();
 
@@ -155,13 +163,11 @@ private:
 	static void readVersionLookup(const char* str, Settings& sets);
 	static void readBinding(void* inputSys, IniLine& il);
 
-	static void readVictoryPoints(const char* str, Config* cfg);
-	static void readSetPieceBattle(const char* str, Config* cfg);
-	static void readFavorLimit(const char* str, Config* cfg);
+	static void readVictoryPoints(const char* str, Config& cfg);
+	static void readSetPieceBattle(const char* str, Config& cfg);
+	static void readFavorLimit(const char* str, Config& cfg);
 	static uint16 readCapturers(const string& line);
 	static void writeCapturers(string& text, uint16 capturers);
-	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
-	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
 	static void saveUserFile(const string& drc, const char* file, const string& text);
 	static tuple<Texplace, sizet, string> beginTextureLoad(const string& dirPath, string& name, bool noWidget);
 	static void loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, sizet num, GLenum ifmt, TextureSet::Import& imp, float scale);
@@ -195,12 +201,28 @@ inline string FileSys::docPath() {
 }
 #endif
 
+inline string FileSys::recordPath() {
+	return dirConfig + "records/";
+}
+
 inline string FileSys::texturePath() {
 	return dataPath() + "textures/";
 }
 
 inline const string& FileSys::getDirConfig() {
 	return dirConfig;
+}
+
+template <sizet N, sizet S>
+void FileSys::writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts) {
+	for (sizet i = 0; i < amts.size(); ++i)
+		IniLine::write(text, word, names[i], toStr(amts[i]));
+}
+
+template <sizet N, sizet S>
+void FileSys::readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts) {
+	if (uint8 id = strToEnum<uint8>(names, il.key); id < amts.size())
+		amts[id] = sstol(il.val);
 }
 
 inline bool operator&(FileSys::Texplace a, FileSys::Texplace b) {

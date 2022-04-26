@@ -352,7 +352,8 @@ struct Settings {
 #endif
 	static constexpr VSync defaultVSync = VSync::synchronized;
 	static constexpr uint8 shadowBitMax = 13;
-	static constexpr float gammaMax = 2.f;
+	static constexpr float gammaMax = 4.f;
+	static constexpr dvec2 fovLimit = dvec2(30.0, 40.0);
 	static constexpr uint16 chatLinesMax = 8191;
 	static constexpr svec2 deadzoneLimit = svec2(256, INT16_MAX - 1);
 	static constexpr Hinting defaultHinting = Hinting::normal;
@@ -374,6 +375,7 @@ struct Settings {
 	string versionLookupUrl;
 	string versionLookupRegex;
 	string font;
+	double fov;
 	SDL_DisplayMode mode;
 	ivec2 size;
 	float gamma;

@@ -148,7 +148,8 @@ ShaderGauss::ShaderGauss(const string& srcVert, const string& srcFrag) :
 }
 
 ShaderFinal::ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets) :
-	Shader(srcVert, editSource(srcFrag, sets), "Shader final")
+	Shader(srcVert, editSource(srcFrag, sets), "Shader final"),
+	gamma(glGetUniformLocation(program, "gamma"))
 {
 	glUniform1i(glGetUniformLocation(program, "sceneMap"), sceneTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "bloomMap"), gaussTexa - GL_TEXTURE0);

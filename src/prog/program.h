@@ -120,12 +120,16 @@ public:
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventStartGame(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
+	void eventOpenPopupRecords(Button* but = nullptr);
+	void eventDelRecord(Button* but);
 	void eventSwitchConfig(uint id, const string& str);
 	void eventConfigDelete(Button* but = nullptr);
 	void eventConfigCopyInput(Button* but = nullptr);
 	void eventConfigCopy(Button* but = nullptr);
 	void eventConfigNewInput(Button* but = nullptr);
 	void eventConfigNew(Button* but = nullptr);
+	void eventSetConfigRecord(Button* but = nullptr);
+	void eventSetConfigRecordName(Button* but = nullptr);
 	void eventUpdateConfig(Button* but = nullptr);
 	void eventUpdateConfigI(Button* but);
 	void eventUpdateConfigV(Button* but);
@@ -201,6 +205,11 @@ public:
 	void eventPostFinishMatch(Button* but = nullptr);
 	void eventGamePlayerLeft();
 
+	// game record
+	void eventOpenRecord(Button* but);
+	void eventRecordPrevAction(Button* but = nullptr);
+	void eventRecordNextAction(Button* but = nullptr);
+
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
 	void eventShowSettings(Button* but = nullptr);
@@ -220,6 +229,8 @@ public:
 	void eventSetBloom(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
+	void eventSetFovSL(Button* but);
+	void eventSetFovLE(Button* but);
 	void eventSetVolumeSL(Button* but);
 	void eventSetVolumeLE(Button* but);
 	void eventSetColorAlly(uint id, const string& str);
@@ -280,8 +291,11 @@ private:
 	void setSaveConfig(const string& name, bool save = true);
 	void openPopupSaveLoad(bool save);
 	void initSetupObjects(bool regular);
-	void popuplateSetup(Setup& setup);
+	void populateSetup(Setup& setup);
+	void playGameStartAnimations() const;
 	Piece* getUnplacedDragon();
+	static string winMessage(Record::Info win);
+	void executeRecordAction(const RecAction& action);
 	void setShadowRes(uint16 newRes);
 	void setColorPieces(Settings::Color clr, Piece* pos, Piece* end);
 	template <class T> void setStandardSlider(Slider* sl, T& val);

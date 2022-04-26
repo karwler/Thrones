@@ -163,9 +163,10 @@ void FrameSet::free() {
 
 // CAMERA
 
-Camera::Camera(const vec3& position, const vec3& lookAt, float pitchMax, float yawMax) :
+Camera::Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax) :
 	pmax(pitchMax),
-	ymax(yawMax)
+	ymax(yawMax),
+	fov(vfov)
 {
 	updateProjection();
 	setPos(position, lookAt);
@@ -205,6 +206,12 @@ void Camera::updateProjection() {
 	res /= 2.f;
 	glUseProgram(*World::sgui());
 	glUniform2fv(World::sgui()->pview, 1, glm::value_ptr(res));
+}
+
+void Camera::setFov(float vfov) {
+	fov = vfov;
+	updateProjection();
+	updateView();
 }
 
 void Camera::setPos(const vec3& newPos, const vec3& newLat) {
@@ -394,7 +401,8 @@ void Animation::append(Animation& ani) {
 
 Scene::Scene() :
 	light(World::sets()->shadowRes),
-	frames(World::sets(), World::window()->getScreenView())
+	frames(World::sets(), World::window()->getScreenView()),
+	camera(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup)
 {
 	wgtTops.initBuffer();
 	wgtTops.allocate(numWgtTops);
@@ -565,7 +573,7 @@ void Scene::onResize() {
 	resetFrames();
 	camera.updateProjection();
 	camera.updateView();
-	World::pgui()->calsSizes();
+	World::pgui()->calcSizes();
 	layout->onResize();
 	for (Popup* it : popups)
 		it->onResize();
@@ -726,7 +734,7 @@ void Scene::resetLayouts() {
 	layout->postInit();
 	for (Overlay* it : overlays)
 		it->postInit();
-	World::state()->updateTitleBar();
+	World::state()->updateTitleBar(World::window()->getTitleBarHeight());
 	updateSelect();
 }
 

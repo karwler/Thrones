@@ -3,10 +3,12 @@
 
 // MATERIAL
 
-Material::Material(const vec4& diffuse, const vec3& specular, float shininess) :
+Material::Material(const vec4& diffuse, const vec3& specular, float shininess, float reflectiveness, float roughness) :
 	color(diffuse),
 	spec(specular),
-	shine(shininess)
+	shine(shininess),
+	reflect(reflectiveness),
+	rough(roughness)
 {}
 
 // VERTEX
@@ -20,15 +22,23 @@ Vertex::Vertex(const vec3& position, const vec3& normal, vec2 texuv, const vec3&
 
 // FUNCTIONS
 
-SDL_Surface* scaleSurface(SDL_Surface* img, ivec2 res) {
+SDL_Surface* scaleSurfaceReplace(SDL_Surface* img, ivec2 res) {
 	SDL_Surface* dst = scaleSurfaceCopy(img, res);
 	if (dst != img)
 		SDL_FreeSurface(img);
 	return dst;
 }
 
+SDL_Surface* scaleSurfaceTry(SDL_Surface* img, ivec2 res) {
+	if (SDL_Surface* dst = scaleSurfaceCopy(img, res); dst && dst != img) {
+		SDL_FreeSurface(img);
+		return dst;
+	}
+	return img;
+}
+
 SDL_Surface* scaleSurfaceCopy(SDL_Surface* img, ivec2 res) {
-	if ((img->w == res.x && img->h == res.y) || !img)
+	if (!img || ivec2(img->w, img->h) == res)
 		return img;
 
 	if (SDL_Surface* dst = SDL_CreateRGBSurfaceWithFormat(0, res.x, res.y, img->format->BitsPerPixel, img->format->format)) {

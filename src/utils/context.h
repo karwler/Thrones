@@ -15,19 +15,21 @@ private:
 	Interactable* parent;	// the instance that got clicked (nullptr in case of blank right click)
 	vector<pair<TexLoc, string>> items;
 	ScrollBar scroll;
+	uint numInsts = 0;
 	uint selected = UINT_MAX;
 
 public:
 	Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2 pos, int lineH, Widget* owner = nullptr, int width = 0);
 	~Context() override;
 
+	void draw();
 	void onMouseMove(ivec2 mPos);
 	void tick(float dSec) override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
-	void onUndrag(uint8 mBut) override;
-	void onScroll(ivec2 wMov) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
+	void onScroll(ivec2 mPos, ivec2 wMov) override;
 	void onNavSelect(Direction dir) override;
 	void onCancelCapture() override;
 
@@ -36,12 +38,16 @@ public:
 	Interactable* getParent() const;
 
 private:
-	void updateInstances();
-	void setSelectedInstance();
+	void setInstances();
+	void setSelectedInstance(Instance* ins);
 	uint getSelected(ivec2 mPos) const;
 	int itemPos(sizet id) const;
 	static int calcPos(int pos, int& siz, int limit);
 };
+
+inline void Context::draw() {
+	drawInstances(numInsts);
+}
 
 inline Rect Context::rect() const {
 	return Rect(position, size);

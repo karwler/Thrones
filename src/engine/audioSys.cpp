@@ -4,7 +4,11 @@
 AudioSys::AudioSys(const uint8& avolume) :
 	volume(avolume)
 {
-	SDL_AudioSpec spec = { 22050, AUDIO_S16, 1, 0, 4096, 0, 0, nullptr, nullptr };	// TODO: adjust values
+	SDL_AudioSpec spec{};	// TODO: adjust values
+	spec.freq = 22050;
+	spec.format = AUDIO_S16;
+	spec.channels = 1;
+	spec.samples = 4096;
 	spec.callback = callback;
 	spec.userdata = this;
 	if (device = SDL_OpenAudioDevice(nullptr, SDL_FALSE, &spec, &aspec, SDL_AUDIO_ALLOW_ANY_CHANGE); !device)

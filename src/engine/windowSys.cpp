@@ -6,6 +6,9 @@
 #include "shaders.h"
 #include "prog/program.h"
 #include "prog/progs.h"
+#ifdef OPENVR
+#include "vrSys.h"
+#endif
 #ifdef _WIN32
 #include <winsock2.h>
 #endif
@@ -13,76 +16,87 @@
 // LOADER
 
 void Loader::init(ShaderStartup* stlog, WindowSys* win) {
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, stride, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(uptrt(0)));
-
 	shader = stlog;
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	if (win->getTitleBarHeight()) {
-		glActiveTexture(Shader::stlogTexa);
-		blank.init(Widget::colorDark);
-		title.init(win->getFonts()->render((string("Thrones v") + Com::commonVersion + " loading...").c_str(), win->getTitleBarHeight(), win->getScreenView().x), win->getScreenView());
-		glActiveTexture(Shader::texa);
-	}
+	if (win->getTitleBarHeight())
+		if (SDL_Surface* img = win->getFonts()->render("Thrones v"s + Com::commonVersion + " loading...", win->getTitleBarHeight(), win->getWindowView().x)) {
+			glActiveTexture(Shader::wgtTexa);
+			glGenTextures(1, &blank);
+#ifdef OPENGLES
+			uploadTextrue<GL_RGBA, GL_UNSIGNED_BYTE>(blank, array<glm::u8vec4, 4>{ Widget::colorDark * 255.f, Widget::colorDark * 255.f, Widget::colorDark * 255.f, Widget::colorDark * 255.f }.data(), ivec2(2), 0);
+#else
+			uploadTexture<GL_RGBA, GL_FLOAT>(blank, array<vec4, 4>{ Widget::colorDark, Widget::colorDark, Widget::colorDark, Widget::colorDark }.data(), ivec2(2), 0);
 #endif
+			titleRes = ivec2(img->w, img->h);
+			glGenTextures(1, &title);
+			uploadTexture<TextureCol::textPixFormat, GL_UNSIGNED_BYTE>(title, img->pixels, titleRes, img->pitch / img->format->BytesPerPixel);
+			SDL_FreeSurface(img);
+		}
+#endif
+	glGenTextures(1, &text);
+	glGenVertexArrays(1, &vao);
 }
 
 void Loader::free() {
+	glDeleteVertexArrays(1, &vao);
+	glDeleteTextures(1, &text);
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	title.free();
-	blank.free();
+	glDeleteTextures(1, &title);
+	glDeleteTextures(1, &blank);
 #endif
 	delete shader;
-
-	glBindVertexArray(vao);
-	glDisableVertexAttribArray(Shader::vpos);
-	glDeleteBuffers(1, &vbo);
-	glDeleteVertexArrays(1, &vao);
 }
 
-void Loader::addLine(const string& str, WindowSys* win) {
-	ivec2 wres = win->getScreenView();
-	logStr += str + '\n';
-	if (uint lines = std::count(logStr.begin(), logStr.end(), '\n'), maxl = (wres.y - logMargin.y * 2) / logSize; lines > maxl) {
+void Loader::addLine(string_view str, WindowSys* win) {
+	logStr += str;
+	logStr +='\n';
+	ivec2 winSize(win->getWindowView().x, win->getWindowView().y - win->getTitleBarHeight());
+	if (uint lines = std::count(logStr.begin(), logStr.end(), '\n'), maxl = (winSize.y - logMargin.y * 2) / logSize; lines > maxl) {
 		sizet end = 0;
 		for (uint i = lines - maxl; i; --i)
 			end = logStr.find_first_of('\n', end) + 1;
 		logStr.erase(0, end);
 	}
 
-	glActiveTexture(Shader::stlogTexa);
-	if (Texture tex; tex.init(win->getFonts()->render(logStr.c_str(), logSize, wres.x), wres)) {
+	if (SDL_Surface* img = win->getFonts()->render(logStr, logSize, winSize.x)) {
+		glActiveTexture(Shader::tmpTexa);
+		uploadTexture<TextureCol::textPixFormat, GL_UNSIGNED_BYTE>(text, img->pixels, ivec2(img->w, img->h), img->pitch / img->format->BytesPerPixel);
+		SDL_FreeSurface(img);
+
+		glEnable(GL_BLEND);
 		glUseProgram(*shader);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glClear(GL_COLOR_BUFFER_BIT);
 		glBindVertexArray(vao);
-		draw(Rect(logMargin, tex.getRes()), tex);
+		draw(Rect(logMargin, img->w, img->h), text);
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		if (title) {
-			vec2 hres = vec2(wres) / 2.f;
+			vec2 hres = vec2(winSize) / 2.f;
 			glUniform2f(shader->pview, hres.x, float(win->getTitleBarHeight()) / 2.f);
-			glViewport(0, wres.y, wres.x, win->getTitleBarHeight());
-			draw(Rect(0, 0, wres.x, win->getTitleBarHeight()), blank);
-			draw(Rect((wres.x - title.getRes().x) / 2, 0, title.getRes()), title);
+			glViewport(0, winSize.y, winSize.x, win->getTitleBarHeight());
+			draw(Rect(0, 0, winSize.x, win->getTitleBarHeight()), blank);
+			draw(Rect((winSize.x - titleRes.x) / 2, 0, titleRes), title);
 			glUniform2fv(shader->pview, 1, glm::value_ptr(hres));
-			glViewport(0, 0, wres.x, wres.y);
+			glViewport(0, 0, winSize.x, winSize.y);
 		}
 #endif
 		SDL_GL_SwapWindow(win->getWindow());
-		tex.free();
 	}
-	glActiveTexture(Shader::texa);
 }
 
 void Loader::draw(const Rect& rect, GLuint tex) {
 	glUniform4f(shader->rect, float(rect.x), float(rect.y), float(rect.w), float(rect.h));
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, corners);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+template <GLenum format, GLenum type>
+void Loader::uploadTexture(GLuint tex, const void* pixels, ivec2 res, int rowLen) {
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLen);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res.x, res.y, 0, format, type, pixels);
 }
 
 // FONT SET
@@ -105,7 +119,7 @@ string FontSet::init(string name, Settings::Hinting hint) {
 						break;
 					}
 				if (!tmp)
-					throw std::runtime_error(string("failed to find a font:") + linend + TTF_GetError());
+					throw std::runtime_error("failed to find a font:"s + linend + TTF_GetError());
 			}
 		}
 	}
@@ -122,7 +136,7 @@ string FontSet::init(string name, Settings::Hinting hint) {
 }
 
 TTF_Font* FontSet::findFile(const string& name, const vector<string>& available) {
-	vector<string>::const_iterator it = std::find_if(available.begin(), available.end(), [name](const string& ent) -> bool { return !SDL_strcasecmp(name.c_str(), delExt(ent).c_str()); });
+	vector<string>::const_iterator it = std::find_if(available.begin(), available.end(), [name](const string& ent) -> bool { return !SDL_strcasecmp(name.c_str(), string(delExt(ent)).c_str()); });
 	return it != available.end() ? load(*it) : nullptr;
 }
 
@@ -218,13 +232,20 @@ int WindowSys::start(const Arguments& args) {
 	geom = nullptr;
 	depth = nullptr;
 	ssao = nullptr;
-	blur = nullptr;
+	mblur = nullptr;
+	ssr = nullptr;
+	ssrColor = nullptr;
+	cblur = nullptr;
 	light = nullptr;
 	gauss = nullptr;
 	sfinal = nullptr;
 	skybox = nullptr;
 	gui = nullptr;
 	fonts = nullptr;
+#ifdef OPENVR
+	vrSys = nullptr;
+#endif
+	samplers = {};
 	run = true;
 
 	int rc = EXIT_SUCCESS;
@@ -256,7 +277,10 @@ int WindowSys::start(const Arguments& args) {
 	delete fonts;
 	delete sets;
 	delete inputSys;
-
+#ifdef OPENVR
+	delete vrSys;
+#endif
+	FileSys::close();
 #ifdef _WIN32
 	WSACleanup();
 #endif
@@ -271,7 +295,14 @@ void WindowSys::exec() {
 	dSec = float(newTime - oldTime) / ticksPerSec;
 	oldTime = newTime;
 
-	scene->draw();
+#ifdef OPENVR
+	if (vrSys)
+		vrSys->draw();
+	else
+		scene->draw(mousePos());
+#else
+	scene->draw(mousePos());
+#endif
 	SDL_GL_SwapWindow(window);
 
 	inputSys->tick();
@@ -285,9 +316,16 @@ void WindowSys::exec() {
 			break;
 		handleEvent(event);
 	} while (!SDL_TICKS_PASSED(SDL_GetTicks(), timeout));
+#ifdef OPENVR
+	if (vrSys)
+		vrSys->handleInput();
+#endif
 }
 
 void WindowSys::init(const Arguments& args) {
+#if SDL_VERSION_ATLEAST(2, 0, 22)
+	SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+#endif
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 	SDL_SetHint(SDL_HINT_APP_NAME, "Thrones");
 #endif
@@ -307,11 +345,11 @@ void WindowSys::init(const Arguments& args) {
 		SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #endif
 	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER))
-		throw std::runtime_error(string("failed to initialize systems:") + linend + SDL_GetError());
-	if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG)
-		throw std::runtime_error(string("failed to initialize textures:") + linend + IMG_GetError());
+		throw std::runtime_error("failed to initialize systems:"s + linend + SDL_GetError());
+	if (IMG_Init(imgInitFlags) != imgInitFlags)
+		throw std::runtime_error("failed to initialize textures:"s + linend + IMG_GetError());
 	if (TTF_Init())
-		throw std::runtime_error(string("failed to initialize fonts:") + linend + TTF_GetError());
+		throw std::runtime_error("failed to initialize fonts:"s + linend + TTF_GetError());
 #ifdef _WIN32
 	if (WSADATA wsad; WSAStartup(MAKEWORD(2, 2), &wsad))
 		throw std::runtime_error(Com::msgWinsockFail);
@@ -344,6 +382,37 @@ void WindowSys::init(const Arguments& args) {
 	SDL_EventState(SDL_SENSORUPDATE, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
+#ifdef OPENVR
+	if (args.hasFlag(Settings::argVr)) {
+		try {
+			vrSys = new VrSys;
+			SDL_EventState(SDL_WINDOWEVENT, SDL_DISABLE);
+			SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
+			SDL_EventState(SDL_KEYUP, SDL_DISABLE);
+			SDL_EventState(SDL_MOUSEMOTION, SDL_DISABLE);
+			SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_DISABLE);
+			SDL_EventState(SDL_MOUSEBUTTONUP, SDL_DISABLE);
+			SDL_EventState(SDL_MOUSEWHEEL, SDL_DISABLE);
+			SDL_EventState(SDL_JOYHATMOTION, SDL_DISABLE);
+			SDL_EventState(SDL_JOYBUTTONDOWN, SDL_DISABLE);
+			SDL_EventState(SDL_JOYBUTTONUP, SDL_DISABLE);
+			SDL_EventState(SDL_JOYDEVICEADDED, SDL_DISABLE);
+			SDL_EventState(SDL_JOYDEVICEREMOVED, SDL_DISABLE);
+			SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_DISABLE);
+			SDL_EventState(SDL_CONTROLLERBUTTONDOWN, SDL_DISABLE);
+			SDL_EventState(SDL_CONTROLLERBUTTONUP, SDL_DISABLE);
+			SDL_EventState(SDL_FINGERDOWN, SDL_DISABLE);
+			SDL_EventState(SDL_FINGERUP, SDL_DISABLE);
+			SDL_EventState(SDL_FINGERMOTION, SDL_DISABLE);
+			SDL_EventState(SDL_MULTIGESTURE, SDL_DISABLE);
+			SDL_EventState(SDL_DROPTEXT, SDL_DISABLE);
+		} catch (const std::runtime_error& err) {
+			logError(err.what());
+		}
+	}
+#endif
+	if (SDL_RegisterEvents(1) == UINT32_MAX)
+		throw std::runtime_error("failed to register application events:"s + linend + SDL_GetError());
 	SDL_StopTextInput();
 
 	FileSys::init(args);
@@ -361,7 +430,7 @@ void WindowSys::load() {
 void WindowSys::load(Loader* loader) {
 #endif
 	switch (loader->state) {
-	case Loader::State::start:
+	case Loader::State::start: {
 #ifdef __EMSCRIPTEN__
 		if (FileSys::canRead())
 			return;
@@ -372,7 +441,7 @@ void WindowSys::load(Loader* loader) {
 		sets->font = fonts->init(sets->font, sets->hinting);
 		loader->init(createWindow(), this);
 		loader->addLine("loading audio", this);
-		break;
+		break; }
 	case Loader::State::audio:
 		try {
 			audio = new AudioSys(sets->avolume);
@@ -387,7 +456,7 @@ void WindowSys::load(Loader* loader) {
 		loader->addLine("loading textures", this);
 		break;
 	case Loader::State::textures: {
-		ivec2 maxWin = windowSizes().back();
+		ivec2 maxWin = sets->windowSizes().back();
 		scene->loadTextures(ceilPower2(std::max(maxWin.x, maxWin.y)));
 		loader->addLine("starting", this);
 		loader->free();
@@ -400,25 +469,15 @@ void WindowSys::load(Loader* loader) {
 		program = new Program;
 		program->start();
 		setTitleBarHitTest();
+
+		SDL_PumpEvents();
+		SDL_FlushEvents(SDL_FIRSTEVENT, SDL_USEREVENT - 1);
 		oldTime = SDL_GetTicks();
 	}
 	++loader->state;
 }
 
 ShaderStartup* WindowSys::createWindow() {
-	uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
-	switch (sets->screen) {
-	case Settings::Screen::borderlessWindow: case Settings::Screen::borderless:
-		flags |= SDL_WINDOW_BORDERLESS;
-		break;
-	case Settings::Screen::fullscreen:
-		flags |= SDL_WINDOW_FULLSCREEN;
-		break;
-	case Settings::Screen::desktop:
-		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-	}
-	int winPos = SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display);
-
 	// create new window
 #ifdef OPENGLES
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -438,15 +497,29 @@ ShaderStartup* WindowSys::createWindow() {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG | SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 #endif
 #endif
-	if (window = SDL_CreateWindow(title, winPos, winPos, sets->size.x, sets->size.y, flags); !window)
-		throw std::runtime_error(string("failed to create window:") + linend + SDL_GetError());
+	ivec2 winSize = sets->size;
+#ifdef OPENVR
+	if (vrSys) {
+		SDL_Rect max;
+		if (SDL_GetDisplayBounds(sets->display, &max))
+			max.w = max.h = INT_MAX;
 
-	vector<ivec2> wsizes = windowSizes();
+		screenView = vrSys->getRenderSize();
+		winSize = ivec2(screenView.x * 2, screenView.y);
+		for (; winSize.x > max.w || winSize.y > max.h; winSize /= 2);
+		guiView = ivec2(ceilPower2(std::max(screenView.x, screenView.y)));
+	}
+#endif
+	int winPos = SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display);
+	if (window = SDL_CreateWindow(title, winPos, winPos, winSize.x, winSize.y, getWindowFlags()); !window)
+		throw std::runtime_error("failed to create window:"s + linend + SDL_GetError());
+
+	vector<ivec2> wsizes = sets->windowSizes();
 	setTitleBarHeight();
 #ifndef __ANDROID__
-	checkCurDisplay();
+	sets->trySetDisplay(displayID());
 	checkResolution(sets->size, wsizes);
-	checkResolution(sets->mode, displayModes());
+	checkResolution(sets->mode, sets->displayModes());
 	if (sets->screen <= Settings::Screen::borderless) {
 		SDL_SetWindowSize(window, sets->size.x, sets->size.y + titleBarHeight);
 		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display), SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display));
@@ -476,12 +549,12 @@ ShaderStartup* WindowSys::createWindow() {
 
 	// create context and set up rendering
 	if (context = SDL_GL_CreateContext(window); !context)
-		throw std::runtime_error(string("failed to create context:") + linend + SDL_GetError());
+		throw std::runtime_error("failed to create context:"s + linend + SDL_GetError());
 	setSwapInterval();
 #if !defined(OPENGLES) && !defined(__APPLE__)
 	glewExperimental = GL_TRUE;
 	if (GLenum err = glewInit(); err != GLEW_OK)
-		throw std::runtime_error(string("failed to initialize OpenGL extensions:") + linend + reinterpret_cast<const char*>(glewGetErrorString(err)));
+		throw std::runtime_error("failed to initialize OpenGL extensions:"s + linend + reinterpret_cast<const char*>(glewGetErrorString(err)));
 #endif
 
 	int gvals[2] = { 0, 0 };
@@ -499,6 +572,10 @@ ShaderStartup* WindowSys::createWindow() {
 #endif
 	if (glGetIntegerv(GL_MAX_TEXTURE_SIZE, gvals); gvals[0] < std::max(wsizes.back().x, wsizes.back().y))
 		throw std::runtime_error("texture size is limited to " + toStr(gvals[0]));
+#ifdef OPENVR
+	if (vrSys && gvals[0] < guiView.x)
+		guiView = ivec2(gvals[0]);
+#endif
 	if (glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, gvals); gvals[0] < largestObjTexture)
 		throw std::runtime_error("texture size is limited to " + toStr(gvals[0]));
 	if (glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, gvals); gvals[0] < 1 << Settings::shadowBitMax)
@@ -507,52 +584,123 @@ ShaderStartup* WindowSys::createWindow() {
 		throw std::runtime_error("viewport size is limited to " + toStr(gvals[0]) + 'x' + toStr(gvals[1]));
 	if (glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, gvals); gvals[0] < std::max(wsizes.back().x, wsizes.back().y))
 		throw std::runtime_error("renderbuffer size is limited to " + toStr(gvals[0]));
-
+#ifdef OPENGLES
+	maxMsamples = 0;
+#else
 	glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, gvals);
 	glGetIntegerv(GL_MAX_DEPTH_TEXTURE_SAMPLES, gvals + 1);
 	maxMsamples = std::min(gvals[0], gvals[1]);
-	setMultisampling();
+	if (sets->antiAliasing = std::min(sets->antiAliasing, maxAntiAliasing()); sets->antiAliasing >= Settings::AntiAliasing::msaa2)
+		glEnable(GL_MULTISAMPLE);
+	else
+		glDisable(GL_MULTISAMPLE);
+#endif
 
 	updateView();
 	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClearDepth(1.0);
-	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
-	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
 	glFrontFace(GL_CCW);
 
+	glGenSamplers(samplers.size(), samplers.data());
+	setSampler<GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, 0>(samplers[0]);
+	setSampler<GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT>(samplers[1]);
+	glBindSampler(Shader::tmpTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::vposTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::normTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::matlTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::ssao0Texa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::ssao1Texa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::sceneTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::gaussTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::ssr0Texa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::ssr1Texa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::depthTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::noiseTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::wgtTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::colorTexa - GL_TEXTURE0, samplers[1]);
+	glBindSampler(Shader::normTexa - GL_TEXTURE0, samplers[1]);
+	glBindSampler(Shader::skyboxTexa - GL_TEXTURE0, samplers[1]);
+
 	umap<string, string> sources = FileSys::loadShaders();
 	geom = new ShaderGeom(sources.at(ShaderGeom::fileVert), sources.at(ShaderGeom::fileFrag));
 	depth = new ShaderDepth(sources.at(ShaderDepth::fileVert), sources.at(ShaderDepth::fileFrag));
 	ssao = new ShaderSsao(sources.at(ShaderSsao::fileVert), sources.at(ShaderSsao::fileFrag));
-	blur = new ShaderBlur(sources.at(ShaderBlur::fileVert), sources.at(ShaderBlur::fileFrag));
+	mblur = new ShaderBlur(sources.at(ShaderBlur::fileVert), sources.at(ShaderBlur::fileFragM), Shader::ssao0Texa);
+	ssr = new ShaderSsr(sources.at(ShaderSsr::fileVert), sources.at(ShaderSsr::fileFrag));
+	ssrColor = new ShaderSsrColor(sources.at(ShaderSsrColor::fileVert), sources.at(ShaderSsrColor::fileFrag));
+	cblur = new ShaderBlur(sources.at(ShaderBlur::fileVert), sources.at(ShaderBlur::fileFragC), Shader::ssr1Texa);
 	light = new ShaderLight(sources.at(ShaderLight::fileVert), sources.at(ShaderLight::fileFrag), sets);
 	brights = new ShaderBrights(sources.at(ShaderBrights::fileVert), sources.at(ShaderBrights::fileFrag));
 	gauss = new ShaderGauss(sources.at(ShaderGauss::fileVert), sources.at(ShaderGauss::fileFrag));
 	sfinal = new ShaderFinal(sources.at(ShaderFinal::fileVert), sources.at(ShaderFinal::fileFrag), sets);
 	skybox = new ShaderSkybox(sources.at(ShaderSkybox::fileVert), sources.at(ShaderSkybox::fileFrag));
+#ifdef OPENVR
+	gui = new ShaderGui(sources.at(vrSys ? ShaderGui::fileVertVr : ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
+#else
 	gui = new ShaderGui(sources.at(ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
+#endif
 	setGamma(sets->gamma);
+#ifdef OPENVR
+	if (vrSys)
+		vrSys->init(sources, windowView);
+#endif
 
 	ShaderStartup* stlog = new ShaderStartup(sources.at(ShaderStartup::fileVert), sources.at(ShaderStartup::fileFrag));
-	glUniform2f(stlog->pview, float(screenView.x) / 2.f, float(screenView.y) / 2.f);
+	glUniform2f(stlog->pview, float(windowView.x) / 2.f, float(windowView.y) / 2.f);
 	return stlog;
 }
 
+uint32 WindowSys::getWindowFlags() const {
+	uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+#ifdef OPENVR
+	if (vrSys)
+		return flags;
+#endif
+	switch (sets->screen) {
+	case Settings::Screen::borderlessWindow: case Settings::Screen::borderless:
+		return flags | SDL_WINDOW_BORDERLESS;
+	case Settings::Screen::fullscreen:
+		return flags | SDL_WINDOW_FULLSCREEN;
+	case Settings::Screen::desktop:
+		return flags | SDL_WINDOW_FULLSCREEN_DESKTOP;
+	}
+	return flags;
+}
+
+template <GLint min, GLint mag, GLint wrap, int lod>
+void WindowSys::setSampler(GLuint sampler) {
+	glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, min);
+	glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, mag);
+	glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD, -lod);
+	glSamplerParameterf(sampler, GL_TEXTURE_MAX_LOD, lod);
+	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, wrap);
+	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, wrap);
+	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, wrap);
+}
+
 void WindowSys::destroyWindow() {
+#ifdef OPENVR
+	if (vrSys)
+		vrSys->free();
+#endif
 	delete gui;
 	delete skybox;
 	delete sfinal;
 	delete brights;
 	delete gauss;
 	delete light;
-	delete blur;
+	delete cblur;
+	delete ssrColor;
+	delete ssr;
+	delete mblur;
 	delete ssao;
 	delete depth;
 	delete geom;
+	glDeleteSamplers(samplers.size(), samplers.data());
 	SDL_GL_DeleteContext(context);
 	SDL_DestroyWindow(window);
 	SDL_FreeCursor(SDL_GetCursor());
@@ -578,6 +726,12 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 	case SDL_TEXTINPUT:
 		scene->onText(event.text.text);
 		break;
+#if SDL_VERSION_ATLEAST(2, 0, 22)
+	case SDL_TEXTEDITING_EXT:
+		scene->onCompose(event.editExt.text);
+		SDL_free(event.editExt.text);
+		break;
+#endif
 	case SDL_MOUSEMOTION:
 		inputSys->eventMouseMotion(event.motion, titleBarHeight);
 		break;
@@ -588,7 +742,7 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		inputSys->eventMouseButtonUp(event.button, titleBarHeight);
 		break;
 	case SDL_MOUSEWHEEL:
-		inputSys->eventMouseWheel(event.wheel);
+		inputSys->eventMouseWheel(event.wheel, titleBarHeight);
 		break;
 	case SDL_JOYAXISMOTION:
 		inputSys->eventJoystickAxis(event.jaxis);
@@ -618,13 +772,13 @@ void WindowSys::handleEvent(const SDL_Event& event) {
 		inputSys->eventGamepadButtonUp(event.cbutton);
 		break;
 	case SDL_FINGERDOWN:
-		inputSys->eventFingerDown(event.tfinger, titleBarHeight, windowHeight);
+		inputSys->eventFingerDown(event.tfinger, titleBarHeight, windowView.y);
 		break;
 	case SDL_FINGERUP:
-		inputSys->eventFingerUp(event.tfinger, titleBarHeight, windowHeight);
+		inputSys->eventFingerUp(event.tfinger, titleBarHeight, windowView.y);
 		break;
 	case SDL_FINGERMOTION:
-		inputSys->eventFingerMove(event.tfinger, titleBarHeight, windowHeight);
+		inputSys->eventFingerMove(event.tfinger, titleBarHeight, windowView.y);
 		break;
 	case SDL_MULTIGESTURE:
 		inputSys->eventFingerGesture(event.mgesture);
@@ -644,11 +798,16 @@ void WindowSys::eventWindow(const SDL_WindowEvent& winEvent) {
 		scene->updateSelect();
 		break;
 	case SDL_WINDOWEVENT_LEAVE:
-		inputSys->eventMouseLeave();
+		inputSys->eventMouseLeave(mousePos());
 		break;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+	case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+		if (sets->trySetDisplay(winEvent.data1)) {
+#else
 	case SDL_WINDOWEVENT_MOVED:
-		if (checkCurDisplay()) {
-			setTitleBarHeight();
+		if (sets->trySetDisplay(displayID())) {
+#endif
+			setTitleBarHeight();	// TODO: update window size if DPI changed and update widgets if in Settings window
 			updateView();
 		}
 	}
@@ -672,17 +831,29 @@ ivec2 WindowSys::mousePos() {
 void WindowSys::setTextCapture(Rect* field) {
 	if (field) {
 		field->y += titleBarHeight;
-		SDL_SetTextInputRect(field);
 		SDL_StartTextInput();
+		SDL_SetTextInputRect(field);
 	} else
 		SDL_StopTextInput();
 }
 
 void WindowSys::setMultisampling() {
-	if (sets->msamples = sets->msamples > 1 ? std::min(ceilPower2(sets->msamples), uint32(maxMsamples)) : 0; sets->msamples)
+	sets->antiAliasing = std::min(sets->antiAliasing, maxAntiAliasing());
+
+	glUseProgram(*sfinal);
+	glUniform1i(sfinal->optFxaa, sets->antiAliasing == Settings::AntiAliasing::fxaa);
+#ifndef OPENGLES
+	if (sets->antiAliasing >= Settings::AntiAliasing::msaa2)
 		glEnable(GL_MULTISAMPLE);
 	else
 		glDisable(GL_MULTISAMPLE);
+#endif
+}
+
+Settings::AntiAliasing WindowSys::maxAntiAliasing() const {
+	Settings::AntiAliasing aa = Settings::AntiAliasing::msaa8;
+	for (; Settings::getMsaa(aa) > maxMsamples; --aa);
+	return aa;
 }
 
 void WindowSys::setSwapInterval() {
@@ -709,18 +880,15 @@ bool WindowSys::trySetSwapInterval() {
 }
 
 void WindowSys::setScreen() {
+#ifdef OPENVR
+	if (vrSys)
+		return;
+#endif
 	bool hadTitleBar = titleBarHeight;
 	if (sets->display >= SDL_GetNumVideoDisplays())
 		sets->display = 0;
-	checkResolution(sets->size, windowSizes());
-	checkResolution(sets->mode, displayModes());
-	setWindowMode();
-	program->getGui()->makeTitleBar();
-	program->getState()->updateTitleBar(hadTitleBar);
-	scene->onResize();
-}
-
-void WindowSys::setWindowMode() {
+	checkResolution(sets->size, sets->windowSizes());
+	checkResolution(sets->mode, sets->displayModes());
 #ifndef __ANDROID__
 	setTitleBarHeight();
 	switch (sets->screen) {
@@ -742,18 +910,27 @@ void WindowSys::setWindowMode() {
 	setTitleBarHitTest();
 	updateView();
 #endif
+	program->getGui()->makeTitleBar();
+	program->getState()->updateTitleBar(hadTitleBar);
+	scene->onExternalResize();
 }
 
 void WindowSys::updateView() {
 #ifdef __ANDROID__
-	SDL_Rect rect;
+	Rect rect;
 	SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(window), &rect);	// SDL_GL_GetDrawableSize don't work properly
-	screenView = ivec2(rect.w, rect.h);
+	windowView = rect.size();
 #else
-	SDL_GL_GetDrawableSize(window, &screenView.x, &screenView.y);
+	SDL_GL_GetDrawableSize(window, &windowView.x, &windowView.y);
 #endif
-	windowHeight = screenView.y;
-	screenView.y -= titleBarHeight;
+#ifdef OPENVR
+	if (vrSys) {
+		glViewport(0, 0, screenView.x, screenView.y);
+		return;
+	}
+#endif
+	screenView = ivec2(windowView.x, windowView.y - titleBarHeight);
+	guiView = screenView;
 	glViewport(0, 0, screenView.x, screenView.y);
 }
 
@@ -761,7 +938,11 @@ void WindowSys::setTitleBarHeight() {
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 	titleBarHeight = 0;
 #else
+#ifdef OPENVR
+	if (sets->screen == Settings::Screen::borderlessWindow && !vrSys) {
+#else
 	if (sets->screen == Settings::Screen::borderlessWindow) {
+#endif
 		float dpi;
 		titleBarHeight = !SDL_GetDisplayDPI(displayID(), nullptr, nullptr, &dpi) ?  int(dpi / 4.f) : 32;
 	} else
@@ -770,7 +951,11 @@ void WindowSys::setTitleBarHeight() {
 }
 
 void WindowSys::setTitleBarHitTest() {
+#ifdef OPENVR
+	if (sets->screen == Settings::Screen::borderlessWindow && !vrSys)
+#else
 	if (sets->screen == Settings::Screen::borderlessWindow)
+#endif
 		SDL_SetWindowHitTest(window, eventWindowHit, this);
 	else
 		SDL_SetWindowHitTest(nullptr, nullptr, nullptr);
@@ -782,34 +967,29 @@ void WindowSys::setGamma(float gamma) {
 	glUniform1f(sfinal->gamma, 1.f / sets->gamma);
 }
 
+void WindowSys::setShaderOptions() {
+	glUseProgram(*light);
+	glUniform1i(light->optShadow, sets->getShadowOpt());
+	glUniform1i(light->optSsao, sets->ssao);
+
+	glUseProgram(*sfinal);
+	glUniform1i(sfinal->optFxaa, sets->antiAliasing == Settings::AntiAliasing::fxaa);
+	glUniform1i(sfinal->optSsr, sets->ssr);
+	glUniform1i(sfinal->optBloom, sets->bloom);
+}
+
 void WindowSys::resetSettings() {
 	*sets = Settings();
 	inputSys->resetBindings();
 	scene->reloadTextures();
-	scene->reloadShader();
 	scene->resetShadows();
+	setShaderOptions();
 	sets->font = fonts->init(sets->font, sets->hinting);
-	checkCurDisplay();
+	sets->trySetDisplay(displayID());
 	setMultisampling();
 	setSwapInterval();
 	setGamma(sets->gamma);
 	setScreen();
-}
-
-void WindowSys::reloadVaryingShaders() {
-	delete sfinal;
-	delete light;
-	umap<string, string> sources = FileSys::loadShaders();
-	light = new ShaderLight(sources.at(ShaderLight::fileVert), sources.at(ShaderLight::fileFrag), sets);
-	sfinal = new ShaderFinal(sources.at(ShaderFinal::fileVert), sources.at(ShaderFinal::fileFrag), sets);
-}
-
-bool WindowSys::checkCurDisplay() {
-	if (int disp = SDL_GetWindowDisplayIndex(window); disp >= 0 && sets->display != disp) {
-		sets->display = disp;
-		return true;
-	}
-	return false;
 }
 
 template <class T>
@@ -826,30 +1006,8 @@ void WindowSys::checkResolution(T& val, const vector<T>& modes) {
 #endif
 }
 
-vector<ivec2> WindowSys::windowSizes() const {
-	SDL_Rect max;
-	if (SDL_GetDisplayBounds(sets->display, &max))
-		max.w = max.h = INT_MAX;
-
-	vector<ivec2> sizes;
-	std::copy_if(resolutions.begin(), resolutions.end(), std::back_inserter(sizes), [&max](ivec2 it) -> bool { return it.x <= max.w && it.y <= max.h; });
-	for (int i = 0; i < SDL_GetNumVideoDisplays(); ++i)
-		for (int im = 0; im < SDL_GetNumDisplayModes(i); ++im)
-			if (SDL_DisplayMode mode; !SDL_GetDisplayMode(i, im, &mode) && mode.w <= max.w && mode.h <= max.h && float(mode.w) / float(mode.h) >= minimumRatio)
-				sizes.emplace_back(mode.w, mode.h);
-	return uniqueSort(sizes);
-}
-
-vector<SDL_DisplayMode> WindowSys::displayModes() const {
-	vector<SDL_DisplayMode> mods;
-	for (int im = 0; im < SDL_GetNumDisplayModes(sets->display); ++im)
-		if (SDL_DisplayMode mode; !SDL_GetDisplayMode(sets->display, im, &mode) && float(mode.w) / float(mode.h) >= minimumRatio)
-			mods.push_back(mode);
-	return uniqueSort(mods);
-}
-
-int WindowSys::estimateSystemCursorSize() {
-    int size = 32;
+uint WindowSys::estimateSystemCursorSize() {
+    uint size = 32;
 #ifdef _WIN32
     if (HICON icon = LoadIconW(nullptr, IDC_ARROW)) {
         if (ICONINFO info = { sizeof(info) }; GetIconInfo(icon, &info)) {
@@ -859,8 +1017,10 @@ int WindowSys::estimateSystemCursorSize() {
             } else if (info.hbmMask)
                 if (BITMAP bmp; GetObjectW(info.hbmMask, sizeof(bmp), &bmp) > 0)
                     size = bmp.bmHeight / 2;
-            DeleteObject(info.hbmColor);
-            DeleteObject(info.hbmMask);
+			if (info.hbmColor)
+	            DeleteObject(info.hbmColor);
+			if (info.hbmMask)
+	            DeleteObject(info.hbmMask);
         }
         DestroyIcon(icon);
     }
@@ -876,81 +1036,80 @@ void WindowSys::debugMessage(GLenum source, GLenum type, uint id, GLenum severit
 #endif
 	if (id == 131169 || id == 131185 || id == 131218 || id == 131204)
 		return;
-	std::ostringstream ss("Debug message ");
-	ss << id << ": " <<  message;
-	if (sizet mlen = strlen(message); mlen && message[mlen-1] != '\n')
-		ss << '\n';
+	string msg = "Debug message " + toStr(id) + ": " + message;
+	if (msg.back() != '\n' && msg.back() != '\r')
+		msg += linend;
 
 	switch (source) {
 	case GL_DEBUG_SOURCE_API:
-		ss << "Source: API, ";
+		msg += "Source: API, ";
 		break;
 	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
-		ss << "Source: window system, ";
+		msg += "Source: window system, ";
 		break;
 	case GL_DEBUG_SOURCE_SHADER_COMPILER:
-		ss << "Source: shader compiler, ";
+		msg += "Source: shader compiler, ";
 		break;
 	case GL_DEBUG_SOURCE_THIRD_PARTY:
-		ss << "Source: third party, ";
+		msg += "Source: third party, ";
 		break;
 	case GL_DEBUG_SOURCE_APPLICATION:
-		ss << "Source: application, ";
+		msg += "Source: application, ";
 		break;
 	case GL_DEBUG_SOURCE_OTHER:
-		ss << "Source: other, ";
+		msg += "Source: other, ";
 		break;
 	default:
-		ss << "Source: unknown, ";
+		msg += "Source: unknown, ";
 	}
 
 	switch (type) {
 	case GL_DEBUG_TYPE_ERROR:
-		ss << "Type: error, ";
+		msg += "Type: error, ";
 		break;
 	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
-		ss << "Type: deprecated behavior, ";
+		msg += "Type: deprecated behavior, ";
 		break;
 	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-		ss << "Type: undefined behavior, ";
+		msg += "Type: undefined behavior, ";
 		break;
 	case GL_DEBUG_TYPE_PORTABILITY:
-		ss << "Type: portability, ";
+		msg += "Type: portability, ";
 		break;
 	case GL_DEBUG_TYPE_PERFORMANCE:
-		ss << "Type: performance, ";
+		msg += "Type: performance, ";
 		break;
 	case GL_DEBUG_TYPE_MARKER:
-		ss << "Type: marker, ";
+		msg += "Type: marker, ";
 		break;
 	case GL_DEBUG_TYPE_PUSH_GROUP:
-		ss << "Type: push group, ";
+		msg += "Type: push group, ";
 		break;
 	case GL_DEBUG_TYPE_POP_GROUP:
-		ss << "Type: pop group, ";
+		msg += "Type: pop group, ";
 		break;
 	case GL_DEBUG_TYPE_OTHER:
-		ss << "Type: other, ";
+		msg += "Type: other, ";
 		break;
 	default:
-		ss << "Type: unknown, ";
+		msg += "Type: unknown, ";
 	}
 
 	switch (severity) {
 	case GL_DEBUG_SEVERITY_HIGH:
-		logError(ss.str(), "Severity: high");
+		logError(std::move(msg), "Severity: high");
 		break;
 	case GL_DEBUG_SEVERITY_MEDIUM:
-		logError(ss.str(), "Severity: medium");
+		logError(std::move(msg), "Severity: medium");
 		break;
 	case GL_DEBUG_SEVERITY_LOW:
-		logError(ss.str(), "Severity: low");
+		logError(std::move(msg), "Severity: low");
 		break;
 	case GL_DEBUG_SEVERITY_NOTIFICATION:
-		logInfo(ss.str(), "Severity: notification");
+		logInfo(std::move(msg), "Severity: notification");
 		break;
 	default:
-		logError(ss.str(), "Severity: unknown");
+		logError(std::move(msg), "Severity: unknown");
 	}
 }
 #endif

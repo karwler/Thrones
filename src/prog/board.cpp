@@ -227,7 +227,7 @@ void Board::prepareTurn(bool myTurn, bool xmov, bool fcont, Record& orec, Record
 		if (!(config.opts & Config::homefront))
 			for (Tile& til : tiles)
 				if (til.isBreachedFortress())
-					if (!findPiece(pieces.begin(), pieces.end(), ptog(til.getPos())))
+					if (!findPiece(ptog(til.getPos())))
 						til.setBreached(false);
 	}
 
@@ -314,7 +314,7 @@ void Board::checkOwnTiles() const {
 					throw firstUpper(tileNames[i]) + " missing in row " + toStr(y - config.homeSize.y - 1);
 	}
 	if (fort != config.countFreeTiles())
-		throw string("Not all tiles were placed");
+		throw "Not all tiles were placed"s;
 }
 
 void Board::checkMidTiles() const {
@@ -350,8 +350,8 @@ Piece* Board::getPieces(Piece* beg, const array<uint16, pieceLim>& amts, PieceTy
 	return beg;
 }
 
-Piece* Board::findPiece(Piece* beg, Piece* end, svec2 pos) {
-	Piece* pce = std::find_if(beg, end, [this, pos](const Piece& it) -> bool { return ptog(it.getPos()) == pos; });
+Piece* Board::findPiece(svec2 pos) {
+	Piece* pce = std::find_if(pieces.begin(), pieces.end(), [this, pos](const Piece& it) -> bool { return ptog(it.getPos()) == pos; });
 	return pce != pieces.end() ? pce : nullptr;
 }
 
@@ -434,7 +434,7 @@ bool Board::spaceAvailableGround(uint16 pos, void* board) {
 
 bool Board::spaceAvailableDragon(uint16 pos, void* board) {
 	Board* self = static_cast<Board*>(board);
-	Piece* occ = self->findPiece(self->pieces.begin(), self->pieces.end(), self->idToPos(pos));
+	Piece* occ = self->findPiece(self->idToPos(pos));
 	return !occ || self->isOwnPiece(occ) || (occ->getType() != PieceType::dragon && !occ->firingArea().first);
 }
 
@@ -579,7 +579,7 @@ pair<Tile*, TileTop> Board::checkTileEstablishable(const Piece* throne) {
 		for (Tile& it : tiles)
 			if (TileTop top = findTileTop(&it); (it.getType() == TileType::fortress && (&it < tiles.mid() || &it >= tiles.own())) || top != TileTop::none)
 				if (svec2 dp = glm::abs(ivec2(ptog(it.getPos())) - ivec2(pos)); dp.x < 3 && dp.y < 3)
-					throw "Tile is too close to a " + string(top == TileTop::none ? tileNames[uint8(it.getType())] : top.name());
+					throw "Tile is too close to a "s + (top == TileTop::none ? tileNames[uint8(it.getType())] : top.name());
 	return pair(getTile(pos), tileTops[TileTop::ownFarm].getShow() ? TileTop::ownCity : TileTop::ownFarm);
 }
 

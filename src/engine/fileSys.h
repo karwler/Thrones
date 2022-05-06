@@ -14,29 +14,18 @@ struct IniLine {
 	string key;	// the thing between the brackets (empty if there are no brackets)
 	string val;	// value, aka. the thing after the equal sign
 
-	IniLine(const string& line);
+	IniLine(string_view line);
 	IniLine(Type what, string&& property = string(), string&& keyval = string(), string&& value = string());
 
-	Type read(const string& str);
-	static void write(string& text, const string& title);
-	static void write(string& text, const string& prp, const string& val);
-	static void write(string& text, const string& prp, const string& key, const string& val);
+	Type read(string_view str);
+	static vector<IniLine> readLines(string_view text);
+	static void write(SDL_RWops* ofh, string_view tit);
+	static void write(SDL_RWops* ofh, string_view prp, string_view val);
+	static void write(SDL_RWops* ofh, string_view prp, string_view key, string_view val);
 };
 
-inline IniLine::IniLine(const string& line) {
+inline IniLine::IniLine(string_view line) {
 	read(line);
-}
-
-inline void IniLine::write(string& text, const string& title) {
-	text += '[' + title + ']' + linend;
-}
-
-inline void IniLine::write(string& text, const string& prp, const string& val) {
-	text += prp + '=' + val + linend;
-}
-
-inline void IniLine::write(string& text, const string& prp, const string& key, const string& val) {
-	text += prp + '[' + key + "]=" + val + linend;
 }
 
 // handles all filesystem interactions
@@ -64,6 +53,7 @@ private:
 	static constexpr char iniKeywordShadows[] = "shadows";
 	static constexpr char iniKeywordSsao[] = "ssao";
 	static constexpr char iniKeywordBloom[] = "bloom";
+	static constexpr char iniKeywordSsr[] = "ssr";
 	static constexpr char iniKeywordGamma[] = "gamma";
 	static constexpr char iniKeywordFov[] = "fov";
 	static constexpr char iniKeywordAVolume[] = "volume";
@@ -118,9 +108,13 @@ private:
 	};
 
 	static inline string dirBase, dirConfig;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	static inline SDL_RWops* logFile;
+#endif
 
 public:
 	static void init(const Arguments& args);
+	static void close();
 
 	static Settings loadSettings(InputSys* input);
 	static void saveSettings(const Settings& sets, const InputSys* input);
@@ -128,20 +122,24 @@ public:
 	static void readConfigPrpVal(const IniLine& il, Config& cfg);
 	static void readConfigPrpKeyVal(const IniLine& il, Config& cfg);
 	static void saveConfigs(const umap<string, Config>& confs);
-	static void writeConfig(string& text, const Config& cfg);
-	template <sizet N, sizet S> static void writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
+	static void writeConfig(SDL_RWops* ofh, const Config& cfg);
+	template <sizet N, sizet S> static void writeAmounts(SDL_RWops* ofh, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts);
 	template <sizet N, sizet S> static void readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts);
 	static umap<string, Setup> loadSetups();
 	static void saveSetups(const umap<string, Setup>& sets);
 	static vector<string> listFonts();
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
 	static umap<string, Material> loadMaterials();
-	static vector<Mesh> loadObjects(umap<string, uint16>& refs);	// geometry shader must be in use
+	static vector<Mesh> loadObjects(umap<string, uint16>& refs);
 	static umap<string, string> loadShaders();
-	static umap<string, TexLoc> loadTextures(TextureSet& tset, TextureCol& tcol, float scale, int recomTexSize);
-	static void reloadTextures(TextureSet& tset, float scale);
-	static void saveScreenshot(SDL_Surface* img, const string& desc = string());
-	static vector<string> listFiles(const string& dirPath);
+	static TextureSet::Import loadTextures(vector<TextureCol::Element>& icns, int& minUiHeight, float scale);
+	static TextureSet::Import reloadTextures(float scale);
+#ifndef __ANDROID__
+	static vector<string> listFiles(string_view dirPath);
+#ifndef __EMSCRIPTEN__
+	static void saveScreenshot(SDL_Surface* img, string_view desc = string_view());
+#endif
+#endif
 
 #ifdef __EMSCRIPTEN__
 	static bool canRead();
@@ -166,15 +164,19 @@ private:
 	static void readVictoryPoints(const char* str, Config& cfg);
 	static void readSetPieceBattle(const char* str, Config& cfg);
 	static void readFavorLimit(const char* str, Config& cfg);
-	static uint16 readCapturers(const string& line);
-	static void writeCapturers(string& text, uint16 capturers);
-	static void saveUserFile(const string& drc, const char* file, const string& text);
-	static tuple<Texplace, sizet, string> beginTextureLoad(const string& dirPath, string& name, bool noWidget);
-	static void loadObjectTexture(SDL_Surface* img, const string& dirPath, string& name, sizet num, GLenum ifmt, TextureSet::Import& imp, float scale);
-	static void loadSkyTextures(TextureSet::Import& imp, string& path, const string& dirPath, sizet num);
-	template <class F> static void listOperateDirectory(const string& dirPath, F func);
+	static uint16 readCapturers(const char* str);
+	static void writeCapturers(SDL_RWops* ofh, uint16 capturers);
+	static SDL_RWops* startWriteUserFile(const string& drc, const char* file);
+	static void endWriteUserFile(SDL_RWops* ofh);
+	static tuple<Texplace, sizet, string> beginTextureLoad(string_view dirPath, string& name, bool noWidget);
+	static void loadObjectTexture(SDL_Surface* img, string_view dirPath, string& name, sizet num, GLenum ifmt, TextureSet::Import& imp, float scale, bool unique = true);
+	static void loadSkyTextures(TextureSet::Import& imp, string& path, sizet dirPathLen, sizet num);
+	template <class F> static void listOperateDirectory(string_view dirPath, F func);
 	template <class T, class F> static string strJoin(const vector<T>& vec, F conv, char sep = ' ');
 	static string::iterator fileLevelPos(string& str);
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	static void SDLCALL logWrite(void* userdata, int category, SDL_LogPriority priority, const char* message);
+#endif
 
 	friend bool operator&(Texplace a, Texplace b);
 };
@@ -214,15 +216,15 @@ inline const string& FileSys::getDirConfig() {
 }
 
 template <sizet N, sizet S>
-void FileSys::writeAmounts(string& text, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts) {
+void FileSys::writeAmounts(SDL_RWops* ofh, const char* word, const array<const char*, N>& names, const array<uint16, S>& amts) {
 	for (sizet i = 0; i < amts.size(); ++i)
-		IniLine::write(text, word, names[i], toStr(amts[i]));
+		IniLine::write(ofh, word, names[i], toStr(amts[i]));
 }
 
 template <sizet N, sizet S>
 void FileSys::readAmount(const IniLine& il, const array<const char*, N>& names, array<uint16, S>& amts) {
 	if (uint8 id = strToEnum<uint8>(names, il.key); id < amts.size())
-		amts[id] = sstol(il.val);
+		amts[id] = toNum<int>(il.val);
 }
 
 inline bool operator&(FileSys::Texplace a, FileSys::Texplace b) {

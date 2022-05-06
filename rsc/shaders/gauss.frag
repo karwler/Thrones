@@ -5,7 +5,7 @@ const float weight[5] = float[]( 0.2270270270, 0.1945945946, 0.1216216216, 0.054
 uniform sampler2D colorMap;
 uniform bool horizontal;
 
-in vec2 fragUV;
+noperspective in vec2 fragUV;
 
 out vec4 fragColor;
 

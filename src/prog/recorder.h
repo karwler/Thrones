@@ -40,10 +40,10 @@ public:
 	static constexpr char iniKeywordFinish[] = "finish";
 
 private:
-	SDL_RWops* file;
+	SDL_RWops* file = nullptr;
 
 public:
-	RecordWriter(const string& cfgName, Board* board);
+	RecordWriter(string_view cfgName, Board* board);
 	~RecordWriter();
 
 	void piece(uint16 pid, svec2 src, svec2 dst);
@@ -67,7 +67,7 @@ private:
 	sizet apos = 0;
 
 public:
-	RecordReader(const string& name, RecConfig& cfg);
+	RecordReader(string_view name, RecConfig& cfg);
 
 	RecAction nextAction();
 	RecAction prevAction();

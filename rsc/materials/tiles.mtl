@@ -2,6 +2,8 @@ newmtl tile
 Kd 0.8 0.8 0.8
 Ks 0.3 0.3 0.3
 Ns 600
+Rl 1
+Rh 0.5
 
 newmtl empty
 Kd 0.8 0.8 0.8

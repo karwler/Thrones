@@ -9,50 +9,23 @@ public:
 	struct Instance {
 		Rectf rect;
 		Rectf uvrc;
-		float zloc;
 		vec4 color;
 		uint texid;
 	};
 
-protected:
-	vector<Instance> instanceData;
 private:
-	GLuint vao = 0, vbo = 0, ibo = 0;
-
-	static constexpr uint corners = 4;
-	static constexpr uint stride = 2;
-	static constexpr float vertices[corners * stride] = {
-		0.f, 0.f,
-		1.f, 0.f,
-		0.f, 1.f,
-		1.f, 1.f
-	};
+	GLuint vao = 0, ibo = 0;
 
 public:
 	void initBuffer();
+	void initBuffer(uint cnt);
 	void freeBuffer();
-	bool bufferInitialized() const;
-	void drawInstances();
 	void drawInstances(GLsizei icnt);
-	void allocate(uint icnt);
-	void setInstance(uint id, const Rect& rect = Rect(0), const vec4& color = vec4(0.f), const TexLoc& tex = TextureCol::blank, float z = 0.f);
-	void setInstance(uint id, const Rect& rect, const Rect& frame, const vec4& color, const TexLoc& tex, float z = 0.f);
-	void updateInstance(uint id, uint cnt = 1);	// id is offset into instanceData and ibo
-	void updateInstanceOffs(uint id, uint cnt);	// id is offset into instanceData
-	void updateInstanceData(uint id, uint cnt);	// id is offset into instanceData
+	void updateInstances(const Instance* data, uint id, uint cnt);
+	void uploadInstances(const Instance* data, uint cnt);
+	static void setInstance(Instance* ins, const Rect& rect = Rect(0), const vec4& color = vec4(0.f), const TexLoc& tex = TextureCol::blank);
+	static void setInstance(Instance* ins, const Rect& rect, const Rect& frame, const vec4& color, const TexLoc& tex = TextureCol::blank);
 };
-
-inline bool Quad::bufferInitialized() const {
-	return vao;
-}
-
-inline void Quad::drawInstances() {
-	drawInstances(instanceData.size());
-}
-
-inline void Quad::allocate(uint icnt) {
-	instanceData.resize(icnt);
-}
 
 // scroll information
 class ScrollBar {
@@ -68,12 +41,12 @@ private:
 	static constexpr float throttle = 10.f;
 
 public:
-	void setInstances(Quad* quad, uint id, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
-	void setInstances(Quad* quad, uint id, const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert, float z = 0.f) const;
+	void setInstances(Quad::Instance* ins, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const;
+	void setInstances(Quad::Instance* ins, const Rect& frame, ivec2 listSize, ivec2 pos, ivec2 size, bool vert) const;
 	bool tick(float dSec, ivec2 listSize, ivec2 size);	// returns whether the list has moved
 	bool hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);	// returns whether the list has moved
 	void drag(ivec2 mPos, ivec2 mMov, ivec2 listSize, ivec2 pos, ivec2 size, bool vert);
-	void undrag(uint8 mBut, bool vert);
+	void undrag(ivec2 mPos, uint8 mBut, bool vert);
 	void cancelDrag();
 	void scroll(ivec2 wMov, ivec2 listSize, ivec2 size, bool vert);
 
@@ -126,19 +99,18 @@ public:
 
 protected:
 	Layout* parent = nullptr;	// every widget that isn't a RootLayout should have a parent
-	uint index = UINT_MAX;		// this widget's id in parent's widget list
-	uint instIndex = UINT_MAX;	// starting index in the parent's instance buffer array
 	Size relSize;				// size relative to parent's parameters
+	uint index = UINT_MAX;		// this widget's id in parent's widget list
 
 public:
 	Widget(const Size& size = 1.f);
 	~Widget() override = default;
 
 	virtual void draw() {}	// reserved for Layout
-	virtual uint setTopInstances(Quad& quad, uint qid);	// returns next instance id
-	virtual void onResize() {}
-	virtual void postInit() {}	// gets called after parent is set and all set up
-	virtual bool setInstances();
+	virtual uint setTopInstances(Quad::Instance* ins);	// returns instance count
+	virtual void onResize(Quad::Instance*) {}
+	virtual void postInit(Quad::Instance*) {}	// gets called after parent is set and all set up
+	virtual void setInstances(Quad::Instance*) {}
 	virtual uint numInstances() const;
 	virtual ivec2 position() const;
 	virtual ivec2 size() const;
@@ -147,10 +119,9 @@ public:
 	virtual bool selectable() const;
 	virtual void updateTipTex() {}
 
-	void setParent(Layout* pnt, uint id, uint inst);
+	void setParent(Layout* pnt, uint id);
 	Layout* getParent() const;
 	uint getIndex() const;
-	uint getInstIndex() const;
 	const Size& getSize() const;
 	bool sizeValid() const;
 	Rect rect() const;			// the rectangle that is the widget
@@ -170,10 +141,6 @@ inline Layout* Widget::getParent() const {
 
 inline uint Widget::getIndex() const {
 	return index;
-}
-
-inline uint Widget::getInstIndex() const {
-	return instIndex;
 }
 
 inline const Size& Widget::getSize() const {
@@ -208,9 +175,9 @@ public:
 	Button(const Size& size = 1.f, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~Button() override;
 
-	void onResize() override;
-	void postInit() override;
-	bool setInstances() override;
+	void onResize(Quad::Instance* ins) override;
+	void postInit(Quad::Instance* ins) override;
+	void setInstances(Quad::Instance* ins) override;
 	uint numInstances() const override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onHover() override;
@@ -219,7 +186,7 @@ public:
 	bool selectable() const override;
 	void updateTipTex() override;
 
-	uint setTooltipInstances(Quad& quad, uint qid) const;	// returns next instance id
+	uint setTooltipInstances(Quad::Instance* ins, ivec2 mPos) const;	// returns instance count
 	void setTooltip(string&& tooltip);
 	void setDim(float factor);
 protected:
@@ -243,8 +210,8 @@ public:
 	CheckBox(const Size& size = 1.f, bool checked = false, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~CheckBox() override = default;
 
-	void onResize() override;
-	void postInit() override;
+	void onResize(Quad::Instance* ins) override;
+	void postInit(Quad::Instance* ins) override;
 	uint numInstances() const override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 
@@ -253,7 +220,7 @@ public:
 	Rect boxRect() const;
 	const vec4& boxColor() const;
 protected:
-	bool setInstances() override;
+	void setInstances(Quad::Instance* ins) override;
 };
 
 inline bool CheckBox::getOn() const {
@@ -280,13 +247,13 @@ public:
 	Slider(const Size& size = 1.f, int value = 0, int minimum = 0, int maximum = 255, int navStep = 1, BCall finishCall = nullptr, BCall updateCall = nullptr, string&& tooltip = string(), float dim = 1.f, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~Slider() override = default;
 
-	void onResize() override;
-	void postInit() override;
+	void onResize(Quad::Instance* ins) override;
+	void postInit(Quad::Instance* ins) override;
 	uint numInstances() const override;
 	void onClick(ivec2, uint8) override {}
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
-	void onUndrag(uint8 mBut) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
 	void onKeyDown(const SDL_KeyboardEvent& key) override;
 	void onJButtonDown(uint8 but) override;
 	void onJHatDown(uint8 hat, uint8 val) override;
@@ -305,7 +272,7 @@ public:
 	Rect sliderRect() const;
 
 protected:
-	bool setInstances() override;
+	void setInstances(Quad::Instance* ins) override;
 private:
 	void onInput(Binding::Type bind);
 	void setSlider(int xpos);
@@ -347,8 +314,8 @@ public:
 	Label(string line, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~Label() override;
 
-	void onResize() override;
-	void postInit() override;
+	void onResize(Quad::Instance* ins) override;
+	void postInit(Quad::Instance* ins) override;
 	uint numInstances() const override;
 
 	const string& getText() const;
@@ -361,8 +328,8 @@ public:
 	static int txtLen(const string& str, float hfac);
 
 protected:
-	bool setInstances() override;
-	void setTextInstance();
+	void setInstances(Quad::Instance* ins) override;
+	void setTextInstance(Quad::Instance* ins);
 	void updateTextInstance();
 	static ivec2 textOfs(int resx, Alignment align, ivec2 pos, int sizx, int margin);
 	virtual Rect textRect() const;
@@ -404,27 +371,27 @@ public:
 
 	uint numInstances() const override;
 	void tick(float dSec) override;
-	void onResize() override;
-	void postInit() override;
+	void onResize(Quad::Instance* ins) override;
+	void postInit(Quad::Instance* ins) override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
-	void onUndrag(uint8 mBut) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
 	void onHover() override {}
 	void onUnhover() override {}
-	void onScroll(ivec2 wMov) override;
+	void onScroll(ivec2 mPos, ivec2 wMov) override;
 	void onCancelCapture() override;
 
 	bool selectable() const override;
 	void setText(string&& str) override;
 	void setText(const string &str) override;
-	void addLine(const string& line);
+	void addLine(string_view line);
 	string moveText();
 protected:
 	Rect textRect() const override;
 	void updateTextTex() override;
-	bool setInstances() override;
+	void setInstances(Quad::Instance* ins) override;
 private:
-	void setScrollBarInstances();
+	void setScrollBarInstances(Quad::Instance* ins);
 	void updateScrollBarInstances();
 	bool alignVerticalScroll();
 	void resetListPos();
@@ -452,9 +419,9 @@ public:
 	bool getSelected() const;
 	void setSelected(bool on);
 protected:
-	bool setInstances() override;
+	void setInstances(Quad::Instance* ins) override;
 private:
-	void setSelectionInstances();
+	void setSelectionInstances(Quad::Instance* ins);
 };
 
 inline bool Icon::getSelected() const {
@@ -505,8 +472,8 @@ public:
 	LabelEdit(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~LabelEdit() override;
 
-	void postInit() override;
-	uint setTopInstances(Quad& quad, uint qid) override;
+	void postInit(Quad::Instance* ins) override;
+	uint setTopInstances(Quad::Instance* ins) override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	void onKeyDown(const SDL_KeyboardEvent& key) override;
 	void onJButtonDown(uint8 but) override;
@@ -514,8 +481,8 @@ public:
 	void onJAxisDown(uint8 axis, bool positive) override;
 	void onGButtonDown(SDL_GameControllerButton but) override;
 	void onGAxisDown(SDL_GameControllerAxis axis, bool positive) override;
-	void onCompose(const char* str, sizet& len) override;
-	void onText(const char* str, sizet& len) override;
+	void onCompose(string_view str, sizet olen) override;
+	void onText(string_view str, sizet olen) override;
 	void onCancelCapture() override;
 
 	bool selectable() const override;
@@ -538,7 +505,7 @@ private:
 
 	static bool kmodCtrl(uint16 mod);
 	static bool kmodAlt(uint16 mod);
-	static sizet cutLength(const char* str, sizet lim);
+	static sizet cutLength(string_view str, sizet lim);
 	void cutText();
 	uint16 jumpCharB(uint16 i);
 	uint16 jumpCharF(uint16 i);

@@ -1,3 +1,4 @@
+#include "layouts.h"
 #include "engine/scene.h"
 #include "engine/world.h"
 #include "prog/board.h"
@@ -34,7 +35,7 @@ Interactable* Navigator::findFirstSelectable() const {
 }
 
 void Navigator::navSelectOut(const vec3& pos, Direction dir) {
-	parent->navSelectNext(index, World::scene()->camera.screenPos(pos)[dir.horizontal()], dir);
+	parent->navSelectNext(index, World::scene()->getCamera()->screenPos(pos)[dir.horizontal()], dir);
 }
 
 // LAYOUT
@@ -46,12 +47,7 @@ Layout::Layout(const Size& size, vector<Widget*>&& children, bool vert, const Si
 	positions(widgets.size() + 1),
 	spaceSize(space),
 	vertical(vert)
-{
-	if (uint numInst = setWidgetsParent(0, startInst)) {
-		instanceData.resize(numInst);
-		initBuffer();
-	}
-}
+{}
 
 Layout::~Layout() {
 	setPtrVec(widgets);
@@ -59,8 +55,8 @@ Layout::~Layout() {
 }
 
 void Layout::draw() {
-	if (!instanceData.empty())
-		drawInstances();
+	if (numInsts)
+		drawInstances(numInsts);
 	for (Widget* it : widgets)
 		it->draw();
 }
@@ -70,38 +66,52 @@ void Layout::tick(float dSec) {
 		it->tick(dSec);
 }
 
-void Layout::onResize() {
+void Layout::onResize(Instance*) {
 	calculateWidgetPositions();
-	doWidgetsResize();
+	if (numInsts) {
+		vector<Instance> instanceData = initInstanceData();
+		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
+			widgets[i]->onResize(&instanceData[qid]);
+		updateInstances(instanceData.data(), 0, instanceData.size());
+	} else
+		for (Widget* it : widgets)
+			it->onResize(nullptr);
 }
 
-void Layout::doWidgetsResize() {
-	for (Widget* it : widgets)
-		it->onResize();
-	if (!instanceData.empty())
-		updateInstanceData(0, instanceData.size());
-}
-
-void Layout::postInit() {
+void Layout::postInit(Instance*) {
+	numInsts = startInst;
+	for (uint i = 0; i < widgets.size(); ++i) {
+		widgets[i]->setParent(this, i);
+		numInsts += widgets[i]->numInstances();
+	}
 	calculateWidgetPositions();
-	for (Widget* it : widgets)
-		it->postInit();
-	if (!instanceData.empty())
-		updateInstanceData(0, instanceData.size());
+
+	if (numInsts) {
+		vector<Instance> instanceData = initInstanceData();
+		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
+			widgets[i]->postInit(&instanceData[qid]);
+		initBuffer();
+		uploadInstances(instanceData.data(), instanceData.size());
+	} else
+		for (Widget* it : widgets)
+			it->postInit(nullptr);
 }
 
-bool Layout::setInstances() {
-	for (Widget* it : widgets)
-		it->setInstances();
-	if (!instanceData.empty())
-		updateInstance(0, instanceData.size());
-	return true;
+void Layout::setInstances(Instance*) {
+	if (numInsts) {
+		vector<Instance> instanceData = initInstanceData();
+		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
+			widgets[i]->setInstances(&instanceData[qid]);
+		updateInstances(instanceData.data(), 0, instanceData.size());
+	} else
+		for (Widget* it : widgets)
+			it->setInstances(nullptr);
 }
 
 void Layout::calculateWidgetPositions() {
 	// get amount of space for widgets with percent size and get sum of sizes
 	ivec2 wsiz = size();
-	float scrh = float(World::window()->getScreenView().y);
+	float scrh = float(World::window()->getGuiView().y);
 	vector<int> pixSizes(widgets.size());
 	int spacing = sizeToPixRel(spaceSize);
 	int totalSpacing = (widgets.size() - 1) * spacing;
@@ -150,53 +160,62 @@ void Layout::setWidgets(vector<Widget*>&& wgts) {
 	deselectWidgets();
 	setPtrVec(widgets, std::move(wgts));
 	positions.resize(widgets.size() + 1);
-	if (uint numInst = setWidgetsParent(0, startInst)) {
-		instanceData.resize(numInst);
-		initBuffer();
-	} else {
-		instanceData.clear();
-		freeBuffer();
-	}
-	postInit();
+	freeBuffer();
+	postInit(nullptr);
 	World::scene()->updateSelect();
 }
 
-void Layout::insertWidget(uint id, Widget* wgt) {
-	initBuffer();
-	uint qid = !widgets.empty() ? widgets[id]->getInstIndex() : startInst;
-	instanceData.emplace(instanceData.begin() + qid);
-	widgets.insert(widgets.begin() + id, wgt);
-	positions.emplace_back();
-
-	setWidgetsParent(id, qid);
+void Layout::insertWidgets(uint id, Widget** wgts, uint cnt) {
+	widgets.insert(widgets.begin() + id, wgts, wgts + cnt);
+	positions.resize(positions.size() + cnt);
+	uint i;
+	for (i = id; i < id + cnt; ++i) {
+		widgets[i]->setParent(this, i);
+		numInsts += widgets[i]->numInstances();
+	}
+	for (; i < widgets.size(); ++i)
+		widgets[i]->setParent(this, i);
 	calculateWidgetPositions();
-	wgt->postInit();
-	doWidgetsResize();
+
+	vector<Instance> instanceData = initInstanceData();
+	uint qid = startInst;
+	for (i = 0; i < id; qid += widgets[i++]->numInstances())
+		widgets[i]->onResize(&instanceData[qid]);
+	for (; i < id + cnt; qid += widgets[i++]->numInstances())
+		widgets[i]->postInit(&instanceData[qid]);
+	for (; i < widgets.size(); qid += widgets[i++]->numInstances())
+		widgets[i]->onResize(&instanceData[qid]);
+	if (numInsts) {
+		initBuffer();
+		uploadInstances(instanceData.data(), instanceData.size());
+	}
 	World::scene()->updateSelect();
 }
 
-void Layout::deleteWidget(uint id) {
-	bool updateSelect = deselectWidget(widgets[id]);
-	uint qid = widgets[id]->getInstIndex();
-	delete widgets[id];
-	instanceData.erase(instanceData.begin() + qid);
-	widgets.erase(widgets.begin() + id);
-	positions.pop_back();
-	if (instanceData.empty())
+void Layout::deleteWidgets(uint id, uint cnt) {
+	deleteWidgetsInit(id, cnt);
+	numInsts = std::accumulate(widgets.begin(), widgets.begin() + id, startInst, [](uint v, const Widget* it) -> uint { return v + it->numInstances(); });
+	for (uint i = id; i < widgets.size(); ++i) {
+		widgets[i]->setParent(this, i);
+		numInsts += widgets[i++]->numInstances();
+	}
+	if (!numInsts)
 		freeBuffer();
-
-	setWidgetsParent(id, qid);
-	onResize();
-	if (updateSelect)
-		World::scene()->updateSelect();
+	onResize(nullptr);
+	World::scene()->updateSelect();
 }
 
-uint Layout::setWidgetsParent(uint id, uint qid) {
-	for (; id < widgets.size(); ++id) {
-		widgets[id]->setParent(this, id, qid);
-		qid += widgets[id]->numInstances();
-	}
-	return qid;
+void Layout::deleteWidgetsInit(uint id, uint cnt) {
+	deselectWidgets();
+	uint end = id + cnt;
+	for (uint i = id; i < end; ++i)
+		delete widgets[i];
+	widgets.erase(widgets.begin() + id, widgets.begin() + end);
+	positions.resize(positions.size() - cnt);
+}
+
+vector<Quad::Instance> Layout::initInstanceData() {
+	return vector<Instance>(numInsts);
 }
 
 bool Layout::deselectWidget(Widget* wgt) {
@@ -219,7 +238,7 @@ bool Layout::deselectWidgets() const {
 
 void Layout::setSpacing(const Size& space) {
 	spaceSize = space;
-	onResize();
+	onResize(nullptr);
 }
 
 ivec2 Layout::wgtPosition(uint id) const {
@@ -227,11 +246,11 @@ ivec2 Layout::wgtPosition(uint id) const {
 }
 
 ivec2 Layout::wgtSize(uint id) const {
-	return swap(size()[!vertical], positions[id+1][vertical] - positions[id][vertical] - sizeToPixRel(spaceSize), !vertical);
+	return swap(size()[!vertical], positions[id + 1][vertical] - positions[id][vertical] - sizeToPixRel(spaceSize), !vertical);
 }
 
-bool Layout::instanceVisible(uint) const {
-	return true;
+uint Layout::wgtInstanceId(uint id) const {
+	return std::accumulate(widgets.begin(), widgets.begin() + id, startInst, [](uint v, const Widget* it) -> uint { return v + it->numInstances(); });
 }
 
 Interactable* Layout::findFirstSelectable() const {
@@ -299,14 +318,11 @@ RootLayout::RootLayout(const Size& size, vector<Widget*>&& children, bool vert, 
 	bgColor(color)
 {}
 
-void RootLayout::onResize() {
-	setInstance(dimInst, Rect(ivec2(0), World::window()->getScreenView()), bgColor, TextureCol::blank);	// dim other widgets
-	Layout::onResize();
-}
-
-void RootLayout::postInit() {
-	setInstance(dimInst, Rect(ivec2(0), World::window()->getScreenView()), bgColor, TextureCol::blank);	// dim other widgets
-	Layout::postInit();
+vector<Quad::Instance> RootLayout::initInstanceData() {
+	vector<Instance> ins(numInsts);
+	if (startInst)
+		setInstance(ins.data(), Rect(ivec2(0), World::window()->getGuiView()), bgColor);	// dim other widgets
+	return ins;
 }
 
 ivec2 RootLayout::position() const {
@@ -314,13 +330,13 @@ ivec2 RootLayout::position() const {
 }
 
 ivec2 RootLayout::size() const {
-	ivec2 res = World::window()->getScreenView();
+	ivec2 res = World::window()->getGuiView();
 	return ivec2(res.x, res.y - pixTopSpacing());
 }
 
 void RootLayout::setSize(const Size& size) {
 	relSize = size;
-	onResize();
+	onResize(nullptr);
 }
 
 Rect RootLayout::frame() const {
@@ -328,7 +344,7 @@ Rect RootLayout::frame() const {
 }
 
 int RootLayout::pixTopSpacing() const {
-	return World::window()->getTitleBarHeight() ? int(topSpacingFac * float(World::window()->getScreenView().y)) : 0;
+	return World::window()->getTitleBarHeight() ? int(topSpacingFac * float(World::window()->getGuiView().y)) : 0;
 }
 
 // TITLE BAR
@@ -338,13 +354,13 @@ ivec2 TitleBar::position() const {
 }
 
 ivec2 TitleBar::size() const {
-	return ivec2(World::window()->getScreenView().x, World::window()->getTitleBarHeight());
+	return ivec2(World::window()->getGuiView().x, World::window()->getTitleBarHeight());
 }
 
 // POPUP
 
 Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okCall, BCall cancelCall, bool vert, const Size& space, float topSpace, Widget* firstSelect, Type ctxType, const vec4& color) :
-	RootLayout(size.first, std::move(children), vert, space, topSpace, color, bgInst + 1),
+	RootLayout(size.first, std::move(children), vert, space, topSpace, color, 2),
 	kcall(okCall),
 	ccall(cancelCall),
 	defaultSelect(firstSelect),
@@ -352,14 +368,11 @@ Popup::Popup(const pair<Size, Size>& size, vector<Widget*>&& children, BCall okC
 	type(ctxType)
 {}
 
-void Popup::onResize() {
-	setInstance(bgInst, getBackgroundRect(), colorBackground, TextureCol::blank);
-	RootLayout::onResize();
-}
-
-void Popup::postInit() {
-	setInstance(bgInst, getBackgroundRect(), colorBackground, TextureCol::blank);
-	RootLayout::postInit();
+vector<Quad::Instance> Popup::initInstanceData() {
+	vector<Instance> ins(numInsts);
+	setInstance(&ins[0], Rect(ivec2(0), World::window()->getGuiView()), bgColor);	// dim other widgets
+	setInstance(&ins[1], getBackgroundRect(), colorBackground);						// background
+	return ins;
 }
 
 void Popup::onClick(ivec2 mPos, uint8 mBut) {
@@ -374,11 +387,11 @@ Rect Popup::getBackgroundRect() const {
 }
 
 ivec2 Popup::position() const {
-	return (World::window()->getScreenView() - size()) / 2;
+	return (World::window()->getGuiView() - size()) / 2;
 }
 
 ivec2 Popup::size() const {
-	ivec2 res = World::window()->getScreenView();
+	ivec2 res = World::window()->getGuiView();
 	return ivec2(sizeToPixAbs(relSize, res.x), sizeToPixAbs(sizeY, res.y));
 }
 
@@ -397,25 +410,22 @@ void Overlay::draw() {
 		Layout::draw();
 }
 
-void Overlay::onResize() {
-	setInstance(bgInst, rect(), boxColor, TextureCol::blank);
-	RootLayout::onResize();
-}
-
-void Overlay::postInit() {
-	setInstance(bgInst, rect(), boxColor, TextureCol::blank);
-	RootLayout::postInit();
+vector<Quad::Instance> Overlay::initInstanceData() {
+	vector<Instance> ins(numInsts);
+	setInstance(&ins[0], Rect(ivec2(0), World::window()->getGuiView()), bgColor);	// dim other widgets
+	setInstance(&ins[1], rect(), boxColor);											// background
+	return ins;
 }
 
 ivec2 Overlay::position() const {
-	ivec2 res = World::window()->getScreenView();
+	ivec2 res = World::window()->getGuiView();
 	return ivec2(sizeToPixAbs(relPos.first, res.x), std::max(sizeToPixAbs(relPos.second, res.y), pixTopSpacing()));
 }
 
 ivec2 Overlay::size() const {
 	ivec2 siz = Popup::size();
 	int topSpacing = pixTopSpacing();
-	int ypos = sizeToPixAbs(relPos.second, World::window()->getScreenView().y);
+	int ypos = sizeToPixAbs(relPos.second, World::window()->getGuiView().y);
 	return ivec2(siz.x, ypos >= topSpacing ? siz.y : siz.y - topSpacing + ypos);
 }
 
@@ -427,75 +437,150 @@ void Overlay::setShow(bool yes) {
 
 // SCROLL AREA
 
+void ScrollArea::draw() {
+	drawInstances(numInsts);
+	for (uint i = visWgts.x; i < visWgts.y; ++i)
+		widgets[i]->draw();
+}
+
 void ScrollArea::tick(float dSec) {
 	bool update = scroll.tick(dSec, listSize(), size());
 	Layout::tick(dSec);
 	if (update)
-		setInstances();
+		setInstances(nullptr);
 }
 
-void ScrollArea::doWidgetsResize() {
-	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
-	setVisibleInstances();
-	for (Widget* it : widgets)
-		it->onResize();
-	scroll.setInstances(this, visibleInsts.x, frame(), listSize(), position(), size(), vertical);
-	updateInstanceData(visibleInsts.x, visibleInsts.y - visibleInsts.x);	// TODO: use subdata if range hasn't changed
-}
-
-void ScrollArea::postInit() {
+void ScrollArea::onResize(Instance*) {
 	calculateWidgetPositions();
-	setVisibleInstances();
-	for (Widget* it : widgets)
-		it->postInit();
-	scroll.setInstances(this, visibleInsts.x, frame(), listSize(), position(), size(), vertical);
-	updateInstanceData(visibleInsts.x, visibleInsts.y - visibleInsts.x);
-}
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
+	uint oldVis = numInsts;
+	setVisibleWidgets();
 
-bool ScrollArea::setInstances() {
-	uint oldVis = visibleInsts.y - visibleInsts.x;
-	setVisibleInstances();
-	for (Widget* it : widgets)
-		it->setInstances();
-	scroll.setInstances(this, visibleInsts.x, frame(), listSize(), position(), size(), vertical);
-
-	if (uint newVis = visibleInsts.y - visibleInsts.x; newVis == oldVis)
-		updateInstanceOffs(visibleInsts.x, newVis);
+	vector<Instance> instanceData = initInstanceData();
+	uint i;
+	for (i = 0; i < visWgts.x; ++i)
+		widgets[i]->onResize(nullptr);
+	for (uint qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->onResize(&instanceData[qid]);
+	for (; i < widgets.size(); ++i)
+		widgets[i]->onResize(nullptr);
+	if (oldVis == numInsts)
+		updateInstances(instanceData.data(), 0, instanceData.size());
 	else
-		updateInstanceData(visibleInsts.x, newVis);
-	return true;
+		uploadInstances(instanceData.data(), instanceData.size());
 }
 
-void ScrollArea::setVisibleInstances() {
-	if (widgets.empty()) {
-		visibleInsts = uvec2(0, ScrollBar::numInstances);
-		return;
-	}
+void ScrollArea::postInit(Quad::Instance*) {
+	uint i;
+	for (i = 0; i < widgets.size(); ++i)
+		widgets[i]->setParent(this, i);
+	calculateWidgetPositions();
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
+	setVisibleWidgets();
 
-	uint pos = 0;
-	for (; pos < widgets.size() && wgtREnd(pos) < scroll.listPos[vertical]; ++pos);
-	uint fin = pos + 1;	// last is one greater than the actual last index
-	for (int end = scroll.listPos[vertical] + size()[vertical]; fin < widgets.size() && wgtRPos(fin) < end; ++fin);
-	visibleInsts = uvec2(widgets[pos]->getInstIndex() - ScrollBar::numInstances, widgets[fin-1]->getInstIndex() + widgets[fin-1]->numInstances());
+	vector<Instance> instanceData = initInstanceData();
+	for (i = 0; i < visWgts.x; ++i)
+		widgets[i]->postInit(nullptr);
+	for (uint qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->postInit(&instanceData[qid]);
+	for (; i < widgets.size(); ++i)
+		widgets[i]->postInit(nullptr);
+	initBuffer();
+	uploadInstances(instanceData.data(), instanceData.size());
+}
+
+void ScrollArea::setInstances(Quad::Instance*) {
+	uint oldVis = numInsts;
+	setVisibleWidgets();
+	vector<Instance> instanceData = initInstanceData();
+	for (uint i = visWgts.x, qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->setInstances(&instanceData[qid]);
+	if (numInsts == oldVis)
+		updateInstances(instanceData.data(), 0, instanceData.size());
+	else
+		uploadInstances(instanceData.data(), instanceData.size());
+}
+
+void ScrollArea::insertWidgets(uint id, Widget** wgts, uint cnt) {
+	widgets.insert(widgets.begin() + id, wgts, wgts + cnt);
+	positions.resize(positions.size() + cnt);
+	uint i, end = id + cnt;
+	for (i = id; i < widgets.size(); ++i)
+		widgets[i]->setParent(this, i);
+	calculateWidgetPositions();
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
+	setVisibleWidgets();
+
+	vector<Instance> instanceData = initInstanceData();
+	uint qid = startInst;
+	for (i = 0; i < id && i < visWgts.x; ++i)
+		widgets[i]->onResize(nullptr);
+	for (; i < id && i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->onResize(&instanceData[qid]);
+	while (i < id)
+		widgets[i++]->onResize(nullptr);
+	while (i < end && i < visWgts.x)
+		widgets[i++]->postInit(nullptr);
+	for (; i < end && i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->postInit(&instanceData[qid]);
+	while (i < end)
+		widgets[i++]->postInit(nullptr);
+	while (i < widgets.size() && i < visWgts.x)
+		widgets[i++]->onResize(nullptr);
+	for (; i < widgets.size() && i < visWgts.y; qid += widgets[i++]->numInstances())
+		widgets[i]->onResize(&instanceData[qid]);
+	while (i < widgets.size())
+		widgets[i++]->onResize(nullptr);
+	initBuffer();
+	uploadInstances(instanceData.data(), instanceData.size());
+	World::scene()->updateSelect();
+}
+
+void ScrollArea::deleteWidgets(uint id, uint cnt) {
+	deleteWidgetsInit(id, cnt);
+	uint i;
+	for (i = id; i < widgets.size(); ++i)
+		widgets[i]->setParent(this, i);
+	onResize(nullptr);
+	World::scene()->updateSelect();
+}
+
+vector<Quad::Instance> ScrollArea::initInstanceData() {
+	vector<Instance> instanceData(numInsts);
+	scroll.setInstances(instanceData.data(), frame(), listSize(), position(), size(), vertical);
+	return instanceData;
+}
+
+void ScrollArea::setVisibleWidgets() {
+	if (!widgets.empty()) {
+		for (visWgts.x = 0; visWgts.x < widgets.size() && wgtREnd(visWgts.x) < scroll.listPos[vertical]; ++visWgts.x);
+		numInsts = startInst + widgets[visWgts.x]->numInstances();
+		visWgts.y = visWgts.x + 1;	// last is one greater than the actual last index
+		for (int end = scroll.listPos[vertical] + size()[vertical]; visWgts.y < widgets.size() && wgtRPos(visWgts.y) < end; ++visWgts.y)
+			numInsts += widgets[visWgts.y]->numInstances();
+	} else {
+		visWgts = uvec2(0);
+		numInsts = startInst;
+	}
 }
 
 void ScrollArea::onHold(ivec2 mPos, uint8 mBut) {
 	if (scroll.hold(mPos, mBut, this, listSize(), position(), size(), vertical))
-		setInstances();
+		setInstances(nullptr);
 }
 
 void ScrollArea::onDrag(ivec2 mPos, ivec2 mMov) {
 	scroll.drag(mPos, mMov, listSize(), position(), size(), vertical);
-	setInstances();
+	setInstances(nullptr);
 }
 
-void ScrollArea::onUndrag(uint8 mBut) {
-	scroll.undrag(mBut, vertical);
+void ScrollArea::onUndrag(ivec2 mPos, uint8 mBut) {
+	scroll.undrag(mPos, mBut, vertical);
 }
 
-void ScrollArea::onScroll(ivec2 wMov) {
+void ScrollArea::onScroll(ivec2, ivec2 wMov) {
 	scroll.scroll(wMov, listSize(), size(), vertical);
-	setInstances();
+	setInstances(nullptr);
 	World::scene()->updateSelect();
 }
 
@@ -511,8 +596,8 @@ ivec2 ScrollArea::wgtSize(uint id) const {
 	return Layout::wgtSize(id) - swap(ScrollBar::barSize(listSize(), size(), vertical), 0, !vertical);
 }
 
-bool ScrollArea::instanceVisible(uint qid) const {
-	return qid >= visibleInsts.x + ScrollBar::numInstances && qid < visibleInsts.y;
+uint ScrollArea::wgtInstanceId(uint id) const {
+	return inRange(id, visWgts.x, visWgts.y) ? std::accumulate(widgets.begin(), widgets.begin() + id, startInst, [](uint v, const Widget* it) -> uint { return v + it->numInstances(); }) : UINT_MAX;
 }
 
 void ScrollArea::onNavSelect(Direction dir) {
@@ -539,10 +624,10 @@ void ScrollArea::scrollToSelected() {
 		if (child->getParent() == this) {
 			if (int cpos = child->position()[vertical], fpos = position()[vertical]; cpos < fpos) {
 				scroll.setListPos(vertical ? ivec2(scroll.listPos.x, wgtRPos(child->getIndex())) : ivec2(wgtRPos(child->getIndex()), scroll.listPos.y), listSize(), size());
-				setInstances();
+				setInstances(nullptr);
 			} else if (cpos + child->size()[vertical] > fpos + size()[vertical]) {
 				scroll.setListPos(vertical ? ivec2(scroll.listPos.x, wgtREnd(child->getIndex()) - size().y) : ivec2(wgtREnd(child->getIndex()) - size().x, scroll.listPos.y), listSize(), size());
-				setInstances();
+				setInstances(nullptr);
 			}
 			break;
 		}

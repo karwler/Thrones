@@ -84,8 +84,8 @@ private:
 	Piece* readCommandPieceId(const char*& cmd);
 	Piece* readCommandPiecePos(const char*& cmd);
 	void readCommandPieceMove(const char*& cmd, Piece* pce, bool killOccupant);
-	static pair<uint16, string> readCommandTileId(const char*& cmd);
-	static pair<svec2, string> readCommandTilePos(const char*& cmd);
+	static pair<uint16, string_view> readCommandTileId(const char*& cmd);
+	static pair<svec2, string_view> readCommandTilePos(const char*& cmd);
 	void readCommandChange(uint16 id, const char* name);
 	static svec2 readCommandVec(const char*& cmd);
 	static pair<uint8, uint16> readCommandMnum(const char*& cmd, initlist<char> pref = { '+', '-' });

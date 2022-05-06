@@ -3,17 +3,16 @@
 template <class C>
 void World::setArgs(int argc, const C* const* argv) {
 #ifdef NDEBUG
-	args.setArgs(argc, argv, {}, { Settings::argExternal, Settings::argCompositor });
+	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog, Settings::argVr }, { Settings::argExternal });
 #else
-	args.setArgs(argc, argv, { Settings::argConsole, Settings::argCompositor, Settings::argSetup }, { Settings::argExternal });
+	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog, Settings::argVr, Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
 #endif
 }
 
-#ifndef IS_TEST_LIBRARY
 #ifdef _WIN32
 #ifdef __MINGW32__
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR lpCmdLine, int) {
-	if (int argc; LPWSTR* argv = CommandLineToArgvW(cstow(lpCmdLine).c_str(), &argc)) {
+	if (int argc; LPWSTR* argv = CommandLineToArgvW(sstow(lpCmdLine).c_str(), &argc)) {
 #else
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR pCmdLine, int) {
 	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
@@ -31,4 +30,3 @@ int main(int argc, char** argv) {
 	return World::window()->start(World::args);
 #endif
 }
-#endif

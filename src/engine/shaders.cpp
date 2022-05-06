@@ -1,9 +1,8 @@
 #include "shaders.h"
 #include "server/server.h"
 #include "utils/settings.h"
-#include "utils/utils.h"
+#include "utils/text.h"
 #include <random>
-#include <regex>
 
 Shader::Shader(const string& srcVert, const string& srcFrag, const char* name) {
 	GLuint vert = loadShader(srcVert, GL_VERTEX_SHADER, name);
@@ -16,16 +15,16 @@ Shader::Shader(const string& srcVert, const string& srcFrag, const char* name) {
 	glDetachShader(program, frag);
 	glDeleteShader(vert);
 	glDeleteShader(frag);
-	checkStatus(program, GL_LINK_STATUS, glGetProgramiv, glGetProgramInfoLog, name + string(" prog"));
+	checkStatus(program, GL_LINK_STATUS, glGetProgramiv, glGetProgramInfoLog, name + " prog"s);
 	glUseProgram(program);
 }
 
 GLuint Shader::loadShader(const string& source, GLenum type, const char* name) {
-	const char* src = source.c_str();
+	const char* src = source.data();
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &src, nullptr);
 	glCompileShader(shader);
-	checkStatus(shader, GL_COMPILE_STATUS, glGetShaderiv, glGetShaderInfoLog, name + string(type == GL_VERTEX_SHADER ? " vert" : type == GL_FRAGMENT_SHADER ? " frag" : ""));
+	checkStatus(shader, GL_COMPILE_STATUS, glGetShaderiv, glGetShaderInfoLog, name + (type == GL_VERTEX_SHADER ? " vert"s : type == GL_FRAGMENT_SHADER ? " frag"s : ""s));
 	return shader;
 }
 
@@ -45,11 +44,6 @@ void Shader::checkStatus(GLuint id, GLenum stat, C check, I info, const string& 
 	}
 }
 
-pairStr Shader::splitGlobMain(const string& src) {
-	sizet pmain = src.find("main()");
-	return pair(src.substr(0, pmain), src.substr(pmain));
-}
-
 ShaderGeom::ShaderGeom(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader geometry"),
 	proj(glGetUniformLocation(program, "proj")),
@@ -67,8 +61,7 @@ ShaderDepth::ShaderDepth(const string& srcVert, const string& srcFrag) :
 ShaderSsao::ShaderSsao(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader SSAO"),
 	proj(glGetUniformLocation(program, "proj")),
-	noiseScale(glGetUniformLocation(program, "noiseScale")),
-	samples(glGetUniformLocation(program, "samples"))
+	noiseScale(glGetUniformLocation(program, "noiseScale"))
 {
 	glUniform1i(glGetUniformLocation(program, "vposMap"), vposTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "normMap"), normTexa - GL_TEXTURE0);
@@ -82,7 +75,7 @@ ShaderSsao::ShaderSsao(const string& srcVert, const string& srcFrag) :
 		float scale = float(i) / float(sampleSize);
 		kernel[i] = sample * glm::mix(0.1f, 1.f, scale * scale);
 	}
-	glUniform3fv(samples, sampleSize, reinterpret_cast<float*>(kernel));
+	glUniform3fv(glGetUniformLocation(program, "samples"), sampleSize, reinterpret_cast<float*>(kernel));
 
 	vec3 noise[noiseSize];
 	for (uint i = 0; i < noiseSize; ++i)
@@ -91,27 +84,39 @@ ShaderSsao::ShaderSsao(const string& srcVert, const string& srcFrag) :
 	glActiveTexture(noiseTexa);
 	glGenTextures(1, &texNoise);
 	glBindTexture(GL_TEXTURE_2D, texNoise);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 4, 4, 0, GL_RGB, GL_FLOAT, noise);
-	glActiveTexture(texa);
 }
 
-ShaderBlur::ShaderBlur(const string& srcVert, const string& srcFrag) :
+ShaderBlur::ShaderBlur(const string& srcVert, const string& srcFrag, GLenum colorMap) :
 	Shader(srcVert, srcFrag, "Shader blur")
 {
-	glUniform1i(glGetUniformLocation(program, "colorMap"), ssaoTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "colorMap"), colorMap - GL_TEXTURE0);
+}
+
+ShaderSsr::ShaderSsr(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader SSR"),
+	proj(glGetUniformLocation(program, "proj"))
+{
+	glUniform1i(glGetUniformLocation(program, "vposMap"), vposTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "normMap"), normTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "matlMap"), matlTexa - GL_TEXTURE0);
+}
+
+ShaderSsrColor::ShaderSsrColor(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader SSR color")
+{
+	glUniform1i(glGetUniformLocation(program, "colorMap"), sceneTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "ssrMap"), ssr0Texa - GL_TEXTURE0);
 }
 
 ShaderLight::ShaderLight(const string& srcVert, const string& srcFrag, const Settings* sets) :
-	Shader(srcVert, editSource(srcFrag, sets), "Shader light"),
+	Shader(srcVert, srcFrag, "Shader light"),
+	optShadow(glGetUniformLocation(program, "optShadow")),
+	optSsao(glGetUniformLocation(program, "optSsao")),
 	pview(glGetUniformLocation(program, "pview")),
 	viewPos(glGetUniformLocation(program, "viewPos")),
-	screenSize(glGetUniformLocation(program, "screenSize")),
 	farPlane(glGetUniformLocation(program, "farPlane")),
 	lightPos(glGetUniformLocation(program, "lightPos")),
 	lightAmbient(glGetUniformLocation(program, "lightAmbient")),
@@ -119,19 +124,12 @@ ShaderLight::ShaderLight(const string& srcVert, const string& srcFrag, const Set
 	lightLinear(glGetUniformLocation(program, "lightLinear")),
 	lightQuadratic(glGetUniformLocation(program, "lightQuadratic"))
 {
+	glUniform1i(optShadow, sets->getShadowOpt());
+	glUniform1i(optSsao, sets->ssao);
 	glUniform1i(glGetUniformLocation(program, "colorMap"), colorTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "normaMap"), normalTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "depthMap"), depthTexa - GL_TEXTURE0);
-	glUniform1i(glGetUniformLocation(program, "ssaoMap"), blurTexa - GL_TEXTURE0);
-}
-
-string ShaderLight::editSource(const string& src, const Settings* sets) {
-	auto [out, ins] = splitGlobMain(src);
-	if (sets->shadowRes)
-		ins = std::regex_replace(ins, std::regex(R"r((float\s+shadow\s*=\s*)[\d\.]+(\s*;))r"), sets->softShadows ? "$1calcShadowSoft()$2" : "$1calcShadowHard()$2");
-	if (sets->ssao)
-		ins = std::regex_replace(ins, std::regex(R"r((float\s+ssao\s*=\s*)[\d\.]+(\s*;))r"), "$1getSsao()$2");
-	return out + ins;
+	glUniform1i(glGetUniformLocation(program, "ssaoMap"), ssao1Texa - GL_TEXTURE0);
 }
 
 ShaderBrights::ShaderBrights(const string& srcVert, const string& srcFrag) :
@@ -148,21 +146,20 @@ ShaderGauss::ShaderGauss(const string& srcVert, const string& srcFrag) :
 }
 
 ShaderFinal::ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets) :
-	Shader(srcVert, editSource(srcFrag, sets), "Shader final"),
+	Shader(srcVert, srcFrag, "Shader final"),
+	optFxaa(glGetUniformLocation(program, "optFxaa")),
+	optSsr(glGetUniformLocation(program, "optSsr")),
+	optBloom(glGetUniformLocation(program, "optBloom")),
 	gamma(glGetUniformLocation(program, "gamma"))
 {
+	glUniform1i(optFxaa, sets->antiAliasing == Settings::AntiAliasing::fxaa);
+	glUniform1i(optSsr, sets->ssr);
+	glUniform1i(optBloom, sets->bloom);
 	glUniform1i(glGetUniformLocation(program, "sceneMap"), sceneTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "bloomMap"), gaussTexa - GL_TEXTURE0);
-}
-
-string ShaderFinal::editSource(const string& src, const Settings* sets) {
-	auto [out, ins] = splitGlobMain(src);
-	if (!sets->bloom) {
-		out = std::regex_replace(out, std::regex(R"r(uniform\s+sampler2D\s+bloomMap\s*;)r"), "");
-		ins = std::regex_replace(ins, std::regex(R"r(vec\d\s*\()r"), "");
-		ins = std::regex_replace(ins, std::regex(R"r(\.\s*[rgb]+\s*\+\s*texture\s*\(\s*bloomMap\s*,\s*fragUV\s*\)\s*\.\s*[rgb]+\s*,\s*\d+\.\d+\s*\)\s*;)r"), ";");
-	}
-	return out + ins;
+	glUniform1i(glGetUniformLocation(program, "ssrCleanMap"), ssr1Texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "ssrBlurMap"), ssr0Texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "matlMap"), matlTexa - GL_TEXTURE0);
 }
 
 ShaderSkybox::ShaderSkybox(const string& srcVert, const string& srcFrag) :
@@ -175,9 +172,12 @@ ShaderSkybox::ShaderSkybox(const string& srcVert, const string& srcFrag) :
 
 ShaderGui::ShaderGui(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader GUI"),
+#ifdef OPENVR
+	pviewModel(glGetUniformLocation(program, "pviewModel")),
+#endif
 	pview(glGetUniformLocation(program, "pview"))
 {
-	glUniform1i(glGetUniformLocation(program, "colorMap"), texa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "colorMap"), wgtTexa - GL_TEXTURE0);
 }
 
 ShaderStartup::ShaderStartup(const string& srcVert, const string& srcFrag) :
@@ -185,5 +185,27 @@ ShaderStartup::ShaderStartup(const string& srcVert, const string& srcFrag) :
 	pview(glGetUniformLocation(program, "pview")),
 	rect(glGetUniformLocation(program, "rect"))
 {
-	glUniform1i(glGetUniformLocation(program, "colorMap"), stlogTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "colorMap"), tmpTexa - GL_TEXTURE0);
 }
+
+#ifdef OPENVR
+ShaderVrController::ShaderVrController(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader VR controller"),
+	matrix(glGetUniformLocation(program, "matrix"))
+{}
+
+ShaderVrModel::ShaderVrModel(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader VR model"),
+	matrix(glGetUniformLocation(program, "matrix")),
+	diffuse(glGetUniformLocation(program, "diffuse"))
+{
+	//glUniform1i(glGetUniformLocation(program, "colorMap"), stlogTexa - GL_TEXTURE0);
+}
+
+ShaderVrWindow::ShaderVrWindow(const string& srcVert, const string& srcFrag) :
+	Shader(srcVert, srcFrag, "Shader VR window"),
+	mytexture(glGetUniformLocation(program, "mytexture"))
+{
+	//glUniform1i(glGetUniformLocation(program, "colorMap"), stlogTexa - GL_TEXTURE0);
+}
+#endif

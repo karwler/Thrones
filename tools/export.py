@@ -16,7 +16,7 @@ def prun(*cmd: str) -> None:
 
 def getVersion() -> str:
 	with open('src/server/server.h', 'r') as fh:
-		return re.search(r'char\s*commonVersion\[.*\]\s*=\s*"(.*)"', fh.read()).group(1)
+		return re.search(r'string_view\s+commonVersion\s*=\s*"([\d\.]+)"', fh.read()).group(1)
 
 def getThreads() -> str:
 	jobs = None
@@ -105,7 +105,7 @@ def expWin(odir: str, pdir: str, msg: str) -> None:
 	shutil.copytree(os.path.join(pdir, 'share'), os.path.join(odir, 'share'))
 	shutil.copytree(os.path.join(pdir, 'doc'), os.path.join(odir, 'doc'))
 	shutil.copytree(os.path.join(pdir, 'licenses'), os.path.join(odir, 'licenses'))
-	for ft in ['SDL2', 'SDL2_image', 'SDL2_ttf', 'libcurl', 'libpng16-16', 'libfreetype-6', 'zlib1']:
+	for ft in ['SDL2', 'SDL2_image', 'SDL2_ttf', 'libcurl', 'libpng16-16', 'openvr_api', 'zlib1']:
 		shutil.copy(os.path.join(pdir, ft + '.dll'), odir)
 	writeZip(odir)
 
@@ -115,7 +115,7 @@ def genProject(pdir: str, pref: str = '', *gopt: str) -> None:
 	if 'debug' in sys.argv:
 		prun(pref, 'cmake', '..', *gopt, '-DCMAKE_BUILD_TYPE=Debug')
 	else:
-		prun(pref, 'cmake', '..', *gopt)
+		prun(pref, 'cmake', '..', *gopt, '-DCMAKE_BUILD_TYPE=Release')
 
 def genLinux(pdir: str, target: str = '', *gopt: str) -> None:
 	genProject(pdir, '', *gopt)
@@ -135,6 +135,10 @@ def genWeb(pdir: str) -> None:
 	os.rename(os.path.join('share', 'licenses'), 'licenses')
 	prun('emmake', 'make', '-j', getThreads())
 
+def genWin(pdir: str) -> None:
+	genProject(pdir, '', '-G', 'NMake Makefiles')
+	prun('nmake')
+
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
 		print("usage: " + os.path.basename(__file__) + " <action>")
@@ -147,21 +151,21 @@ if __name__ == '__main__':
 	win32Dir = 'build_win32'
 	win64Dir = 'build_win64'
 	if sys.argv[1] == 'android':
-		expAndroid('Thrones_' + getVersion() + '_android')
+		expAndroid('Thrones-' + getVersion() + '-android')
 	elif sys.argv[1] == 'linux':
-		expLinux('Thrones_' + getVersion() + '_linux64', os.path.join(linuxDir, 'Thrones'))
+		expLinux('Thrones-' + getVersion() + '-linux64', os.path.join(linuxDir, 'Thrones'))
 	elif sys.argv[1] == 'appimage':
-		expAppImage('Thrones_' + getVersion() + '_linux64', appimgDir)
+		expAppImage('Thrones-' + getVersion() + '-linux64', appimgDir)
 	elif sys.argv[1] == 'gles':
-		expLinux('Thrones_' + getVersion() + '_gles64', os.path.join(glesDir, 'Thrones'))
+		expLinux('Thrones-' + getVersion() + '-gles64', os.path.join(glesDir, 'Thrones'))
 	elif sys.argv[1] == 'web':
-		expWeb('Thrones_' + getVersion() + '_web', webDir)
+		expWeb('Thrones-' + getVersion() + '-web', webDir)
 	elif sys.argv[1] == 'mac':
-		expMac('Thrones_' + getVersion() + '_mac64', 'build')
+		expMac('Thrones-' + getVersion() + '-mac64', 'build')
 	elif sys.argv[1] == 'win32':
-		expWin('Thrones_' + getVersion() + '_win32', os.path.join(win32Dir, 'Thrones'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 32-bit installed.  \n')
+		expWin('Thrones-' + getVersion() + '-win32', os.path.join(win32Dir, 'Thrones'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 32-bit installed.  \n')
 	elif sys.argv[1] == 'win64':
-		expWin('Thrones_' + getVersion() + '_win64', os.path.join(win64Dir, 'Thrones'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 64-bit installed.  \n')
+		expWin('Thrones-' + getVersion() + '-win64', os.path.join(win64Dir, 'Thrones'), 'To run the program you need to have the Microsoft Visual C++ Redistributable 2019 64-bit installed.  \n')
 	elif sys.argv[1] == 'glinux':
 		genLinux(linuxDir)
 	elif sys.argv[1] == 'gappimage':
@@ -171,8 +175,8 @@ if __name__ == '__main__':
 	elif sys.argv[1] == 'gweb':
 		genWeb(webDir)
 	elif sys.argv[1] == 'gwin32':
-		genProject(win32Dir, '', '-G', 'Visual Studio 16', '-A', 'Win32')
+		genWin(win32Dir)
 	elif sys.argv[1] == 'gwin64':
-		genProject(win64Dir, '', '-G', 'Visual Studio 16', '-A', 'x64')
+		genWin(win64Dir)
 	else:
 		print('unknown action')

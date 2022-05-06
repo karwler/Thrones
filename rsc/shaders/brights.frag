@@ -2,7 +2,7 @@
 
 uniform sampler2D colorMap;
 
-in vec2 fragUV;
+noperspective in vec2 fragUV;
 
 out vec4 fragColor;
 

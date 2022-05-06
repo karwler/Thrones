@@ -25,6 +25,13 @@
 #include <SDL2/SDL_image.h>
 #endif
 
+#ifndef SDL_IMAGE_VERSION_ATLEAST	// emscripten doesn't have this
+#define SDL_IMAGE_VERSION_ATLEAST(X, Y, Z) \
+	((SDL_IMAGE_MAJOR_VERSION >= X) && \
+	(SDL_IMAGE_MAJOR_VERSION > X || SDL_IMAGE_MINOR_VERSION >= Y) && \
+	(SDL_IMAGE_MAJOR_VERSION > X || SDL_IMAGE_MINOR_VERSION > Y || SDL_IMAGE_PATCHLEVEL >= Z))
+#endif
+
 constexpr char defaultReadMode[] = "rb";
 constexpr char defaultWriteMode[] = "wb";
 
@@ -32,8 +39,10 @@ struct Material {
 	vec4 color;
 	vec3 spec;
 	float shine;
+	float reflect;
+	float rough;
 
-	Material(const vec4& diffuse = vec4(1.f), const vec3& specular = vec3(1.f), float shininess = 32.f);
+	Material(const vec4& diffuse = vec4(1.f), const vec3& specular = vec3(1.f), float shininess = 32.f, float reflectiveness = 0.f, float roughness = 0.f);
 };
 
 struct Vertex {
@@ -46,9 +55,10 @@ struct Vertex {
 	Vertex(const vec3& position, const vec3& normal, vec2 texuv, const vec3& tangent);
 };
 
-// other functions
+// functions
 
-SDL_Surface* scaleSurface(SDL_Surface* img, ivec2 res);
+SDL_Surface* scaleSurfaceReplace(SDL_Surface* img, ivec2 res);
+SDL_Surface* scaleSurfaceTry(SDL_Surface* img, ivec2 res);
 SDL_Surface* scaleSurfaceCopy(SDL_Surface* img, ivec2 res);
 
 template <class T = string>

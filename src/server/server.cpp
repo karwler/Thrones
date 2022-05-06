@@ -199,7 +199,7 @@ string digestSha1(string str) {
 	return str;
 }
 
-string encodeBase64(const string& str) {
+string encodeBase64(string_view str) {
 	constexpr char b64charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	string ret;
 	uint8 arr3[3], arr4[4];
@@ -241,9 +241,9 @@ void sendWaitClose(nsint socket) {
 }
 
 void sendVersionRejection(nsint socket, bool webs) {
-	array<uint8, dataHeadSize + (sizeof(commonVersion) - 1) / sizeof(*commonVersion)> data = { uint8(Code::version) };
+	array<uint8, dataHeadSize + commonVersion.length()> data = { uint8(Code::version) };
 	write16(data.data() + 1, data.size());
-	std::copy_n(commonVersion, strlen(commonVersion), data.data() + dataHeadSize);
+	std::copy(commonVersion.begin(), commonVersion.end(), data.data() + dataHeadSize);
 	sendData(socket, data.data(), data.size(), webs);
 }
 
@@ -294,17 +294,40 @@ ulong generateRandomSeed() {
 uint Buffer::pushHead(Code code, uint16 dlen) {
 	uint end = checkOver(dlim + dataHeadSize);
 	data[dlim] = uint8(code);
-	write16(&data[dlim+1], dlen);
+	write16(&data[dlim + 1], dlen);
 	return dlim = end;
 }
 
 uint Buffer::allocate(Code code, uint16 dlen) {
 	uint end = checkOver(dlim + dlen);
 	data[dlim] = uint8(code);
-	write16(&data[dlim+1], dlen);
+	write16(&data[dlim + 1], dlen);
 	uint ret = dlim + dataHeadSize;
 	dlim = end;
 	return ret;
+}
+
+template <class T, class F>
+void Buffer::pushNumber(T val, F writer) {
+	uint end = checkOver(dlim + sizeof(val));
+	writer(&data[dlim], val);
+	dlim = end;
+}
+
+template <class T, class F>
+void Buffer::pushNumberList(initlist<T> lst, F writer) {
+	checkOver(dlim + lst.size() * sizeof(T));
+	for (T n : lst) {
+		writer(&data[dlim], n);
+		dlim += sizeof(T);
+	}
+}
+
+template <class T>
+void Buffer::pushRaw(const T& vec) {
+	uint end = checkOver(dlim + vec.size());
+	std::copy(vec.begin(), vec.end(), &data[dlim]);
+	dlim = end;
 }
 
 void Buffer::push(uint8 val) {
@@ -323,13 +346,6 @@ void Buffer::push(uint64 val) {
 	pushNumber(val, write64);
 }
 
-template <class T, class F>
-void Buffer::pushNumber(T val, F writer) {
-	uint end = checkOver(dlim + sizeof(val));
-	writer(&data[dlim], val);
-	dlim = end;
-}
-
 void Buffer::push(initlist<uint16> lst) {
 	pushNumberList(lst, write16);
 }
@@ -346,24 +362,8 @@ void Buffer::push(initlist<uint8> lst) {
 	pushRaw(lst);
 }
 
-void Buffer::push(const string& str) {
+void Buffer::push(string_view str) {
 	pushRaw(str);
-}
-
-template <class T, class F>
-void Buffer::pushNumberList(initlist<T> lst, F writer) {
-	checkOver(dlim + lst.size() * sizeof(T));
-	for (T n : lst) {
-		writer(&data[dlim], n);
-		dlim += sizeof(T);
-	}
-}
-
-template <class T>
-void Buffer::pushRaw(const T& vec) {
-	uint end = checkOver(dlim + vec.size());
-	std::copy(vec.begin(), vec.end(), &data[dlim]);
-	dlim = end;
 }
 
 uint Buffer::write(uint8 val, uint pos) {
@@ -470,7 +470,7 @@ Buffer::Init Buffer::recvConn(nsint socket, bool& webs, bool& nameError, bool (*
 		string response = "HTTP/1.1 101 Switching Protocols\r\n"
 			"Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n"
-			"Sec-WebSocket-Accept: " + encodeBase64(digestSha1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) + "\r\n\r\n";
+			"Sec-WebSocket-Accept: " + encodeBase64(digestSha1(trim(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"s)) + "\r\n\r\n";
 		sendNet(socket, response.c_str(), response.length());
 		eraseFront(rend - data.get());
 		webs = true;
@@ -501,7 +501,7 @@ bool Buffer::recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs) {
 		if (data[1] & 0x80) {
 			if (ofs += sizeof(uint32); dlim < ofs)
 				return false;
-			mask = &data[ofs-sizeof(uint32)];
+			mask = &data[ofs - sizeof(uint32)];
 		}
 
 		if (uint8 opc = data[0] & 0xF; opc != 2) {
@@ -524,12 +524,12 @@ bool Buffer::recvHead(nsint socket, uint& ofs, uint8*& mask, bool webs) {
 
 uint8* Buffer::recvLoad(uint ofs, const uint8* mask) {
 	if (mask) {
-		uint8 buf[sizeof(uint16)] = { uint8(data[ofs+1] ^ mask[1]), uint8(data[ofs+2] ^ mask[2]) };
+		uint8 buf[sizeof(uint16)] = { uint8(data[ofs + 1] ^ mask[1]), uint8(data[ofs + 2] ^ mask[2]) };
 		uint end = read16(buf) + ofs;
 		if (dlim < end)
 			return nullptr;
 		unmask(mask, ofs, end);
-	} else if (dlim < read16(&data[ofs+1]))
+	} else if (dlim < read16(&data[ofs + 1]))
 		return nullptr;
 	return &data[ofs];
 }
@@ -541,7 +541,7 @@ void Buffer::resendWs(nsint socket, uint hsize, uint plen, const uint8* mask) {
 	if (mask) {
 		data[1] &= 0x7F;
 		unmask(mask, hsize, end);
-		std::copy_n(&data[hsize], plen, &data[hsize-sizeof(uint32)]);
+		std::copy_n(&data[hsize], plen, &data[hsize - sizeof(uint32)]);
 	}
 	sendData(socket, data.get(), end, false);
 	eraseFront(end);
@@ -558,7 +558,7 @@ uint Buffer::readLoadSize(bool webs) const {
 		if (data[1] & 0x80)
 			ofs += sizeof(uint32);
 	}
-	return ofs + read16(&data[ofs+1]);
+	return ofs + read16(&data[ofs + 1]);
 }
 
 uint Buffer::checkOver(uint end) {

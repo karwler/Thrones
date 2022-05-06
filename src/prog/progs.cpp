@@ -4,37 +4,38 @@
 #include "engine/inputSys.h"
 #include "engine/scene.h"
 #include "engine/world.h"
+#include "utils/layouts.h"
 
 // PROGRAM STATE
 
 void ProgState::chatEmbedAxisScroll(float val) {
 	if (chatBox && chatBox->getParent()->sizeValid())
-		chatBox->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+		chatBox->onScroll(World::window()->mousePos(), ivec2(0, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
 void ProgState::eventCameraReset() {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.setPos(Camera::posSetup, Camera::latSetup);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
 }
 
 void ProgState::eventCameraLeft(float val) {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.rotate(vec2(0.f, val * World::window()->getDeltaSec()), 0.f);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->rotate(vec2(0.f, val * World::window()->getDeltaSec()), 0.f);
 }
 
 void ProgState::eventCameraRight(float val) {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.rotate(vec2(0.f, -val * World::window()->getDeltaSec()), 0.f);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->rotate(vec2(0.f, -val * World::window()->getDeltaSec()), 0.f);
 }
 
 void ProgState::eventCameraUp(float val) {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.rotate(vec2(val * World::window()->getDeltaSec(), 0.f), 0.f);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->rotate(vec2(val * World::window()->getDeltaSec(), 0.f), 0.f);
 }
 
 void ProgState::eventCameraDown(float val) {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.rotate(vec2(-val * World::window()->getDeltaSec(), 0.f), 0.f);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->rotate(vec2(-val * World::window()->getDeltaSec(), 0.f), 0.f);
 }
 
 void ProgState::eventConfirm() {
@@ -64,8 +65,8 @@ void ProgState::eventRight() {
 }
 
 void ProgState::eventStartCamera() {
-	if (World::scene()->camera.state != Camera::State::animating) {
-		World::scene()->camera.state = Camera::State::dragging;
+	if (World::scene()->getCamera()->state != Camera::State::animating) {
+		World::scene()->getCamera()->state = Camera::State::dragging;
 #ifndef __EMSCRIPTEN__
 		World::scene()->deselect();
 		SDL_SetRelativeMouseMode(SDL_TRUE);
@@ -74,8 +75,8 @@ void ProgState::eventStartCamera() {
 }
 
 void ProgState::eventStopCamera() {
-	if (World::scene()->camera.state != Camera::State::animating) {
-		World::scene()->camera.state = Camera::State::stationary;
+	if (World::scene()->getCamera()->state != Camera::State::animating) {
+		World::scene()->getCamera()->state = Camera::State::stationary;
 #ifndef __EMSCRIPTEN__
 		SDL_SetRelativeMouseMode(SDL_FALSE);
 #endif
@@ -91,6 +92,7 @@ void ProgState::eventFrameCounter() {
 	World::program()->eventCycleFrameCounter();
 }
 
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 void ProgState::eventScreenshot() {
 	FileSys::saveScreenshot(takeScreenshot(World::window()->getScreenView()));
 }
@@ -104,6 +106,7 @@ void ProgState::eventPeekUiTextures() {
 	for (sizet i = 0; i < imgs.size(); ++i)
 		FileSys::saveScreenshot(imgs[i], "uitex" + toStr(i));
 }
+#endif
 
 void ProgState::eventSelect0() {
 	eventSetSelected(0);
@@ -251,8 +254,8 @@ void ProgMenu::eventFinish() {
 	World::program()->eventConnectServer();
 }
 
-uptr<RootLayout> ProgMenu::createLayout(Interactable*& selected) {
-	return World::pgui()->makeMainMenu(selected, pname, versionNotif);
+pair<RootLayout*, Interactable*> ProgMenu::createLayout() {
+	return World::pgui()->makeMainMenu(pname, versionNotif);
 }
 
 // PROG LOBBY
@@ -280,17 +283,18 @@ void ProgLobby::eventScrollDown(float val) {
 	chatEmbedAxisScroll(val);
 }
 
-uptr<RootLayout> ProgLobby::createLayout(Interactable*& selected) {
-	return World::pgui()->makeLobby(selected, chatBox, rooms, roomBuff);
+pair<RootLayout*, Interactable*> ProgLobby::createLayout() {
+	return World::pgui()->makeLobby(chatBox, rooms, roomBuff);
 }
 
 void ProgLobby::addRoom(string&& name) {
 	vector<Widget*>::const_iterator it = std::find_if(rooms->getWidgets().begin(), rooms->getWidgets().end(), [&name](const Widget* rm) -> bool { return strnatless(reinterpret_cast<const Label*>(rm)->getText(), name); });
-	rooms->insertWidget(it - rooms->getWidgets().begin(), World::pgui()->createRoom(std::move(name), true));
+	Widget* room = World::pgui()->createRoom(std::move(name), true);
+	rooms->insertWidgets(it - rooms->getWidgets().begin(), &room);
 }
 
 void ProgLobby::delRoom(const string& name) {
-	rooms->deleteWidget(findRoom(name));
+	rooms->deleteWidgets(findRoom(name));
 }
 
 void ProgLobby::openRoom(const string& name, bool open) {
@@ -343,8 +347,8 @@ void ProgRoom::eventScrollDown(float val) {
 	chatEmbedAxisScroll(val);
 }
 
-uptr<RootLayout> ProgRoom::createLayout(Interactable*& selected) {
-	return World::pgui()->makeRoom(selected, wio, rio, chatBox, configName, confs, startConfig);
+pair<RootLayout*, Interactable*> ProgRoom::createLayout() {
+	return World::pgui()->makeRoom(wio, rio, chatBox, configName, confs, startConfig);
 }
 
 void ProgRoom::updateStartButton() {
@@ -443,9 +447,9 @@ void ProgGame::eventOpenConfig() {
 
 void ProgGame::axisScroll(float val) {
 	if (Popup* pop = World::scene()->getPopup(); pop && pop->getType() == Popup::Type::config)
-		mainScrollContent->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+		mainScrollContent->onScroll(World::window()->mousePos(), ivec2(0, val * axisScrollThrottle * World::window()->getDeltaSec()));
 	else if (chatBox && static_cast<Overlay*>(chatBox->getParent())->getShow())
-		chatBox->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+		chatBox->onScroll(World::window()->mousePos(), ivec2(0, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
 uint8 ProgGame::switchButtons(uint8 but) {
@@ -471,14 +475,11 @@ vector<Overlay*> ProgGame::createOverlays() {
 
 void ProgGame::updateTitleBar(bool hadTitleBar) {
 	setTitleBarInteractivity(true, true);
-	if (!hadTitleBar && World::window()->getTitleBarHeight()) {
+	if (hadTitleBar && !World::window()->getTitleBarHeight()) {
 		array<Widget*, 2> buts = World::pgui()->createConfSetsButtons();
-		sideBar->insertWidget(confSetsIndex, buts[0]);
-		sideBar->insertWidget(confSetsIndex + 1, buts[1]);
-	} else if (hadTitleBar && !World::window()->getTitleBarHeight()) {
-		sideBar->deleteWidget(confSetsIndex + 1);
-		sideBar->deleteWidget(confSetsIndex);
-	}
+		sideBar->insertWidgets(confSetsIndex, buts.data(), buts.size());
+	} else if (!hadTitleBar && World::window()->getTitleBarHeight())
+		sideBar->deleteWidgets(confSetsIndex, 2);
 }
 
 // PROG SETUP
@@ -633,8 +634,8 @@ void ProgSetup::handleClearing() {
 		World::program()->eventClearPiece();
 }
 
-uptr<RootLayout> ProgSetup::createLayout(Interactable*& selected) {
-	return World::pgui()->makeSetup(selected, sio, bswapIcon, planeSwitch, sideBar, confSetsIndex);
+pair<RootLayout*, Interactable*> ProgSetup::createLayout() {
+	return World::pgui()->makeSetup(sio, bswapIcon, planeSwitch, sideBar, confSetsIndex);
 }
 
 Icon* ProgSetup::getIcon(uint8 type) const {
@@ -668,8 +669,8 @@ void ProgMatch::eventEnter() {
 }
 
 void ProgMatch::eventWheel(int ymov) {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.zoom(ymov);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->zoom(ymov);
 }
 
 void ProgMatch::eventFinish() {
@@ -718,21 +719,21 @@ void ProgMatch::eventDeceive() {
 }
 
 void ProgMatch::eventCameraReset() {
-	if (World::scene()->camera.state != Camera::State::animating)
-		World::scene()->camera.setPos(Camera::posMatch, Camera::latMatch);
+	if (World::scene()->getCamera()->state != Camera::State::animating)
+		World::scene()->getCamera()->setPos(Camera::posMatch, Camera::latMatch);
 }
 
 void ProgMatch::eventCameraLeft(float val) {
-	if (World::scene()->camera.state != Camera::State::animating) {
+	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		val *= -World::window()->getDeltaSec();
-		World::scene()->camera.rotate(vec2(0.f, val), val);
+		World::scene()->getCamera()->rotate(vec2(0.f, val), val);
 	}
 }
 
 void ProgMatch::eventCameraRight(float val) {
-	if (World::scene()->camera.state != Camera::State::animating) {
+	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		val *= World::window()->getDeltaSec();
-		World::scene()->camera.rotate(vec2(0.f, val), val);
+		World::scene()->getCamera()->rotate(vec2(0.f, val), val);
 	}
 }
 
@@ -778,9 +779,9 @@ void ProgMatch::updateFavorIcon(Favor type, bool on) {
 			ico->setDim(on ? 1.f : GuiGen::defaultDim);
 		} else {
 			if (Layout* box = ico->getParent(); box->getWidgets().size() > 1)
-				box->deleteWidget(ico->getIndex());
+				box->deleteWidgets(ico->getIndex());
 			else
-				box->getParent()->deleteWidget(box->getIndex());
+				box->getParent()->deleteWidgets(box->getIndex());
 			mio.favors[uint8(type)] = nullptr;
 		}
 	}
@@ -798,13 +799,13 @@ void ProgMatch::updateVictoryPoints(uint16 own, uint16 ene) {
 }
 
 void ProgMatch::destroyEstablishIcon() {
-	mio.establish->getParent()->deleteWidget(mio.establish->getIndex());
+	mio.establish->getParent()->deleteWidgets(mio.establish->getIndex());
 	mio.establish = nullptr;
 }
 
 void ProgMatch::decreaseDragonIcon() {
 	if (!--unplacedDragons) {
-		mio.dragon->getParent()->getParent()->deleteWidget(mio.dragon->getParent()->getIndex());
+		mio.dragon->getParent()->getParent()->deleteWidgets(mio.dragon->getParent()->getIndex());
 		mio.dragon = nullptr;
 	}
 }
@@ -854,19 +855,20 @@ bool ProgMatch::selectHomefrontIcon(Icon* ico) {
 	return false;
 }
 
-uptr<RootLayout> ProgMatch::createLayout(Interactable*& selected) {
-	return World::pgui()->makeMatch(selected, mio, bswapIcon, planeSwitch, unplacedDragons, sideBar, confSetsIndex);
+pair<RootLayout*, Interactable*> ProgMatch::createLayout() {
+	return World::pgui()->makeMatch(mio, bswapIcon, planeSwitch, unplacedDragons, sideBar, confSetsIndex);
 }
 
 // PROG RECORD
 
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 ProgRecord::ProgRecord(RecordReader&& rr, string&& config) :
 	ProgGame(std::move(config)),
 	reader(std::move(rr))
 {}
 
-uptr<RootLayout> ProgRecord::createLayout(Interactable*& selected) {
-	return World::pgui()->makeRecord(selected, back, next, sideBar, confSetsIndex);
+pair<RootLayout*, Interactable*> ProgRecord::createLayout() {
+	return World::pgui()->makeRecord(back, next, sideBar, confSetsIndex);
 }
 
 vector<Overlay*> ProgRecord::createOverlays() {
@@ -879,6 +881,7 @@ void ProgRecord::setButtons(bool canBack, bool canNext) {
 	next->setDim(canNext ? 1.f : GuiGen::defaultDim);
 	next->lcall = canNext ? &Program::eventRecordNextAction : nullptr;
 }
+#endif
 
 // PROG SETTINGS
 
@@ -890,8 +893,8 @@ void ProgSettings::eventFinish() {
 	World::program()->eventOpenInfo();
 }
 
-uptr<RootLayout> ProgSettings::createLayout(Interactable*& selected) {
-	return World::pgui()->makeSettings(selected, mainScrollContent, keyBindingsStart);
+pair<RootLayout*, Interactable*> ProgSettings::createLayout() {
+	return World::pgui()->makeSettings(mainScrollContent, keyBindingsStart);
 }
 
 void ProgSettings::updateTitleBar(bool) {
@@ -909,15 +912,15 @@ void ProgInfo::eventFinish() {
 }
 
 void ProgInfo::eventScrollUp(float val) {
-	mainScrollContent->onScroll(vec2(0.f, -val * axisScrollThrottle * World::window()->getDeltaSec()));
+	mainScrollContent->onScroll(World::window()->mousePos(), vec2(0.f, -val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
 void ProgInfo::eventScrollDown(float val) {
-	mainScrollContent->onScroll(vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
+	mainScrollContent->onScroll(World::window()->mousePos(), vec2(0.f, val * axisScrollThrottle * World::window()->getDeltaSec()));
 }
 
-uptr<RootLayout> ProgInfo::createLayout(Interactable*& selected) {
-	return World::pgui()->makeInfo(selected, mainScrollContent);
+pair<RootLayout*, Interactable*> ProgInfo::createLayout() {
+	return World::pgui()->makeInfo(mainScrollContent);
 }
 
 void ProgInfo::updateTitleBar(bool) {

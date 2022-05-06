@@ -13,31 +13,31 @@ bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
 	return a.format < b.format;
 }
 
-void checkFramebufferStatus(const string& name) {
+void checkFramebufferStatus(string_view name) {
 	switch (GLenum rc = glCheckFramebufferStatus(GL_FRAMEBUFFER)) {
 	case GL_FRAMEBUFFER_UNDEFINED:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_UNDEFINED");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_UNDEFINED"s);
 	case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT"s);
 	case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT"s);
 #ifndef OPENGLES
 	case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER"s);
 	case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER"s);
 #endif
 	case GL_FRAMEBUFFER_UNSUPPORTED:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_UNSUPPORTED");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_UNSUPPORTED"s);
 	case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE"s);
 #ifndef OPENGLES
 	case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
-		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS");
+		throw std::runtime_error(name + ": GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS"s);
 #endif
 	default:
 		if (rc != GL_FRAMEBUFFER_COMPLETE)
-			throw std::runtime_error(name + ": unknown framebuffer error");
+			throw std::runtime_error(name + ": unknown framebuffer error"s);
 	}
 }
 
@@ -59,9 +59,9 @@ pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img) {
 #ifndef OPENGLES
 	case SDL_PIXELFORMAT_BGR24:
 		return pair(img, GL_BGR);
-#endif
 	case SDL_PIXELFORMAT_RGB24:
 		return pair(img, GL_RGB);
+#endif
 	}
 #ifdef OPENGLES
 	SDL_Surface* dst = SDL_ConvertSurfaceFormat(img, SDL_PIXELFORMAT_RGBA32, 0);
@@ -77,55 +77,29 @@ pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img) {
 #endif
 }
 
+void invertImage(SDL_Surface* img) {
+	for (sizet a = 0, b = sizet(img->h - 1) * img->pitch; a < b; a += img->pitch, b -= img->pitch) {
+		uint8* ap = static_cast<uint8*>(img->pixels) + a;
+		std::swap_ranges(ap, ap + img->pitch, static_cast<uint8*>(img->pixels) + b);
+	}
+}
+
 SDL_Surface* takeScreenshot(ivec2 res) {
-	SDL_Surface* img = SDL_CreateRGBSurfaceWithFormat(0, res.x, res.y, 32, SDL_PIXELFORMAT_RGBA32);
+	SDL_Surface* img = SDL_CreateRGBSurfaceWithFormat(0, res.x, res.y, 32, TextureCol::shotImgFormat);
 	if (img) {
-		glReadPixels(0, 0, res.x, res.y, GL_RGBA, GL_UNSIGNED_BYTE, img->pixels);
-		for (sizet a = 0, b = sizet(img->h - 1) * img->pitch; a < b; a += img->pitch, b -= img->pitch) {
-			uint8* ap = static_cast<uint8*>(img->pixels) + a;
-			std::swap_ranges(ap, ap + img->pitch, static_cast<uint8*>(img->pixels) + b);
-		}
+		glReadPixels(0, 0, res.x, res.y, TextureCol::textPixFormat, GL_UNSIGNED_BYTE, img->pixels);
+		invertImage(img);
 	} else
 		logError("failed to create screenshot surface");
 	return img;
 }
 
-// TEXTURE
-
-void Texture::init(const vec4& color) {
-	res = ivec2(2);
-	upload(array<vec4, 4>{ color, color, color, color }.data(), 0, GL_RGBA, GL_FLOAT);
-}
-
-bool Texture::init(SDL_Surface* img, ivec2 limit) {
-	if (img) {
-		res = glm::min(ivec2(img->w, img->h), limit);
-		upload(img->pixels, img->pitch / img->format->BytesPerPixel, textPixFormat, GL_UNSIGNED_BYTE);
-		SDL_FreeSurface(img);
-	}
-	return img;
-}
-
-void Texture::upload(void* pixels, int rowLen, GLint format, GLenum type) {
-	glGenTextures(1, &id);
-	glBindTexture(GL_TEXTURE_2D, id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-	glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLen);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res.x, res.y, 0, format, type, pixels);
-}
-
 // TEXTURE COL
 
-TextureCol::Element::Element(string&& texName, SDL_Surface* img, GLenum pformat, bool freeImage, bool minimizeSize) :
+TextureCol::Element::Element(string&& texName, SDL_Surface* img, GLenum pformat) :
 	name(std::move(texName)),
 	image(img),
-	format(pformat),
-	freeImg(freeImage),
-	minSize(minimizeSize)
+	format(pformat)
 {}
 
 TextureCol::Find::Find(uint pg, uint id, const Rect& posize) :
@@ -134,31 +108,17 @@ TextureCol::Find::Find(uint pg, uint id, const Rect& posize) :
 	rect(posize)
 {}
 
-umap<string, TexLoc> TextureCol::init(vector<Element>&& imgs, int recommendSize) {
+umap<string, TexLoc> TextureCol::init(vector<Element>&& imgs, int recommendSize, int minUiIcon) {
 	int maxSize;
-	if (glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize); maxSize < recommendSize)
-		throw std::runtime_error("texture size is limited to " + toStr(maxSize));
-	int minIcon = recommendSize;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
 	for (const Element& it : imgs)
-		if (!it.minSize) {
-			minIcon = std::min(minIcon, it.image->h);
-			res = std::min(std::max(recommendSize, std::max(it.image->w, it.image->h)), maxSize);
-		}
-	pages = { { Rect(0, 0, minIcon, minIcon) } };
+		res = std::min(std::max(recommendSize, std::max(it.image->w, it.image->h)), maxSize);
+	pages = { { Rect(0, 0, minUiIcon, minUiIcon) } };
 	umap<string, TexLoc> refs;
 	refs.reserve(imgs.size());
 	refs.emplace(string(), TexLoc(0, pages[0][0]));
 	vector<Find> fres(imgs.size());
 	for (sizet i = 0; i < imgs.size(); ++i) {
-		if (imgs[i].minSize)
-			if (SDL_Surface* tscl = scaleSurfaceCopy(imgs[i].image, ivec2(minIcon)); tscl && tscl != imgs[i].image) {
-				if (imgs[i].freeImg)
-					SDL_FreeSurface(imgs[i].image);
-				else
-					imgs[i].freeImg = true;
-				imgs[i].image = tscl;
-			}
-
 		fres[i] = findLocation(ivec2(imgs[i].image->w, imgs[i].image->h));
 		if (fres[i].page < pages.size())
 			pages[fres[i].page].insert(pages[fres[i].page].begin() + fres[i].index, fres[i].rect);
@@ -169,28 +129,34 @@ umap<string, TexLoc> TextureCol::init(vector<Element>&& imgs, int recommendSize)
 	calcPageReserve();
 
 	vector<uint32> pixd(res * res * pageReserve, 0);
+	glActiveTexture(Shader::wgtTexa);
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 0);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, pageReserve, 0, Texture::textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
+	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, pageReserve, 0, textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
 
 	pixd.assign(pages[0][0].w * pages[0][0].h, 0xFFFFFFFF);
-	glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, pages[0][0].x, pages[0][0].y, 0, pages[0][0].w, pages[0][0].h, 1, Texture::textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
+	glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, pages[0][0].x, pages[0][0].y, 0, pages[0][0].w, pages[0][0].h, 1, textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
 	for (sizet i = 0; i < imgs.size(); ++i) {
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, imgs[i].image->pitch / imgs[i].image->format->BytesPerPixel);
 		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, fres[i].rect.x, fres[i].rect.y, fres[i].page, fres[i].rect.w, fres[i].rect.h, 1, imgs[i].format, GL_UNSIGNED_BYTE, imgs[i].image->pixels);
-		if (imgs[i].freeImg)
-			SDL_FreeSurface(imgs[i].image);
+		SDL_FreeSurface(imgs[i].image);
 	}
+#ifdef OPENGLES
+	constexpr GLenum none = GL_NONE;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glDrawBuffers(1, &none);
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+#endif
 	return refs;
 }
 
 void TextureCol::free() {
+#ifdef OPENGLES
+	glDeleteFramebuffers(1, &fbo);
+#endif
 	glDeleteTextures(1, &tex);
 	pages.clear();
 }
@@ -205,6 +171,7 @@ TexLoc TextureCol::insert(const SDL_Surface* img, ivec2 size, ivec2 offset) {
 	if (!img)
 		return blank;
 
+	glActiveTexture(Shader::wgtTexa);
 	Find fres = findLocation(size);
 	if (fres.page < pages.size())
 		pages[fres.page].insert(pages[fres.page].begin() + fres.index, fres.rect);
@@ -236,6 +203,7 @@ void TextureCol::replace(TexLoc& loc, const SDL_Surface* img, ivec2 size, ivec2 
 		rit->w = size.x;
 		loc.rct.size() = size;
 		assertIntegrity();
+		glActiveTexture(Shader::wgtTexa);
 		uploadSubTex(img, offset, loc.rct, loc.tid);
 	} else {
 		if (rit != page.end())
@@ -247,16 +215,16 @@ void TextureCol::replace(TexLoc& loc, const SDL_Surface* img, ivec2 size, ivec2 
 void TextureCol::uploadSubTex(const SDL_Surface* img, ivec2 offset, const Rect& loc, uint page) {
 	ivec2 sampRes = glm::min(ivec2(img->w, img->h) - offset, loc.size());
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, img->pitch / img->format->BytesPerPixel);
-	glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x, loc.y, page, sampRes.x, sampRes.y, 1, Texture::textPixFormat, GL_UNSIGNED_BYTE, static_cast<uint8*>(img->pixels) + offset.y * img->pitch + offset.x * img->format->BytesPerPixel);
+	glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x, loc.y, page, sampRes.x, sampRes.y, 1, textPixFormat, GL_UNSIGNED_BYTE, static_cast<uint8*>(img->pixels) + offset.y * img->pitch + offset.x * img->format->BytesPerPixel);
 	if (sampRes.x < loc.w) {
 		int missing = loc.w - sampRes.x;
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x + sampRes.x, loc.y, page, missing, sampRes.y, 1, Texture::textPixFormat, GL_UNSIGNED_BYTE, vector<uint32>(sizet(missing) * sizet(sampRes.y), 0).data());
+		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x + sampRes.x, loc.y, page, missing, sampRes.y, 1, textPixFormat, GL_UNSIGNED_BYTE, vector<uint32>(sizet(missing) * sizet(sampRes.y), 0).data());
 	}
 	if (sampRes.y < loc.y) {
 		int missing = loc.h - sampRes.y;
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x, loc.y + sampRes.y, page, loc.w, missing, 1, Texture::textPixFormat, GL_UNSIGNED_BYTE, vector<uint32>(sizet(loc.w) * sizet(missing), 0).data());
+		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, loc.x, loc.y + sampRes.y, page, loc.w, missing, 1, textPixFormat, GL_UNSIGNED_BYTE, vector<uint32>(sizet(loc.w) * sizet(missing), 0).data());
 	}
 }
 
@@ -275,6 +243,7 @@ void TextureCol::erase(TexLoc& loc) {
 		if (vector<Rect>::iterator rit = std::find_if(page.begin(), page.end(), [loc](const Rect& it) -> bool { return it.pos() == loc.rct.pos(); }); rit != page.end()) {
 			if (page.erase(rit); loc.tid == pages.size() - 1 && page.empty()) {
 				pages.pop_back();
+				glActiveTexture(Shader::wgtTexa);
 				maybeResize();
 			}
 			loc = blank;
@@ -303,7 +272,7 @@ TextureCol::Find TextureCol::findLocation(ivec2 size) const {
 				for (; i < page.size() && page[i].y == pos.y; ++i);
 
 			if (i < page.size())
-				if (int endy = i ? page[i-1].end().y : 0; page[i].y - endy >= size.y) {
+				if (int endy = i ? page[i - 1].end().y : 0; page[i].y - endy >= size.y) {
 					assertIntegrity(page, Rect(0, endy, size));
 					return Find(p, i, Rect(0, endy, size));
 				}
@@ -332,12 +301,11 @@ void TextureCol::maybeResize() {
 	if (pages.size() > pageReserve || pageReserve - pages.size() > pageNumStep) {
 		uint oldSize = pageReserve;
 		calcPageReserve();
-		vector<uint32> pixd(res * res * pageReserve);
+		vector<uint32> pixd = texturePixels();
 		if (pageReserve > oldSize)
 			std::fill(pixd.begin() + res * res * oldSize, pixd.end(), 0);
-		glGetTexImage(GL_TEXTURE_2D_ARRAY, 0, Texture::textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, pageReserve, 0, Texture::textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, pageReserve, 0, textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
 	}
 }
 
@@ -345,14 +313,14 @@ vector<SDL_Surface*> TextureCol::peekMemory() const {
 	Rect irc(0, 0, res, res);
 	vector<SDL_Surface*> imgs(pages.size());
 	for (sizet i = 0; i < pages.size(); ++i) {
-		if (imgs[i] = SDL_CreateRGBSurfaceWithFormat(0, res, res, 32, SDL_PIXELFORMAT_RGB24); !imgs[i]) {
+		if (imgs[i] = SDL_CreateRGBSurfaceWithFormat(0, res, res, 24, SDL_PIXELFORMAT_RGB24); !imgs[i]) {
 			logError("failed to create memory peek surface ", i);
 			continue;
 		}
 		vector<Rect> borders(pages[i].size() * 2);
 		for (sizet b = 0; b < pages[i].size(); ++b) {
 			borders[b] = Rect(pages[i][b].end().x - 1, pages[i][b].y, 1, pages[i][b].h - 1);
-			borders[pages[i].size()+b] = Rect(pages[i][b].x, pages[i][b].end().y - 1, pages[i][b].w, 1);
+			borders[pages[i].size() + b] = Rect(pages[i][b].x, pages[i][b].end().y - 1, pages[i][b].w, 1);
 		}
 		SDL_FillRect(imgs[i], &irc, 0);
 		SDL_FillRects(imgs[i], pages[i].data(), pages[i].size(), SDL_MapRGB(imgs[i]->format, 255, 0, 0));
@@ -363,12 +331,11 @@ vector<SDL_Surface*> TextureCol::peekMemory() const {
 
 vector<SDL_Surface*> TextureCol::peekTexture() const {
 	sizet psiz = sizet(res) * sizet(res);
-	vector<uint32> pixd(psiz * pageReserve);
-	glGetTexImage(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixd.data());
-
+	glActiveTexture(Shader::wgtTexa);
+	vector<uint32> pixd = texturePixels();
 	vector<SDL_Surface*> imgs(pages.size());
 	for (sizet i = 0; i < pages.size(); ++i) {
-		if (imgs[i] = SDL_CreateRGBSurfaceWithFormat(0, res, res, 32, SDL_PIXELFORMAT_RGBA32); imgs[i])
+		if (imgs[i] = SDL_CreateRGBSurfaceWithFormat(0, res, res, 32, shotImgFormat); imgs[i])
 			std::copy_n(pixd.data() + i * psiz, psiz, static_cast<uint32*>(imgs[i]->pixels));
 		else
 			logError("failed to create memory peek surface ", i);
@@ -376,41 +343,72 @@ vector<SDL_Surface*> TextureCol::peekTexture() const {
 	return imgs;
 }
 
+vector<uint32> TextureCol::texturePixels() const {
+	sizet psiz = sizet(res) * sizet(res);
+	vector<uint32> pixd(psiz * pageReserve);
+#ifdef OPENGLES
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	for (uint i = 0; i < pageReserve; ++i) {
+		glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, tex, 0, i);
+		glReadPixels(0, 0, res, res, Texture::textPixFormat, GL_UNSIGNED_BYTE, pixd.data() + i * psiz);
+	}
+#else
+	glGetTexImage(GL_TEXTURE_2D_ARRAY, 0, textPixFormat, GL_UNSIGNED_BYTE, pixd.data());
+#endif
+	return pixd;
+}
+
 // TEXTURE SET
 
-TextureSet::Element::Element(SDL_Surface* iclr, SDL_Surface* inrm, string&& texName, GLenum cfmt, GLenum nfmt) :
+TextureSet::Element::Element(SDL_Surface* iclr, SDL_Surface* inrm, string&& texName, GLenum cfmt, GLenum nfmt, bool owned) :
 	color(iclr),
 	normal(inrm),
 	name(std::move(texName)),
 	cformat(cfmt),
-	nformat(nfmt)
+	nformat(nfmt),
+	unique(owned)
 {}
 
-void TextureSet::init(Import&& imp) {
-	for (sizet i = 0; i < imp.imgs.size(); ++i) {
-		Element& it = imp.imgs[i];
-		if (it.color && ivec2(it.color->w, it.color->h) != ivec2(imp.cres))
-			it.color = scaleSurface(it.color, ivec2(imp.cres));
-		if (it.normal && ivec2(it.normal->w, it.normal->h) != ivec2(imp.nres))
-			it.normal = scaleSurface(it.normal, ivec2(imp.nres));
-	}
-	loadTexArray(clr, imp, imp.cres, &Element::color, &Element::cformat, { 255, 255, 255, 255 }, Shader::colorTexa);
-	loadTexArray(nrm, imp, imp.nres, &Element::normal, &Element::nformat, { 128, 128, 255, 255 }, Shader::normalTexa);
+void TextureSet::Element::clear() {
+	if (unique)
+		SDL_FreeSurface(color);
+	SDL_FreeSurface(normal);
+}
 
-	refs.reserve(imp.imgs.size() + 1);
+void TextureSet::init(Import&& imp) {
+	uint numColors = 1, numNormals = 1;
+	for (Element& it : imp.imgs) {
+		if (SDL_Surface* tscl = scaleSurfaceCopy(it.color, ivec2(imp.cres))) {
+			if (tscl != it.color) {
+				if (it.unique)
+					SDL_FreeSurface(it.color);
+				it.color = tscl;
+				it.unique = true;
+			}
+			++numColors;
+
+			it.normal = scaleSurfaceReplace(it.normal, ivec2(imp.nres));
+			numNormals += bool(it.normal);
+		} else {
+			it.clear();
+			it.color = nullptr;
+		}
+	}
+	loadTexArray<Shader::colorTexa>(clr, imp, imp.cres, numColors, &Element::color, &Element::cformat, { 255, 255, 255, 255 });
+	loadTexArray<Shader::normalTexa>(nrm, imp, imp.nres, numNormals, &Element::normal, &Element::nformat, { 128, 128, 255, 255 });
+
+	refs.reserve(numColors);
 	refs.emplace(string(), uvec2(0));
 	uvec2 tid(0);
 	for (Element& it : imp.imgs)
-		refs.emplace(std::move(it.name), uvec2(it.color ? tid.x += 1 : 0, it.normal ? tid.y += 1 : 0));
+		if (it.color) {
+			refs.emplace(std::move(it.name), uvec2(tid.x += 1, it.normal ? tid.y += 1 : 0));
+			it.clear();
+		}
 
 	glActiveTexture(Shader::skyboxTexa);
 	glGenTextures(1, &sky);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, sky);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 	for (sizet i = 0; i < imp.sky.size(); ++i) {
 		if (auto [img, format] = imp.sky[i]; img) {
 			glPixelStorei(GL_UNPACK_ROW_LENGTH, img->pitch / img->format->BytesPerPixel);
@@ -423,7 +421,6 @@ void TextureSet::init(Import&& imp) {
 		}
 	}
 	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-	glActiveTexture(Shader::texa);
 }
 
 void TextureSet::free() {
@@ -433,7 +430,8 @@ void TextureSet::free() {
 	refs.clear();
 }
 
-void TextureSet::loadTexArray(GLuint& tex, Import& imp, int res, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank, GLenum active) {
+template <GLenum active>
+void TextureSet::loadTexArray(GLuint& tex, const Import& imp, int res, uint num, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank) {
 	vector<uint8> pixels(sizet(res) * sizet(res) * blank.size());
 	for (sizet i = 0; i < pixels.size(); i += blank.size())
 		std::copy(blank.begin(), blank.end(), pixels.begin() + i);
@@ -441,23 +439,14 @@ void TextureSet::loadTexArray(GLuint& tex, Import& imp, int res, SDL_Surface* El
 	glActiveTexture(active);
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#ifdef OPENGLES
-	glTexStorage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, imp.imgs.size() + 1);
-#else
-	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, imp.imgs.size() + 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-#endif
+	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, res, res, num, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 	glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, res, res, 1, GL_RGBA,  GL_UNSIGNED_BYTE, pixels.data());
 
 	for (sizet i = 0, t = 1; i < imp.imgs.size(); ++i)
 		if (SDL_Surface* it = imp.imgs[i].*img) {
 			glPixelStorei(GL_UNPACK_ROW_LENGTH, it->pitch / it->format->BytesPerPixel);
 			glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, t++, res, res, 1, imp.imgs[i].*format,  GL_UNSIGNED_BYTE, it->pixels);
-			SDL_FreeSurface(it);
 		}
 	glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 }

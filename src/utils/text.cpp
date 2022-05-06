@@ -6,30 +6,21 @@
 #include <sys/stat.h>
 #endif
 
-string parentPath(const string& path) {
-	string::const_reverse_iterator end = std::find_if_not(path.rbegin(), path.rend(), isDsep);
-	string::const_iterator fin = std::find_if(end, path.rend(), isDsep).base();
-#ifdef _WIN32
-	return string(path.begin(), fin);
-#else
-	return string(path.begin(), isDsep(*fin) ? fin + 1 : fin);
-#endif
-}
-
-string readWord(const char*& pos) {
-	const char* end;
+string_view readWord(const char*& pos) {
+	sizet i = 0;
 	for (; isSpace(*pos); ++pos);
-	for (end = pos; notSpace(*end); ++end);
+	for (; notSpace(pos[i]); ++i);
 
-	string str(pos, end);
-	pos = end;
+	string_view str(pos, i);
+	pos += i;
 	return str;
 }
 
-string strEnclose(string str) {
-	for (sizet i = str.find_first_of("\"\\"); i < str.length(); i = str.find_first_of("\"\\", i + 2))
-		str.insert(str.begin() + i, '\\');
-	return '"' + str + '"';
+string strEnclose(string_view str) {
+	string txt(str);
+	for (sizet i = txt.find_first_of("\"\\"); i < txt.length(); i = txt.find_first_of("\"\\", i + 2))
+		txt.insert(txt.begin() + i, '\\');
+	return '"' + txt + '"';
 }
 
 string strUnenclose(const char*& str) {
@@ -43,7 +34,7 @@ string strUnenclose(const char*& str) {
 		len = strcspn(pos, "\"\\");
 		quote.append(pos, len);
 		if (pos[len] == '\\') {
-			if (char ch = pos[len+1]) {
+			if (char ch = pos[len + 1]) {
 				quote += ch;
 				pos += 2;
 			} else
@@ -120,12 +111,12 @@ uint8 u8clen(char c) {
 	return 0;
 }
 
-vector<string> readTextLines(const string& text) {
+vector<string> readTextLines(string_view text) {
 	vector<string> lines;
 	constexpr char nl[] = "\n\r";
 	for (sizet e, p = text.find_first_not_of(nl); p < text.length(); p = text.find_first_not_of(nl, e))
 		if (e = text.find_first_of(nl, p); sizet len = e - p)
-			lines.push_back(text.substr(p, len));
+			lines.emplace_back(text.data() + p, len);
 	return lines;
 }
 
@@ -151,58 +142,39 @@ bool createDirectories(const string& path) {
 	return ok;
 }
 
-SDL_DisplayMode strToDisp(const string& str) {
-	const char* pos = str.c_str();
-	int w = readNumber<int>(pos, strtoul, 0);
-	int h = readNumber<int>(pos, strtoul, 0);
-	int r = readNumber<int>(pos, strtoul, 0);
-	uint32 f = readNumber<uint32>(pos, strtoul, 0);
+SDL_DisplayMode strToDisp(string_view str) {
+	int w = readNumber<uint>(str);
+	int h = readNumber<uint>(str);
+	int r = readNumber<uint>(str);
+	uint32 f = readNumber<uint32>(str);
 	return { f, w, h, r, nullptr };
 }
 
 #ifdef _WIN32
-string cwtos(const wchar* src) {
+string swtos(wstring_view src) {
 	string dst;
-	if (int len = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr) - 1; len > 0) {
+	if (int len = WideCharToMultiByte(CP_UTF8, 0, src.data(), src.length(), nullptr, 0, nullptr, nullptr); len > 0) {
 		dst.resize(len);
-		WideCharToMultiByte(CP_UTF8, 0, src, -1, dst.data(), len, nullptr, nullptr);
+		WideCharToMultiByte(CP_UTF8, 0, src.data(), src.length(), dst.data(), len, nullptr, nullptr);
 	}
 	return dst;
 }
 
-string swtos(const wstring& src) {
-	string dst;
-	if (int len = WideCharToMultiByte(CP_UTF8, 0, src.c_str(), src.length(), nullptr, 0, nullptr, nullptr); len > 0) {
-		dst.resize(len);
-		WideCharToMultiByte(CP_UTF8, 0, src.c_str(), src.length(), dst.data(), len, nullptr, nullptr);
-	}
-	return dst;
-}
-
-wstring cstow(const char* src) {
+wstring sstow(string_view src) {
 	wstring dst;
-	if (int len = MultiByteToWideChar(CP_UTF8, 0, src, -1, nullptr, 0) - 1; len > 0) {
+	if (int len = MultiByteToWideChar(CP_UTF8, 0, src.data(), src.length(), nullptr, 0); len > 0) {
 		dst.resize(len);
-		MultiByteToWideChar(CP_UTF8, 0, src, -1, dst.data(), len);
-	}
-	return dst;
-}
-
-wstring sstow(const string& src) {
-	wstring dst;
-	if (int len = MultiByteToWideChar(CP_UTF8, 0, src.c_str(), src.length(), nullptr, 0); len > 0) {
-		dst.resize(len);
-		MultiByteToWideChar(CP_UTF8, 0, src.c_str(), src.length(), dst.data(), len);
+		MultiByteToWideChar(CP_UTF8, 0, src.data(), src.length(), dst.data(), len);
 	}
 	return dst;
 }
 
 string lastErrorMessage() {
 	wchar* buff = nullptr;
-	string msg = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, GetLastError(), 0, reinterpret_cast<LPWSTR>(&buff), 0, nullptr) ? cwtos(buff) : string();
+	string msg = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, GetLastError(), 0, reinterpret_cast<LPWSTR>(&buff), 0, nullptr) ? swtos(buff) : string();
 	if (buff)
 		LocalFree(buff);
-	return trim(msg);
+	return string(trim(msg));
 }
 #endif
 
@@ -210,7 +182,7 @@ string lastErrorMessage() {
 
 #ifdef _WIN32
 void Arguments::setArgs(int argc, const wchar* const* argv, const uset<char>& flg, const uset<char>& opt) {
-	setArgs(argc, argv, cwtos, flg, opt);
+	setArgs(argc, argv, swtos, flg, opt);
 }
 #endif
 
@@ -223,7 +195,7 @@ void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>
 	for (int i = 1; i < argc; ++i) {
 		if (char key; argv[i][0] == '-') {
 			for (int j = 1; (key = char(argv[i][j])); ++j) {
-				if (!argv[i][j+1] && i + 1 < argc && opt.count(key)) {
+				if (!argv[i][j + 1] && i + 1 < argc && opt.count(key)) {
 					opts.emplace(key, conv(argv[++i]));
 					break;
 				}
@@ -250,6 +222,11 @@ DateTime::DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ym
 
 DateTime DateTime::now() {
 	time_t rawt = time(nullptr);
-	struct tm* tim = localtime(&rawt);
-	return DateTime(tim->tm_sec, tim->tm_min, tim->tm_hour, tim->tm_mday, tim->tm_mon + 1, tim->tm_year + 1900, tim->tm_wday ? tim->tm_wday : 7);
+	tm tim;
+#ifdef _WIN32
+	localtime_s(&tim, &rawt);
+#else
+	localtime_r(&rawt, &tim);
+#endif
+	return DateTime(tim.tm_sec, tim.tm_min, tim.tm_hour, tim.tm_mday, tim.tm_mon + 1, tim.tm_year + 1900, tim.tm_wday ? tim.tm_wday : 7);
 }

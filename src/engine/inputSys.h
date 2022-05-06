@@ -18,7 +18,7 @@ class Joystick : public Controller {
 private:
 	SDL_Joystick* ctr;
 	uptr<uint8[]> hats;	// last read hat states
-	uptr<bool[]> axes;		// last read axis values
+	uptr<bool[]> axes;	// last read axis values
 
 public:
 	Joystick(SDL_Joystick* joy);
@@ -42,7 +42,7 @@ inline optional<bool> Joystick::axisDown(int16 val, uint8 id) {
 class Gamepad : public Controller {
 private:
 	SDL_GameController* ctr;
-	bool axes[SDL_CONTROLLER_AXIS_MAX+2]{};	// last read axis values as booleans (add 2 because there's padding anyway)
+	bool axes[SDL_CONTROLLER_AXIS_MAX + 2]{};	// last read axis values as booleans (add 2 because there's padding anyway)
 
 public:
 	Gamepad(SDL_GameController* pad);
@@ -120,10 +120,10 @@ public:
 	InputSys();
 	~InputSys();
 
-	void eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset, bool mouse = true);
-	void eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset, bool mouse = true);
-	void eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset, bool mouse = true);
-	void eventMouseWheel(const SDL_MouseWheelEvent& wheel);
+	void eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset);
+	void eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset);
+	void eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset);
+	void eventMouseWheel(const SDL_MouseWheelEvent& wheel, int yoffset);
 	void eventKeyDown(const SDL_KeyboardEvent& key);
 	void eventKeyUp(const SDL_KeyboardEvent& key);
 	void eventJoystickButtonDown(const SDL_JoyButtonEvent& jbutton);
@@ -137,7 +137,7 @@ public:
 	void eventFingerGesture(const SDL_MultiGestureEvent& ges);
 	void eventFingerDown(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight);
 	void eventFingerUp(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight);
-	void eventMouseLeave();
+	void eventMouseLeave(ivec2 mPos);
 	void simulateMouseMove();
 	void tick();
 
@@ -173,6 +173,7 @@ private:
 	template <class T, class M> sizet addBinding(Binding::Type bid, T key, mumap<T, Binding::Type>& kmap, M bkey);	// returns kid or SIZE_MAX if failed
 	template <class T, class M> void delBinding(Binding::Type bid, sizet kid, M bkey, mumap<T, Binding::Type>& kmap);
 	template <class T> static typename mumap<T, Binding::Type>::iterator findMapBind(Binding::Type bid, T key, mumap<T, Binding::Type>& kmap);
+	static SDL_MouseButtonEvent toMouseEvent(const SDL_TouchFingerEvent& fin, uint8 state, vec2 winSize);
 };
 
 inline const Binding& InputSys::getBinding(Binding::Type type) const {

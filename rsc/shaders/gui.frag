@@ -2,7 +2,7 @@
 
 uniform sampler2DArray colorMap;
 
-in vec2 fragUV;
+noperspective in vec2 fragUV;
 flat in vec4 fragDiffuse;
 flat in uint fragTexid;
 

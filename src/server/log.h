@@ -9,7 +9,7 @@ class Log {
 public:
 	static constexpr uint defaultMaxLogfiles = 8;
 private:
-	static constexpr char filePrefix[] = "thrones_log_";
+	static constexpr string_view filePrefix = "thrones_log_";
 
 	string dir;
 	std::ofstream lfile;

@@ -2,9 +2,9 @@
 
 uniform sampler2D colorMap;
 
-in vec2 fragUV;
+noperspective in vec2 fragUV;
 
-layout (location = 0) out float fragColor;
+layout(location = 0) out float fragColor;
 
 void main() {
 	vec2 texSize = vec2(textureSize(colorMap, 0));

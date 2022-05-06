@@ -36,7 +36,7 @@ std::ostream& operator<<(std::ostream& s, const glm::vec<L, T, Q>& v) {
 		return s << v[0] << ')';
 	for (glm::length_t i = 0; i < L - 1; ++i)
 		s << v[i] << ' ';
-	return s << v[L-1] << ')';
+	return s << v[L - 1] << ')';
 }
 
 inline std::ostream& operator<<(std::ostream& s, const SDL_Rect& r) {

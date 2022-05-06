@@ -58,8 +58,10 @@ public:
 	void eventStopCamera();
 	void eventChat();
 	void eventFrameCounter();
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void eventScreenshot();
 	void eventPeekUiTextures();
+#endif
 	void eventSelect0();
 	void eventSelect1();
 	void eventSelect2();
@@ -74,7 +76,7 @@ public:
 	virtual void eventOpenSettings();
 
 	virtual uint8 switchButtons(uint8 but);
-	virtual uptr<RootLayout> createLayout(Interactable*& selected) = 0;
+	virtual pair<RootLayout*, Interactable*> createLayout() = 0;
 	virtual vector<Overlay*> createOverlays();
 	virtual void updateTitleBar(bool hadTitleBar);
 
@@ -117,7 +119,7 @@ public:
 	void eventEscape() override;
 	void eventFinish() override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 };
 
 class ProgLobby : public ProgState {
@@ -134,7 +136,7 @@ public:
 	void eventScrollUp(float val) override;
 	void eventScrollDown(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 
 	void addRoom(string&& name);
 	void delRoom(const string& name);
@@ -163,7 +165,7 @@ public:
 	void eventScrollUp(float val) override;
 	void eventScrollDown(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 
 	void setStartConfig();
 	void updateStartButton();
@@ -241,7 +243,7 @@ public:
 	void eventSelectPrev() override;
 	void eventSetSelected(uint8 sel) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 
 	Stage getStage() const;
 	void setStage(Stage stg);	// returns true if match is ready to load
@@ -296,7 +298,7 @@ public:
 	void eventCameraLeft(float val) override;
 	void eventCameraRight(float val) override;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 
 	void setIcons(Favor favor, Icon* homefront = nullptr);	// set favor or a homefront icon
 	const array<Icon*, favorMax>& getFavorIcons() const;
@@ -324,6 +326,7 @@ inline const Icon* ProgMatch::getDestroyIcon() const {
 	return mio.destroy;
 }
 
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 class ProgRecord : public ProgGame {
 public:
 	RecordReader reader;	// TODO: use this and the buttons
@@ -335,11 +338,12 @@ public:
 	ProgRecord(RecordReader&& rr, string&& config);
 	~ProgRecord() override = default;
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 	vector<Overlay*> createOverlays() override;
 
 	void setButtons(bool canBack, bool canNext);
 };
+#endif
 
 class ProgSettings : public ProgState {
 public:
@@ -349,7 +353,7 @@ public:
 	void eventFinish() override;
 	void eventOpenSettings() override {}
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 	void updateTitleBar(bool hadTitleBar) override;
 };
 
@@ -363,6 +367,6 @@ public:
 	void eventScrollDown(float val) override;
 	void eventOpenSettings() override {}
 
-	uptr<RootLayout> createLayout(Interactable*& selected) override;
+	pair<RootLayout*, Interactable*> createLayout() override;
 	void updateTitleBar(bool hadTitleBar) override;
 };

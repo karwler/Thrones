@@ -5,65 +5,25 @@
 #include "world.h"
 #include "prog/board.h"
 #include "prog/progs.h"
-
-// FRAME
-
-Frame::Frame() {
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, vlength, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(0));
-	glEnableVertexAttribArray(Shader::uvloc);
-	glVertexAttribPointer(Shader::uvloc, vlength, GL_FLOAT, GL_FALSE, stride * sizeof(*vertices), reinterpret_cast<void*>(vlength * sizeof(*vertices)));
-}
-
-Frame::~Frame() {
-	glBindVertexArray(vao);
-	glDisableVertexAttribArray(Shader::vpos);
-	glDisableVertexAttribArray(Shader::uvloc);
-	glDeleteBuffers(1, &vbo);
-	glDeleteVertexArrays(1, &vao);
-}
-
-// SKYBOX
-
-Skybox::Skybox() {
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(Shader::vpos);
-	glVertexAttribPointer(Shader::vpos, vlength, GL_FLOAT, GL_FALSE, vlength * sizeof(*vertices), reinterpret_cast<void*>(0));
-}
-
-Skybox::~Skybox() {
-	glBindVertexArray(vao);
-	glDisableVertexAttribArray(Shader::vpos);
-	glDisableVertexAttribArray(Shader::uvloc);
-	glDeleteBuffers(1, &vbo);
-	glDeleteVertexArrays(1, &vao);
-}
+#include "utils/context.h"
+#include "utils/layouts.h"
 
 // FRAME SET
 
 FrameSet::FrameSet(const Settings* sets, ivec2 res) {
-	if (sets->ssao) {
-		constexpr GLenum attach[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+	if (sets->ssao || sets->ssr) {
+		constexpr array<GLenum, 3> attach = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 		glGenFramebuffers(1, &fboGeom);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboGeom);
-		texPosition = makeTexture(res, GL_RGBA32F, Shader::vposTexa);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texPosition, 0);
-		texNormal = makeTexture(res, GL_RGBA32F, Shader::normTexa);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, texNormal, 0);
-		glDrawBuffers(2, attach);
+		texPosition = makeTexture<GL_RGBA32F, GL_RGBA, Shader::vposTexa>(res);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, attach[0], GL_TEXTURE_2D, texPosition, 0);
+		texNormal = makeTexture<GL_RGBA32F, GL_RGBA, Shader::normTexa>(res);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, attach[1], GL_TEXTURE_2D, texNormal, 0);
+		if (sets->ssr) {
+			texMatl = makeTexture<GL_RG32F, GL_RG, Shader::matlTexa>(res);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, attach[2], GL_TEXTURE_2D, texMatl, 0);
+		}
+		glDrawBuffers(attach.size() - !sets->ssr, attach.data());
 		glReadBuffer(GL_NONE);
 
 		glGenRenderbuffers(1, &rboGeom);
@@ -71,37 +31,43 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, res.x, res.y);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboGeom);
 		checkFramebufferStatus("geometry buffer");
-
-		fboSsao = makeFramebuffer(texSsao, res, GL_R16F, Shader::ssaoTexa, "SSAO buffer");
-		fboBlur = makeFramebuffer(texBlur, res, GL_R16F, Shader::blurTexa, "blur buffer");
+	}
+	if (sets->ssao) {
+		std::tie(fboSsao[0], texSsao[0]) = makeFramebuffer<GL_R16F, GL_RED, Shader::ssao0Texa>(res, "SSAO buffer 0");
+		std::tie(fboSsao[1], texSsao[1]) = makeFramebuffer<GL_R16F, GL_RED, Shader::ssao1Texa>(res, "SSAO buffer 1");
+	}
+	if (sets->ssr) {
+		std::tie(fboSsr[0], texSsr[0]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::ssr0Texa>(res, "SSR buffer 0");
+		std::tie(fboSsr[1], texSsr[1]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::ssr1Texa>(res, "SSR buffer 1");
 	}
 
+	uint msaa = sets->getMsaa();
 #ifndef OPENGLES
-	if (sets->msamples) {
+	if (msaa) {
 		glGenFramebuffers(1, &fboLight[1]);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboLight[1]);
 
-		glActiveTexture(Shader::texa);
+		glActiveTexture(Shader::tmpTexa);
 		glGenTextures(1, &texLight[1]);
 		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texLight[1]);
 		glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAX_LEVEL, 0);
-		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, sets->msamples, GL_RGBA16F, res.x, res.y, GL_TRUE);
+		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, msaa, GL_RGBA16F, res.x, res.y, GL_TRUE);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texLight[1], 0);
 
 		glGenRenderbuffers(1, &rboLight);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboLight);
-		glRenderbufferStorageMultisample(GL_RENDERBUFFER, sets->msamples, GL_DEPTH_COMPONENT32F, res.x, res.y);
+		glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaa, GL_DEPTH_COMPONENT32F, res.x, res.y);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboLight);
 		checkFramebufferStatus("light buffer multisample");
 	}
 #endif
 	glGenFramebuffers(1, &fboLight[0]);
 	glBindFramebuffer(GL_FRAMEBUFFER, fboLight[0]);
-	texLight[0] = makeTexture(res, GL_RGBA16F, Shader::sceneTexa);
+	texLight[0] = makeTexture<GL_RGBA16F, GL_RGBA, Shader::sceneTexa>(res);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texLight[0], 0);
 	glReadBuffer(GL_NONE);
 
-	if (!sets->msamples) {
+	if (!msaa) {
 		glGenRenderbuffers(1, &rboLight);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboLight);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, res.x, res.y);
@@ -111,37 +77,48 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 
 	if (sets->bloom)
 		for (sizet i = 0; i < fboGauss.size(); ++i)
-			fboGauss[i] = makeFramebuffer(texGauss[i], res, GL_RGBA16F, Shader::gaussTexa, "gauss buffer " + toStr(i));
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glActiveTexture(Shader::texa);
+			std::tie(fboGauss[i], texGauss[i]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::gaussTexa>(res, "gauss buffer " + toStr(i));
 }
 
-GLuint FrameSet::makeFramebuffer(GLuint& tex, ivec2 res, GLint iform, GLenum active, const string& name) {
+void FrameSet::bindTextures() {
+	glActiveTexture(Shader::vposTexa);
+	glBindTexture(GL_TEXTURE_2D, texPosition);
+	glActiveTexture(Shader::normTexa);
+	glBindTexture(GL_TEXTURE_2D, texNormal);
+	glActiveTexture(Shader::matlTexa);
+	glBindTexture(GL_TEXTURE_2D, texMatl);
+	glActiveTexture(Shader::ssao0Texa);
+	glBindTexture(GL_TEXTURE_2D, texSsao[0]);
+	glActiveTexture(Shader::ssao1Texa);
+	glBindTexture(GL_TEXTURE_2D, texSsao[1]);
+	glActiveTexture(Shader::ssr0Texa);
+	glBindTexture(GL_TEXTURE_2D, texSsr[0]);
+	glActiveTexture(Shader::ssr1Texa);
+	glBindTexture(GL_TEXTURE_2D, texSsr[1]);
+	glActiveTexture(Shader::sceneTexa);
+	glBindTexture(GL_TEXTURE_2D, texLight[0]);
+}
+
+template <GLint iform, GLenum pform, GLenum active>
+pair<GLuint, GLuint> FrameSet::makeFramebuffer(ivec2 res, string_view name) {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	tex = makeTexture(res, iform, active);
+	GLuint tex = makeTexture<iform, pform, active>(res);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 	glReadBuffer(GL_NONE);
 	checkFramebufferStatus(name);
-	return fbo;
+	return pair(fbo, tex);
 }
 
-GLuint FrameSet::makeTexture(ivec2 res, GLint iform, GLenum active) {
+template <GLint iform, GLenum pform, GLenum active>
+GLuint FrameSet::makeTexture(ivec2 res) {
 	GLuint tex;
 	glActiveTexture(active);
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-#ifdef OPENGLES
-	glTexStorage2D(GL_TEXTURE_2D, 0, iform, res.x, res.y);
-#else
-	glTexImage2D(GL_TEXTURE_2D, 0, iform, res.x, res.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-#endif
+	glTexImage2D(GL_TEXTURE_2D, 0, iform, res.x, res.y, 0, pform, GL_FLOAT, nullptr);
 	return tex;
 }
 
@@ -151,11 +128,12 @@ void FrameSet::free() {
 	glDeleteRenderbuffers(1, &rboLight);
 	glDeleteTextures(texLight.size(), texLight.data());
 	glDeleteFramebuffers(fboLight.size(), fboLight.data());
-	glDeleteTextures(1, &texBlur);
-	glDeleteFramebuffers(1, &fboBlur);
-	glDeleteTextures(1, &texSsao);
-	glDeleteFramebuffers(1, &fboSsao);
+	glDeleteTextures(texSsr.size(), texSsr.data());
+	glDeleteFramebuffers(texSsr.size(), fboSsr.data());
+	glDeleteTextures(texSsao.size(), texSsao.data());
+	glDeleteFramebuffers(fboSsao.size(), fboSsao.data());
 	glDeleteRenderbuffers(1, &rboGeom);
+	glDeleteTextures(1, &texMatl);
 	glDeleteTextures(1, &texNormal);
 	glDeleteTextures(1, &texPosition);
 	glDeleteFramebuffers(1, &fboGeom);
@@ -163,12 +141,12 @@ void FrameSet::free() {
 
 // CAMERA
 
-Camera::Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax) :
+Camera::Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax, ivec2 res) :
 	pmax(pitchMax),
 	ymax(yawMax),
 	fov(vfov)
 {
-	updateProjection();
+	updateProjection(res);
 	setPos(position, lookAt);
 }
 
@@ -188,29 +166,26 @@ void Camera::updateView() const {
 	glUniform3fv(World::skybox()->viewPos, 1, glm::value_ptr(pos));
 }
 
-void Camera::updateProjection() {
-	vec2 res = World::window()->getScreenView();
-	vec2 nscale = res / 4.f;
+void Camera::updateProjection(vec2 res) {
 	proj = glm::perspective(fov, res.x / res.y, znear, zfar);
 
 	glUseProgram(*World::geom());
 	glUniformMatrix4fv(World::geom()->proj, 1, GL_FALSE, glm::value_ptr(proj));
 
 	glUseProgram(*World::ssao());
-	glUniform2fv(World::ssao()->noiseScale, 1, glm::value_ptr(nscale));
+	glUniform2f(World::ssao()->noiseScale, res.x / 4.f, res.y / 4.f);
 	glUniformMatrix4fv(World::ssao()->proj, 1, GL_FALSE, glm::value_ptr(proj));
 
-	glUseProgram(*World::light());
-	glUniform2fv(World::light()->screenSize, 1, glm::value_ptr(res));
+	glUseProgram(*World::ssr());
+	glUniformMatrix4fv(World::ssr()->proj, 1, GL_FALSE, glm::value_ptr(proj));
 
-	res /= 2.f;
 	glUseProgram(*World::sgui());
-	glUniform2fv(World::sgui()->pview, 1, glm::value_ptr(res));
+	glUniform2f(World::sgui()->pview, res.x / 2.f, res.y / 2.f);
 }
 
-void Camera::setFov(float vfov) {
+void Camera::setFov(float vfov, ivec2 res) {
 	fov = vfov;
-	updateProjection();
+	updateProjection(res);
 	updateView();
 }
 
@@ -263,13 +238,13 @@ vec3 Camera::direction(ivec2 mPos) const {
 
 ivec2 Camera::screenPos(const vec3& pnt) const {
 	vec2 res = vec2(World::window()->getScreenView()) / 2.f;
-	vec2 pix = vec2(proj * glm::lookAt(pos, lat, up) * vec4(pnt, 1.f)) / 10.f;	// idk why 10
-	return vec2((pix.x + 1.f) * res.x, (1.f - pix.y) * res.y);
+	vec4 clip = proj * glm::lookAt(pos, lat, up) * vec4(pnt, 1.f);
+	return vec2((clip.x / clip.w + 1.f) * res.x, (1.f - clip.y / clip.w) * res.y);
 }
 
 // LIGHT
 
-Light::Light(GLsizei res, const vec3& position, const vec3& color, float ambiFac, float range) :
+Light::Light(const Settings* sets, const vec3& position, const vec3& color, float ambiFac, float range) :
 	pos(position),
 	ambient(color * ambiFac),
 	diffuse(color),
@@ -277,7 +252,7 @@ Light::Light(GLsizei res, const vec3& position, const vec3& color, float ambiFac
 	quadratic(75.f / (range * range)),
 	farPlane(range)
 {
-	if (res) {
+	if (sets->shadowRes) {
 		glGenFramebuffers(1, &fboDepth);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboDepth);
 
@@ -285,12 +260,8 @@ Light::Light(GLsizei res, const vec3& position, const vec3& color, float ambiFac
 		glGenTextures(1, &texDepth);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, texDepth);
 		for (uint i = 0; i < 6; ++i)
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, res, res, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, sets->shadowRes, sets->shadowRes, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X, texDepth, 0);	// bind one to make the check happy
 #ifdef OPENGLES
 		GLenum none = GL_NONE;
@@ -300,20 +271,10 @@ Light::Light(GLsizei res, const vec3& position, const vec3& color, float ambiFac
 #endif
 		glReadBuffer(GL_NONE);
 		checkFramebufferStatus("shadow buffer");
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glActiveTexture(Shader::texa);
 	}
-	updateValues();
-}
 
-void Light::free() {
-	glDeleteTextures(1, &texDepth);
-	glDeleteFramebuffers(1, &fboDepth);
-}
-
-void Light::updateValues() {
 	glUseProgram(*World::light());
+	glUniform1i(World::light()->optShadow, sets->getShadowOpt());
 	glUniform1f(World::light()->farPlane, farPlane);
 	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(pos));
 	glUniform3fv(World::light()->lightAmbient, 1, glm::value_ptr(ambient));
@@ -334,6 +295,11 @@ void Light::updateValues() {
 	glUniformMatrix4fv(World::depth()->pvTrans, 6, GL_FALSE, reinterpret_cast<float*>(shadowTransforms));
 	glUniform3fv(World::depth()->lightPos, 1, glm::value_ptr(pos));
 	glUniform1f(World::depth()->farPlane, farPlane);
+}
+
+void Light::free() {
+	glDeleteTextures(1, &texDepth);
+	glDeleteFramebuffers(1, &fboDepth);
 }
 
 // CLICK STAMP
@@ -400,21 +366,20 @@ void Animation::append(Animation& ani) {
 // SCENE
 
 Scene::Scene() :
-	light(World::sets()->shadowRes),
-	frames(World::sets(), World::window()->getScreenView()),
-	camera(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup)
+	camera(!World::vr() ? std::make_unique<Camera>(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup, World::window()->getScreenView()) : nullptr),
+	light(World::sets()),
+	frames(World::sets(), World::window()->getScreenView())
 {
-	wgtTops.initBuffer();
-	wgtTops.allocate(numWgtTops);
-	wgtTops.updateInstanceData(0, numWgtTops);
+	glGenVertexArrays(1, &wgtVao);
+	wgtTops.initBuffer(wgtTopInsts.size());
 }
 
 Scene::~Scene() {
-	layout.reset();	// needs to happen before texCol gets freed
+	delete layout;	// needs to happen before texCol gets freed
 	setPtrVec(popups);
 	setPtrVec(overlays);
-	context.reset();
-	titleBar.reset();
+	delete context;
+	delete titleBar;
 	texSet.free();
 	texCol.free();
 	for (Mesh& it : meshes)
@@ -422,11 +387,15 @@ Scene::~Scene() {
 	wgtTops.freeBuffer();
 	frames.free();
 	light.free();
+	glDeleteVertexArrays(1, &wgtVao);
 }
 
-void Scene::draw() {
+void Scene::draw(ivec2 mPos, GLuint finalFbo) {
 	BoardObject* cbob = dynamic_cast<BoardObject*>(capture.inter);
 	ivec2 res = World::window()->getScreenView();
+	bool msaa = World::sets()->antiAliasing >= Settings::AntiAliasing::msaa2;
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
 	if (World::sets()->shadowRes) {
 		glViewport(0, 0, World::sets()->shadowRes, World::sets()->shadowRes);
 		glUseProgram(*World::depth());
@@ -437,71 +406,50 @@ void Scene::draw() {
 			glClear(GL_DEPTH_BUFFER_BIT);
 			for (Mesh& it : meshes)
 				it.draw();
-			if (cbob && cbob->getTopDepth())
+			if (cbob && cbob->getTopSolid())
 				World::state()->getObjectDragMesh()->drawTop();
 		}
 		glViewport(0, 0, res.x, res.y);
 	}
 
-	if (World::sets()->ssao) {
-		glDisable(GL_BLEND);
-		glUseProgram(*World::geom());
-		glBindFramebuffer(GL_FRAMEBUFFER, frames.fboGeom);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	if (World::sets()->ssao || World::sets()->ssr) {
+		startDepthDraw(World::geom(), frames.fboGeom);
 		for (Mesh& it : meshes)
 			it.draw();
-		if (cbob && cbob->getTopDepth())
+		if (cbob && cbob->getTopSolid())
 			World::state()->getObjectDragMesh()->drawTop();
-
-		glUseProgram(*World::ssao());
-		glBindFramebuffer(GL_FRAMEBUFFER, frames.fboSsao);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glBindVertexArray(scrFrame.getVao());
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
-
-		glUseProgram(*World::blur());
-		glBindFramebuffer(GL_FRAMEBUFFER, frames.fboBlur);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
-		glEnable(GL_BLEND);
+	}
+	glBindVertexArray(wgtVao);
+	if (World::sets()->ssao) {
+		glDisable(GL_DEPTH_TEST);
+		drawFrame(World::ssao(), frames.fboSsao[0]);
+		drawFrame(World::mblur(), frames.fboSsao[1]);
+		glEnable(GL_DEPTH_TEST);
 	}
 
-#ifdef OPENGLES
-	glBindFramebuffer(GL_FRAMEBUFFER, frames.fboLight[0]);
-#else
-	glBindFramebuffer(GL_FRAMEBUFFER, frames.fboLight[World::sets()->msamples ? 1 : 0]);
-#endif
-	glUseProgram(*World::skybox());
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glBindVertexArray(skybox.getVao());
-	glDrawArrays(GL_TRIANGLES, 0, Skybox::corners);
+	startDepthDraw(World::skybox(), frames.fboLight[msaa]);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
 
+	glEnable(GL_BLEND);
 	glUseProgram(*World::light());
 	for (Mesh& it : meshes)
 		it.draw();
-	if (cbob) {
-		if (cbob->getTopDepth())
-			World::state()->getObjectDragMesh()->drawTop();
-		else {
-			glDisable(GL_DEPTH_TEST);
-			World::state()->getObjectDragMesh()->drawTop();
-			glEnable(GL_DEPTH_TEST);
-		}
-	}
+	glDisable(GL_DEPTH_TEST);
+	if (cbob)
+		World::state()->getObjectDragMesh()->drawTop();
+	glDisable(GL_BLEND);
+
 #ifndef OPENGLES
-	if (World::sets()->msamples) {
+	if (msaa) {
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, frames.fboLight[1]);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, frames.fboLight[0]);
-		glBlitFramebuffer(0, 0, res.x, res.y, 0, 0, res.x, res.y, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		glBlitFramebuffer(0, 0, res.x, res.y, 0, 0, res.x, res.y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 	}
 #endif
 
+	glBindVertexArray(wgtVao);
 	if (World::sets()->bloom) {
-		glUseProgram(*World::brights());
-		glBindFramebuffer(GL_FRAMEBUFFER, frames.fboGauss[0]);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glBindVertexArray(scrFrame.getVao());
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
+		drawFrame(World::brights(), frames.fboGauss[0]);
 
 		glUseProgram(*World::gauss());
 		glActiveTexture(Shader::gaussTexa);
@@ -511,17 +459,19 @@ void Scene::draw() {
 			glClear(GL_COLOR_BUFFER_BIT);
 			glUniform1i(World::gauss()->horizontal, !vertical);
 			glBindTexture(GL_TEXTURE_2D, frames.texGauss[vertical]);
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		}
-		glActiveTexture(Shader::texa);
+		glBindTexture(GL_TEXTURE_2D, frames.texGauss[0]);
 	}
-	glUseProgram(*World::sfinal());
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glBindVertexArray(scrFrame.getVao());
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, Frame::corners);
+	if (World::sets()->ssr) {
+		drawFrame(World::ssr(), frames.fboSsr[0]);
+		drawFrame(World::ssrColor(), frames.fboSsr[1]);
+		drawFrame(World::cblur(), frames.fboSsr[0]);
+	}
+	drawFrame(World::sfinal(), finalFbo);
 
-	glUseProgram(*World::sgui());
+	glEnable(GL_BLEND);
+	glUseProgram(*World::sgui());	// TODO: if in VR render to the texture of an object
 	layout->draw();
 	for (Overlay* it : overlays)
 		if (it->getShow())
@@ -529,27 +479,40 @@ void Scene::draw() {
 	for (Popup* it : popups)
 		it->draw();
 	if (context)
-		context->drawInstances();
+		context->draw();
 	else {
 		uint icnt = 0;
 		if (Widget* wgt = dynamic_cast<Widget*>(capture.inter))
-			icnt = wgt->setTopInstances(wgtTops, icnt);
+			icnt += wgt->setTopInstances(&wgtTopInsts[icnt]);
 		if (Button* but = dynamic_cast<Button*>(select); but && World::input()->mouseLast)
-			icnt = but->setTooltipInstances(wgtTops, icnt);
+			icnt += but->setTooltipInstances(&wgtTopInsts[icnt], mPos);
 		if (icnt) {
-			wgtTops.updateInstance(0, icnt);
+			wgtTops.updateInstances(wgtTopInsts.data(), 0, icnt);
 			wgtTops.drawInstances(icnt);
 		}
 	}
 
 	if (titleBar) {
-		vec2 hres = res / 2;
+		vec2 hres = vec2(res) / 2.f;
 		glViewport(0, res.y, res.x, World::window()->getTitleBarHeight());
-		glUniform2f(World::sgui()->pview, hres.x, float(World::window()->getTitleBarHeight() / 2));
+		glUniform2f(World::sgui()->pview, hres.x, float(World::window()->getTitleBarHeight()) / 2.f);
 		titleBar->draw();
 		glUniform2fv(World::sgui()->pview, 1, glm::value_ptr(hres));
 		glViewport(0, 0, res.x, res.y);
 	}
+}
+
+void Scene::startDepthDraw(const Shader* shader, GLuint fbo) {
+	glUseProgram(*shader);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void Scene::drawFrame(const Shader* shader, GLuint fbo) {
+	glUseProgram(*shader);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 void Scene::tick(float dSec) {
@@ -569,16 +532,24 @@ void Scene::tick(float dSec) {
 	}
 }
 
-void Scene::onResize() {
+void Scene::onExternalResize() {
 	resetFrames();
-	camera.updateProjection();
-	camera.updateView();
+	if (World::vr()) {
+		// TODO: update program uniforms
+	} else {
+		camera->updateProjection(World::window()->getScreenView());
+		camera->updateView();
+	}
+	onInternalResize();
+}
+
+void Scene::onInternalResize() {
 	World::pgui()->calcSizes();
-	layout->onResize();
+	layout->onResize(nullptr);
 	for (Popup* it : popups)
-		it->onResize();
+		it->onResize(nullptr);
 	for (Overlay* it : overlays)
-		it->onResize();
+		it->onResize(nullptr);
 }
 
 void Scene::onMouseMove(ivec2 pos, ivec2 mov, uint32 state) {
@@ -597,7 +568,7 @@ void Scene::onMouseDown(ivec2 pos, uint8 but) {
 		return;
 	if (LabelEdit* box = dynamic_cast<LabelEdit*>(capture.inter); popups.empty() && box)	// confirm entered text if such a thing exists and it wants to, unless it's in a popup (that thing handles itself)
 		box->confirm();
-	if (context && select != context.get())
+	if (context && select != context)
 		setContext(nullptr);
 
 	cstamp = ClickStamp(select, getSelectedScrollArea(select), pos, but);
@@ -614,7 +585,7 @@ void Scene::onMouseUp(ivec2 pos, uint8 but) {
 	if (but != cstamp.but)
 		return;
 	if (capture)
-		capture->onUndrag(but);
+		capture->onUndrag(pos, but);
 	if (select && cstamp.inter == select && cursorInClickRange(pos))
 		cstamp.inter->onClick(pos, but);
 	if (!capture)
@@ -622,30 +593,34 @@ void Scene::onMouseUp(ivec2 pos, uint8 but) {
 	cstamp = ClickStamp();
 }
 
-void Scene::onMouseWheel(ivec2 mov) {
+void Scene::onMouseWheel(ivec2 pos, ivec2 mov) {
 	if (Interactable* box = context ? dynamic_cast<Context*>(select) : dynamic_cast<TextBox*>(select) ? select : getSelectedScrollArea(select))
-		box->onScroll(ivec2(mov.x, mov.y * btom<int>(World::sets()->invertWheel)) * scrollFactorWheel);
+		box->onScroll(pos, ivec2(mov.x, mov.y * btom<int>(World::sets()->invertWheel)) * scrollFactorWheel);
 	else if (mov.y)
 		World::state()->eventWheel(mov.y * btom<int>(!World::sets()->invertWheel));
 }
 
-void Scene::onMouseLeave() {
+void Scene::onMouseLeave(ivec2 pos) {
 	if (capture)
-		capture->onUndrag(cstamp.but);
+		capture->onUndrag(pos, cstamp.but);
 	else
 		World::state()->eventUndrag();
 	deselect();
 	cstamp = ClickStamp();
 }
 
-void Scene::onCompose(const char* str) {
-	if (capture)
+void Scene::onCompose(string_view str) {
+	if (capture) {
 		capture->onCompose(str, capture.len);
+		capture.len = str.length();
+	}
 }
 
-void Scene::onText(const char* str) {
-	if (capture)
+void Scene::onText(string_view str) {
+	if (capture) {
 		capture->onText(str, capture.len);
+		capture.len = 0;
+	}
 }
 
 void Scene::onConfirm() {
@@ -694,23 +669,36 @@ void Scene::loadObjects() {
 }
 
 void Scene::loadTextures(int recomTexSize) {
-	texColRefs = FileSys::loadTextures(texSet, texCol, float(World::sets()->texScale) / 100.f, recomTexSize);
+	int minUiIcon = recomTexSize;
+	vector<TextureCol::Element> elems(pieceLim, TextureCol::Element(string(), nullptr, TextureCol::textPixFormat));
+	texSet.init(FileSys::loadTextures(elems, minUiIcon, float(World::sets()->texScale) / 100.f));
+
+	array<SDL_Surface*, pieceLim> icons = renderPieceIcons();
+	for (sizet i = 0; i < icons.size(); ++i) {
+		elems[i].name = pieceNames[i];
+		elems[i].image = icons[i];
+	}
+	texColRefs = texCol.init(std::move(elems), recomTexSize, minUiIcon);
 }
 
 void Scene::reloadTextures() {
-	FileSys::reloadTextures(texSet, float(World::sets()->texScale) / 100.f);
+	texSet.free();
+	texSet.init(FileSys::reloadTextures(float(World::sets()->texScale) / 100.f));
+	setPieceIcons();
 }
 
-void Scene::reloadShader() {
-	World::window()->reloadVaryingShaders();
-	camera.updateProjection();
-	camera.updateView();
-	light.updateValues();
+void Scene::setPieceIcons() {
+	array<SDL_Surface*, pieceLim> icons = renderPieceIcons();
+	for (sizet i = 0; i < icons.size(); ++i) {
+		TexLoc tloc = wgtTex(pieceNames[i]);
+		texCol.replace(tloc, icons[i]);
+		texColRefs[pieceNames[i]] = tloc;
+	}
 }
 
 void Scene::resetShadows() {
 	light.free();
-	light = Light(World::sets()->shadowRes);
+	light = Light(World::sets());
 }
 
 void Scene::resetFrames() {
@@ -720,20 +708,22 @@ void Scene::resetFrames() {
 
 void Scene::resetLayouts() {
 	// clear scene
-	onMouseLeave();	// reset stamp and select
+	onMouseLeave(World::window()->mousePos());	// reset stamp and select
 	setCapture(nullptr);
+	delete layout;
 	setPtrVec(popups);
-	context.reset();
+	delete context;
+	context = nullptr;
 #if !SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	World::fonts()->clear();
 #endif
 
 	// set up new widgets
-	layout = World::state()->createLayout(firstSelect);
+	std::tie(layout, firstSelect) = World::state()->createLayout();
 	setPtrVec(overlays, World::state()->createOverlays());
-	layout->postInit();
+	layout->postInit(nullptr);
 	for (Overlay* it : overlays)
-		it->postInit();
+		it->postInit(nullptr);
 	World::state()->updateTitleBar(World::window()->getTitleBarHeight());
 	updateSelect();
 }
@@ -746,11 +736,11 @@ void Scene::updateTooltips() {
 		it->updateTipTex();
 }
 
-void Scene::pushPopup(uptr<Popup>&& newPopup, Widget* newCapture) {
+void Scene::pushPopup(Popup* newPopup, Widget* newCapture) {
 	deselect();	// clear select and capture in case of a dangling pointer
 	setCapture(nullptr);
-	popups.push_back(newPopup.release());
-	popups.back()->postInit();
+	popups.push_back(newPopup);
+	popups.back()->postInit(nullptr);
 	if (newCapture)
 		newCapture->onClick(newCapture->position(), SDL_BUTTON_LEFT);
 
@@ -768,21 +758,23 @@ void Scene::popPopup() {
 	updateSelect();
 }
 
-void Scene::setContext(uptr<Context>&& newContext) {
+void Scene::setContext(Context* newContext) {
 	if (context) {
 		if (context->getParent() && !World::input()->mouseLast)
 			updateSelect(context->getParent());
-		else if (select == context.get())
+		else if (select == context)
 			deselect();
+		delete context;
 	}
-	context = std::move(newContext);
+	context = newContext;
 	updateSelect();
 }
 
-void Scene::setTitleBar(uptr<TitleBar>&& bar) {
+void Scene::setTitleBar(TitleBar* bar) {
 	deselect();	// clear select and capture in case of a dangling pointer
-	if (titleBar = std::move(bar); titleBar)
-		titleBar->postInit();
+	delete titleBar;
+	if (titleBar = bar; titleBar)
+		titleBar->postInit(nullptr);
 	updateSelect();
 }
 
@@ -843,9 +835,9 @@ Interactable* Scene::getSelected(ivec2 mPos) {
 	if (outRange(mPos, ivec2(0), World::window()->getScreenView()))
 		return titleBar ? getTitleBarSelected(ivec2(mPos.x, mPos.y + World::window()->getTitleBarHeight())) : nullptr;
 	if (context && context->rect().contain(mPos))
-		return context.get();
+		return context;
 
-	Layout* box = layout.get();
+	Layout* box = layout;
 	if (!popups.empty())
 		box = popups.back();
 	else for (vector<Overlay*>::reverse_iterator it = overlays.rbegin(); it != overlays.rend(); ++it)
@@ -881,7 +873,7 @@ ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
 }
 
 Interactable* Scene::getTitleBarSelected(ivec2 tmPos) {
-	for (Layout* box = titleBar.get();;) {
+	for (Layout* box = titleBar;;) {
 		Rect frame = box->rect();
 		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &tmPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(tmPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
@@ -891,4 +883,142 @@ Interactable* Scene::getTitleBarSelected(ivec2 tmPos) {
 		} else
 			return findFirstScrollArea(box);
 	}
+}
+
+array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
+	GLsizei res = GLsizei(float(World::vr() ? World::window()->getGuiView().y : World::sets()->windowSizes().back().y) * GuiGen::iconSize);
+	const Material* matl = material(Settings::colorNames[uint8(World::sets()->colorAlly)]);
+	Settings::AntiAliasing oldAa = World::sets()->antiAliasing;
+	uint16 oldShadowRes = World::sets()->shadowRes;
+	bool oldSsao = World::sets()->ssao;
+	bool oldBloom = World::sets()->bloom;
+	bool oldSsr = World::sets()->ssr;
+	World::sets()->antiAliasing = Settings::AntiAliasing::fxaa;
+	World::sets()->shadowRes = 0;
+	World::sets()->ssao = true;
+	World::sets()->bloom = false;
+	World::sets()->ssr = false;
+	World::window()->setShaderOptions();
+
+	array<SDL_Surface*, pieceLim> icons;
+	for (sizet i = 0; i < icons.size(); ++i)
+		if (icons[i] = SDL_CreateRGBSurfaceWithFormat(0, res, res, 32, SDL_PIXELFORMAT_BGRA32); !icons[i]) {
+			std::for_each_n(icons.begin(), i, SDL_FreeSurface);
+			throw std::runtime_error("Failed to render piece icons:"s + linend + SDL_GetError());
+		}
+
+	constexpr pair<vec3, float> camPositions[10] = {
+		pair(vec3(1.52f, 1.1f, 0.9f), 0.37f),
+		pair(vec3(1.55f, 1.1f, 0.95f), 0.39f),
+		pair(vec3(0.9f, 1.1f, 1.3f), 0.32f),
+		pair(vec3(1.f, 1.1f, 1.15f), 0.3f),
+		pair(vec3(1.6f, 1.4f, 1.3f), 0.5f),
+		pair(vec3(1.43f, 1.3f, 1.13f), 0.42f),
+		pair(vec3(1.38f, 1.3f, 1.08f), 0.4f),
+		pair(vec3(1.5f, 1.4f, 1.3f), 0.48f),
+		pair(vec3(1.7f, 1.4f, 1.3f), 0.53f),
+		pair(vec3(1.3f, 1.4f, 1.4f), 0.46f)
+	};
+	vec3 oldCamPos = camera->getPos();
+	vec3 oldCamLat = camera->getLat();
+	camera->updateProjection(vec2(float(res)));
+
+	constexpr vec3 lightPos(1.f);
+	glUseProgram(*World::light());
+	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(lightPos));
+
+	GLuint tex;
+	glActiveTexture(Shader::tmpTexa);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, res, res, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	GLuint fbo;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+#ifdef OPENGLES
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+#else
+	glReadBuffer(GL_NONE);
+#endif
+	checkFramebufferStatus("piece icon buffer");
+
+	FrameSet frameSet(World::sets(), ivec2(res));
+	glViewport(0, 0, res, res);
+	glClearColor(0.f, 0.f, 0.f, 0.f);
+	glDisable(GL_BLEND);
+	for (sizet i = 0; i < icons.size(); ++i) {
+		camera->setPos(camPositions[i].first, vec3(0.f, camPositions[i].second, 0.f));
+		renderModel(fbo, frameSet, pieceNames[i], matl);
+#ifdef OPENGLES
+		glReadPixels(0, 0, res, res, TextureCol::textPixFormat, GL_UNSIGNED_BYTE, icons[i]->pixels);
+#else
+		glGetTexImage(GL_TEXTURE_2D, 0, TextureCol::textPixFormat, GL_UNSIGNED_BYTE, icons[i]->pixels);
+#endif
+		invertImage(icons[i]);
+	}
+	glViewport(0, 0, World::window()->getScreenView().x, World::window()->getScreenView().y);
+	glClearColor(0.f, 0.f, 0.f, 1.f);
+	frameSet.free();
+	frames.bindTextures();
+	glDeleteTextures(1, &tex);
+	glDeleteFramebuffers(1, &fbo);
+
+	glUseProgram(*World::light());
+	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(light.pos));
+	camera->updateProjection(World::window()->getScreenView());
+	camera->setPos(oldCamPos, oldCamLat);
+
+	World::sets()->antiAliasing = oldAa;
+	World::sets()->shadowRes = oldShadowRes;
+	World::sets()->ssao = oldSsao;
+	World::sets()->bloom = oldBloom;
+	World::sets()->ssr = oldSsr;
+	World::window()->setShaderOptions();
+	return icons;
+}
+
+void Scene::renderModel(GLuint fbo, const FrameSet& frms, const string& name, const Material* matl) {
+	Mesh* model = mesh(name);
+	bool hadTop = model->hasTop();
+	if (!hadTop)
+		model->allocateTop(true);
+
+	Mesh::Instance& insTop = model->getInstanceTop();
+	Mesh::Instance oldTop = insTop;
+	insTop.model = mat4(1.f);
+	insTop.normat = mat3(1.f);
+	insTop.diffuse = matl->color;
+	insTop.specShine = vec4(matl->spec, matl->shine);
+	insTop.reflRough = vec2(matl->reflect, matl->rough);
+	insTop.texid = objTex("metal");
+	insTop.show = true;
+	model->updateInstanceDataTop();
+
+	glEnable(GL_DEPTH_TEST);
+	startDepthDraw(World::geom(), frms.fboGeom);
+	model->drawTop();
+	glDisable(GL_DEPTH_TEST);
+
+	glBindVertexArray(wgtVao);
+	drawFrame(World::ssao(), frms.fboSsao[0]);
+	drawFrame(World::mblur(), frms.fboSsao[1]);
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	startDepthDraw(World::light(), frms.fboLight[0]);
+	model->drawTop();
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+
+	glBindVertexArray(wgtVao);
+	drawFrame(World::sfinal(), fbo);
+
+	if (hadTop) {
+		insTop = oldTop;
+		model->updateInstanceDataTop();
+	} else
+		model->allocateTop(false);
 }

@@ -33,7 +33,6 @@
 	<h1 id="h1_0">1 Miscellaneous</h1>
 
 	<h2 id="h1_1">1.1 Dependencies</h2>
-	<p>This list refers to the provided binaries, not strictly the source code.</p>
 	<h3>Android</h3>
 	<ul>
 		<li>Android 4.4 KitKat</li>
@@ -47,13 +46,6 @@
 	<ul>
 		<li>Linux 3.2.0 64-bit</li>
 		<li>OpenGL 3.3 (x86/x86-64) or OpenGL ES 3.0 (ARM)</li>
-		<li>FreeType</li>
-		<li>libcurl (optional)</li>
-		<li>libpng</li>
-		<li>SDL2 2.0.20</li>
-		<li>SDL2_image 2.0.5</li>
-		<li>SDL2_ttf 2.0.18</li>
-		<li>zlib</li>
 	</ul>
 	<h3>macOS</h3>
 	<ul>
@@ -121,6 +113,8 @@
 			<td>save externally</td>
 		</tr>
 	</table>
+	<p>The game will try to run in VR mode if the "-r" flag is set.</p>
+	<p>Log files will be written to the preferences directory when the "-l" flag is set.</p>
 	<p>By default the game bypasses the X11 compositor. The compositor can be kept enabled by running the game with the "-k" flag.</p>
 
 	<h2 id="h2_1">2.1 Settings</h2>
@@ -160,8 +154,21 @@
 	<p>Window size when "Screen" is set to "window" or "borderless".</p>
 	<h3>Mode</h3>
 	<p>The screen mode to use when "Screen" is set to "fullscreen".</p>
-	<h3>Multisamples</h3>
-	<p>Set to "0" to turn off. Doesn't work with OpenGL ES.</p>
+	<h3>Anti-aliasing</h3>
+	<table class="listing">
+		<tr>
+			<td>none</td>
+			<td>disable anti-aliasing</td>
+		</tr>
+		<tr>
+			<td>FXAA</td>
+			<td>use FXAA post-processing</td>
+		</tr>
+		<tr>
+			<td>MSAA n</td>
+			<td>use hardware MSAA with n being limited to the maximum samples</td>
+		</tr>
+	</table>
 	<h3>Shadow resolution</h3>
 	<p>The width/height of the light's shadow cubemap texture. Shadows are disabled if set to 0 or under OpenGL ES.</p>
 	<h3>Soft shadows</h3>
@@ -170,6 +177,8 @@
 	<p>Render with screen space ambient occlusion.</p>
 	<h3>Bloom</h3>
 	<p>Renders a light blur around bright areas.</p>
+	<h3>Reflections</h3>
+	<p>Render with screen space reflections.</p>
 	<h3>Texture scale</h3>
 	<p>Scale of texture sizes.</p>
 	<h3>VSync</h3>
@@ -344,6 +353,10 @@
 		<tr>
 			<td>Screenshot</td>
 			<td>Take a screenshot and save it to the game's preferences directory.</td>
+		</tr>
+		<tr>
+			<td>Peek textures</td>
+			<td>Take a screenshot of the current state of the UI's text texture atlas.</td>
 		</tr>
 		<tr>
 			<td>Select next</td>

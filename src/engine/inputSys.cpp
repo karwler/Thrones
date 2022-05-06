@@ -59,20 +59,20 @@ InputSys::~InputSys() {
 		pad.close();
 }
 
-void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset, bool mouse) {
-	mouseLast = mouse;
+void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset) {
+	mouseLast = motion.type == SDL_MOUSEMOTION;
 	mouseMove = ivec2(motion.xrel, motion.yrel);
 	moveTime = motion.timestamp;
-	if (World::scene()->camera.state != Camera::State::dragging)
+	if (World::scene()->getCamera()->state != Camera::State::dragging)
 		World::scene()->onMouseMove(ivec2(motion.x, motion.y - yoffset), mouseMove, motion.state);
 	else {
 		vec2 rot(glm::radians(float(motion.yrel) / 2.f), glm::radians(float(-motion.xrel) / 2.f));
-		World::scene()->camera.rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
+		World::scene()->getCamera()->rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 	}
 }
 
-void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset, bool mouse) {
-	mouseLast = mouse;
+void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset) {
+	mouseLast = button.type == SDL_MOUSEBUTTONDOWN;
 	switch (button.button) {
 	case SDL_BUTTON_LEFT: case SDL_BUTTON_RIGHT:
 		World::scene()->onMouseDown(ivec2(button.x, button.y - yoffset), button.button);
@@ -88,8 +88,8 @@ void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoff
 	}
 }
 
-void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset, bool mouse) {
-	mouseLast = mouse;
+void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffset) {
+	mouseLast = button.type == SDL_MOUSEBUTTONUP;
 	switch (button.button) {
 	case SDL_BUTTON_LEFT: case SDL_BUTTON_RIGHT:
 		World::scene()->onMouseUp(ivec2(button.x, button.y - yoffset), button.button);
@@ -99,9 +99,13 @@ void InputSys::eventMouseButtonUp(const SDL_MouseButtonEvent& button, int yoffse
 	}
 }
 
-void InputSys::eventMouseWheel(const SDL_MouseWheelEvent& wheel) {
+void InputSys::eventMouseWheel(const SDL_MouseWheelEvent& wheel, int yoffset) {
 	mouseLast = true;
-	World::scene()->onMouseWheel(ivec2(wheel.x, wheel.y));
+#if SDL_VERSION_ATLEAST(2, 26, 0)
+	World::scene()->onMouseWheel(ivec2(wheel.mouseX, wheel.mouseY - yoffset), ivec2(wheel.x, wheel.y));
+#else
+	World::scene()->onMouseWheel(World::window()->mousePos(), ivec2(wheel.x, wheel.y));
+#endif
 }
 
 void InputSys::eventKeyDown(const SDL_KeyboardEvent& key) {
@@ -211,35 +215,65 @@ void InputSys::eventGamepadAxis(const SDL_ControllerAxisEvent& gaxis) {
 
 void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
 	vec2 size(World::window()->getScreenView().x, windowHeight);
-	eventMouseMotion({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LMASK, int(fin.x * size.x), int(fin.y * size.y), int(fin.dx * size.x), int(fin.dy * size.y) }, yoffset, false);
+	SDL_MouseMotionEvent event{};
+	event.type = fin.type;
+	event.timestamp = fin.timestamp;
+	event.windowID = fin.windowID;
+	event.which = SDL_TOUCH_MOUSEID;
+	event.state = SDL_BUTTON_LMASK;
+	event.x = int(fin.x * size.x);
+	event.y = int(fin.y * size.y);
+	event.x = int(fin.dx * size.x);
+	event.y = int(fin.dy * size.y);
+	eventMouseMotion(event, yoffset);
 }
 
 void InputSys::eventFingerGesture(const SDL_MultiGestureEvent& ges) {
-	if (World::scene()->camera.state != Camera::State::animating && dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
-		World::scene()->camera.zoom(int(ges.dDist * float(World::window()->getScreenView().y)));
+	if (World::scene()->getCamera()->state != Camera::State::animating && dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
+		World::scene()->getCamera()->zoom(int(ges.dDist * float(World::window()->getScreenView().y)));
 }
 
 void InputSys::eventFingerDown(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
-	ivec2 pos(fin.x * float(World::window()->getScreenView().x), fin.y * float(windowHeight));
-	eventMouseButtonDown({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_PRESSED, 1, 0, pos.x, pos.y }, yoffset, false);
+	eventMouseButtonDown(toMouseEvent(fin, SDL_PRESSED, vec2(World::window()->getScreenView().x, windowHeight)), yoffset);
 }
 
 void InputSys::eventFingerUp(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {
-	ivec2 pos(fin.x * float(World::window()->getScreenView().x), fin.y * float(windowHeight));
-	eventMouseButtonUp({ fin.type, fin.timestamp, 0, SDL_TOUCH_MOUSEID, SDL_BUTTON_LEFT, SDL_RELEASED, 1, 0, pos.x, pos.y }, yoffset, false);
+	eventMouseButtonUp(toMouseEvent(fin, SDL_RELEASED, vec2(World::window()->getScreenView().x, windowHeight)), yoffset);
 	World::scene()->deselect();	// deselect last Interactable because Scene::onMouseUp updates the select
 }
 
-void InputSys::eventMouseLeave() {
+SDL_MouseButtonEvent InputSys::toMouseEvent(const SDL_TouchFingerEvent& fin, uint8 state, vec2 winSize) {
+	SDL_MouseButtonEvent event{};
+	event.type = fin.type;
+	event.timestamp = fin.timestamp;
+	event.windowID = fin.windowID;
+	event.which = SDL_TOUCH_MOUSEID;
+	event.button = SDL_BUTTON_LEFT;
+	event.state = state;
+	event.clicks = 1;
+	event.x = int(fin.x * winSize.x);
+	event.y = int(fin.y * winSize.y);
+	return event;
+}
+
+void InputSys::eventMouseLeave(ivec2 mPos) {
 	SDL_SetRelativeMouseMode(SDL_FALSE);
-	World::scene()->onMouseLeave();
+	World::scene()->onMouseLeave(mPos);
 }
 
 void InputSys::simulateMouseMove() {
-	if (ivec2 pos; mouseLast)
-		eventMouseMotion({ SDL_MOUSEMOTION, SDL_GetTicks(), 0, 0, SDL_GetMouseState(&pos.x, &pos.y), pos.x, pos.y, 0, 0 }, mouseLast);
-	else
-		eventMouseMotion({ SDL_FINGERMOTION, SDL_GetTicks(), 0, SDL_TOUCH_MOUSEID, 0, INT_MIN, INT_MIN, 0, 0 }, mouseLast);
+	SDL_MouseMotionEvent event{};
+	event.timestamp = SDL_GetTicks();
+	if (mouseLast) {
+		event.type = SDL_MOUSEMOTION;
+		event.state = SDL_GetMouseState(&event.x, &event.y);
+	} else {
+		event.type = SDL_FINGERMOTION;
+		event.which = SDL_TOUCH_MOUSEID;
+		event.x = INT_MIN;
+		event.y = INT_MIN;
+	}
+	eventMouseMotion(event, World::window()->getTitleBarHeight());
 }
 
 template <class K, class T, class M>

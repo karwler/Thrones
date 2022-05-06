@@ -159,8 +159,10 @@ struct Binding {
 		config,
 		settings,
 		frameCounter,
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		screenshot,
 		peekTextures,
+#endif
 		selectNext,
 		selectPrev,
 		select0,
@@ -180,7 +182,7 @@ struct Binding {
 		scrollUp,
 		scrollDown
 	};
-	static constexpr array<const char*, sizet(Type::scrollDown)+1> names = {
+	static constexpr array<const char*, sizet(Type::scrollDown) + 1> names = {
 		"up",
 		"down",
 		"left",
@@ -211,8 +213,10 @@ struct Binding {
 		"config",
 		"settings",
 		"frame_counter",
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		"screenshot",
 		"peek_textures",
+#endif
 		"select_next",
 		"select_prev",
 		"select_0",
@@ -268,7 +272,7 @@ struct Settings {
 		fullscreen,
 		desktop
 	};
-	static constexpr array<const char*, sizet(Screen::desktop)+1> screenNames = {
+	static constexpr array<const char*, sizet(Screen::desktop) + 1> screenNames = {
 		"window",
 		"borderless_window",
 		"borderless",
@@ -281,10 +285,25 @@ struct Settings {
 		immediate,
 		synchronized
 	};
-	static constexpr array<const char*, sizet(VSync::synchronized)+2> vsyncNames = {	// add 1 to vsync value to get name
+	static constexpr array<const char*, sizet(VSync::synchronized) + 2> vsyncNames = {	// add 1 to vsync value to get name
 		"adaptive",
 		"immediate",
 		"synchronized"
+	};
+
+	enum class AntiAliasing : uint8 {
+		none,
+		fxaa,
+		msaa2,
+		msaa4,
+		msaa8
+	};
+	static constexpr array<const char*, sizet(AntiAliasing::msaa8) + 1> antiAliasingNames = {
+		"none",
+		"FXAA",
+		"MSAAx2",
+		"MSAAx4",
+		"MSAAx8"
 	};
 
 	enum class Hinting : uint8 {
@@ -294,7 +313,7 @@ struct Settings {
 		none,
 		subpixel
 	};
-	static constexpr array<const char*, sizet(Hinting::subpixel)+1> hintingNames = {
+	static constexpr array<const char*, sizet(Hinting::subpixel) + 1> hintingNames = {
 		"normal",
 		"light",
 		"mono",
@@ -314,7 +333,7 @@ struct Settings {
 		red,
 		white
 	};
-	static constexpr array<const char*, sizet(Color::white)+1> colorNames = {
+	static constexpr array<const char*, sizet(Color::white) + 1> colorNames = {
 		"black",
 		"blue",
 		"brass",
@@ -332,7 +351,7 @@ struct Settings {
 		v4,
 		v6
 	};
-	static constexpr array<const char*, sizet(Family::v6)+1> familyNames = {
+	static constexpr array<const char*, sizet(Family::v6) + 1> familyNames = {
 		"any",
 		"IPv4",
 		"IPv6"
@@ -363,10 +382,13 @@ struct Settings {
 
 	static constexpr char argExternal = 'e';
 	static constexpr char argCompositor = 'k';
+	static constexpr char argLog = 'l';
+	static constexpr char argVr = 'r';
 #ifndef NDEBUG
 	static constexpr char argConsole = 'c';
 	static constexpr char argSetup = 's';
 #endif
+	static constexpr float minimumRatio = 1.4f;
 
 	string address;
 	string port;
@@ -386,10 +408,11 @@ struct Settings {
 	Screen screen;
 	VSync vsync;
 	uint8 texScale;
-	uint8 msamples;
+	AntiAliasing antiAliasing;
 	bool softShadows;
 	bool ssao;
 	bool bloom;
+	bool ssr;
 	Hinting hinting;
 	uint8 avolume;
 	Color colorAlly, colorEnemy;
@@ -401,5 +424,24 @@ struct Settings {
 
 	Settings();
 
+	bool trySetDisplay(int dip);
 	int getFamily() const;
+	int getShadowOpt() const;
+	uint getMsaa() const;
+	static uint getMsaa(AntiAliasing aa);
+
+	vector<ivec2> windowSizes() const;
+	vector<SDL_DisplayMode> displayModes() const;
 };
+
+inline int Settings::getShadowOpt() const {
+	return shadowRes ? bool(shadowRes) + softShadows : 0;
+}
+
+inline uint Settings::getMsaa() const {
+	return getMsaa(antiAliasing);
+}
+
+inline uint Settings::getMsaa(AntiAliasing aa) {
+	return aa >= AntiAliasing::msaa2 ? 1 << (uint8(aa) - uint8(AntiAliasing::msaa2) + 1) : 0;
+}

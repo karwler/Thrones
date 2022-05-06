@@ -10,9 +10,9 @@ uniform sampler2D vposMap;
 uniform sampler2D normMap;
 uniform sampler2D noiseMap;
 
-in vec2 fragUV;
+noperspective in vec2 fragUV;
 
-layout (location = 0) out float fragColor;
+layout(location = 0) out float fragColor;
 
 void main() {
 	vec3 fragPos = texture(vposMap, fragUV).xyz;

@@ -1,3 +1,4 @@
+#include "layouts.h"
 #include "engine/scene.h"
 #include "engine/inputSys.h"
 #include "engine/shaders.h"
@@ -40,18 +41,22 @@ void Mesh::initTop() {
 }
 
 void Mesh::free() {
-	if (top) {
-		glBindVertexArray(top->vao);
-		disableAttrib();
-		glDeleteBuffers(1, &top->ibo);
-		glDeleteVertexArrays(1, &top->vao);
-	}
+	if (top)
+		freeTop();
+
 	glBindVertexArray(vao);
 	disableAttrib();
 	glDeleteBuffers(1, &ebo);
 	glDeleteBuffers(1, &ibo);
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
+}
+
+void Mesh::freeTop() {
+	glBindVertexArray(top->vao);
+	disableAttrib();
+	glDeleteBuffers(1, &top->ibo);
+	glDeleteVertexArrays(1, &top->vao);
 }
 
 void Mesh::setVertexAttrib() {
@@ -93,17 +98,21 @@ void Mesh::setInstanceAttrib() {
 	glEnableVertexAttribArray(Shader::specShine);
 	glVertexAttribPointer(Shader::specShine, decltype(Instance::specShine)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, specShine)));
 	glVertexAttribDivisor(Shader::specShine, 1);
+	glEnableVertexAttribArray(Shader::reflRough);
+	glVertexAttribPointer(Shader::reflRough, decltype(Instance::reflRough)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, reflRough)));
+	glVertexAttribDivisor(Shader::reflRough, 1);
 	glEnableVertexAttribArray(Shader::texid);
 	glVertexAttribIPointer(Shader::texid, decltype(Instance::texid)::length(), GL_UNSIGNED_INT, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, texid)));
 	glVertexAttribDivisor(Shader::texid, 1);
 	glEnableVertexAttribArray(Shader::show);
-	glVertexAttribIPointer(Shader::show, 1, GL_BYTE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, show)));
+	glVertexAttribIPointer(Shader::show, 1, GL_INT, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, show)));
 	glVertexAttribDivisor(Shader::show, 1);
 }
 
 void Mesh::disableAttrib() {
 	glDisableVertexAttribArray(Shader::show);
 	glDisableVertexAttribArray(Shader::texid);
+	glDisableVertexAttribArray(Shader::reflRough);
 	glDisableVertexAttribArray(Shader::specShine);
 	glDisableVertexAttribArray(Shader::diffuse);
 	glDisableVertexAttribArray(Shader::normat2);
@@ -156,9 +165,16 @@ void Mesh::updateInstanceDataTop() {
 
 void Mesh::allocate(uint size, bool setTop) {
 	instanceData.resize(size);
-	if (setTop && !top) {
+	allocateTop(setTop);
+}
+
+void Mesh::allocateTop(bool yes) {
+	if (yes && !top) {
 		top = std::make_unique<Top>();
 		initTop();
+	} else if (!yes && top) {
+		freeTop();
+		top.reset();
 	}
 }
 
@@ -196,6 +212,7 @@ void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const 
 	ins.normat = glm::inverseTranspose(mat3(ins.model));
 	ins.diffuse = material->color;
 	ins.specShine = vec4(material->spec, material->shine);
+	ins.reflRough = vec2(material->reflect, material->rough);
 	ins.texid = texture;
 	ins.show = visible;
 }
@@ -257,7 +274,8 @@ void Object::setMaterial(const Material* material) {
 	Mesh::Instance& ins = mesh->getInstance(meshIndex);
 	ins.diffuse = matl->color;
 	ins.specShine = vec4(matl->spec, matl->shine);
-	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(ins.diffuse) + sizeof(ins.specShine));
+	ins.reflRough = vec2(material->reflect, material->rough);
+	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(ins.diffuse) + sizeof(ins.specShine) + sizeof(ins.reflRough));
 }
 
 void Object::setTexture(uvec2 texture) {
@@ -282,12 +300,13 @@ void BoardObject::init(Mesh* model, uint id, const Material* material, uvec2 tex
 	getTransform(ins.model, ins.normat);
 	ins.diffuse = matl->color * vec4(dfac, dfac, dfac, alpha);
 	ins.specShine = vec4(matl->spec, matl->shine);
+	ins.reflRough = vec2(material->reflect, material->rough);
 	ins.texid = texture;
 	ins.show = visible;
 }
 
-void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool depth) {
-	topDepth = depth;
+void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool solid) {
+	topSolid = solid;
 
 	vec3 isct = World::scene()->rayXZIsct(World::scene()->pickerRay(mPos));
 	Mesh::Instance& top = tmesh->getInstanceTop();
@@ -295,6 +314,7 @@ void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Mater
 	top.normat = normat;
 	top.diffuse = material->color * colorFactor;
 	top.specShine = vec4(material->spec, material->shine);
+	top.reflRough = vec2(material->reflect, material->rough);
 	top.texid = texture;
 	top.show = true;
 	tmesh->updateInstanceDataTop();
@@ -382,7 +402,7 @@ void BoardObject::onInputDown(Binding::Type bind) {
 	case Binding::Type::cancel:
 		World::scene()->updateSelect(this);
 	case Binding::Type::confirm: case Binding::Type::engage:
-		onUndrag(leftDrag ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);
+		onUndrag(ivec2(), leftDrag ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT);
 	}
 }
 
@@ -396,7 +416,7 @@ void BoardObject::onInputUp(Binding::Type bind) {
 void BoardObject::onNavSelect(Direction dir) {
 	svec2 mov = swap(dir.positive() ? 1 : -1, 0, dir.vertical());
 	for (svec2 gpos = World::game()->board->ptog(getPos()) + mov; inRange(gpos, svec2(0), World::game()->board->boardLimit()); gpos += mov) {
-		if (Piece* pce = World::game()->board->findOccupant(gpos); pce && pce->rigid) {
+		if (Piece* pce = World::game()->board->findPiece(gpos); pce && pce->rigid) {
 			World::state()->setObjectDragPos(vec2(pce->getPos().x, pce->getPos().z));
 			World::scene()->updateSelect(pce);
 			return;
@@ -446,7 +466,7 @@ void Tile::onHold(ivec2 mPos, uint8 mBut) {
 	}
 }
 
-void Tile::onUndrag(uint8 mBut) {
+void Tile::onUndrag(ivec2, uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
 		World::scene()->setCapture(nullptr);
 		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this, mBut);
@@ -529,7 +549,7 @@ void Piece::init(Mesh* model, uint id, const Material* material, uvec2 texture, 
 }
 
 float Piece::getTopY() {
-	return topDepth && dynamic_cast<const Piece*>(World::scene()->getSelect()) && World::scene()->getSelect() != this ? 1.1f * getScl().y : 0.01f;
+	return topSolid && dynamic_cast<const Piece*>(World::scene()->getSelect()) && World::scene()->getSelect() != this ? 1.1f * getScl().y : 0.01f;
 }
 
 void Piece::onHold(ivec2 mPos, uint8 mBut) {
@@ -548,7 +568,7 @@ void Piece::onHold(ivec2 mPos, uint8 mBut) {
 	}
 }
 
-void Piece::onUndrag(uint8 mBut) {
+void Piece::onUndrag(ivec2, uint8 mBut) {
 	if (mBut = World::state()->switchButtons(mBut); mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) {
 		World::scene()->setCapture(nullptr);
 		World::prun(mBut == SDL_BUTTON_LEFT ? ulcall : urcall, this, mBut);
@@ -583,7 +603,7 @@ void Piece::updatePos(svec2 bpos, bool forceRigid) {
 
 	// needlessly complicated selection update because of retarded controller support
 	if (World::scene()->getSelect() == this) {
-		if (Piece* pce = World::game()->board->findOccupant(oldPos))
+		if (Piece* pce = World::game()->board->findPiece(oldPos))
 			World::scene()->updateSelect(pce);
 		else if (inRange(oldPos, svec2(0), World::game()->board->boardLimit()))
 			World::scene()->updateSelect(World::game()->board->getTile(oldPos));

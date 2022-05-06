@@ -5,14 +5,17 @@
 #include "engine/inputSys.h"
 #include "engine/scene.h"
 #include "engine/world.h"
+#include "utils/layouts.h"
+#ifdef UPDATE_CHECK
 #include <regex>
-#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
+#endif
 #endif
 
 // WEB FETCH PROC
 
-#ifndef __ANDROID__
+#ifdef UPDATE_CHECK
 WebFetchProc::WebFetchProc(string link, string rver) :
 	url(std::move(link)),
 	regex(std::move(rver))
@@ -94,18 +97,18 @@ int WebFetchProc::fetchVersion(void* data) {
 
 	try {
 		if (!lib)
-			throw liberror();
+			throw std::runtime_error(liberror());
 		CURL* (*easy_init)() = reinterpret_cast<CURL* (*)()>(libsym(lib, "curl_easy_init"));
 		if (!easy_init)
-			throw liberror();
+			throw std::runtime_error(liberror());
 		if (easy_cleanup = reinterpret_cast<void (*)(CURL*)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
-			throw liberror();
+			throw std::runtime_error(liberror());
 		CURLcode(*easy_setopt)(CURL*, CURLoption, ...) = reinterpret_cast<CURLcode(*)(CURL*, CURLoption, ...)>(libsym(lib, "curl_easy_setopt"));
 		if (!easy_setopt)
-			throw liberror();
+			throw std::runtime_error(liberror());
 		CURLcode(*easy_perform)(CURL*) = reinterpret_cast<CURLcode(*)(CURL*)>(libsym(lib, "curl_easy_perform"));
 		if (!easy_perform)
-			throw liberror();
+			throw std::runtime_error(liberror());
 		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<const char* (*)(CURLcode)>(libsym(lib, "curl_easy_strerror"));
 
 		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<curl_version_info_data* (*)(CURLversion)>(libsym(lib, "curl_version_info"))) {
@@ -129,12 +132,12 @@ int WebFetchProc::fetchVersion(void* data) {
 			if (cinf->features & CURL_VERSION_UNICODE)
 				clver += " Unicode,";
 #endif
-			wfp->libVersion = clver.empty() ? cinf->version : cinf->version + string(" with") + clver.substr(0, clver.length() - 1);
+			wfp->libVersion = clver.empty() ? cinf->version : cinf->version + " with"s + string_view(clver).substr(0, clver.length() - 1);
 		}
 
 		if (SDL_AtomicGet(&wfp->arun)) {
 			if (curl = easy_init(); !curl)
-				throw "couldn't initialize curl";
+				throw std::runtime_error("couldn't initialize curl");
 			string html;
 			easy_setopt(curl, CURLOPT_URL, wfp->url.data());
 			easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1l);
@@ -148,15 +151,11 @@ int WebFetchProc::fetchVersion(void* data) {
 			easy_setopt(curl, CURLOPT_STDERR, dnull);	// curl tries to output some bullshit
 #endif
 			if (CURLcode code = easy_perform(curl); code != CURLE_OK)
-				throw easy_strerror ? easy_strerror(code) : "couldn't fetch page";
+				throw std::runtime_error(easy_strerror ? easy_strerror(code) : "couldn't fetch page");
 			wfp->pushFetchedVersion(html);
 		}
-	} catch (const string& err) {
-		wfp->error = err;
-		rc = EXIT_FAILURE;
-		pushEvent(UserCode::versionFetch, wfp);
-	} catch (const char* err) {
-		wfp->error = err ? err : "unknown error";
+	} catch (const std::runtime_error& err) {
+		wfp->error = err.what();
 		rc = EXIT_FAILURE;
 		pushEvent(UserCode::versionFetch, wfp);
 	}
@@ -185,7 +184,7 @@ int WebFetchProc::checkProgress(void* clientp, curl_off_t, curl_off_t, curl_off_
 void WebFetchProc::pushFetchedVersion(const string& html) {
 	if (std::smatch sm; std::regex_search(html, sm, std::regex(regex, std::regex_constants::ECMAScript | std::regex_constants::icase)) && sm.size() >= 2) {
 		string latest = sm[1];
-		uvec4 cur = stoiv<uvec4>(Com::commonVersion, strtoul), web = stoiv<uvec4>(latest.c_str(), strtoul);
+		uvec4 cur = toVec<uvec4>(Com::commonVersion), web = toVec<uvec4>(latest);
 		glm::length_t i = 0;
 		for (; i < uvec4::length() - 1 && cur[i] == web[i]; ++i);
 		if (cur[i] < web[i])
@@ -207,7 +206,7 @@ void Program::start() {
 	gui.initSizes();	// redundant because it happens again in eventOpenMainMenu but makeTitleBar needs it
 	gui.makeTitleBar();
 	eventOpenMainMenu();
-#ifndef __ANDROID__
+#if defined(UPDATE_CHECK) && !defined(__EMSCRIPTEN__)
 	if (!(World::sets()->versionLookupUrl.empty() || World::sets()->versionLookupRegex.empty()))
 		if (wfproc = std::make_unique<WebFetchProc>(World::sets()->versionLookupUrl, World::sets()->versionLookupRegex); !wfproc->start())
 			wfproc.reset();
@@ -216,7 +215,7 @@ void Program::start() {
 
 void Program::eventUser(const SDL_UserEvent& user) {
 	switch (UserCode(user.code)) {
-#ifndef __ANDROID__
+#ifdef UPDATE_CHECK
 	case UserCode::versionFetch:
 		if (WebFetchProc* wfp = static_cast<WebFetchProc*>(user.data1)) {
 #ifdef __EMSCRIPTEN__
@@ -249,6 +248,7 @@ void Program::tick(float dSec) {
 		if (ftimeSleep -= dSec; ftimeSleep <= 0.f) {
 			ftimeSleep = ftimeUpdateDelay;
 			state->getFpsText()->setText(gui.makeFpsText(dSec));
+			state->getFpsText()->getParent()->onResize(nullptr);
 		}
 }
 
@@ -310,7 +310,7 @@ void Program::eventConnLobby(const uint8* data) {
 		bool acceptName = chatName.empty();
 		chatName = toStr<16>(nresp);
 		if (!acceptName)
-			gui.openPopupChoice("Name taken. Are you ok with " + chatName + '?', &Program::eventClosePopup, &Program::eventExitLobby);
+			gui.openPopupChoice("Name taken. Are you okay with " + chatName + '?', &Program::eventClosePopup, &Program::eventExitLobby);
 	}
 }
 
@@ -459,17 +459,15 @@ void Program::eventHostServer(Button*) {
 	connect(false, "Waiting for player...");
 }
 
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 void Program::eventOpenPopupRecords(Button*) {
-#ifdef __EMSCRIPTEN__
-	if (!FileSys::canRead())
-		return gui.openPopupMessage("Waiting for files to sync", &Program::eventClosePopup);
-#endif
 	gui.openPopupRecords();
 }
+#endif
 
 void Program::eventDelRecord(Button* but) {
 	if (const string& file = static_cast<Label*>(but)->getText(); !remove(file.c_str()))
-		but->getParent()->deleteWidget(but->getIndex());
+		but->getParent()->deleteWidgets(but->getIndex());
 	else
 		gui.openPopupMessage("Failed to delete file", &Program::eventClosePopup);
 }
@@ -542,28 +540,28 @@ void Program::eventSetConfigRecordName(Button* but) {
 void Program::eventUpdateConfig(Button*) {
 	ProgRoom* ph = static_cast<ProgRoom*>(state);
 	Config& cfg = ph->confs[ph->configName->getText()];
-	svec2 newHome = glm::clamp(svec2(sstol(ph->wio.width->getText()), sstol(ph->wio.height->getText())), Config::minHomeSize, Config::maxHomeSize);
+	svec2 newHome = glm::clamp(svec2(toNum<int>(ph->wio.width->getText()), toNum<int>(ph->wio.height->getText())), Config::minHomeSize, Config::maxHomeSize);
 	setConfigAmounts(cfg.tileAmounts.data(), ph->wio.tiles.data(), tileLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scaleTiles);
 	setConfigAmounts(cfg.middleAmounts.data(), ph->wio.middles.data(), tileLim, cfg.homeSize.x, newHome.x, World::sets()->scaleTiles);
 	setConfigAmounts(cfg.pieceAmounts.data(), ph->wio.pieces.data(), pieceLim, cfg.homeSize.x * cfg.homeSize.y, newHome.x * newHome.y, World::sets()->scalePieces);
 	cfg.homeSize = newHome;
 	cfg.opts = ph->wio.victoryPoints->getOn() ? cfg.opts | Config::victoryPoints : cfg.opts & ~Config::victoryPoints;
-	cfg.victoryPointsNum = sstol(ph->wio.victoryPointsNum->getText());
+	cfg.victoryPointsNum = toNum<uint16>(ph->wio.victoryPointsNum->getText());
 	cfg.opts = ph->wio.vpEquidistant->getOn() ? cfg.opts | Config::victoryPointsEquidistant : cfg.opts & ~Config::victoryPointsEquidistant;
 	cfg.opts = ph->wio.ports->getOn() ? cfg.opts | Config::ports : cfg.opts & ~Config::ports;
 	cfg.opts = ph->wio.rowBalancing->getOn() ? cfg.opts | Config::rowBalancing : cfg.opts & ~Config::rowBalancing;
 	cfg.opts = ph->wio.homefront->getOn() ? cfg.opts | Config::homefront : cfg.opts & ~Config::homefront;
 	cfg.opts = ph->wio.setPieceBattle->getOn() ? cfg.opts | Config::setPieceBattle : cfg.opts & ~Config::setPieceBattle;
-	cfg.setPieceBattleNum = sstol(ph->wio.setPieceBattleNum->getText());
-	cfg.battlePass = sstol(ph->wio.battleLE->getText());
+	cfg.setPieceBattleNum = toNum<int>(ph->wio.setPieceBattleNum->getText());
+	cfg.battlePass = toNum<int8>(ph->wio.battleLE->getText());
 	cfg.opts = ph->wio.favorTotal->getOn() ? cfg.opts | Config::favorTotal : cfg.opts & ~Config::favorTotal;
-	cfg.favorLimit = sstol(ph->wio.favorLimit->getText());
+	cfg.favorLimit = toNum<int>(ph->wio.favorLimit->getText());
 	cfg.opts = ph->wio.firstTurnEngage->getOn() ? cfg.opts | Config::firstTurnEngage : cfg.opts & ~Config::firstTurnEngage;
 	cfg.opts = ph->wio.terrainRules->getOn() ? cfg.opts | Config::terrainRules : cfg.opts & ~Config::terrainRules;
 	cfg.opts = ph->wio.dragonLate->getOn() ? cfg.opts | Config::dragonLate : cfg.opts & ~Config::dragonLate;
 	cfg.opts = ph->wio.dragonStraight->getOn() ? cfg.opts | Config::dragonStraight : cfg.opts & ~Config::dragonStraight;
-	cfg.winThrone = sstol(ph->wio.winThrone->getText());
-	cfg.winFortress = sstol(ph->wio.winFortress->getText());
+	cfg.winThrone = toNum<int>(ph->wio.winThrone->getText());
+	cfg.winFortress = toNum<int>(ph->wio.winFortress->getText());
 	cfg.capturers = 0;
 	for (uint8 i = 0; i < pieceLim; ++i)
 		cfg.capturers |= uint16(ph->wio.capturers[i]->getSelected()) << i;
@@ -626,7 +624,7 @@ void Program::postConfigUpdate() {
 
 void Program::setConfigAmounts(uint16* amts, LabelEdit** wgts, uint8 acnt, uint16 oarea, uint16 narea, bool scale) {
 	for (uint8 i = 0; i < acnt; ++i)
-		amts[i] = scale && narea != oarea ? uint16(std::round(float(amts[i]) * float(narea) / float(oarea))) : sstoul(wgts[i]->getText());
+		amts[i] = scale && narea != oarea ? uint16(std::round(float(amts[i]) * float(narea) / float(oarea))) : toNum<uint16>(wgts[i]->getText());
 }
 
 void Program::eventTileSliderUpdate(Button* but) {
@@ -1005,7 +1003,7 @@ void Program::eventSetupDelete(Button* but) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	ps->setups.erase(static_cast<Label*>(but)->getText());
 	FileSys::saveSetups(ps->setups);
-	but->getParent()->deleteWidget(but->getIndex());
+	but->getParent()->deleteWidgets(but->getIndex());
 }
 
 void Program::eventShowConfig(Button*) {
@@ -1030,9 +1028,11 @@ void Program::eventOpenMatch() {
 
 void Program::playGameStartAnimations() const {
 	World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYDown, game.board->getScreen()->getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
-	World::scene()->addAnimation(Animation(&World::scene()->camera, std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
-	World::scene()->camera.pmax = Camera::pmaxMatch;
-	World::scene()->camera.ymax = Camera::ymaxMatch;
+	if (!World::vr()) {
+		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
+		World::scene()->getCamera()->pmax = Camera::pmaxMatch;
+		World::scene()->getCamera()->ymax = Camera::ymaxMatch;
+	}
 }
 
 void Program::eventEndTurn(Button*) {
@@ -1051,7 +1051,7 @@ void Program::eventPickFavor(Button* but) {
 		--game.favorsLeft[fid];
 
 	if (--game.availableFF) {
-		if (but->getParent()->getParent()->getWidget<Label>(0)->setText(GuiGen::msgFavorPick + string(" (") + toStr(game.availableFF) + ')'); !game.favorsLeft[fid]) {
+		if (but->getParent()->getParent()->getWidget<Label>(0)->setText(GuiGen::msgFavorPick + " ("s + toStr(game.availableFF) + ')'); !game.favorsLeft[fid]) {
 			but->setDim(GuiGen::defaultDim);
 			but->lcall = nullptr;
 		}
@@ -1125,7 +1125,7 @@ void Program::eventEstablish(Button* but) {
 
 	switch (std::count_if(game.board->getOwnPieces(PieceType::throne), game.board->getPieces().ene(), [](Piece& it) -> bool { return it.getShow(); })) {
 	case 0:
-		gui.openPopupMessage("No " + string(pieceNames[uint8(PieceType::throne)]) + " for establishing", &Program::eventClosePopupResetIcons);
+		gui.openPopupMessage("No "s + pieceNames[uint8(PieceType::throne)] + " for establishing", &Program::eventClosePopupResetIcons);
 		break;
 	case 1:
 		try {
@@ -1277,12 +1277,14 @@ void Program::uninitGame() {
 	game.board->uninitObjects();
 	if (dynamic_cast<ProgMatch*>(state)) {
 		World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(0.f, std::nullopt, std::nullopt, vec3(1.f)), Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYUp, game.board->getScreen()->getPos().z)) })));
-		World::scene()->addAnimation(Animation(&World::scene()->camera, std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posSetup, std::nullopt, Camera::latSetup) })));
-		for (Piece& it : game.board->getPieces())
-			if (it.getPos().z <= game.board->getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
-				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(it.getPos().x, pieceYDown, it.getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
-		World::scene()->camera.pmax = Camera::pmaxSetup;
-		World::scene()->camera.ymax = Camera::ymaxSetup;
+		if (!World::vr()) {
+			World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posSetup, std::nullopt, Camera::latSetup) })));
+			for (Piece& it : game.board->getPieces())
+				if (it.getPos().z <= game.board->getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
+					World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(it.getPos().x, pieceYDown, it.getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
+			World::scene()->getCamera()->pmax = Camera::pmaxSetup;
+			World::scene()->getCamera()->ymax = Camera::ymaxSetup;
+		}
 	}
 }
 
@@ -1349,6 +1351,7 @@ void Program::showGameError(const Com::Error& err) {
 
 // GAME RECORD
 
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 void Program::eventOpenRecord(Button* but) {
 	try {
 		RecConfig cfg;
@@ -1403,6 +1406,7 @@ void Program::executeRecordAction(const RecAction& action) {
 	if (!action.next && action.type != RecAction::finish)
 		pr->message->setText(winMessage(Record::Info::none));
 }
+#endif
 
 // SETTINGS
 
@@ -1420,7 +1424,7 @@ void Program::eventShowSettings(Button*) {
 }
 
 void Program::eventSetDisplay(Button* but) {
-	if (uint8 disp = sstoul(static_cast<LabelEdit*>(but)->getText()); disp != World::sets()->display) {
+	if (uint8 disp = toNum<uint8>(static_cast<LabelEdit*>(but)->getText()); disp != World::sets()->display) {
 		World::sets()->display = disp;
 		World::window()->setScreen();
 		eventSaveSettings();
@@ -1436,7 +1440,7 @@ void Program::eventSetScreen(uint id, const string&) {
 }
 
 void Program::eventSetWindowSize(uint, const string& str) {
-	if (ivec2 wsize = stoiv<ivec2>(str.c_str(), strtoul); wsize != World::sets()->size) {
+	if (ivec2 wsize = toVec<ivec2, uint>(str); wsize != World::sets()->size) {
 		World::sets()->size = wsize;
 		World::window()->setScreen();
 		eventSaveSettings();
@@ -1459,9 +1463,9 @@ void Program::eventSetVsync(uint id, const string&) {
 	}
 }
 
-void Program::eventSetSamples(uint, const string& str) {
-	if (uint8 msamples = sstoul(str); msamples != World::sets()->msamples) {
-		World::sets()->msamples = msamples;
+void Program::eventSetSamples(uint id, const string&) {
+	if (Settings::AntiAliasing aa = Settings::AntiAliasing(id); aa != World::sets()->antiAliasing) {
+		World::sets()->antiAliasing = aa;
 		World::window()->setMultisampling();
 		World::scene()->resetFrames();
 		eventSaveSettings();
@@ -1479,7 +1483,7 @@ void Program::eventSetTexturesScaleSL(Button* but) {
 
 void Program::eventSetTextureScaleLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	if (uint8 tscale = std::clamp(sstoull(le->getText()), 1ull, 100ull); tscale != World::sets()->texScale) {
+	if (uint8 tscale = std::clamp(toNum<uint8>(le->getText()), 1_ub, 100_ub); tscale != World::sets()->texScale) {
 		World::sets()->texScale = tscale;
 		World::scene()->reloadTextures();
 		le->setText(toStr(World::sets()->texScale) + '%');
@@ -1503,7 +1507,7 @@ void Program::eventSetShadowResSL(Button* but) {
 
 void Program::eventSetShadowResLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	if (uint16 sres = std::min(sstoull(le->getText()), 1ull << Settings::shadowBitMax); sres != World::sets()->shadowRes) {
+	if (uint16 sres = std::min(toNum<uint16>(le->getText()), uint16(1 << Settings::shadowBitMax)); sres != World::sets()->shadowRes) {
 		setShadowRes(sres);
 		le->setText(toStr(World::sets()->shadowRes));
 		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1);
@@ -1512,27 +1516,33 @@ void Program::eventSetShadowResLE(Button* but) {
 
 void Program::setShadowRes(uint16 newRes) {
 	World::sets()->shadowRes = newRes;
-	World::scene()->reloadShader();
 	World::scene()->resetShadows();
 	eventSaveSettings();
 }
 
 void Program::eventSetSoftShadows(Button* but) {
 	World::sets()->softShadows = static_cast<CheckBox*>(but)->getOn();
-	World::scene()->reloadShader();
+	World::window()->setShaderOptions();
 	eventSaveSettings();
 }
 
 void Program::eventSetSsao(Button* but) {
 	World::sets()->ssao = static_cast<CheckBox*>(but)->getOn();
-	World::scene()->reloadShader();
-	World::scene()->resetFrames();
-	eventSaveSettings();
+	finishFramebufferSettings();
 }
 
 void Program::eventSetBloom(Button* but) {
 	World::sets()->bloom = static_cast<CheckBox*>(but)->getOn();
-	World::scene()->reloadShader();
+	finishFramebufferSettings();
+}
+
+void Program::eventSetSsr(Button* but) {
+	World::sets()->ssr = static_cast<CheckBox*>(but)->getOn();
+	finishFramebufferSettings();
+}
+
+void Program::finishFramebufferSettings() {
+	World::window()->setShaderOptions();
 	World::scene()->resetFrames();
 	eventSaveSettings();
 }
@@ -1546,7 +1556,7 @@ void Program::eventSetGammaSL(Button* but) {
 
 void Program::eventSetGammaLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	if (float gamma = sstof(le->getText()); gamma != World::sets()->gamma) {
+	if (float gamma = toNum<float>(le->getText()); gamma != World::sets()->gamma) {
 		World::window()->setGamma(gamma);
 		le->setText(toStr(World::sets()->gamma));
 		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->gamma * GuiGen::gammaStepFactor));
@@ -1557,16 +1567,18 @@ void Program::eventSetGammaLE(Button* but) {
 void Program::eventSetFovSL(Button* but) {
 	if (double fov = double(static_cast<Slider*>(but)->getValue()) / GuiGen::fovStepFactor; fov != World::sets()->fov) {
 		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
-		World::scene()->camera.setFov(float(glm::radians(World::sets()->fov)));
+		if (!World::vr())
+			World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
 		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->fov));
 	}
 }
 
 void Program::eventSetFovLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
-	if (double fov = sstod(le->getText()); fov != World::sets()->fov) {
+	if (double fov = toNum<double>(le->getText()); fov != World::sets()->fov) {
 		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
-		World::scene()->camera.setFov(float(glm::radians(World::sets()->fov)));
+		if (!World::vr())
+			World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
 		le->setText(toStr(World::sets()->fov));
 		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->fov * GuiGen::fovStepFactor));
 		eventSaveSettings();
@@ -1584,6 +1596,7 @@ void Program::eventSetVolumeLE(Button* but) {
 void Program::eventSetColorAlly(uint id, const string&) {
 	if (Settings::Color color = Settings::Color(id); color != World::sets()->colorAlly) {
 		World::sets()->colorAlly = color;
+		World::scene()->setPieceIcons();
 		setColorPieces(color, game.board->getPieces().own(), game.board->getPieces().ene());
 	}
 }
@@ -1648,7 +1661,7 @@ void Program::eventSetResolveFamily(uint id, const string&) {
 void Program::eventSetFont(uint, const string& str) {
 	if (string font = World::fonts()->init(str, World::sets()->hinting); font != World::sets()->font) {
 		World::sets()->font = std::move(font);
-		World::scene()->onResize();
+		World::scene()->onInternalResize();
 		eventSaveSettings();
 	}
 }
@@ -1657,7 +1670,7 @@ void Program::eventSetFontHinting(uint id, const string&) {
 	if (Settings::Hinting hint = Settings::Hinting(id); hint != World::sets()->hinting) {
 		World::sets()->hinting = hint;
 		World::fonts()->setHinting(hint);
-		World::scene()->onResize();
+		World::scene()->onInternalResize();
 		eventSaveSettings();
 	}
 }
@@ -1674,8 +1687,8 @@ void Program::eventAddKeyBinding(Button* but) {
 void Program::eventSetNewBinding(Button* but) {
 	KeyGetter* kg = static_cast<KeyGetter*>(but);
 	Layout* lin = state->mainScrollContent->getWidget<Layout>(state->keyBindingsStart + sizet(kg->bind));
-	Layout* lst = lin->getWidget<Layout>(uint8(kg->accept) + 1);
-	lst->insertWidget(kg->kid, gui.createKeyGetter(kg->accept, kg->bind, kg->kid, lin->getWidget<Layout>(0)->getWidget<Label>(0)));
+	Widget* newKg = gui.createKeyGetter(kg->accept, kg->bind, kg->kid, lin->getWidget<Layout>(0)->getWidget<Label>(0));
+	lin->getWidget<Layout>(uint8(kg->accept) + 1)->insertWidgets(kg->kid, &newKg);
 	lin->setSize(gui.keyGetLineSize(kg->bind));
 	eventClosePopup();
 	eventSaveSettings();
@@ -1693,7 +1706,7 @@ void Program::eventDelKeyBinding(Button* but) {
 	case Binding::Accept::gamepad:
 		World::input()->delBindingG(kg->bind, kg->kid);
 	}
-	but->getParent()->deleteWidget(but->getIndex());
+	but->getParent()->deleteWidgets(but->getIndex());
 	but->getParent()->getParent()->setSize(gui.keyGetLineSize(kg->bind));
 	eventSaveSettings();
 }
@@ -1710,7 +1723,7 @@ void Program::setStandardSlider(Slider* sl, T& val) {
 template <class T>
 void Program::setStandardSlider(LabelEdit* le, T& val) {
 	Slider* sl = le->getParent()->getWidget<Slider>(le->getIndex() - 1);
-	if (T nv = T(std::clamp(sstol(le->getText()), long(sl->getMin()), long(sl->getMax()))); nv != val) {
+	if (T nv = T(std::clamp(toNum<int>(le->getText()), sl->getMin(), sl->getMax())); nv != val) {
 		val = nv;
 		le->setText(toStr(val));
 		sl->setVal(val);
@@ -1825,6 +1838,7 @@ void Program::eventCycleFrameCounter() {
 	else {
 		box->setShow(true);
 		state->getFpsText()->setText(gui.makeFpsText(World::window()->getDeltaSec()));
+		box->onResize(nullptr);
 		ftimeSleep = ftimeUpdateDelay;
 	}
 }

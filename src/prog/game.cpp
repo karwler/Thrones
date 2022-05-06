@@ -67,12 +67,12 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 	switch (action) {
 	case ACT_MOVE:
 		if (!board->collectMoveTiles(piece, eneRec, favor).count(board->posToId(dst)))
-			throw string("Can't move there");
+			throw "Can't move there"s;
 		placePiece(piece, dst);
 		break;
 	case ACT_SWAP:
 		if (board->isEnemyPiece(occupant) && piece->getType() != PieceType::warhorse && favor != Favor::deceive)
-			throw string("Piece can't switch with an enemy");
+			throw "Piece can't switch with an enemy"s;
 		if (favor != Favor::assault && favor != Favor::deceive && piece->getType() == PieceType::warhorse && board->isEnemyPiece(occupant) && (board->config.opts & Config::terrainRules)) {
 			if (occupant->getType() == PieceType::spearmen)
 				throw firstUpper(pieceNames[uint8(piece->getType())]) + " can't switch with an enemy " + pieceNames[uint8(occupant->getType())];
@@ -82,7 +82,7 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 				throw firstUpper(pieceNames[uint8(piece->getType())]) + " can't switch onto a not breached " + tileNames[uint8(dtil->getType())];
 		}
 		if (!board->collectMoveTiles(piece, eneRec, favor, true).count(board->posToId(dst)))
-			throw string("Can't move there");
+			throw "Can't move there"s;
 		placePiece(occupant, pos);
 		placePiece(piece, dst);
 		break;
@@ -99,7 +99,7 @@ void Game::pieceMove(Piece* piece, svec2 dst, Piece* occupant, bool move) {
 				throw firstUpper(pieceNames[uint8(piece->getType())]) + " can't attack onto " + tileNames[uint8(dtil->getType())];
 		}
 		if (!board->collectEngageTiles(piece).count(board->posToId(dst)))
-			throw string("Can't move there");
+			throw "Can't move there"s;
 		doEngage(piece, pos, dst, occupant, dtil, action);
 	}
 	if (board->getPxpad()->getShow())
@@ -122,18 +122,18 @@ void Game::pieceFire(Piece* killer, svec2 dst, Piece* victim) {
 	checkKiller(killer, victim, dtil, false);
 	if (board->config.opts & Config::terrainRules) {
 		if (stil->getType() == TileType::forest || stil->getType() == TileType::water)
-			throw "Can't fire from " + string(stil->getType() == TileType::forest ? "a " : "") + tileNames[uint8(stil->getType())];
+			throw "Can't fire from "s + (stil->getType() == TileType::forest ? "a " : "") + tileNames[uint8(stil->getType())];
 		if (dtil->getType() == TileType::forest && killer->getType() != PieceType::trebuchet)
 			throw firstUpper(pieceNames[uint8(killer->getType())]) + " can't fire at a " + tileNames[uint8(dtil->getType())];
 		if (dtil->getType() == TileType::mountain)
-			throw string("Can't fire at a ") + tileNames[uint8(dtil->getType())];
+			throw "Can't fire at a "s + tileNames[uint8(dtil->getType())];
 	}
 	if (!board->collectEngageTiles(killer).count(board->posToId(dst)))
-		throw string("Can't fire there");
+		throw "Can't fire there"s;
 	if (board->config.opts & Config::terrainRules)
 		for (svec2 m = deltaSingle(ivec2(dst) - ivec2(pos)), i = pos + m; i != dst; i += m)
 			if (TileType type = board->getTile(i)->getType(); type == TileType::mountain)
-				throw string("Can't fire over ") + tileNames[uint8(type)] + 's';
+				throw "Can't fire over "s + tileNames[uint8(type)] + 's';
 
 	doEngage(killer, pos, dst, victim, dtil, ACT_FIRE);
 	if (concludeAction(killer, ACT_FIRE, favor) && availableFF)
@@ -215,7 +215,7 @@ void Game::spawnPiece(PieceType type, Tile* tile, bool reinit) {
 
 void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor favor) {
 	if (eneRec.info == Record::battleFail && action != ACT_MOVE)
-		throw string("Only moving is allowed");
+		throw "Only moving is allowed"s;
 
 	switch (favor) {
 	case Favor::hasten:
@@ -226,7 +226,7 @@ void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor
 		if (!(action & ACT_MS))
 			throw firstUpper(favorNames[uint8(favor)]) + " is limited to moving and switching";
 		if (ownRec.actors.count(occupant))
-			throw "Can't switch with a non-" + string(favorNames[uint8(Favor::assault)]) + " piece";
+			throw "Can't switch with a non-"s + favorNames[uint8(Favor::assault)] + " piece";
 		if (umap<Piece*, Action>::iterator it = ownRec.assault.find(piece); it != ownRec.assault.end())
 			if (Action act = it->second & ~(action == ACT_MOVE ? ACT_SWAP : ACT_MOVE))
 				throw actionRecordMsg(act, true);
@@ -247,9 +247,9 @@ void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor
 				if (Action act = oth->second & ~ACT_MS)
 					throw actionRecordMsg(act, false);
 				if ((oth->second & ACT_MS) == ACT_MS)
-					throw string("A piece has already moved and switched");
+					throw "A piece has already moved and switched"s;
 				if (it != ownRec.actors.end() && it->second)
-					throw string("Piece can't move anymore");
+					throw "Piece can't move anymore"s;
 			}
 		} else if (action == ACT_SWAP) {
 			umap<Piece*, Action>::iterator it = ownRec.actors.find(piece);
@@ -262,13 +262,13 @@ void Game::checkActionRecord(Piece* piece, Piece* occupant, Action action, Favor
 				if (Action act = oth->second & ~ACT_MOVE)
 					throw actionRecordMsg(act, false);
 				if (it != ownRec.actors.end() && (it->first->getType() != PieceType::warhorse ? it->second : it->second & ~ACT_SWAP))
-					throw string("Piece can't switch anymore");
+					throw "Piece can't switch anymore"s;
 			}
 		} else if (!ownRec.actors.empty())
-			throw string("A piece has already acted");
+			throw "A piece has already acted"s;
 	}
 	if (favor != Favor::assault && action == ACT_SWAP && ownRec.assault.count(occupant))
-		throw string("Can't switch with an ") + favorNames[uint8(Favor::assault)] + "piece";
+		throw "Can't switch with an "s + favorNames[uint8(Favor::assault)] + "piece";
 }
 
 string Game::actionRecordMsg(Action action, bool self) {
@@ -300,7 +300,7 @@ void Game::checkKiller(Piece* killer, Piece* victim, Tile* dtil, bool attack) {
 	if (victim) {
 		umap<Piece*, bool>::iterator protect = eneRec.protects.find(victim);
 		if (protect != eneRec.protects.end() && (protect->second || killer->getType() != PieceType::throne))
-			throw string("Piece is protected during this turn");
+			throw "Piece is protected during this turn"s;
 		if (victim->getType() == PieceType::elephant && dtil->getType() == TileType::plains && killer->getType() != PieceType::dragon && killer->getType() != PieceType::throne && (board->config.opts & Config::terrainRules))
 			throw firstUpper(pieceNames[uint8(killer->getType())]) + " can't attack an " + pieceNames[uint8(victim->getType())] + " on " + tileNames[uint8(dtil->getType())];
 	} else if (!(board->config.opts & Config::homefront) || (dtil->getType() != TileType::fortress && !board->findTileTop(dtil).isFarm()) || dtil->getBreached())
@@ -313,8 +313,8 @@ void Game::doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dt
 
 	if (dtil->isUnbreachedFortress() && killer->getType() != PieceType::throne) {
 		if (killer->getType() == PieceType::dragon)
-			if (dst -= deltaSingle(ivec2(dst) - ivec2(pos)); dst != pos && board->findOccupant(dst))
-				throw string("No space beside ") + tileNames[uint8(TileType::fortress)];
+			if (dst -= deltaSingle(ivec2(dst) - ivec2(pos)); dst != pos && board->findPiece(dst))
+				throw "No space beside "s + tileNames[uint8(TileType::fortress)];
 
 		if ((!victim || board->isEnemyPiece(victim)) && randDist(randGen) >= board->config.battlePass) {
 			if (eneRec.addProtect(killer, false); action == ACT_ATCK) {
@@ -322,7 +322,7 @@ void Game::doEngage(Piece* killer, svec2 pos, svec2 dst, Piece* victim, Tile* dt
 				ownRec.lastAct = pair(killer, ACT_ATCK);
 				endTurn();
 			}
-			throw string("Battle lost");
+			throw "Battle lost"s;
 		}
 		if (breachTile(dtil); killer->getType() == PieceType::dragon)
 			placePiece(killer, dst);
@@ -368,7 +368,7 @@ void Game::doWin(Record::Info win) {
 void Game::surrender() {
 	sendb.pushHead(Com::Code::record, Com::dataHeadSize + sizeof(uint8) + sizeof(uint16) * 2);
 	sendb.push(uint8(Record::loose));
-	sendb.push({ uint16(UINT16_MAX), uint16(0) });
+	sendb.push({ uint16(UINT16_MAX), 0_us });
 	World::netcp()->sendData(sendb);
 	capRec(Record::loose);
 	World::program()->finishMatch(Record::loose);
@@ -434,10 +434,10 @@ void Game::sendConfig(bool onJoin) {
 	ProgRoom* pr = World::state<ProgRoom>();
 	Config& cfg = pr->confs[pr->configName->getText()];
 	if (onJoin) {
-		ofs = sendb.allocate(Com::Code::cnjoin, Com::dataHeadSize + 1 + cfg.dataSize(pr->configName->getText()));
+		ofs = sendb.allocate(Com::Code::cnjoin, Com::dataHeadSize + 1 + cfg.dataSize(pr->configName->getText().length()));
 		ofs = sendb.write(uint8(true), ofs);
 	} else
-		ofs = sendb.allocate(Com::Code::config, Com::dataHeadSize + cfg.dataSize(pr->configName->getText()));
+		ofs = sendb.allocate(Com::Code::config, Com::dataHeadSize + cfg.dataSize(pr->configName->getText().length()));
 	cfg.toComData(&sendb[ofs], pr->configName->getText());
 	World::netcp()->sendData(sendb);
 }
@@ -446,7 +446,7 @@ void Game::sendStart() {
 	myTurn = std::uniform_int_distribution<uint>(0, 1)(randGen);
 	ProgRoom* pr = World::state<ProgRoom>();
 	Config& cfg = pr->confs[pr->configName->getText()];
-	uint ofs = sendb.allocate(Com::Code::start, Com::dataHeadSize + cfg.dataSize(pr->configName->getText()));
+	uint ofs = sendb.allocate(Com::Code::start, Com::dataHeadSize + cfg.dataSize(pr->configName->getText().length()));
 	ofs = sendb.write(uint8(!myTurn), ofs);
 	cfg.toComData(&sendb[ofs], pr->configName->getText());
 	World::netcp()->sendData(sendb);
@@ -463,7 +463,7 @@ void Game::sendSetup() {
 	uint ofs = sendb.allocate(Com::Code::setup, Com::dataHeadSize + tcnt + pieceLim * sizeof(uint16) + board->getPieces().getNum() * sizeof(uint16));
 	std::fill_n(&sendb[ofs], tcnt, 0);
 	for (uint16 i = 0; i < board->getTiles().getExtra(); ++i)
-		sendb[i/2+ofs] |= board->compressTile(i);
+		sendb[i / 2 + ofs] |= board->compressTile(i);
 	ofs += tcnt;
 
 	for (uint8 i = 0; i < pieceLim; ofs = sendb.write(board->ownPieceAmts[i++], ofs));
@@ -522,7 +522,7 @@ void Game::recvMove(const uint8* data) {
 
 void Game::placePiece(Piece* piece, svec2 pos) {
 	if (uint16 fid = board->posToId(pos); piece->getType() == PieceType::throne && board->getTiles()[fid].getType() == TileType::fortress && piece->lastFortress != fid)
-		if (piece->lastFortress = fid; availableFF < std::accumulate(favorsLeft.begin(), favorsLeft.end(), uint16(0)))
+		if (piece->lastFortress = fid; availableFF < std::accumulate(favorsLeft.begin(), favorsLeft.end(), 0_us))
 			++availableFF;
 
 	capRec(piece, pos);
@@ -569,7 +569,7 @@ void Game::recvTile(const uint8* data) {
 	TileType type = TileType(data[sizeof(uint16)] & 0xF);
 	capRec(&board->getTiles()[id], type);
 	if (board->getTiles()[id].setType(type); board->getTiles()[id].getType() == TileType::fortress)
-		if (Piece* pce = board->findOccupant(board->idToPos(id)); pce && pce->getType() == PieceType::throne)
+		if (Piece* pce = board->findPiece(board->idToPos(id)); pce && pce->getType() == PieceType::throne)
 			pce->lastFortress = id;
 	if (TileTop top = TileTop(data[sizeof(uint16)] >> 4); top != TileTop::none) {
 		capRec(top, &board->getTiles()[id]);
@@ -618,34 +618,34 @@ void Game::capRec(Record::Info info) {
 
 #ifndef NDEBUG
 void Game::processCommand(const char* cmd) {
-	if (string key = readWord(cmd); !SDL_strcasecmp(key.c_str(), "m")) {
+	if (string_view key = readWord(cmd); !SDL_strcasecmp(key.data(), "m")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPieceId(cmd), true);
-	} else if (!SDL_strcasecmp(key.c_str(), "move")) {
+	} else if (!SDL_strcasecmp(key.data(), "move")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPiecePos(cmd), true);
-	} else if (!SDL_strcasecmp(key.c_str(), "s")) {
+	} else if (!SDL_strcasecmp(key.data(), "s")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPieceId(cmd), false);
-	} else if (!SDL_strcasecmp(key.c_str(), "swap")) {
+	} else if (!SDL_strcasecmp(key.data(), "swap")) {
 		while (*cmd)
 			readCommandPieceMove(cmd, readCommandPiecePos(cmd), false);
-	} else if (!SDL_strcasecmp(key.c_str(), "switch")) {
+	} else if (!SDL_strcasecmp(key.data(), "switch")) {
 		while (*cmd)
 			if (Piece* a = readCommandPieceId(cmd), *b = readCommandPieceId(cmd); a && b) {
 				svec2 pos = board->ptog(b->getPos());
 				placePiece(b, board->ptog(a->getPos()));
 				placePiece(a, pos);
 			}
-	} else if (!SDL_strcasecmp(key.c_str(), "k")) {
+	} else if (!SDL_strcasecmp(key.data(), "k")) {
 		while (*cmd)
 			if (Piece* pce = readCommandPieceId(cmd))
 				removePiece(pce);
-	} else if (!SDL_strcasecmp(key.c_str(), "kill")) {
+	} else if (!SDL_strcasecmp(key.data(), "kill")) {
 		while (*cmd)
 			if (Piece* pce = readCommandPiecePos(cmd))
 				removePiece(pce);
-	} else if (!SDL_strcasecmp(key.c_str(), "killall")) {
+	} else if (!SDL_strcasecmp(key.data(), "killall")) {
 		while (*cmd) {
 			bool own = readCommandPref(cmd);
 			if (PieceType type = strToEnum<PieceType>(pieceNames, readWord(cmd)); type <= PieceType::throne) {
@@ -654,15 +654,15 @@ void Game::processCommand(const char* cmd) {
 					removePiece(pces + i);
 			}
 		}
-	} else if (!SDL_strcasecmp(key.c_str(), "c")) {
+	} else if (!SDL_strcasecmp(key.data(), "c")) {
 		while (*cmd)
 			if (auto [id, name] = readCommandTileId(cmd); id < board->getTiles().getSize())
-				readCommandChange(id, name.c_str());
-	} else if (!SDL_strcasecmp(key.c_str(), "change")) {
+				readCommandChange(id, name.data());
+	} else if (!SDL_strcasecmp(key.data(), "change")) {
 		while (*cmd)
 			if (auto [pos, name] = readCommandTilePos(cmd); inRange(pos, svec2(0), board->boardLimit()))
-				readCommandChange(board->posToId(pos), name.c_str());
-	} else if (!SDL_strcasecmp(key.c_str(), "changeall")) {
+				readCommandChange(board->posToId(pos), name.data());
+	} else if (!SDL_strcasecmp(key.data(), "changeall")) {
 		while (*cmd) {
 			svec2 pos = readCommandVec(cmd), end = readCommandVec(cmd);
 			for (svec2::length_type i = 0; i < svec2::length(); ++i)
@@ -675,14 +675,14 @@ void Game::processCommand(const char* cmd) {
 						changeTile(tile, type, board->findTileTop(tile));
 					}
 		}
-	} else if (!SDL_strcasecmp(key.c_str(), "b")) {
+	} else if (!SDL_strcasecmp(key.data(), "b")) {
 		while (*cmd)
 			if (auto [id, yes] = readCommandTileId(cmd); id < board->getTiles().getSize())
-				breachTile(&board->getTiles()[id], stob(yes));
-	} else if (!SDL_strcasecmp(key.c_str(), "breach"))
+				breachTile(&board->getTiles()[id], toBool(yes));
+	} else if (!SDL_strcasecmp(key.data(), "breach"))
 		while (*cmd)
 			if (auto [pos, yes] = readCommandTilePos(cmd); inRange(pos, svec2(0), board->boardLimit()))
-				breachTile(board->getTile(pos), stob(yes));
+				breachTile(board->getTile(pos), toBool(yes));
 }
 
 Piece* Game::readCommandPieceId(const char*& cmd) {
@@ -693,7 +693,7 @@ Piece* Game::readCommandPieceId(const char*& cmd) {
 }
 
 inline Piece* Game::readCommandPiecePos(const char*& cmd) {
-	return board->findOccupant(readCommandVec(cmd) % board->boardLimit());
+	return board->findPiece(readCommandVec(cmd) % board->boardLimit());
 }
 
 void Game::readCommandPieceMove(const char*& cmd, Piece* pce, bool killOccupant) {
@@ -703,18 +703,18 @@ void Game::readCommandPieceMove(const char*& cmd, Piece* pce, bool killOccupant)
 		svec2 pos = board->ptog(pce->getPos());
 		pos.x = !xm ? pos.x + xv : xm == 1 ? pos.x - xv : xv;
 		pos.y = !ym ? pos.y + yv : ym == 1 ? pos.y - yv : yv;
-		if (Piece* occ = board->findOccupant(pos))
+		if (Piece* occ = board->findPiece(pos))
 			killOccupant ? removePiece(occ) : placePiece(occ, board->ptog(pce->getPos()));
 		placePiece(pce, pos);
 	}
 }
 
-pair<uint16, string> Game::readCommandTileId(const char*& cmd) {
-	uint16 id = readNumber<uint16>(cmd, strtoul, 0);
+pair<uint16, string_view> Game::readCommandTileId(const char*& cmd) {
+	uint16 id = readNumber<uint16>(cmd);
 	return pair(id, readWord(cmd));
 }
 
-pair<svec2, string> Game::readCommandTilePos(const char*& cmd) {
+pair<svec2, string_view> Game::readCommandTilePos(const char*& cmd) {
 	svec2 pos = readCommandVec(cmd);
 	return pair(pos, readWord(cmd));
 }
@@ -723,18 +723,18 @@ void Game::readCommandChange(uint16 id, const char* name) {
 	bool own = readCommandPref(name);
 	if (TileType type = strToEnum<TileType>(tileNames, name); type < TileType::empty)
 		changeTile(&board->getTiles()[id], type, board->findTileTop(&board->getTiles()[id]));
-	else if (TileTop top = strToEnum<TileTop>(TileTop::names, name); top <= TileTop::ownCity)
+	else if (TileTop top = strToEnum<TileTop::Type>(TileTop::names, name); top <= TileTop::ownCity)
 		changeTile(&board->getTiles()[id], board->getTiles()[id].getType(), own ? top.type : top.invert());
 }
 
 svec2 Game::readCommandVec(const char*& cmd) {
-	uint16 x = readNumber<uint16>(cmd, strtoul, 0);
-	return svec2(x, readNumber<uint16>(cmd, strtoul, 0));
+	uint16 x = readNumber<uint16>(cmd);
+	return svec2(x, readNumber<uint16>(cmd));
 }
 
 pair<uint8, uint16> Game::readCommandMnum(const char*& cmd, initlist<char> pref) {
 	uint8 p = readCommandPref(cmd, pref);
-	return pair(p, readNumber<uint16>(cmd, strtoul, 0));
+	return pair(p, readNumber<uint16>(cmd));
 }
 
 uint8 Game::readCommandPref(const char*& cmd, initlist<char> chars) {

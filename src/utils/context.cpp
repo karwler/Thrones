@@ -1,3 +1,4 @@
+#include "context.h"
 #include "engine/scene.h"
 #include "engine/world.h"
 
@@ -18,16 +19,16 @@ Context::Context(ivec2 mPos, const vector<string>& txts, CCall cancelCall, ivec2
 {
 	items.resize(txts.size());
 	for (sizet i = 0; i < txts.size(); ++i) {
-		items[i] = pair(World::scene()->getTexCol()->insert(World::fonts()->render(txts[i].c_str(), lineH)), txts[i]);
+		items[i] = pair(World::scene()->getTexCol()->insert(World::fonts()->render(txts[i], lineH)), txts[i]);
 		if (int w = items[i].first.rct.w + lineHeight / Label::textMarginFactor * 2 + *World::pgui()->getSize(GuiGen::SizeRef::scrollBarWidth); w > size.x)
 			size.x = w;
 	}
-	ivec2 res = World::window()->getScreenView();
+	ivec2 res = World::window()->getGuiView();
 	position = ivec2(calcPos(pos.x, size.x, res.x), calcPos(pos.y, size.y, res.y));
 	selected = getSelected(mPos);
 
 	initBuffer();
-	updateInstances();
+	setInstances();
 }
 
 Context::~Context() {
@@ -36,27 +37,31 @@ Context::~Context() {
 	freeBuffer();
 }
 
-void Context::updateInstances() {
+void Context::setInstances() {
+	uint oldVis = numInsts;
 	uvec2 vis = listSize.y <= size.y ? uvec2(0, items.size()) : uvec2(scroll.listPos.y / lineHeight, (size.y + scroll.listPos.y + lineHeight - 1) / lineHeight);
-	instanceData.resize(vis.y - vis.x + 2 + ScrollBar::numInstances);
-
+	numInsts = vis.y - vis.x + 2 + ScrollBar::numInstances;
+	vector<Instance> instanceData(numInsts);
 	Rect rct = rect();
-	setInstance(bgInst, rct, Widget::colorDark, TextureCol::blank, -1.f);
-	setSelectedInstance();
+	setInstance(&instanceData[0], rct, Widget::colorDark);
+	setSelectedInstance(&instanceData[1]);
 
-	uint id = selInst + 1;
+	uint id = 2;
 	for (ivec2 pos(rct.x + lineHeight / Label::textMarginFactor, rct.y + vis.x * lineHeight - scroll.listPos.y); vis.x < vis.y; ++vis.x, ++id, pos.y += lineHeight)
-		setInstance(id, Rect(pos, items[vis.x].first.rct.size()), rct, vec4(1.f), items[vis.x].first, -1.f);	// TODO: what's even the point of z?
-	scroll.setInstances(this, id, listSize, position, size, true, -1.f);
-	updateInstanceData(0, instanceData.size());
+		setInstance(&instanceData[id], Rect(pos, items[vis.x].first.rct.size()), rct, vec4(1.f), items[vis.x].first);
+	scroll.setInstances(&instanceData[id], listSize, position, size, true);
+	if (oldVis == numInsts)
+		updateInstances(instanceData.data(), 0, instanceData.size());
+	else
+		uploadInstances(instanceData.data(), instanceData.size());
 }
 
-void Context::setSelectedInstance() {
+void Context::setSelectedInstance(Instance* ins) {
 	if (selected < items.size()) {
 		Rect rct = rect();
-		setInstance(selInst, Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed, TextureCol::blank, -1.f);
+		setInstance(ins, Rect(rct.x, rct.y + itemPos(selected), size.x, lineHeight), rct, Widget::colorDimmed);
 	} else
-		setInstance(selInst);
+		setInstance(ins);
 }
 
 void Context::onClick(ivec2 mPos, uint8 mBut) {
@@ -71,39 +76,40 @@ void Context::onClick(ivec2 mPos, uint8 mBut) {
 void Context::onMouseMove(ivec2 mPos) {
 	if (uint sel = getSelected(mPos); sel != selected) {
 		selected = sel;
-		setSelectedInstance();
-		updateInstance(selInst);
+		Instance ins;
+		setSelectedInstance(&ins);
+		updateInstances(&ins, 1, 1);
 	}
 }
 
 void Context::tick(float dSec) {
 	if (scroll.tick(dSec, listSize, size)) {
 		selected = getSelected(World::window()->mousePos());
-		updateInstances();
+		setInstances();
 	}
 }
 
 void Context::onHold(ivec2 mPos, uint8 mBut) {
 	if (scroll.hold(mPos, mBut, this, listSize, position, size, true)) {
 		selected = getSelected(mPos);
-		updateInstances();
+		setInstances();
 	}
 }
 
 void Context::onDrag(ivec2 mPos, ivec2 mMov) {
 	scroll.drag(mPos, mMov, listSize, position, size, true);
 	selected = getSelected(mPos);
-	updateInstances();
+	setInstances();
 }
 
-void Context::onUndrag(uint8 mBut) {
-	scroll.undrag(mBut, true);
+void Context::onUndrag(ivec2 mPos, uint8 mBut) {
+	scroll.undrag(mPos, mBut, true);
 }
 
-void Context::onScroll(ivec2 wMov) {
+void Context::onScroll(ivec2 mPos, ivec2 wMov) {
 	scroll.scroll(wMov, listSize, size, true);
-	selected = getSelected(World::window()->mousePos());
-	updateInstances();
+	selected = getSelected(mPos);
+	setInstances();
 }
 
 void Context::onNavSelect(Direction dir) {
@@ -116,7 +122,7 @@ void Context::onNavSelect(Direction dir) {
 		if (int y = itemPos(selected); y < 0)
 			scroll.moveListPos(ivec2(0, y), listSize, size);
 	}
-	updateInstances();
+	setInstances();
 }
 
 void Context::onCancelCapture() {

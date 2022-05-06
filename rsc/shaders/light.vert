@@ -4,16 +4,16 @@ uniform mat4 pview;
 uniform vec3 viewPos;
 uniform vec3 lightPos;
 
-layout (location = 0) in vec3 vpos;
-layout (location = 1) in vec3 normal;
-layout (location = 2) in vec2 uvloc;
-layout (location = 3) in vec3 tangent;
-layout (location = 4) in mat4 model;
-layout (location = 8) in mat3 normat;
-layout (location = 11) in vec4 diffuse;
-layout (location = 12) in vec4 specShine;
-layout (location = 13) in uvec2 texid;
-layout (location = 14) in int show;
+layout(location = 0) in vec3 vpos;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec2 uvloc;
+layout(location = 3) in vec3 tangent;
+layout(location = 4) in mat4 model;
+layout(location = 8) in mat3 normat;
+layout(location = 11) in vec4 diffuse;
+layout(location = 12) in vec4 specShine;
+layout(location = 14) in uvec2 texid;
+layout(location = 15) in int show;
 
 out vec3 fragPos;
 out vec2 fragUV;

@@ -1,0 +1,12 @@
+[Unit]
+Description=Thrones server
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/opt/thrones/server -4 -l /opt/thrones
+Restart=always
+RestartSec=4
+
+[Install]
+WantedBy=multi-user.target

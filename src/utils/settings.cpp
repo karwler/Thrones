@@ -129,6 +129,7 @@ void Binding::init(Type type) {
 		bcall = &ProgState::eventFrameCounter;
 		ucall = nullptr;
 		break;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	case Type::screenshot:
 		bcall = &ProgState::eventScreenshot;
 		ucall = nullptr;
@@ -137,6 +138,7 @@ void Binding::init(Type type) {
 		bcall = &ProgState::eventPeekUiTextures;
 		ucall = nullptr;
 		break;
+#endif
 	case Type::selectNext:
 		bcall = &ProgState::eventSelectNext;
 		ucall = nullptr;
@@ -358,6 +360,7 @@ void Binding::reset(Binding::Type type) {
 		joys = { JoystickButton::rs };
 		gpds = { SDL_CONTROLLER_BUTTON_RIGHTSTICK };
 		break;
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	case Type::screenshot:
 		keys = { SDL_SCANCODE_F12 };
 		joys.clear();
@@ -368,6 +371,7 @@ void Binding::reset(Binding::Type type) {
 		joys.clear();
 		gpds.clear();
 		break;
+#endif
 	case Type::selectNext:
 		keys.clear();
 		joys = { JoystickButton::lb, JoystickButton::lt };
@@ -485,15 +489,17 @@ Settings::Settings() :
 	vsync(defaultVSync),
 	texScale(100),
 #ifdef OPENGLES
-	msamples(0),
+	antiAliasing(AntiAliasing::none),
 	softShadows(false),
 	ssao(false),
 	bloom(false),
+	ssr(false),
 #else
-	msamples(4),
+	antiAliasing(AntiAliasing::msaa4),
 	softShadows(true),
 	ssao(true),
 	bloom(true),
+	ssr(true),
 #endif
 	hinting(defaultHinting),
 	avolume(0),
@@ -507,6 +513,14 @@ Settings::Settings() :
 	invertWheel(false)
 {}
 
+bool Settings::trySetDisplay(int dip) {
+	if (dip >= 0 && display != dip) {
+		display = dip;
+		return true;
+	}
+	return false;
+}
+
 int Settings::getFamily() const {
 	switch (resolveFamily) {
 	case Family::v4:
@@ -515,4 +529,54 @@ int Settings::getFamily() const {
 		return AF_INET6;
 	}
 	return AF_UNSPEC;
+}
+
+vector<ivec2> Settings::windowSizes() const {
+	SDL_Rect max;
+	if (SDL_GetDisplayBounds(display, &max))
+		max.w = max.h = INT_MAX;
+
+	initlist<ivec2> resolutions = {
+		ivec2(640, 360),
+		ivec2(768, 432),
+		ivec2(800, 450),
+		ivec2(848, 480),
+		ivec2(854, 480),
+		ivec2(960, 540),
+		ivec2(1024, 576),
+		ivec2(1280, 720),
+		ivec2(1366, 768),
+		ivec2(1280, 800),
+		ivec2(1440, 900),
+		ivec2(1600, 900),
+		ivec2(1680, 1050),
+		ivec2(1920, 1080),
+		ivec2(2048, 1152),
+		ivec2(1920, 1200),
+		ivec2(2560, 1440),
+		ivec2(2560, 1600),
+		ivec2(2880, 1620),
+		ivec2(3200, 1800),
+		ivec2(3840, 2160),
+		ivec2(4096, 2304),
+		ivec2(3840, 2400),
+		ivec2(5120, 2880),
+		ivec2(7680, 4320),
+		ivec2(15360, 8640)
+	};
+	vector<ivec2> sizes;
+	std::copy_if(resolutions.begin(), resolutions.end(), std::back_inserter(sizes), [&max](ivec2 it) -> bool { return it.x <= max.w && it.y <= max.h; });
+	for (int i = 0; i < SDL_GetNumVideoDisplays(); ++i)
+		for (int im = 0; im < SDL_GetNumDisplayModes(i); ++im)
+			if (SDL_DisplayMode dm; !SDL_GetDisplayMode(i, im, &dm) && dm.w <= max.w && dm.h <= max.h && float(dm.w) / float(dm.h) >= minimumRatio)
+				sizes.emplace_back(dm.w, dm.h);
+	return uniqueSort(sizes);
+}
+
+vector<SDL_DisplayMode> Settings::displayModes() const {
+	vector<SDL_DisplayMode> mods;
+	for (int im = 0; im < SDL_GetNumDisplayModes(display); ++im)
+		if (SDL_DisplayMode dm; !SDL_GetDisplayMode(display, im, &dm) && float(dm.w) / float(dm.h) >= minimumRatio)
+			mods.push_back(dm);
+	return uniqueSort(mods);
 }

@@ -98,6 +98,7 @@ public:
 		Icon* dragon;	// has to be nullptr if dragon can't be placed anymore
 	};
 
+	static constexpr float iconSize = 1.f / 11.f;	// 64p
 	static constexpr float defaultDim = 0.5f;
 	static constexpr float gammaStepFactor = 10.f;
 	static constexpr double fovStepFactor = 10.0;
@@ -114,14 +115,13 @@ private:
 	static constexpr float smallHeight = 1.f / 36.f;	// 20p
 	static constexpr float lineHeight = 1.f / 24.f;		// 30p
 	static constexpr float superHeight = 1.f / 18.f;	// 40p
-	static constexpr float iconSize = 1.f / 11.f;		// 64p
 	static constexpr float lineSpacing = 1.f / 144.f;	// 5p
 	static constexpr float superSpacing = 1.f / 72.f;	// 10p
 	static constexpr float tooltipHeight = 1.f / 45.f;	// 16p
 	static constexpr float tooltipLimit = 2.f / 3.f;
 	static constexpr float chatEmbed = 0.5f;
 
-	array<pair<int, std::function<int ()>>, sizet(SizeRef::infoProgRightLen)+1> sizes;
+	array<pair<int, std::function<int ()>>, sizet(SizeRef::infoProgRightLen) + 1> sizes;
 
 public:
 	void initSizes();
@@ -133,7 +133,9 @@ public:
 	void openPopupInput(string&& msg, string text, BCall kcal, uint16 limit = UINT16_MAX) const;
 	void openPopupFavorPick(uint16 availableFF) const;
 	void openPopupConfig(const string& configName, const Config& cfg, ScrollArea*& configList, bool match);
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void openPopupRecords() const;
+#endif
 	void openPopupSaveLoad(const umap<string, Setup>& setups, bool save) const;
 	void openPopupPiecePicker(uint16 piecePicksLeft) const;
 	void openPopupSpawner() const;
@@ -153,14 +155,16 @@ public:
 	Size keyGetLineSize(Binding::Type bind) const;
 	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
 
-	uptr<RootLayout> makeMainMenu(Interactable*& selected, LabelEdit*& pname, Label*& versionNotif);
-	uptr<RootLayout> makeLobby(Interactable*& selected, TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff);
-	uptr<RootLayout> makeRoom(Interactable*& selected, ConfigIO& wio, RoomIO& rio, TextBox*& chatBox, ComboBox*& configName, const umap<string, Config>& confs, const string& startConfig);
-	uptr<RootLayout> makeSetup(Interactable*& selected, SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex);
-	uptr<RootLayout> makeMatch(Interactable*& selected, MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex);
-	uptr<RootLayout> makeRecord(Interactable*& selected, Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex);
-	uptr<RootLayout> makeSettings(Interactable*& selected, ScrollArea*& content, sizet& bindingsStart);
-	uptr<RootLayout> makeInfo(Interactable*& selected, ScrollArea*& content);
+	pair<RootLayout*, Interactable*> makeMainMenu(LabelEdit*& pname, Label*& versionNotif);
+	pair<RootLayout*, Interactable*> makeLobby(TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff);
+	pair<RootLayout*, Interactable*> makeRoom(ConfigIO& wio, RoomIO& rio, TextBox*& chatBox, ComboBox*& configName, const umap<string, Config>& confs, const string& startConfig);
+	pair<RootLayout*, Interactable*> makeSetup(SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex);
+	pair<RootLayout*, Interactable*> makeMatch(MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex);
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+	pair<RootLayout*, Interactable*> makeRecord(Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex);
+#endif
+	pair<RootLayout*, Interactable*> makeSettings(ScrollArea*& content, sizet& bindingsStart);
+	pair<RootLayout*, Interactable*> makeInfo(ScrollArea*& content);
 
 	static string tileFortressString(const Config& cfg);
 	static string middleFortressString(const Config& cfg);
@@ -169,7 +173,7 @@ public:
 private:
 	void assignSizeFunc(SizeRef id, std::function<int ()>&& func);
 	template <class T> static int txtMaxLen(T pos, T end, float hfac);
-	static int txtMaxLen(const initlist<initlist<const char*>>& lists, float hfac);
+	static int txtMaxLen(initlist<initlist<const char*>> lists, float hfac);
 	static string dispToFstr(const SDL_DisplayMode& mode);
 	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const;
 	template <bool upper = true, class T, sizet S> static string enameToFstr(T val, const array<const char*, S>& names);

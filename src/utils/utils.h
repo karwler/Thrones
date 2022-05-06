@@ -10,8 +10,9 @@ enum class UserCode : int32 {
 // general wrappers
 
 bool operator<(const SDL_DisplayMode& a, const SDL_DisplayMode& b);
-void checkFramebufferStatus(const string& name);
+void checkFramebufferStatus(string_view name);
 pair<SDL_Surface*, GLenum> pickPixFormat(SDL_Surface* img);
+void invertImage(SDL_Surface* img);
 SDL_Surface* takeScreenshot(ivec2 res);
 
 inline bool operator==(const SDL_DisplayMode& a, const SDL_DisplayMode& b) {
@@ -72,10 +73,10 @@ struct Rect : SDL_Rect {
 	constexpr Rect(ivec2 pos, ivec2 size);
 
 	ivec2& pos();
-	ivec2 pos() const;
+	constexpr ivec2 pos() const;
 	ivec2& size();
-	ivec2 size() const;
-	ivec2 end() const;
+	constexpr ivec2 size() const;
+	constexpr ivec2 end() const;
 	int* data();
 	const int* data() const;
 
@@ -107,7 +108,7 @@ inline ivec2& Rect::pos() {
 	return *reinterpret_cast<ivec2*>(this);
 }
 
-inline ivec2 Rect::pos() const {
+constexpr ivec2 Rect::pos() const {
 	return ivec2(x, y);
 }
 
@@ -115,11 +116,11 @@ inline ivec2& Rect::size() {
 	return reinterpret_cast<ivec2*>(this)[1];
 }
 
-inline ivec2 Rect::size() const {
+constexpr ivec2 Rect::size() const {
 	return ivec2(w, h);
 }
 
-inline ivec2 Rect::end() const {
+constexpr ivec2 Rect::end() const {
 	return pos() + size();
 }
 
@@ -151,10 +152,10 @@ struct Rectf : SDL_FRect {
 	constexpr Rectf(const Rect& rect);
 
 	vec2& pos();
-	vec2 pos() const;
+	constexpr vec2 pos() const;
 	vec2& size();
-	vec2 size() const;
-	vec2 end() const;
+	constexpr vec2 size() const;
+	constexpr vec2 end() const;
 	float* data();
 	const float* data() const;
 };
@@ -187,7 +188,7 @@ inline vec2& Rectf::pos() {
 	return *reinterpret_cast<vec2*>(this);
 }
 
-inline vec2 Rectf::pos() const {
+constexpr vec2 Rectf::pos() const {
 	return vec2(x, y);
 }
 
@@ -195,11 +196,11 @@ inline vec2& Rectf::size() {
 	return reinterpret_cast<vec2*>(this)[1];
 }
 
-inline vec2 Rectf::size() const {
+constexpr vec2 Rectf::size() const {
 	return vec2(w, h);
 }
 
-inline vec2 Rectf::end() const {
+constexpr vec2 Rectf::end() const {
 	return pos() + size();
 }
 
@@ -209,43 +210,6 @@ inline float* Rectf::data() {
 
 inline const float* Rectf::data() const {
 	return reinterpret_cast<const float*>(this);
-}
-
-// basic dirty texture wrapper for logger
-class Texture {
-public:
-#ifdef OPENGLES
-	static constexpr GLenum textPixFormat = GL_RGBA;
-#else
-	static constexpr GLenum textPixFormat = GL_BGRA;
-#endif
-
-private:
-	GLuint id = 0;
-	ivec2 res = ivec2(0);
-
-public:
-	void init(const vec4& color);
-	bool init(SDL_Surface* img, ivec2 limit);
-	void free();
-
-	operator GLuint() const;
-	ivec2 getRes() const;
-
-private:
-	void upload(void* pixels, int rowLen, GLint format, GLenum type);
-};
-
-inline void Texture::free() {
-	glDeleteTextures(1, &id);
-}
-
-inline Texture::operator GLuint() const {
-	return id;
-}
-
-inline ivec2 Texture::getRes() const {
-	return res;
 }
 
 // texture location in TextureCol
@@ -270,16 +234,21 @@ constexpr bool TexLoc::blank() const {
 // texture collection for widgets
 class TextureCol {
 public:
+#ifdef OPENGLES
+	static constexpr GLenum textPixFormat = GL_RGBA;
+	static constexpr SDL_PixelFormatEnum shotImgFormat = SDL_PIXELFORMAT_RGBA32;
+#else
+	static constexpr GLenum textPixFormat = GL_BGRA;
+	static constexpr SDL_PixelFormatEnum shotImgFormat = SDL_PIXELFORMAT_BGRA32;
+#endif
 	static constexpr TexLoc blank = TexLoc(0, Rect(0, 0, 2, 2));
 
 	struct Element {
 		string name;
 		SDL_Surface* image;
 		GLenum format;
-		bool freeImg;
-		bool minSize;
 
-		Element(string&& texName, SDL_Surface* img, GLenum pformat, bool freeImage, bool minimizeSize);
+		Element(string&& texName, SDL_Surface* img, GLenum pformat);
 	};
 
 private:
@@ -293,13 +262,16 @@ private:
 
 	static constexpr uint pageNumStep = 4;
 
-	GLuint tex;
+	GLuint tex = 0;
+#ifdef OPENGLES
+	GLuint fbo;
+#endif
 	int res;
 	uint pageReserve;
 	vector<vector<Rect>> pages;
 
 public:
-	umap<string, TexLoc> init(vector<Element>&& imgs, int recommendSize);
+	umap<string, TexLoc> init(vector<Element>&& imgs, int recommendSize, int minUiIcon);
 	void free();
 
 	int getRes() const;
@@ -317,6 +289,7 @@ private:
 	Find findLocation(ivec2 size) const;
 	void maybeResize();
 	void calcPageReserve();
+	vector<uint32> texturePixels() const;
 
 	void assertIntegrity();	// TODO: remove
 	static void assertIntegrity(const vector<Rect>& page, const Rect& nrect);	// TODO: remove
@@ -338,8 +311,11 @@ public:
 		SDL_Surface* normal;
 		string name;
 		GLenum cformat, nformat;
+		bool unique;
 
-		Element(SDL_Surface* iclr, SDL_Surface* inrm, string&& texName, GLenum cfmt, GLenum nfmt);
+		Element(SDL_Surface* iclr, SDL_Surface* inrm, string&& texName, GLenum cfmt, GLenum nfmt, bool owned);
+
+		void clear();
 	};
 
 	struct Import {
@@ -359,7 +335,7 @@ public:
 	uvec2 get(const string& name = string()) const;
 
 private:
-	static void loadTexArray(GLuint& tex, Import& imp, int res, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank, GLenum active);
+	template <GLenum active> static void loadTexArray(GLuint& tex, const Import& imp, int res, uint num, SDL_Surface* Element::*img, GLenum Element::*format, array<uint8, 4> blank);
 };
 
 inline uvec2 TextureSet::get(const string& name) const {
@@ -478,14 +454,14 @@ public:
 	virtual void onClick(ivec2, uint8) {}
 	virtual void onHold(ivec2, uint8) {}
 	virtual void onDrag(ivec2, ivec2) {}	// mouse move while left button down
-	virtual void onUndrag(uint8) {}						// gets called on mouse button up if instance is Scene's capture
+	virtual void onUndrag(ivec2, uint8) {}	// gets called on mouse button up if instance is Scene's capture
 	virtual void onHover() {}
 	virtual void onUnhover() {}
-	virtual void onScroll(ivec2) {}
+	virtual void onScroll(ivec2, ivec2) {}
 	virtual void onKeyDown(const SDL_KeyboardEvent&) {}
 	virtual void onKeyUp(const SDL_KeyboardEvent&) {}
-	virtual void onCompose(const char*, sizet&) {}
-	virtual void onText(const char*, sizet&) {}
+	virtual void onCompose(string_view, sizet) {}
+	virtual void onText(string_view, sizet) {}
 	virtual void onJButtonDown(uint8) {}
 	virtual void onJButtonUp(uint8) {}
 	virtual void onJHatDown(uint8, uint8) {}

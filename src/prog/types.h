@@ -13,7 +13,7 @@ enum class TileType : uint8 {
 };
 constexpr uint8 tileLim = uint8(TileType::fortress);
 
-constexpr array<const char*, uint8(TileType::empty)+1> tileNames = {
+constexpr array<const char*, sizet(TileType::empty) + 1> tileNames = {
 	"plains",
 	"forest",
 	"mountain",
@@ -36,7 +36,7 @@ enum class PieceType : uint8 {
 };
 constexpr uint8 pieceLim = uint8(PieceType::throne) + 1;
 
-constexpr array<const char*, uint8(PieceType::throne)+1> pieceNames = {
+constexpr array<const char*, pieceLim> pieceNames = {
 	"rangers",
 	"spearmen",
 	"crossbowmen",
@@ -116,8 +116,8 @@ struct Config {
 	string recordName;
 
 	Config& checkValues();
-	uint16 dataSize(const string& name) const;
-	void toComData(uint8* data, const string& name) const;
+	uint16 dataSize(uint16 nameLen) const;
+	void toComData(uint8* data, string_view name) const;
 	string fromComData(const uint8* data);	// returns name
 	uint16 countTiles() const;
 	uint16 countMiddles() const;
@@ -130,20 +130,20 @@ struct Config {
 	static uint16 ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei);
 };
 
-inline uint16 Config::dataSize(const string& name) const {
-	return sizeof(uint8) + name.length() + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceLim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers);
+inline uint16 Config::dataSize(uint16 nameLen) const {
+	return sizeof(uint8) + nameLen + 2 * sizeof(uint8) + sizeof(opts) + sizeof(battlePass) + sizeof(victoryPointsNum) + sizeof(setPieceBattleNum) + sizeof(favorLimit) + tileLim * sizeof(uint16) + tileLim * sizeof(uint16) + pieceLim * sizeof(uint16) + sizeof(winThrone) + sizeof(winFortress) + sizeof(capturers);
 }
 
 inline uint16 Config::countTiles() const {
-	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), 0);
+	return std::accumulate(tileAmounts.begin(), tileAmounts.end(), 0_us);
 }
 
 inline uint16 Config::countMiddles() const {
-	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), 0);
+	return std::accumulate(middleAmounts.begin(), middleAmounts.end(), 0_us);
 }
 
 inline uint16 Config::countPieces() const {
-	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), 0);
+	return std::accumulate(pieceAmounts.begin(), pieceAmounts.end(), 0_us);
 }
 
 inline uint16 Config::countFreeTiles() const {

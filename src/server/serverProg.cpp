@@ -516,13 +516,13 @@ int main(int argc, char** argv) {
 	try {
 		Arguments args(argc, argv, { arg4, arg6, argVerbose }, { argPort, argMaxPlayers, argLog, argMaxLogs });
 		const char* maxLogs = args.getOpt(argMaxLogs);
-		slog.start(args.hasFlag(argVerbose), args.getOpt(argLog), maxLogs ? sstoul(maxLogs) : Log::defaultMaxLogfiles);
+		slog.start(args.hasFlag(argVerbose), args.getOpt(argLog), maxLogs ? toNum<uint>(maxLogs) : Log::defaultMaxLogfiles);
 
 		const char* port = args.getOpt(argPort);
 		if (!port)
 			port = defaultPort;
 		const char* playerLim = args.getOpt(argMaxPlayers);
-		maxPlayers = playerLim ? std::min(sstoull(playerLim), ullong(maxPlayersLimit)) : defaultMaxPlayers;
+		maxPlayers = playerLim ? std::min(toNum<uint>(playerLim), maxPlayersLimit) : defaultMaxPlayers;
 		int family = AF_UNSPEC;
 		if (args.hasFlag(arg4) && !args.hasFlag(arg6))
 			family = AF_INET;

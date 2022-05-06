@@ -25,6 +25,7 @@ protected:
 	vector<Widget*> widgets;
 	vector<ivec2> positions;	// widgets' positions. one element larger than widgets. last element is layout's size
 	Size spaceSize;		// factor for space between widgets
+	uint numInsts;		// current total number of instances
 	const bool vertical;	// how to arrange widgets
 
 public:
@@ -33,9 +34,9 @@ public:
 
 	void draw() override;
 	void tick(float dSec) override;
-	void onResize() override;
-	void postInit() override;
-	bool setInstances() override;	// unlike a regular widget, a layout also uploads the instance buffer
+	void onResize(Instance* ins) override;
+	void postInit(Instance* ins) override;
+	void setInstances(Instance* ins) override;	// unlike a regular widget, a layout also uploads the instance buffer
 	bool selectable() const override;
 	void navSelectFrom(int mid, Direction dir) override;
 	virtual void navSelectNext(uint id, int mid, Direction dir);
@@ -45,20 +46,20 @@ public:
 	template <class T = Widget> T* getWidget(uint id) const;
 	const vector<Widget*>& getWidgets() const;
 	void setWidgets(vector<Widget*>&& wgts);
-	void insertWidget(uint id, Widget* wgt);
-	void deleteWidget(uint id);
+	virtual void insertWidgets(uint id, Widget** wgts, uint cnt = 1);
+	virtual void deleteWidgets(uint id, uint cnt = 1);
 	void setSpacing(const Size& space);
 	bool getVertical() const;
 	virtual ivec2 wgtPosition(uint id) const;
 	virtual ivec2 wgtSize(uint id) const;
-	virtual bool instanceVisible(uint qid) const;
+	virtual uint wgtInstanceId(uint id) const;
 protected:
 	virtual ivec2 listSize() const;
-	virtual void doWidgetsResize();
+	virtual vector<Instance> initInstanceData();
 
 	void calculateWidgetPositions();
+	void deleteWidgetsInit(uint id, uint cnt);
 private:
-	uint setWidgetsParent(uint id, uint qid);	// returns last instance id
 	static bool deselectWidget(Widget* wgt);
 	bool deselectWidgets() const;
 	void navSelectWidget(uint id, int mid, Direction dir);
@@ -90,23 +91,18 @@ public:
 
 protected:
 	const float topSpacingFac;
-	Quad background;
 	const vec4 bgColor;
 
-private:
-	static constexpr uint dimInst = 0;
-
 public:
-	RootLayout(const Size& size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, const Size& space = 0, float topSpace = 0.f, const vec4& color = vec4(0.f), uint widgetInstId = dimInst + 1);
+	RootLayout(const Size& size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, const Size& space = 0, float topSpace = 0.f, const vec4& color = vec4(0.f), uint widgetInstId = 1);
 	~RootLayout() override = default;
 
-	void onResize() override;
-	void postInit() override;
 	ivec2 position() const override;
 	ivec2 size() const override;
 	void setSize(const Size& size) override;
 	Rect frame() const override;
 protected:
+	vector<Instance> initInstanceData() override;
 	int pixTopSpacing() const;
 };
 
@@ -138,23 +134,21 @@ public:
 	Widget* defaultSelect;	// nav select to this if nothing selected (popup is not navigable if this is nullptr)
 protected:
 	const Size sizeY;		// use Widget's relSize as width
-
-	static constexpr uint bgInst = 1;
 private:
-	static constexpr vec4 colorBackground = vec4(0.42f, 0.05f, 0.f, 1.f);
-
 	const Type type;
+
+	static constexpr vec4 colorBackground = vec4(0.42f, 0.05f, 0.f, 1.f);
 
 public:
 	Popup(const pair<Size, Size>& size = pair(1.f, 1.f), vector<Widget*>&& children = vector<Widget*>(), BCall okCall = nullptr, BCall cancelCall = nullptr, bool vert = true, const Size& space = 0, float topSpace = 0.f, Widget* firstSelect = nullptr, Type ctxType = Type::generic, const vec4& color = uniformBgColor);
 	~Popup() override = default;
 
-	void onResize() override;
-	void postInit() override;
 	void onClick(ivec2 mPos, uint8 mBut) override;
 	ivec2 position() const override;
 	ivec2 size() const override;
 	Type getType() const;
+protected:
+	vector<Instance> initInstanceData() override;
 private:
 	Rect getBackgroundRect() const;
 };
@@ -176,14 +170,15 @@ public:
 	~Overlay() override = default;
 
 	void draw() override;
-	void onResize() override;
-	void postInit() override;
 	ivec2 position() const override;
 	ivec2 size() const override;
 
 	bool getShow() const;
 	void setShow(bool yes);
 	bool canInteract() const;
+
+protected:
+	vector<Instance> initInstanceData() override;
 };
 
 inline bool Overlay::getShow() const {
@@ -198,33 +193,37 @@ inline bool Overlay::canInteract() const {
 class ScrollArea : public Layout {
 private:
 	ScrollBar scroll;
-	uvec2 visibleInsts = uvec2(0);
+	uvec2 visWgts;
 
 public:
 	ScrollArea(const Size& size = 1.f, vector<Widget*>&& children = vector<Widget*>(), bool vert = true, const Size& space = 0);
 	~ScrollArea() override = default;
 
+	void draw() override;
 	void tick(float dSec) override;
-	void postInit() override;
-	bool setInstances() override;
+	void onResize(Instance* ins) override;
+	void postInit(Instance* ins) override;
+	void setInstances(Quad::Instance* ins) override;
 	void onHold(ivec2 mPos, uint8 mBut) override;
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
-	void onUndrag(uint8 mBut) override;
-	void onScroll(ivec2 wMov) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
+	void onScroll(ivec2 mPos, ivec2 wMov) override;
 	void onNavSelect(Direction dir) override;
 	void navSelectNext(uint id, int mid, Direction dir) override;
 	void navSelectFrom(int mid, Direction dir) override;
 	void onCancelCapture() override;
 
+	void insertWidgets(uint id, Widget** wgts, uint cnt = 1) override;
+	void deleteWidgets(uint id, uint cnt = 1) override;
 	Rect frame() const override;
 	ivec2 wgtPosition(uint id) const override;
 	ivec2 wgtSize(uint id) const override;
-	bool instanceVisible(uint qid) const override;
+	uint wgtInstanceId(uint id) const override;
 protected:
-	void doWidgetsResize() override;
+	vector<Instance> initInstanceData() override;
 private:
 	void updateInstancesFull();
-	void setVisibleInstances();
+	void setVisibleWidgets();
 	void scrollToSelected();
 	int wgtRPos(uint id) const;
 	int wgtREnd(uint id) const;
@@ -239,5 +238,5 @@ inline int ScrollArea::wgtRPos(uint id) const {
 }
 
 inline int ScrollArea::wgtREnd(uint id) const {
-	return positions[id+1][vertical] - sizeToPixRel(spaceSize);
+	return positions[id + 1][vertical] - sizeToPixRel(spaceSize);
 }

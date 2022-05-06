@@ -52,12 +52,11 @@ public:
 	uint8 compressTile(uint16 e) const;
 	static TileType decompressTile(const uint8* src, uint16 i);
 	Piece* getPieces(Piece* beg, const array<uint16, pieceLim>& amts, PieceType type);
-	Piece* findPiece(Piece* beg, Piece* end, svec2 pos);
+	Piece* findPiece(svec2 pos);
 	PieceCol& getPieces();
 	Piece* getOwnPieces(PieceType type);
 	Piece* getEnePieces(PieceType type);
 	Piece* findOccupant(const Tile* tile);
-	Piece* findOccupant(svec2 pos);
 	BoardObject* findObject(const vec3& isct);
 	bool isOwnPiece(const Piece* pce) const;
 	bool isEnemyPiece(const Piece* pce) const;
@@ -164,7 +163,7 @@ inline uint16 Board::tileCompressionSize() const {
 }
 
 inline uint8 Board::compressTile(uint16 i) const {
-	return uint8(tiles[tiles.getSize()-i-1].getType()) << (i % 2 * 4);
+	return uint8(tiles[tiles.getSize() - i - 1].getType()) << (i % 2 * 4);
 }
 
 inline TileType Board::decompressTile(const uint8* src, uint16 i) {
@@ -184,11 +183,7 @@ inline Piece* Board::getEnePieces(PieceType type) {
 }
 
 inline Piece* Board::findOccupant(const Tile* tile) {
-	return findOccupant(idToPos(tileId(tile)));
-}
-
-inline Piece* Board::findOccupant(svec2 pos) {
-	return findPiece(pieces.begin(), pieces.end(), pos);
+	return findPiece(idToPos(tileId(tile)));
 }
 
 inline bool Board::isOwnPiece(const Piece* pce) const {

@@ -10,7 +10,7 @@ private:
 	pollfd sock = { INVALID_SOCKET, POLLOUT, 0 };
 
 public:
-	Connector(const char* addr, const char* port, int family);
+	Connector(const string& addr, const string& port, int family);
 	~Connector();
 
 	nsint pollReady();

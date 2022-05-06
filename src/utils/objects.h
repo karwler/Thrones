@@ -14,8 +14,9 @@ public:
 		mat3 normat;
 		vec4 diffuse;
 		vec4 specShine;	// RGB = specular, A = shininess
+		vec2 reflRough;	// x = reflectiveness, y = roughness
 		uvec2 texid;	// x = color, y = normal
-		bool show;
+		int show;
 	};
 
 private:
@@ -35,17 +36,20 @@ public:
 	void draw();
 	void drawTop();
 	void allocate(uint size, bool setTop = false);
+	void allocateTop(bool yes);
 	uint insert(const Instance& data);
 	Instance erase(uint id);
 	Instance& getInstance(uint id);
 	void updateInstance(uint id, iptrt loffs = 0, sizet size = sizeof(Instance));
 	void updateInstanceData();
+	bool hasTop() const;
 	Instance& getInstanceTop();
 	void updateInstanceTop(iptrt loffs = 0, sizet size = sizeof(Instance));
 	void updateInstanceDataTop();
 
 private:
 	void initTop();
+	void freeTop();
 	void setVertexAttrib();
 	void setInstanceAttrib();
 	void disableAttrib();
@@ -53,6 +57,10 @@ private:
 
 inline Mesh::Instance& Mesh::getInstance(uint id) {
 	return instanceData[id];
+}
+
+inline bool Mesh::hasTop() const {
+	return bool(top);
 }
 
 inline Mesh::Instance& Mesh::getInstanceTop() {
@@ -144,7 +152,7 @@ protected:
 	static constexpr vec4 moveColorFactor = vec4(1.f, 1.f, 1.f, 0.9f);
 
 	bool leftDrag;
-	bool topDepth;
+	bool topSolid;
 private:
 	Emission emission = EMI_NONE;
 
@@ -181,13 +189,13 @@ public:
 	void onNavSelect(Direction dir) override;
 	void startKeyDrag(uint8 mBut);
 
-	bool getTopDepth() const;
+	bool getTopSolid() const;
 	Emission getEmission() const;
 	virtual void setEmission(Emission emi);
 	void setAlphaFactor(float alpha);
 
 protected:
-	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool depth = true);
+	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool solid = true);
 
 private:
 	float emissionFactor();
@@ -200,8 +208,8 @@ inline BoardObject::BoardObject(const vec3& position, float rotation, float size
 	Object(position, vec3(0.f, rotation, 0.f), vec3(size))
 {}
 
-inline bool BoardObject::getTopDepth() const {
-	return topDepth;
+inline bool BoardObject::getTopSolid() const {
+	return topSolid;
 }
 
 inline BoardObject::Emission BoardObject::getEmission() const {
@@ -236,7 +244,7 @@ public:
 	Tile& operator=(Tile&&) = default;
 
 	void onHold(ivec2 mPos, uint8 mBut) override;
-	void onUndrag(uint8 mBut) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
 	void onHover() override;
 	void onUnhover() override;
 	void onCancelCapture() override;
@@ -346,19 +354,19 @@ inline const Tile* TileCol::ene(pdift i) const {
 }
 
 inline Tile* TileCol::mid(pdift i) {
-	return &tl[home+i];
+	return &tl[home + i];
 }
 
 inline const Tile* TileCol::mid(pdift i) const {
-	return &tl[home+i];
+	return &tl[home + i];
 }
 
 inline Tile* TileCol::own(pdift i) {
-	return &tl[extra+i];
+	return &tl[extra + i];
 }
 
 inline const Tile* TileCol::own(pdift i) const {
-	return &tl[extra+i];
+	return &tl[extra + i];
 }
 
 // player on tiles
@@ -382,7 +390,7 @@ public:
 	float getTopY() override;
 
 	void onHold(ivec2 mPos, uint8 mBut) override;
-	void onUndrag(uint8 mBut) override;
+	void onUndrag(ivec2 mPos, uint8 mBut) override;
 	void onHover() override;
 	void onUnhover() override;
 	void onCancelCapture() override;
@@ -471,9 +479,9 @@ inline const Piece* PieceCol::own(pdift i) const {
 }
 
 inline Piece* PieceCol::ene(pdift i) {
-	return &pc[num+i];
+	return &pc[num + i];
 }
 
 inline const Piece* PieceCol::ene(pdift i) const {
-	return &pc[num+i];
+	return &pc[num + i];
 }

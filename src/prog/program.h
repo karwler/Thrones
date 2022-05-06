@@ -5,11 +5,11 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/fetch.h>
-#elif !defined(__ANDROID__)
+#elif defined(UPDATE_CHECK)
 #include <curl/curl.h>
 #endif
 
-#ifndef __ANDROID__
+#ifdef UPDATE_CHECK
 class WebFetchProc {
 private:
 	string url;
@@ -72,7 +72,7 @@ private:
 	Netcp* netcp = nullptr;
 	Game game;
 	GuiGen gui;
-#ifndef __ANDROID__
+#ifdef UPDATE_CHECK
 	uptr<WebFetchProc> wfproc;
 #ifndef __EMSCRIPTEN__
 	string curlVersion = "not found";
@@ -120,7 +120,9 @@ public:
 	void eventOpenHostMenu(Button* but = nullptr);
 	void eventStartGame(Button* but = nullptr);
 	void eventHostServer(Button* but = nullptr);
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void eventOpenPopupRecords(Button* but = nullptr);
+#endif
 	void eventDelRecord(Button* but);
 	void eventSwitchConfig(uint id, const string& str);
 	void eventConfigDelete(Button* but = nullptr);
@@ -206,9 +208,11 @@ public:
 	void eventGamePlayerLeft();
 
 	// game record
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	void eventOpenRecord(Button* but);
 	void eventRecordPrevAction(Button* but = nullptr);
 	void eventRecordNextAction(Button* but = nullptr);
+#endif
 
 	// settings
 	void eventOpenSettings(Button* but = nullptr);
@@ -227,6 +231,7 @@ public:
 	void eventSetSoftShadows(Button* but);
 	void eventSetSsao(Button* but);
 	void eventSetBloom(Button* but);
+	void eventSetSsr(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
 	void eventSetFovSL(Button* but);
@@ -277,7 +282,7 @@ public:
 	GuiGen* getGui();
 	const string& getChatName() const;
 	const string& getLatestVersion() const;
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#if defined(UPDATE_CHECK) && !defined(__EMSCRIPTEN__)
 	const string& getCurlVersion() const;
 #endif
 
@@ -297,6 +302,7 @@ private:
 	static string winMessage(Record::Info win);
 	void executeRecordAction(const RecAction& action);
 	void setShadowRes(uint16 newRes);
+	void finishFramebufferSettings();
 	void setColorPieces(Settings::Color clr, Piece* pos, Piece* end);
 	template <class T> void setStandardSlider(Slider* sl, T& val);
 	template <class T> void setStandardSlider(LabelEdit* le, T& val);
@@ -341,7 +347,7 @@ inline const string& Program::getLatestVersion() const {
 	return latestVersion;
 }
 
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#if defined(UPDATE_CHECK) && !defined(__EMSCRIPTEN__)
 inline const string& Program::getCurlVersion() const {
 	return curlVersion;
 }

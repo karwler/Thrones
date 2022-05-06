@@ -3,10 +3,10 @@
 uniform mat4 pvTrans[6];
 uniform uint pvId;
 
-layout (location = 0) in vec3 vpos;
-layout (location = 4) in mat4 model;
-layout (location = 11) in vec4 diffuse;
-layout (location = 14) in int show;
+layout(location = 0) in vec3 vpos;
+layout(location = 4) in mat4 model;
+layout(location = 11) in vec4 diffuse;
+layout(location = 15) in int show;
 
 out vec3 fragPos;
 flat out float fragAlpha;

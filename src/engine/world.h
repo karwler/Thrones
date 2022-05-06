@@ -21,12 +21,20 @@ public:
 	static Program* program();
 	static ProgState* state();
 	template <class T> static T* state();
-	static Settings* sets();
 	static Scene* scene();
+	static Settings* sets();
+#ifdef OPENVR
+	static VrSys* vr();
+#else
+	static constexpr VrSys* vr();
+#endif
 	static const ShaderGeom* geom();
 	static const ShaderDepth* depth();
 	static const ShaderSsao* ssao();
-	static const ShaderBlur* blur();
+	static const ShaderBlur* mblur();
+	static const ShaderSsr* ssr();
+	static const ShaderSsrColor* ssrColor();
+	static const ShaderBlur* cblur();
 	static const ShaderLight* light();
 	static const ShaderBrights* brights();
 	static const ShaderGauss* gauss();
@@ -34,9 +42,9 @@ public:
 	static const ShaderSkybox* skybox();
 	static const ShaderGui* sgui();
 
-	template <class C> static void setArgs(int argc, const C* const* argv);
 	template <class F, class... A> static void prun(F func, A&&... argv);
 	template <class F, class... A> static void srun(F func, A&&... argv);
+	template <class C> static void setArgs(int argc, const C* const* argv);
 };
 
 inline WindowSys* World::window() {
@@ -88,6 +96,14 @@ inline Settings* World::sets() {
 	return windowSys.getSets();
 }
 
+#ifdef OPENVR
+inline VrSys* World::vr() {
+#else
+constexpr VrSys* World::vr() {
+#endif
+	return windowSys.getVr();
+}
+
 inline const ShaderGeom* World::geom() {
 	return windowSys.getGeom();
 }
@@ -100,8 +116,20 @@ inline const ShaderSsao* World::ssao() {
 	return windowSys.getSsao();
 }
 
-inline const ShaderBlur* World::blur() {
-	return windowSys.getBlur();
+inline const ShaderBlur* World::mblur() {
+	return windowSys.getMblur();
+}
+
+inline const ShaderSsr* World::ssr() {
+	return windowSys.getSsr();
+}
+
+inline const ShaderSsrColor* World::ssrColor() {
+	return windowSys.getSsrColor();
+}
+
+inline const ShaderBlur* World::cblur() {
+	return windowSys.getCblur();
 }
 
 inline const ShaderLight* World::light() {

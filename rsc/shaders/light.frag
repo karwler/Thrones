@@ -9,13 +9,13 @@ const vec3 gridDisk[samples] = vec3[](
     vec3(0.0, 1.0, 1.0), vec3(0.0, -1.0, 1.0), vec3(0.0, -1.0, -1.0), vec3(0.0, 1.0, -1.0)
 );
 
+uniform int optShadow;
+uniform bool optSsao;
 uniform vec3 lightPos;
 uniform vec3 lightAmbient;
 uniform vec3 lightDiffuse;
 uniform float lightLinear;
 uniform float lightQuadratic;
-
-uniform vec2 screenSize;
 uniform vec3 viewPos;
 uniform float farPlane;
 uniform sampler2DArray colorMap;
@@ -51,10 +51,6 @@ float calcShadowSoft() {
 	return 1.0 - (shadow / float(samples));
 }
 
-float getSsao() {
-	return texture(ssaoMap, gl_FragCoord.xy / screenSize).r;
-}
-
 void main() {
 	if (!bool(fragShow)) {
 		discard;
@@ -72,7 +68,7 @@ void main() {
 	vec3 ambient = color.rgb * lightAmbient;
 	vec3 diffuse = color.rgb * lightDiffuse * max(dot(normal, lightDir), 0.0);
 	vec3 specular = fragSpecShine.rgb * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), fragSpecShine.a);
-	float shadow = 1.0;	// appropiate function is automatically placed during startup
-	float ssao = 1.0;	// ^
+	float shadow = optShadow == 2 ? calcShadowSoft() : optShadow == 1 ? calcShadowHard() : 1.0;
+	float ssao = optSsao ? texture(ssaoMap, gl_FragCoord.xy / vec2(textureSize(ssaoMap, 0))).r : 1.0;
 	fragColor = vec4((ambient + (diffuse + specular) * shadow) / attenuation * ssao, color.a);
 }

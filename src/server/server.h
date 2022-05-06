@@ -39,7 +39,7 @@ constexpr short polleventsDisconnect = POLLERR | POLLHUP | POLLNVAL | POLLRDHUP;
 
 namespace Com {
 
-constexpr char commonVersion[] = "0.5.3";
+constexpr string_view commonVersion = "0.5.3";
 constexpr char defaultPort[] = "39741";
 constexpr uint16 dataHeadSize = sizeof(uint8) + sizeof(uint16);	// code + size
 constexpr uint8 roomNameLimit = 63;
@@ -56,7 +56,7 @@ constexpr char msgProtocolError[] = "Protocol error";
 constexpr char msgResolveFail[] = "Failed to resolve host";
 constexpr char msgWinsockFail[] = "failed to initialize Winsock 2.2";
 
-constexpr array<const char*, 1> compatibleVersions = {
+constexpr array<string_view, 1> compatibleVersions = {
 	commonVersion
 };
 
@@ -126,11 +126,11 @@ inline void closeSocketV(nsint fd) {
 
 // universal functions
 void sendWaitClose(nsint socket);
-void sendVersionRejection(nsint socket, bool webs);	// this might as well be sendText(const string& text)
+void sendVersionRejection(nsint socket, bool webs);	// this might as well be a sendText
 void sendRejection(nsint server);
 void sendData(nsint socket, const uint8* data, uint len, bool webs);
 string digestSha1(string str);
-string encodeBase64(const string& str);
+string encodeBase64(string_view str);
 ulong generateRandomSeed();
 
 inline uint16 read16(const void* data) {
@@ -210,7 +210,7 @@ public:
 	void push(initlist<uint16> lst);
 	void push(initlist<uint32> lst);
 	void push(initlist<uint64> lst);
-	void push(const string& str);
+	void push(string_view str);
 	uint write(uint8 val, uint pos);
 	uint write(uint16 val, uint pos);
 	uint write(uint32 val, uint pos);

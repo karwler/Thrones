@@ -33,7 +33,7 @@ Config& Config::checkValues() {
 			++mort;
 		}
 	}
-	victoryPointsNum = std::clamp(victoryPointsNum, uint16(1), uint16(UINT16_MAX - mort));
+	victoryPointsNum = std::clamp(victoryPointsNum, 1_us, uint16(UINT16_MAX - mort));
 
 	uint16 psize = floorAmounts(countPieces(), pieceAmounts.data(), hsize, pieceAmounts.size() - 1);
 	if (!psize)
@@ -46,9 +46,9 @@ Config& Config::checkValues() {
 		for (uint8 i = 0; i < pieceLim; ++i)
 			if (capturers & (1 << i))
 				capCnt += pieceAmounts[i];
-		winFortress = std::clamp(winFortress, uint16(0), std::min(fort, capCnt));
+		winFortress = std::min(winFortress, std::min(fort, capCnt));
 
-		winThrone = std::clamp(winThrone, uint16(0), pieceAmounts[uint8(PieceType::throne)]);
+		winThrone = std::min(winThrone, pieceAmounts[uint8(PieceType::throne)]);
 		if (!(winFortress || winThrone))
 			if (winThrone = 1; !pieceAmounts[uint8(PieceType::throne)]) {
 				if (psize == hsize)
@@ -77,7 +77,7 @@ uint16 Config::ceilAmounts(uint16 total, uint16 floor, uint16* amts, uint8 ei) {
 	return total;
 }
 
-void Config::toComData(uint8* data, const string& name) const {
+void Config::toComData(uint8* data, string_view name) const {
 	*data++ = name.length();
 	data = std::copy(name.begin(), name.end(), data);
 

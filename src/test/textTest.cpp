@@ -2,6 +2,15 @@
 #include "prog/types.h"
 #include "server/server.h"
 
+static void testStringViewCat() {
+	string str = "ref";
+	assertEqual(""s + ""sv, "");
+	assertEqual("a"s + "b"sv, "ab");
+	assertEqual("ab"sv + "cd"s, "abcd");
+	assertEqual(str + "vw"sv, "refvw");
+	assertEqual("str"sv + str, "strref");
+}
+
 static void testReadWordM() {
 	const char* str = "the quick\tbrown  fox\r\njumps\rover\v\vthe \tlazy\n dog";
 	const char* words[] = { "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog" };
@@ -26,16 +35,16 @@ static void testStrUnenclose() {
 static void testU8clen() {
 	assertEqual(u8clen(0), 1);
 	assertEqual(u8clen(0x7F), 1);
-	assertEqual(u8clen(char(0x80)), 0);
-	assertEqual(u8clen(char(0xBF)), 0);
-	assertEqual(u8clen(char(0xC0)), 2);
-	assertEqual(u8clen(char(0xDF)), 2);
-	assertEqual(u8clen(char(0xE0)), 3);
-	assertEqual(u8clen(char(0xEF)), 3);
-	assertEqual(u8clen(char(0xF0)), 4);
-	assertEqual(u8clen(char(0xF7)), 4);
-	assertEqual(u8clen(char(0xF8)), 0);
-	assertEqual(u8clen(char(0xFF)), 0);
+	assertEqual(u8clen(0x80), 0);
+	assertEqual(u8clen(0xBF), 0);
+	assertEqual(u8clen(0xC0), 2);
+	assertEqual(u8clen(0xDF), 2);
+	assertEqual(u8clen(0xE0), 3);
+	assertEqual(u8clen(0xEF), 3);
+	assertEqual(u8clen(0xF0), 4);
+	assertEqual(u8clen(0xF7), 4);
+	assertEqual(u8clen(0xF8), 0);
+	assertEqual(u8clen(0xFF), 0);
 }
 
 static void testReadTextLines() {
@@ -74,8 +83,8 @@ static void testIsSpace() {
 	assertFalse(isSpace('_'));
 	assertFalse(isSpace('a'));
 	assertTrue(isSpace(0x7F));
-	assertFalse(isSpace(char(0x80)));
-	assertFalse(isSpace(char(0xFF)));
+	assertFalse(isSpace(0x80));
+	assertFalse(isSpace(0xFF));
 }
 
 static void testNotSpace() {
@@ -91,8 +100,8 @@ static void testNotSpace() {
 	assertTrue(notSpace('_'));
 	assertTrue(notSpace('a'));
 	assertFalse(notSpace(0x7F));
-	assertTrue(notSpace(char(0x80)));
-	assertTrue(notSpace(char(0xFF)));
+	assertTrue(notSpace(0x80));
+	assertTrue(notSpace(0xFF));
 }
 
 static void testFirstUpper() {
@@ -165,6 +174,8 @@ static void testStrToDisp() {
 }
 
 static void testToStr() {
+	assertEqual(toStr(true), "true"s);
+	assertEqual(toStr(false), "false"s);
 	assertEqual(toStr(0), "0");
 	assertEqual(toStr(929u), "929");
 	assertEqual(toStr(-54), "-54");
@@ -172,6 +183,8 @@ static void testToStr() {
 	assertEqual(toStr(0.007f), "0.007");
 	assertEqual(toStr(2.45f), "2.45");
 	assertEqual(toStr(-86.125f), "-86.125");
+	assertEqual(toStr(3.900f), "3.9");
+	assertEqual(toStr(80.f), "80");
 	assertEqual(toStr(0, 3), "000");
 	assertEqual(toStr(2, 3), "002");
 	assertEqual(toStr(40, 3), "040");
@@ -186,25 +199,20 @@ static void testToStr() {
 	assertEqual(toStr(glm::vec3(4.2f, 0.f, -2.53f), "x"), "4.2x0x-2.53");
 }
 
-static void testStob() {
-	assertTrue(stob("true"));
-	assertTrue(stob("TRUES"));
-	assertFalse(stob("false"));
-	assertTrue(stob("YES"));
-	assertTrue(stob("ya"));
-	assertFalse(stob("non"));
-	assertTrue(stob("ON"));
-	assertTrue(stob("on."));
-	assertFalse(stob("OFF"));
-	assertTrue(stob("1"));
-	assertTrue(stob("02"));
-	assertFalse(stob("0"));
-	assertFalse(stob("00"));
-}
-
-static void testBtos() {
-	assertEqual(btos(true), string("true"));
-	assertEqual(btos(false), string("false"));
+static void testToBool() {
+	assertTrue(toBool("true"));
+	assertTrue(toBool("TRUES"));
+	assertFalse(toBool("false"));
+	assertTrue(toBool("YES"));
+	assertTrue(toBool("ya"));
+	assertFalse(toBool("non"));
+	assertTrue(toBool("ON"));
+	assertTrue(toBool("on."));
+	assertFalse(toBool("OFF"));
+	assertTrue(toBool("1"));
+	assertTrue(toBool("02"));
+	assertFalse(toBool("0"));
+	assertFalse(toBool("00"));
 }
 
 static void testStrToEnum() {
@@ -217,23 +225,41 @@ static void testStrToEnum() {
 	assertEqual(strToEnum<uint8>(tileNames, "garbage", UINT8_MAX), UINT8_MAX);
 }
 
+static void testToNum() {
+	assertEqual(toNum<int>("128"), 128);
+	assertEqual(toNum<int>("-2"), -2);
+	assertEqual(toNum<int>(" \r\n\t3"), 3);
+	assertEqual(toNum<int>("+4"), 0);
+	assertEqual(toNum<int>("abc"), 0);
+	assertEqual(toNum<uint>("-1"), 0);
+	assertEqual(toNum<uint8>("160"), 0);
+	assertEqual(toNum<float>("128"), 128.f);
+	assertEqual(toNum<float>("10.6"), 10.6f);
+	assertEqual(toNum<float>("-2"), -2.f);
+	assertEqual(toNum<float>("-0.5"), -0.5f);
+	assertEqual(toNum<float>(" \r\n\t3"), 3.f);
+	assertEqual(toNum<float>(" \r\n\t-4.1"), -4.1f);
+	assertEqual(toNum<float>("+4"), 0);
+	assertEqual(toNum<float>("abc"), 0);
+}
+
 static void testReadNumber() {
 	const char* istr = "12 -1\t0\r\n-54";
 	int ints[] = { 12, -1, 0, -54 };
 	for (int* intp = ints; *istr; ++intp)
-		assertEqual(readNumber<int>(istr, strtol, 0), *intp);
+		assertEqual(readNumber<int>(istr), *intp);
 
 	const char* fstr = "24.000 -2\t0.25\r\n-54.120 \t 0";
 	float flts[] = { 24.f, -2.f, 0.25f, -54.12f, 0.f };
 	for (float* fltp = flts; *fstr; ++fltp)
-		assertEqual(readNumber<float>(fstr, strtof), *fltp);
+		assertEqual(readNumber<float>(fstr), *fltp);
 }
 
-static void testStoxv() {
-	assertEqual(stoiv<glm::ivec4>(" 0 \n 3 ", strtol), glm::ivec4(0, 3, 0, 0));
-	assertEqual(stoiv<glm::ivec4>("\r\n1\t\t-1 24  -24 ", strtol), glm::ivec4(1, -1, 24, -24));
-	assertEqual(stofv<glm::vec4>(" 0.01 \n -3.0 "), glm::vec4(0.01f, -3.f, 0.f, 0.f));
-	assertEqual(stofv<glm::vec4>("\r\n1.0\t\t-1.50 24.99  -24 "), glm::vec4(1.f, -1.5f, 24.99f, -24.f));
+static void testToVec() {
+	assertEqual(toVec<glm::ivec4>(" 0 \n 3 "), glm::ivec4(0, 3, 0, 0));
+	assertEqual(toVec<glm::ivec4>("\r\n1\t\t-1 24  -24 "), glm::ivec4(1, -1, 24, -24));
+	assertEqual(toVec<glm::vec4>(" 0.01 \n -3.0 "), glm::vec4(0.01f, -3.f, 0.f, 0.f));
+	assertEqual(toVec<glm::vec4>("\r\n1.0\t\t-1.50 24.99  -24 "), glm::vec4(1.f, -1.5f, 24.99f, -24.f));
 }
 
 static void testNumDigits() {
@@ -269,12 +295,13 @@ static void testArguments() {
 	assertRange(arg.getVals(), vector<string>({ "v0", "v1", "v2" }));
 	assertTrue(arg.hasFlag('f'));
 	assertTrue(arg.hasFlag('g'));
-	assertEqual(arg.getOpt('o'), string("s0"));
+	assertEqual(arg.getOpt('o'), "s0"s);
 	assertEqual(arg.getOpt('p'), nullptr);
 }
 
 void testText() {
 	puts("Running Text tests...");
+	testStringViewCat();
 	testReadWordM();
 	testStrEnclose();
 	testStrUnenclose();
@@ -292,11 +319,11 @@ void testText() {
 	testParentPath();
 	testStrToDisp();
 	testToStr();
-	testStob();
-	testBtos();
 	testStrToEnum();
+	testToBool();
+	testToNum();
 	testReadNumber();
-	testStoxv();
+	testToVec();
 	testNumDigits();
 	testArguments();
 }

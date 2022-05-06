@@ -21,6 +21,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+using namespace std::string_literals;
+using namespace std::literals::string_view_literals;
 
 using uchar = unsigned char;
 using ushort = unsigned short;
@@ -48,9 +50,11 @@ using std::array;
 using std::optional;
 using std::pair;
 using std::string;
+using std::string_view;
 using std::tuple;
 using std::vector;
 using std::wstring;
+using std::wstring_view;
 
 template <class T> using initlist = std::initializer_list<T>;
 template <class... T> using sptr = std::shared_ptr<T...>;
@@ -70,7 +74,7 @@ using glm::dvec2;
 using glm::ivec2;
 using glm::uvec2;
 using glm::uvec4;
-using svec2 = glm::vec<2, uint16, glm::defaultp>;
+using svec2 = glm::u16vec2;
 
 class AudioSys;
 class Board;
@@ -102,6 +106,7 @@ class Scene;
 class ScrollArea;
 struct Settings;
 struct Setup;
+class Shader;
 class ShaderBlur;
 class ShaderBrights;
 class ShaderDepth;
@@ -112,11 +117,14 @@ class ShaderGui;
 class ShaderLight;
 class ShaderSkybox;
 class ShaderSsao;
+class ShaderSsr;
+class ShaderSsrColor;
 class ShaderStartup;
 class Slider;
 class TextBox;
 class Tile;
 class TitleBar;
+class VrSys;
 class Widget;
 class WindowSys;
 
@@ -193,6 +201,14 @@ constexpr T operator^(T a, T b) {
 template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
 constexpr T operator^=(T& a, T b) {
 	return a = T(std::underlying_type_t<T>(a) ^ std::underlying_type_t<T>(b));
+}
+
+constexpr uint8 operator""_ub(ullong n) {
+	return n;
+}
+
+constexpr uint16 operator""_us(ullong n) {
+	return n;
 }
 
 template <class T>

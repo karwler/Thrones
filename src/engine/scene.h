@@ -1,94 +1,8 @@
 #pragma once
 
-#include "utils/context.h"
-#include "utils/layouts.h"
 #include "utils/objects.h"
+#include "utils/widgets.h"
 #include <queue>
-
-// screen space quad
-class Frame {
-public:
-	static constexpr uint corners = 4;
-private:
-	static constexpr uint stride = 4;
-	static constexpr uint vlength = 2;
-	static constexpr float vertices[corners * stride] = {
-		-1.f,  1.f, 0.f, 1.f,
-		1.f,  1.f, 1.f, 1.f,
-		-1.f, -1.f, 0.f, 0.f,
-		1.f, -1.f, 1.f, 0.f,
-	};
-
-	GLuint vao = 0, vbo = 0;
-
-public:
-	Frame();
-	~Frame();
-
-	GLuint getVao() const;
-};
-
-inline GLuint Frame::getVao() const {
-	return vao;
-}
-
-// skybox cube
-class Skybox {
-public:
-	static constexpr uint corners = 36;
-private:
-	static constexpr uint vlength = 3;
-	static constexpr float vertices[corners * vlength] = {
-		1.f, -1.f, -1.f,
-		-1.f, -1.f, -1.f,
-		-1.f, 1.f, -1.f,
-		-1.f, 1.f, -1.f,
-		1.f, 1.f, -1.f,
-		1.f, -1.f, -1.f,
-		-1.f, 1.f, -1.f,
-		-1.f, -1.f, -1.f,
-		-1.f, -1.f, 1.f,
-		-1.f, -1.f, 1.f,
-		-1.f, 1.f, 1.f,
-		-1.f, 1.f, -1.f,
-		1.f, 1.f, 1.f,
-		1.f, -1.f, 1.f,
-		1.f, -1.f, -1.f,
-		1.f, -1.f, -1.f,
-		1.f, 1.f, -1.f,
-		1.f, 1.f, 1.f,
-		1.f, 1.f, 1.f,
-		-1.f, 1.f, 1.f,
-		-1.f, -1.f, 1.f,
-		-1.f, -1.f, 1.f,
-		1.f, -1.f, 1.f,
-		1.f, 1.f, 1.f,
-		1.f, 1.f, 1.f,
-		1.f, 1.f, -1.f,
-		-1.f, 1.f, -1.f,
-		-1.f, 1.f, -1.f,
-		-1.f, 1.f, 1.f,
-		1.f, 1.f, 1.f,
-		1.f, -1.f, -1.f,
-		-1.f, -1.f, 1.f,
-		-1.f, -1.f, -1.f,
-		1.f, -1.f, 1.f,
-		-1.f, -1.f, 1.f,
-		1.f, -1.f, -1.f
-	};
-
-	GLuint vao = 0, vbo = 0;
-
-public:
-	Skybox();
-	~Skybox();
-
-	GLuint getVao() const;
-};
-
-inline GLuint Skybox::getVao() const {
-	return vao;
-}
 
 // render data group
 class FrameSet {
@@ -100,20 +14,21 @@ private:
 #endif
 
 public:
-	GLuint fboGeom = 0, texPosition = 0, texNormal = 0, rboGeom = 0;
-	GLuint fboSsao = 0, texSsao = 0;
-	GLuint fboBlur = 0, texBlur = 0;
+	GLuint fboGeom = 0, texPosition = 0, texNormal = 0, texMatl = 0, rboGeom = 0;
+	array<GLuint, 2> fboSsao{}, texSsao{};
+	array<GLuint, 2> fboSsr{}, texSsr{};
 	array<GLuint, lightBuffers> fboLight{}, texLight{};	// first is non-multisampled destination, second is multisampled source
 	GLuint rboLight = 0;
 	array<GLuint, 2> fboGauss{}, texGauss{};
 
 	FrameSet(const Settings* sets, ivec2 res);
 
+	void bindTextures();
 	void free();
 
 private:
-	static GLuint makeFramebuffer(GLuint& tex, ivec2 res, GLint iform, GLenum active, const string& name);
-	static GLuint makeTexture(ivec2 res, GLint iform, GLenum active);
+	template <GLint iform, GLenum pform, GLenum active> static pair<GLuint, GLuint> makeFramebuffer(ivec2 res, string_view name);
+	template <GLint iform, GLenum pform, GLenum active> static GLuint makeTexture(ivec2 res);
 };
 
 // additional data for rendering objects
@@ -148,11 +63,11 @@ private:
 public:
 	State state = State::stationary;
 
-	Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax);
+	Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax, ivec2 res);
 
 	void updateView() const;
-	void updateProjection();	// call updateView afterwards
-	void setFov(float vfov);
+	void updateProjection(vec2 res);	// call updateView afterwards
+	void setFov(float vfov, ivec2 res);
 	const vec3& getPos() const;
 	const vec3& getLat() const;
 	void setPos(const vec3& newPos, const vec3& newLat);
@@ -186,11 +101,11 @@ inline float Camera::calcYaw(const vec3& pos, float dist) {
 class Light {
 public:
 	GLuint fboDepth = 0, texDepth = 0;
+	vec3 pos;
 
 private:
 	static constexpr float snear = 0.1f;
 
-	vec3 pos;
 	vec3 ambient;
 	vec3 diffuse;
 	float linear;
@@ -198,10 +113,9 @@ private:
 	float farPlane;
 
 public:
-	Light(GLsizei res, const vec3& pos = vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), const vec3& color = vec3(1.f, 0.98f, 0.92f), float ambiFac = 0.8f, float range = 140.f);
+	Light(const Settings* sets, const vec3& position = vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), const vec3& color = vec3(1.f, 0.98f, 0.92f), float ambiFac = 0.8f, float range = 140.f);
 
 	void free();
-	void updateValues();
 };
 
 // saves what widget is being clicked on with what button at what position
@@ -257,7 +171,7 @@ private:
 		Interactable* inter;
 		sizet len = 0;	// composing substring length
 
-		constexpr Capture(Interactable* capture = nullptr);
+		constexpr Capture(Interactable* icap = nullptr);
 
 		constexpr operator bool() const;
 		Interactable* operator->();
@@ -265,16 +179,16 @@ private:
 
 	static constexpr float clickThreshold = 8.f;
 	static constexpr int scrollFactorWheel = 140;
-	static constexpr uint numWgtTops = 3;	// can't be more than 3 instances (one for LabelEdit caret and two for tooltip)
 
 	Interactable* select = nullptr;	// currently selected widget/object
 	Interactable* firstSelect = nullptr;
 	Capture capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
-	uptr<RootLayout> layout;
+	uptr<Camera> camera;
+	RootLayout* layout = nullptr;
 	vector<Popup*> popups;
 	vector<Overlay*> overlays;
-	uptr<Context> context;
-	uptr<TitleBar> titleBar;
+	Context* context = nullptr;
+	TitleBar* titleBar = nullptr;
 	vector<Animation> animations;
 	vector<Mesh> meshes;
 	umap<string, uint16> meshRefs;
@@ -285,27 +199,25 @@ private:
 	Light light;
 	ClickStamp cstamp;	// data about last mouse click
 	FrameSet frames;
-	Frame scrFrame;
-	Skybox skybox;
-public:
-	Camera camera;
-private:
+	GLuint wgtVao;
 	Quad wgtTops;
+	array<Quad::Instance, 3> wgtTopInsts;	// can't be more than 3 instances (one for LabelEdit caret and two for tooltip)
 
 public:
 	Scene();
 	~Scene();
 
-	void draw();
+	void draw(ivec2 mPos, GLuint finalFbo = 0);
 	void tick(float dSec);
-	void onResize();
+	void onExternalResize();
+	void onInternalResize();
 	void onMouseMove(ivec2 pos, ivec2 mov, uint32 state);
 	void onMouseDown(ivec2 pos, uint8 but);
 	void onMouseUp(ivec2 pos, uint8 but);
-	void onMouseWheel(ivec2 mov);
-	void onMouseLeave();
-	void onCompose(const char* str);
-	void onText(const char* str);
+	void onMouseWheel(ivec2 pos, ivec2 mov);
+	void onMouseLeave(ivec2 pos);
+	void onCompose(string_view str);
+	void onText(string_view str);
 	void onConfirm();
 	void onXbutConfirm();
 	void onCancel();
@@ -319,24 +231,25 @@ public:
 	uvec2 objTex(const string& name = string()) const;
 	void loadTextures(int recomTexSize);
 	void reloadTextures();
-	void reloadShader();
 	void resetShadows();
 	void resetFrames();
+	void setPieceIcons();
 	Interactable* getSelect() const;
 	Interactable* getFirstSelect() const;
 	Interactable* getCapture() const;
 	void setCapture(Interactable* inter, bool reset = true);
 	void resetLayouts();
 	void updateTooltips();
+	Camera* getCamera();
 	RootLayout* getLayout();
 	Popup* getPopup();
 	vector<Overlay*>& getOverlays();
-	void pushPopup(uptr<Popup>&& newPopup, Widget* newCapture = nullptr);
+	void pushPopup(Popup* newPopup, Widget* newCapture = nullptr);
 	void popPopup();
 	Context* getContext();
-	void setContext(uptr<Context>&& newContext);
+	void setContext(Context* newContext);
 	TitleBar* getTitleBar();
-	void setTitleBar(uptr<TitleBar>&& bar);
+	void setTitleBar(TitleBar* bar);
 	void addAnimation(Animation&& anim);
 	void delegateStamp(Interactable* inter);
 	bool cursorInClickRange(ivec2 mPos) const;
@@ -354,10 +267,15 @@ private:
 	Interactable* getScrollOrObject(ivec2 mPos, Widget* wgt) const;
 	ScrollArea* getSelectedScrollArea(Interactable* inter) const;
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
+
+	array<SDL_Surface*, pieceLim> renderPieceIcons();
+	void renderModel(GLuint fbo, const FrameSet& frms, const string& name, const Material* matl);
+	static void startDepthDraw(const Shader* shader, GLuint fbo);
+	static void drawFrame(const Shader* shader, GLuint fbo);
 };
 
-constexpr Scene::Capture::Capture(Interactable* capture) :
-	inter(capture)
+constexpr Scene::Capture::Capture(Interactable* icap) :
+	inter(icap)
 {}
 
 constexpr Scene::Capture::operator bool() const {
@@ -380,8 +298,12 @@ inline Interactable* Scene::getCapture() const {
 	return capture.inter;
 }
 
+inline Camera* Scene::getCamera() {
+	return camera.get();
+}
+
 inline RootLayout* Scene::getLayout() {
-	return layout.get();
+	return layout;
 }
 
 inline Popup* Scene::getPopup() {
@@ -393,11 +315,11 @@ inline vector<Overlay*>& Scene::getOverlays() {
 }
 
 inline Context* Scene::getContext() {
-	return context.get();
+	return context;
 }
 
 inline TitleBar* Scene::getTitleBar() {
-	return titleBar.get();
+	return titleBar;
 }
 
 inline bool Scene::cursorInClickRange(ivec2 mPos) const {
@@ -413,11 +335,11 @@ inline ScrollArea* Scene::getSelectedScrollArea(Interactable* inter) const {
 }
 
 inline vec3 Scene::pickerRay(ivec2 mPos) const {
-	return camera.direction(mPos) * Camera::zfar;
+	return camera->direction(mPos) * Camera::zfar;	// TODO: VR handling
 }
 
 inline vec3 Scene::rayXZIsct(const vec3& ray) const {
-	return camera.getPos() - ray * (camera.getPos().y / ray.y);
+	return camera->getPos() - ray * (camera->getPos().y / ray.y);	// TODO: VR handling
 }
 
 inline Mesh* Scene::mesh(const string& name) {

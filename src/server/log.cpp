@@ -48,17 +48,17 @@ vector<string> Log::listLogs() const {
 #ifdef _WIN32
 	WIN32_FIND_DATAW data;
 	if (HANDLE hFind = FindFirstFileW(sstow(dir + "*").c_str(), &data); hFind != INVALID_HANDLE_VALUE) {
-		wstring wprefix = cstow(filePrefix);
+		wstring wprefix = sstow(filePrefix);
 		do {
 			if (!(_wcsnicmp(data.cFileName, wprefix.c_str(), wprefix.length()) || (data.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))))
-				entries.push_back(cwtos(data.cFileName));
+				entries.push_back(swtos(data.cFileName));
 		} while (FindNextFileW(hFind, &data));
 		FindClose(hFind);
 	}
 #else
 	if (DIR* directory = opendir(dir.c_str())) {
 		while (dirent* entry = readdir(directory))
-			if (!strncmp(entry->d_name, filePrefix, strlen(filePrefix)) && entry->d_type == DT_REG)
+			if (!strncmp(entry->d_name, filePrefix.data(), filePrefix.length()) && entry->d_type == DT_REG)
 				entries.emplace_back(entry->d_name);
 		closedir(directory);
 	}

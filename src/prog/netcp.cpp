@@ -5,8 +5,8 @@ using namespace Com;
 
 // CONNECTOR
 
-Connector::Connector(const char* addr, const char* port, int family) :
-	inf(resolveAddress(addr, port, family))
+Connector::Connector(const string& addr, const string& port, int family) :
+	inf(resolveAddress(addr.c_str(), port.c_str(), family))
 {
 	if (!inf)
 		throw Error(msgConnectionFail);
@@ -70,7 +70,7 @@ Netcp::~Netcp() {
 }
 
 void Netcp::connect(const Settings* sets) {
-	connector = std::make_unique<Connector>(sets->address.c_str(), sets->port.c_str(), sets->getFamily());
+	connector = std::make_unique<Connector>(sets->address, sets->port, sets->getFamily());
 	tickproc = &Netcp::tickConnect;
 }
 
@@ -266,15 +266,14 @@ bool Netcp::pollSocket(pollfd& sock) {
 }
 
 void Netcp::sendVersionRequest() {
-	uint8 vlen = strlen(commonVersion);
 	const string& pname = prog->getChatName();
-	vector<uint8> data(dataHeadSize + sizeof(uint8) + vlen + sizeof(uint8) + pname.length());
+	vector<uint8> data(dataHeadSize + sizeof(uint8) + commonVersion.length() + sizeof(uint8) + pname.length());
 	data[0] = uint8(Code::version);
 	write16(data.data() + 1, data.size());
 
 	uint8* pos = data.data() + dataHeadSize;
-	*pos++ = vlen;
-	pos = std::copy_n(commonVersion, vlen, pos);
+	*pos++ = commonVersion.length();
+	pos = std::copy(commonVersion.begin(), commonVersion.end(), pos);
 	*pos++ = pname.length();
 	std::copy(pname.begin(), pname.end(), pos);
 	Com::sendData(sock.fd, data.data(), data.size(), webs);

@@ -28,7 +28,7 @@ def incCode(lines: list[str], regs: str, form: str, inc: int) -> None:
 
 def setVersion(fpath: str) -> None:
 	lines = readlin(fpath)
-	findReplace(lines, r'char\s*commonVersion\[.*\]\s*=', '".*"', '"' + sys.argv[1] + '"')
+	findReplace(lines, r'string_view\s+commonVersion\s*=', '".*"', '"' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
 def setGradle(fpath: str, inc: int) -> None:
@@ -62,6 +62,16 @@ def setResource(fpath: str) -> None:
 	findReplace(lines, '"ProductVersion"', rstr, ', "' + sys.argv[1] + '"')
 	writelin(fpath, lines)
 
+def setCmake(fpath: str) -> None:
+	lines = readlin(fpath)
+	findReplace(lines, r'VERSION\s+\s+', r'\d+\.d+\.\d+', sys.argv[1])
+	writelin(fpath, lines)
+
+def setDoxyfile(fpath: str) -> None:
+	lines = readlin(fpath)
+	findReplace(lines, r'PROJECT_NUMBER\s*=', r'=.*', '= ' + sys.argv[1])
+	writelin(fpath, lines)
+
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
 		print('usage:', os.path.basename(__file__), '<new version> <code increment = 1>')
@@ -75,5 +85,7 @@ if __name__ == '__main__':
 		setInfo('rsc/Info.plist')
 		setResource('rsc/server.rc')
 		setResource('rsc/thrones.rc')
+		setCmake('CMakeLists.txt')
+		setDoxyfile('Doxyfile')
 	except Exception as e:
 		print(e)

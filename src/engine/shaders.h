@@ -7,21 +7,24 @@ public:
 	static constexpr GLuint vpos = 0, normal = 1, uvloc = 2, tangent = 3;
 	static constexpr GLuint model0 = 4, model1 = 5, model2 = 6, model3 = 7;
 	static constexpr GLuint normat0 = 8, normat1 = 9, normat2 = 10;
-	static constexpr GLuint diffuse = 11, specShine = 12, texid = 13, show = 14;
+	static constexpr GLuint diffuse = 11, specShine = 12, reflRough = 13, texid = 14, show = 15;
 
-	static constexpr GLenum texa = GL_TEXTURE0;			// widget textures for ShderGui
+	static constexpr GLenum tmpTexa = GL_TEXTURE0;		// for temporary or intermediate textures
 	static constexpr GLenum colorTexa = GL_TEXTURE1;	// color texture of 3D objects for ShaderLight
 	static constexpr GLenum normalTexa = GL_TEXTURE2;	// normal texture of 3D objects for ShaderLight
 	static constexpr GLenum skyboxTexa = GL_TEXTURE3;	// skybox texture for ShaderSkybox
 	static constexpr GLenum vposTexa = GL_TEXTURE4;		// vertex vectors output by ShaderGeom
 	static constexpr GLenum normTexa = GL_TEXTURE5;		// normal vectors output by ShaderGeom
-	static constexpr GLenum ssaoTexa = GL_TEXTURE6;		// SSAO map output by ShaderSsao
-	static constexpr GLenum blurTexa = GL_TEXTURE7;		// SSAO blur map output by ShaderBlur
-	static constexpr GLenum sceneTexa = GL_TEXTURE8;	// scene colors output by ShaderLight
-	static constexpr GLenum gaussTexa = GL_TEXTURE9;	// blurred bright colors in scene by ShaderBrights and ShaderGauss for ShaderFinal
-	static constexpr GLenum depthTexa = GL_TEXTURE10;	// shadow map by ShaderDepth
-	static constexpr GLenum noiseTexa = GL_TEXTURE11;	// noise map for ShaderSsao
-	static constexpr GLenum stlogTexa = GL_TEXTURE12;	// startup log texture for ShaderStartup
+	static constexpr GLenum matlTexa = GL_TEXTURE6;		// material properties map output by ShaderGeom
+	static constexpr GLenum ssao0Texa = GL_TEXTURE7;	// SSAO map output by ShaderSsao
+	static constexpr GLenum ssao1Texa = GL_TEXTURE8;	// SSAO blur map output by ShaderBlur
+	static constexpr GLenum sceneTexa = GL_TEXTURE9;	// scene colors output by ShaderLight
+	static constexpr GLenum gaussTexa = GL_TEXTURE10;	// blurred bright colors in scene by ShaderBrights and ShaderGauss for ShaderFinal
+	static constexpr GLenum ssr0Texa = GL_TEXTURE11;	// reflection map output by ShaderSsr and ShaderBlur
+	static constexpr GLenum ssr1Texa = GL_TEXTURE12;	// reflection map output by ShaderSsrColor
+	static constexpr GLenum depthTexa = GL_TEXTURE13;	// shadow map by ShaderDepth
+	static constexpr GLenum noiseTexa = GL_TEXTURE14;	// noise map for ShaderSsao
+	static constexpr GLenum wgtTexa = GL_TEXTURE15;		// widget textures for ShderGui
 
 protected:
 	GLuint program;
@@ -31,9 +34,6 @@ public:
 	~Shader();
 
 	operator GLuint() const;
-
-protected:
-	static pairStr splitGlobMain(const string& src);
 
 private:
 	static GLuint loadShader(const string& source, GLenum type, const char* name);
@@ -74,7 +74,7 @@ public:
 	static constexpr char fileVert[] = "frame.vert";
 	static constexpr char fileFrag[] = "ssao.frag";
 
-	GLint proj, noiseScale, samples;
+	GLint proj, noiseScale;
 private:
 	GLuint texNoise;
 
@@ -93,9 +93,28 @@ inline ShaderSsao::~ShaderSsao() {
 class ShaderBlur : public Shader {
 public:
 	static constexpr char fileVert[] = "frame.vert";
-	static constexpr char fileFrag[] = "blur.frag";
+	static constexpr char fileFragM[] = "blurMono.frag";
+	static constexpr char fileFragC[] = "blurColor.frag";
 
-	ShaderBlur(const string& srcVert, const string& srcFrag);
+	ShaderBlur(const string& srcVert, const string& srcFrag, GLenum colorMap);
+};
+
+class ShaderSsr : public Shader {
+public:
+	static constexpr char fileVert[] = "frame.vert";
+	static constexpr char fileFrag[] = "ssr.frag";
+
+	GLint proj;
+
+	ShaderSsr(const string& srcVert, const string& srcFrag);
+};
+
+class ShaderSsrColor : public Shader {
+public:
+	static constexpr char fileVert[] = "frame.vert";
+	static constexpr char fileFrag[] = "ssrColor.frag";
+
+	ShaderSsrColor(const string& srcVert, const string& srcFrag);
 };
 
 class ShaderLight : public Shader {
@@ -103,14 +122,11 @@ public:
 	static constexpr char fileVert[] = "light.vert";
 	static constexpr char fileFrag[] = "light.frag";
 
+	GLint optShadow, optSsao;
 	GLint pview, viewPos;
-	GLint screenSize, farPlane;
-	GLint lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
+	GLint farPlane, lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
 	ShaderLight(const string& srcVert, const string& srcFrag, const Settings* sets);
-
-private:
-	static string editSource(const string& src, const Settings* sets);
 };
 
 class ShaderBrights : public Shader {
@@ -136,12 +152,10 @@ public:
 	static constexpr char fileVert[] = "frame.vert";
 	static constexpr char fileFrag[] = "final.frag";
 
+	GLint optFxaa, optSsr, optBloom;
 	GLint gamma;
 
 	ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets);
-
-private:
-	static string editSource(const string& src, const Settings* sets);
 };
 
 class ShaderSkybox : public Shader {
@@ -157,10 +171,14 @@ public:
 class ShaderGui : public Shader {
 public:
 	static constexpr char fileVert[] = "gui.vert";
+	static constexpr char fileVertVr[] = "vrGui.vert";
 	static constexpr char fileFrag[] = "gui.frag";
 
-	static constexpr GLuint rect = 1, uvrc = 2, zloc = 3;
+	static constexpr GLuint rect = 0, uvrc = 1;
 
+#ifdef OPENVR
+	GLint pviewModel;
+#endif
 	GLint pview;
 
 	ShaderGui(const string& srcVert, const string& srcFrag);
@@ -175,3 +193,36 @@ public:
 
 	ShaderStartup(const string& srcVert, const string& srcFrag);
 };
+
+#ifdef OPENVR
+class ShaderVrController : public Shader {
+public:
+	static constexpr char fileVert[] = "vrController.vert";
+	static constexpr char fileFrag[] = "vrController.frag";
+
+	GLint matrix;
+
+	ShaderVrController(const string& srcVert, const string& srcFrag);
+};
+
+class ShaderVrModel : public Shader {
+public:
+	static constexpr char fileVert[] = "vrModel.vert";
+	static constexpr char fileFrag[] = "vrModel.frag";
+
+	GLint matrix;
+	GLint diffuse;
+
+	ShaderVrModel(const string& srcVert, const string& srcFrag);
+};
+
+class ShaderVrWindow : public Shader {
+public:
+	static constexpr char fileVert[] = "vrWindow.vert";
+	static constexpr char fileFrag[] = "vrWindow.frag";
+
+	GLint mytexture;
+
+	ShaderVrWindow(const string& srcVert, const string& srcFrag);
+};
+#endif

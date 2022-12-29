@@ -91,6 +91,7 @@ class Interactable;
 class KeyGetter;
 class Label;
 class LabelEdit;
+class InstLayout;
 class Layout;
 class Mesh;
 class Navigator;

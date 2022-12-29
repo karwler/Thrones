@@ -83,7 +83,7 @@ public:
 		Label* load;
 		Label* back;
 		Label* next;
-		Layout* icons;
+		InstLayout* icons;
 	};
 
 	struct MatchIO {
@@ -153,15 +153,15 @@ public:
 	vector<Widget*> createBottomIcons(bool tiles) const;
 	array<Widget*, 2> createConfSetsButtons() const;
 	Size keyGetLineSize(Binding::Type bind) const;
-	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const;
+	KeyGetter* createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, const string& name) const;
 
 	pair<RootLayout*, Interactable*> makeMainMenu(LabelEdit*& pname, Label*& versionNotif);
 	pair<RootLayout*, Interactable*> makeLobby(TextBox*& chatBox, ScrollArea*& rooms, vector<pair<string, bool>>& roomBuff);
 	pair<RootLayout*, Interactable*> makeRoom(ConfigIO& wio, RoomIO& rio, TextBox*& chatBox, ComboBox*& configName, const umap<string, Config>& confs, const string& startConfig);
-	pair<RootLayout*, Interactable*> makeSetup(SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex);
-	pair<RootLayout*, Interactable*> makeMatch(MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex);
+	pair<RootLayout*, Interactable*> makeSetup(SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, InstLayout*& sideBar, sizet& confSetsIndex);
+	pair<RootLayout*, Interactable*> makeMatch(MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, InstLayout*& sideBar, sizet& confSetsIndex);
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-	pair<RootLayout*, Interactable*> makeRecord(Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex);
+	pair<RootLayout*, Interactable*> makeRecord(Label*& back, Label*& next, InstLayout*& sideBar, sizet& confSetsIndex);
 #endif
 	pair<RootLayout*, Interactable*> makeSettings(ScrollArea*& content, sizet& bindingsStart);
 	pair<RootLayout*, Interactable*> makeInfo(ScrollArea*& content);
@@ -175,7 +175,7 @@ private:
 	template <class T> static int txtMaxLen(T pos, T end, float hfac);
 	static int txtMaxLen(initlist<initlist<const char*>> lists, float hfac);
 	static string dispToFstr(const SDL_DisplayMode& mode);
-	template <class T> Layout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const;
+	template <class T> InstLayout* createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, const string& name) const;
 	template <bool upper = true, class T, sizet S> static string enameToFstr(T val, const array<const char*, S>& names);
 	static string versionText(const SDL_version& ver);
 	static string ibtos(int val);

@@ -419,7 +419,7 @@ void ProgRoom::updateAmtSliders(const uint16* amts, LabelEdit** wgts, uint8 cnt,
 	if (World::program()->info & Program::INF_HOST) {
 		Layout* bline = wgts[0]->getParent();
 		for (uint8 i = 0; i < cnt; ++i)
-			bline->getParent()->getWidget<Layout>(bline->getIndex() + i)->getWidget<Slider>(1)->set(amts[i], min, amts[i] + rest);
+			bline->getParent()->getWidget<InstLayout>(bline->getIndex() + i)->getWidget<Slider>(1)->set(amts[i], min, amts[i] + rest);
 	}
 }
 
@@ -778,10 +778,10 @@ void ProgMatch::updateFavorIcon(Favor type, bool on) {
 			ico->lcall = on ? &Program::eventSelectFavor : nullptr;
 			ico->setDim(on ? 1.f : GuiGen::defaultDim);
 		} else {
-			if (Layout* box = ico->getParent(); box->getWidgets().size() > 1)
+			if (InstLayout* box = static_cast<InstLayout*>(ico->getParent()); box->getWidgets().size() > 1)
 				box->deleteWidgets(ico->getIndex());
 			else
-				box->getParent()->deleteWidgets(box->getIndex());
+				static_cast<InstLayout*>(box->getParent())->deleteWidgets(box->getIndex());
 			mio.favors[uint8(type)] = nullptr;
 		}
 	}
@@ -799,13 +799,13 @@ void ProgMatch::updateVictoryPoints(uint16 own, uint16 ene) {
 }
 
 void ProgMatch::destroyEstablishIcon() {
-	mio.establish->getParent()->deleteWidgets(mio.establish->getIndex());
+	static_cast<InstLayout*>(mio.establish->getParent())->deleteWidgets(mio.establish->getIndex());
 	mio.establish = nullptr;
 }
 
 void ProgMatch::decreaseDragonIcon() {
 	if (!--unplacedDragons) {
-		mio.dragon->getParent()->getParent()->deleteWidgets(mio.dragon->getParent()->getIndex());
+		static_cast<InstLayout*>(mio.dragon->getParent()->getParent())->deleteWidgets(mio.dragon->getParent()->getIndex());
 		mio.dragon = nullptr;
 	}
 }

@@ -514,7 +514,7 @@ void GuiGen::setConfigTitle(vector<Widget*>& menu, string&& title, sizet& id) co
 
 // SETUP
 
-pair<RootLayout*, Interactable*> GuiGen::makeSetup(SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, Layout*& sideBar, sizet& confSetsIndex) {
+pair<RootLayout*, Interactable*> GuiGen::makeSetup(SetupIO& sio, Icon*& bswapIcon, Navigator*& planeSwitch, InstLayout*& sideBar, sizet& confSetsIndex) {
 	static constexpr initlist<const char*> sidt = {
 		"Exit",
 		"Save",
@@ -551,14 +551,14 @@ pair<RootLayout*, Interactable*> GuiGen::makeSetup(SetupIO& sio, Icon*& bswapIco
 	}
 
 	vector<Widget*> side = {
-		sideBar = new Layout(getSize(SizeRef::setupSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing)),
+		sideBar = new InstLayout(getSize(SizeRef::setupSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing)),
 		planeSwitch = new Navigator()
 	};
 
 	// root layout
 	vector<Widget*> cont = {
 		new Layout(1.f, std::move(side), false),
-		sio.icons = new Layout(getSize(SizeRef::iconSize), {}, false, getSize(SizeRef::lineSpacing)),
+		sio.icons = new InstLayout(getSize(SizeRef::iconSize), {}, false, getSize(SizeRef::lineSpacing)),
 		new Widget(getSize(SizeRef::superSpacing))
 	};
 	return pair(new RootLayout(1.f, std::move(cont), true, 0, lineSpacing), selected);
@@ -684,7 +684,7 @@ void GuiGen::openPopupPiecePicker(uint16 piecePicksLeft) const {
 
 // MATCH
 
-pair<RootLayout*, Interactable*> GuiGen::makeMatch(MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, Layout*& sideBar, sizet& confSetsIndex) {
+pair<RootLayout*, Interactable*> GuiGen::makeMatch(MatchIO& mio, Icon*& bswapIcon, Navigator*& planeSwitch, uint16& unplacedDragons, InstLayout*& sideBar, sizet& confSetsIndex) {
 	static constexpr initlist<const char*> sidt = {
 		"Exit",
 		"Surrender",
@@ -734,7 +734,7 @@ pair<RootLayout*, Interactable*> GuiGen::makeMatch(MatchIO& mio, Icon*& bswapIco
 			mio.favors[i] = new Icon(getSize(SizeRef::iconSize), string(), nullptr, nullptr, nullptr, firstUpper(favorNames[i]), 1.f, Label::Alignment::center, true, World::scene()->wgtTex(favorNames[i]), vec4(1.f));
 		left.push_back(new Widget(0));
 		for (sizet i = 0; i < mio.favors.size(); i += 2)
-			left.push_back(new Layout(getSize(SizeRef::iconSize), { new Widget(0), mio.favors[i], mio.favors[i + 1] }, false, getSize(SizeRef::lineSpacing)));
+			left.push_back(new InstLayout(getSize(SizeRef::iconSize), { new Widget(0), mio.favors[i], mio.favors[i + 1] }, false, getSize(SizeRef::lineSpacing)));
 	} else
 		std::fill(mio.favors.begin(), mio.favors.end(), nullptr);
 
@@ -744,13 +744,13 @@ pair<RootLayout*, Interactable*> GuiGen::makeMatch(MatchIO& mio, Icon*& bswapIco
 			++unplacedDragons;
 	if (unplacedDragons) {
 		mio.dragon = new Icon(getSize(SizeRef::iconSize), string(), nullptr, nullptr, nullptr, "Place "s + pieceNames[uint8(PieceType::dragon)], 1.f, Label::Alignment::left, true, World::scene()->wgtTex(pieceNames[uint8(PieceType::dragon)]), vec4(1.f));
-		left.push_back(new Layout(getSize(SizeRef::iconSize), { mio.dragon }, false, 0));
+		left.push_back(new InstLayout(getSize(SizeRef::iconSize), { mio.dragon }, false, 0));
 	} else
 		mio.dragon = nullptr;
 
 	// root layout
 	vector<Widget*> cont = {
-		sideBar = new Layout(getSize(SizeRef::matchSideWidth), std::move(left), true, getSize(SizeRef::lineSpacing)),
+		sideBar = new InstLayout(getSize(SizeRef::matchSideWidth), std::move(left), true, getSize(SizeRef::lineSpacing)),
 		nullptr
 	};
 	if (World::game()->board->config.opts & Config::victoryPoints) {
@@ -797,7 +797,7 @@ void GuiGen::openPopupRecords() const {
 	World::scene()->pushPopup(new Popup(pair(0.6f, 0.8f), std::move(con), nullptr, &Program::eventCloseScrollingPopup, true, getSize(SizeRef::lineSpacing), 0.f, nullptr, Popup::Type::config));
 }
 
-pair<RootLayout*, Interactable*> GuiGen::makeRecord(Label*& back, Label*& next, Layout*& sideBar, sizet& confSetsIndex) {
+pair<RootLayout*, Interactable*> GuiGen::makeRecord(Label*& back, Label*& next, InstLayout*& sideBar, sizet& confSetsIndex) {
 	static constexpr initlist<const char*> sidt = {
 		"Exit",
 		"Back",
@@ -825,7 +825,7 @@ pair<RootLayout*, Interactable*> GuiGen::makeRecord(Label*& back, Label*& next, 
 
 	// root layout
 	vector<Widget*> cont = {
-		sideBar = new Layout(getSize(SizeRef::recordSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing))
+		sideBar = new InstLayout(getSize(SizeRef::recordSideWidth), std::move(wgts), true, getSize(SizeRef::lineSpacing))
 	};
 	return pair(new RootLayout(1.f, std::move(cont), false, 0, lineSpacing), selected);
 }
@@ -1082,9 +1082,9 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		Label* lbl = new Label(getSize(SizeRef::lineHeight), std::move(bnames[i]));
 		vector<Widget*> line = {
 			new Layout(getSize(SizeRef::settingsDescWidth), { lbl, new Widget() }),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).keys, Binding::Accept::keyboard, lbl),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).joys, Binding::Accept::joystick, lbl),
-			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).gpds, Binding::Accept::gamepad, lbl),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).keys, Binding::Accept::keyboard, lbl->getText()),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).joys, Binding::Accept::joystick, lbl->getText()),
+			createKeyGetterList(Binding::Type(i), World::input()->getBinding(Binding::Type(i)).gpds, Binding::Accept::gamepad, lbl->getText()),
 			new Layout(getSize(SizeRef::settingsAddWidth), { new Label(getSize(SizeRef::lineHeight), "+", &Program::eventAddKeyBinding, nullptr, "Add a " + lbl->getText() + " binding", 1.f, Label::Alignment::center) })
 		};
 		lns[bindingsStart + i] = new Layout(keyGetLineSize(Binding::Type(i)), std::move(line), false, getSize(SizeRef::lineSpacing));
@@ -1093,15 +1093,15 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 }
 
 template <class T>
-Layout* GuiGen::createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, Label* lbl) const {
+InstLayout* GuiGen::createKeyGetterList(Binding::Type bind, const vector<T>& refs, Binding::Accept type, const string& name) const {
 	vector<Widget*> lst(refs.size());
 	for (sizet i = 0; i < refs.size(); ++i)
-		lst[i] = createKeyGetter(type, bind, i, lbl);
-	return new Layout(1.f, std::move(lst), true, getSize(SizeRef::lineSpacing));
+		lst[i] = createKeyGetter(type, bind, i, name);
+	return new InstLayout(1.f, std::move(lst), true, getSize(SizeRef::lineSpacing));
 }
 
-KeyGetter* GuiGen::createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, Label* lbl) const {
-	return new KeyGetter(getSize(SizeRef::lineHeight), accept, bind, kid, &Program::eventSaveSettings, &Program::eventDelKeyBinding, lbl->getText() + ' ' + Binding::acceptNames[uint8(accept)] + " binding");
+KeyGetter* GuiGen::createKeyGetter(Binding::Accept accept, Binding::Type bind, sizet kid, const string& name) const {
+	return new KeyGetter(getSize(SizeRef::lineHeight), accept, bind, kid, &Program::eventSaveSettings, &Program::eventDelKeyBinding, name + ' ' + Binding::acceptNames[uint8(accept)] + " binding");
 }
 
 SDL_DisplayMode GuiGen::fstrToDisp(const string& str) {

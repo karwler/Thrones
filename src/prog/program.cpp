@@ -248,7 +248,7 @@ void Program::tick(float dSec) {
 		if (ftimeSleep -= dSec; ftimeSleep <= 0.f) {
 			ftimeSleep = ftimeUpdateDelay;
 			state->getFpsText()->setText(gui.makeFpsText(dSec));
-			state->getFpsText()->getParent()->onResize(nullptr);
+			state->getFpsText()->findFirstInstLayout()->onResize(nullptr);
 		}
 }
 
@@ -467,7 +467,7 @@ void Program::eventOpenPopupRecords(Button*) {
 
 void Program::eventDelRecord(Button* but) {
 	if (const string& file = static_cast<Label*>(but)->getText(); !remove(file.c_str()))
-		but->getParent()->deleteWidgets(but->getIndex());
+		static_cast<InstLayout*>(but->getParent())->deleteWidgets(but->getIndex());
 	else
 		gui.openPopupMessage("Failed to delete file", &Program::eventClosePopup);
 }
@@ -1003,7 +1003,7 @@ void Program::eventSetupDelete(Button* but) {
 	ProgSetup* ps = static_cast<ProgSetup*>(state);
 	ps->setups.erase(static_cast<Label*>(but)->getText());
 	FileSys::saveSetups(ps->setups);
-	but->getParent()->deleteWidgets(but->getIndex());
+	static_cast<InstLayout*>(but->getParent())->deleteWidgets(but->getIndex());
 }
 
 void Program::eventShowConfig(Button*) {
@@ -1686,9 +1686,9 @@ void Program::eventAddKeyBinding(Button* but) {
 
 void Program::eventSetNewBinding(Button* but) {
 	KeyGetter* kg = static_cast<KeyGetter*>(but);
-	Layout* lin = state->mainScrollContent->getWidget<Layout>(state->keyBindingsStart + sizet(kg->bind));
-	Widget* newKg = gui.createKeyGetter(kg->accept, kg->bind, kg->kid, lin->getWidget<Layout>(0)->getWidget<Label>(0));
-	lin->getWidget<Layout>(uint8(kg->accept) + 1)->insertWidgets(kg->kid, &newKg);
+	InstLayout* lin = state->mainScrollContent->getWidget<InstLayout>(state->keyBindingsStart + sizet(kg->bind));
+	Widget* newKg = gui.createKeyGetter(kg->accept, kg->bind, kg->kid, lin->getWidget<InstLayout>(0)->getWidget<Label>(0)->getText());
+	lin->getWidget<InstLayout>(uint8(kg->accept) + 1)->insertWidgets(kg->kid, &newKg);
 	lin->setSize(gui.keyGetLineSize(kg->bind));
 	eventClosePopup();
 	eventSaveSettings();
@@ -1706,7 +1706,7 @@ void Program::eventDelKeyBinding(Button* but) {
 	case Binding::Accept::gamepad:
 		World::input()->delBindingG(kg->bind, kg->kid);
 	}
-	but->getParent()->deleteWidgets(but->getIndex());
+	static_cast<InstLayout*>(but->getParent())->deleteWidgets(but->getIndex());
 	but->getParent()->getParent()->setSize(gui.keyGetLineSize(kg->bind));
 	eventSaveSettings();
 }
@@ -1832,7 +1832,7 @@ void Program::disconnect() {
 }
 
 void Program::eventCycleFrameCounter() {
-	Overlay* box = static_cast<Overlay*>(state->getFpsText()->getParent());
+	Overlay* box = static_cast<Overlay*>(state->getFpsText()->findFirstInstLayout());
 	if (ftimeMode = ftimeMode < FrameTime::seconds ? ftimeMode + 1 : FrameTime::none; ftimeMode == FrameTime::none)
 		box->setShow(false);
 	else {

@@ -218,7 +218,7 @@ ivec2 Widget::size() const {
 
 void Widget::setSize(const Size& size) {
 	relSize = size;
-	parent->onResize(nullptr);
+	findFirstInstLayout()->onResize(nullptr);
 }
 
 Rect Widget::frame() const {
@@ -232,6 +232,12 @@ bool Widget::selectable() const {
 void Widget::setParent(Layout* pnt, uint id) {
 	parent = pnt;
 	index = id;
+}
+
+InstLayout* Widget::findFirstInstLayout() {
+	for (Layout* box = parent;; box = box->parent)
+		if (InstLayout* pnt = dynamic_cast<InstLayout*>(box))
+			return pnt;
 }
 
 int Widget::sizeToPixRel(const Size& siz) const {
@@ -282,12 +288,12 @@ bool Widget::sizeValid() const {
 
 Button::Button(const Size& size, BCall leftCall, BCall rightCall, string&& tooltip, float dim, const TexLoc& tex, const vec4& clr) :
 	Widget(size),
+	dimFactor(dim),
 	lcall(leftCall),
 	rcall(rightCall),
 	tipStr(std::move(tooltip)),
 	bgTex(tex),
-	color(clr),
-	dimFactor(dim)
+	color(clr)
 {
 	if (World::sets()->tooltips) {
 		auto [theight, tlimit] = tipParams();
@@ -317,7 +323,7 @@ void Button::updateInstances() {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		vector<Quad::Instance> instanceData(numInstances());
 		setInstances(instanceData.data());
-		parent->updateInstances(instanceData.data(), iid, instanceData.size());
+		findFirstInstLayout()->updateInstances(instanceData.data(), iid, instanceData.size());
 	}
 }
 
@@ -443,7 +449,7 @@ void CheckBox::setOn(bool checked) {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		Quad::Instance ins;
 		Quad::setInstance(&ins, boxRect(), frame(), dimColor(boxColor()));
-		parent->updateInstances(&ins, iid + 1, 1);
+		findFirstInstLayout()->updateInstances(&ins, iid + 1, 1);
 	}
 }
 
@@ -572,7 +578,7 @@ void Slider::setVal(int val) {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		Quad::Instance ins;
 		Quad::setInstance(&ins, sliderRect(), frame(), dimColor(colorLight));
-		parent->updateInstances(&ins, iid + 2, 1);
+		findFirstInstLayout()->updateInstances(&ins, iid + 2, 1);
 	}
 }
 
@@ -661,7 +667,7 @@ void Label::updateTextInstance() {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		Quad::Instance ins;
 		setTextInstance(&ins);
-		parent->updateInstances(&ins, iid + showBG, 1);
+		findFirstInstLayout()->updateInstances(&ins, iid + showBG, 1);
 	}
 }
 
@@ -773,7 +779,7 @@ void TextBox::updateScrollBarInstances() {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		array<Quad::Instance, 2> ins;
 		setScrollBarInstances(ins.data());
-		parent->updateInstances(ins.data(), iid + showBG + 1, ins.size());
+		findFirstInstLayout()->updateInstances(ins.data(), iid + showBG + 1, ins.size());
 	}
 }
 
@@ -891,11 +897,10 @@ Icon::Icon(const Size& size, string line, BCall leftCall, BCall rightCall, BCall
 
 void Icon::setInstances(Quad::Instance* ins) {
 	Label::setInstances(ins);
-	setSelectionInstances(ins);
+	setSelectionInstances(ins + showBG + 1);
 }
 
 void Icon::setSelectionInstances(Quad::Instance* ins) {
-	ins += showBG + 1;
 	if (selected) {
 		Rect rbg = rect();
 		Rect frm = frame();
@@ -928,7 +933,7 @@ void Icon::setSelected(bool on) {
 	if (uint iid = parent->wgtInstanceId(index); iid != UINT_MAX) {
 		array<Quad::Instance, 4> ins;
 		setSelectionInstances(ins.data());
-		parent->updateInstances(ins.data(), + showBG + 1, ins.size());
+		findFirstInstLayout()->updateInstances(ins.data(), iid + showBG + 1, ins.size());
 	}
 }
 

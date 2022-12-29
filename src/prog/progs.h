@@ -184,7 +184,7 @@ public:
 	Icon* bswapIcon = nullptr;
 	string configName;
 protected:
-	Layout* sideBar;
+	InstLayout* sideBar;
 	sizet confSetsIndex;
 
 public:

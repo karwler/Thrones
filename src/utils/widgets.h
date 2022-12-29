@@ -118,6 +118,7 @@ public:
 	virtual Rect frame() const;	// the rectangle to restrain a widget's visibility (in Widget it returns the parent's frame and if in Layout, it returns a frame for it's children)
 	virtual bool selectable() const;
 	virtual void updateTipTex() {}
+	virtual InstLayout* findFirstInstLayout();
 
 	void setParent(Layout* pnt, uint id);
 	Layout* getParent() const;
@@ -157,6 +158,8 @@ inline ivec2 Widget::center() const {
 
 // clickable widget with function calls for left and right click (it's rect is drawn so you can use it like a spacer with color)
 class Button : public Widget {
+private:
+	float dimFactor;
 public:
 	BCall lcall, rcall;
 protected:
@@ -165,7 +168,6 @@ protected:
 	TexLoc tipTex;
 private:
 	const vec4 color;
-	float dimFactor;
 
 	static constexpr vec4 selectFactor = vec4(1.2f, 1.2f, 1.2f, 1.f);
 	static constexpr ivec2 tooltipMargin = ivec2(4, 1);
@@ -298,7 +300,7 @@ public:
 	enum class Alignment : uint8 {
 		left,
 		center,
-		right,
+		right
 	};
 
 	static constexpr int textMarginFactor = 6;

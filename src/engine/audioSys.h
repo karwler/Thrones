@@ -19,4 +19,9 @@ public:
 
 private:
 	static void SDLCALL callback(void* udata, uint8* stream, int len);
+	static string formatToStr(SDL_AudioFormat fmt);
 };
+
+inline string AudioSys::formatToStr(SDL_AudioFormat fmt) {
+	return (SDL_AUDIO_ISSIGNED(fmt) ? 'S' : 'U') + (SDL_AUDIO_ISFLOAT(fmt) ? "FLOAT" : "INT") + toStr(SDL_AUDIO_BITSIZE(fmt)) + (SDL_AUDIO_ISBIGENDIAN(fmt) ? "BE" : "LE");
+}

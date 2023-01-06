@@ -165,6 +165,7 @@ private:
 	ivec2 screenView, guiView, windowView;
 	int titleBarHeight;
 	uint maxMsamples;
+	float maxAnisotropy;
 	uint cursorHeight;
 	uint32 oldTime;
 	float dSec;			// delta seconds, aka the time between each iteration of the above mentioned loop
@@ -189,6 +190,7 @@ public:
 	void setScreen();
 	void setSwapInterval();
 	void setMultisampling();
+	void setSamplers();
 	void setGamma(float gamma);
 	void setShaderOptions();
 	void resetSettings();
@@ -201,8 +203,6 @@ public:
 	Settings* getSets();
 #ifdef OPENVR
 	VrSys* getVr();
-#else
-	constexpr VrSys* getVr() const;
 #endif
 	const ShaderGeom* getGeom() const;
 	const ShaderDepth* getDepth() const;
@@ -220,6 +220,7 @@ public:
 	SDL_Window* getWindow();
 	float getDeltaSec() const;
 	Settings::AntiAliasing maxAntiAliasing() const;
+	Settings::Anisotropy maxAnisotropicFiltering() const;
 
 private:
 	void init(const Arguments& args);
@@ -232,12 +233,11 @@ private:
 	ShaderStartup* createWindow();
 	void destroyWindow();
 	uint32 getWindowFlags() const;
-	template <GLint min, GLint mag, GLint wrap, int lod = 1000> static void setSampler(GLuint sampler);
+	template <GLint min, GLint mag, GLint wrap, int lod = 1000> static void setSampler(GLuint sampler, float anisotropy = 1.f);
 	void handleEvent(const SDL_Event& event);
 	void eventWindow(const SDL_WindowEvent& winEvent);
 	static SDL_HitTestResult SDLCALL eventWindowHit(SDL_Window* win, const SDL_Point* area, void* data);
 	static SDL_HitTestResult SDLCALL eventWindowHitStartup(SDL_Window* win, const SDL_Point* area, void* data);
-	bool trySetSwapInterval();
 	void updateView();
 	void setTitleBarHeight();	// must be followed by updateView() to update the viewport
 	void setTitleBarHitTest();
@@ -303,11 +303,8 @@ inline Settings* WindowSys::getSets() {
 #ifdef OPENVR
 inline VrSys* WindowSys::getVr() {
 	return vrSys;
-#else
-constexpr VrSys* WindowSys::getVr() const {
-	return nullptr;
-#endif
 }
+#endif
 
 inline const ShaderGeom* WindowSys::getGeom() const {
 	return geom;

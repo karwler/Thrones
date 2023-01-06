@@ -77,10 +77,8 @@ struct Rect : SDL_Rect {
 	ivec2& size();
 	constexpr ivec2 size() const;
 	constexpr ivec2 end() const;
-	int* data();
-	const int* data() const;
 
-	bool contain(ivec2 point) const;
+	bool contains(ivec2 point) const;
 	Rect intersect(const Rect& rect) const;	// same as above except it returns the overlap instead of the crop and it doesn't modify the rect
 };
 
@@ -124,15 +122,7 @@ constexpr ivec2 Rect::end() const {
 	return pos() + size();
 }
 
-inline int* Rect::data() {
-	return reinterpret_cast<int*>(this);
-}
-
-inline const int* Rect::data() const {
-	return reinterpret_cast<const int*>(this);
-}
-
-inline bool Rect::contain(ivec2 point) const {
+inline bool Rect::contains(ivec2 point) const {
 	return SDL_PointInRect(reinterpret_cast<const SDL_Point*>(&point), this);
 }
 
@@ -252,6 +242,10 @@ public:
 	};
 
 private:
+	struct Less {
+		bool operator()(const Rect& a, const Rect& b) const;
+	};
+
 	struct Find {
 		uint page, index;
 		Rect rect;
@@ -264,7 +258,7 @@ private:
 
 	GLuint tex = 0;
 #ifdef OPENGLES
-	GLuint fbo;
+	GLuint fbo = 0;
 #endif
 	int res;
 	uint pageReserve;
@@ -294,6 +288,10 @@ private:
 	void assertIntegrity();	// TODO: remove
 	static void assertIntegrity(const vector<Rect>& page, const Rect& nrect);	// TODO: remove
 };
+
+inline bool TextureCol::Less::operator()(const Rect& a, const Rect& b) const {
+	return a.y < b.y || (a.y == b.y && a.x < b.x);
+}
 
 inline int TextureCol::getRes() const {
 	return res;

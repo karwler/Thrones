@@ -49,6 +49,7 @@ private:
 	static constexpr char iniKeywordMode[] = "mode";
 	static constexpr char iniKeywordVsync[] = "vsync";
 	static constexpr char iniKeywordMsamples[] = "samples";
+	static constexpr char iniKeywordAnisotropy[] = "anisotropy";
 	static constexpr char iniKeywordTexScale[] = "textures";
 	static constexpr char iniKeywordShadows[] = "shadows";
 	static constexpr char iniKeywordSsao[] = "ssao";

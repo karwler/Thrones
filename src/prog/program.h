@@ -221,8 +221,8 @@ public:
 	void eventSetScreen(uint id, const string& str);
 	void eventSetWindowSize(uint id, const string& str);
 	void eventSetWindowMode(uint id, const string& str);
-	void eventSetVsync(uint id, const string& str);
 	void eventSetSamples(uint id, const string& str);
+	void eventSetAnisotropy(uint id, const string& str);
 	void eventSetTexturesScaleSL(Button* but);
 	void eventSetTextureScaleLE(Button* but);
 	void eventUpdateShadowResSL(Button* but);
@@ -232,6 +232,7 @@ public:
 	void eventSetSsao(Button* but);
 	void eventSetBloom(Button* but);
 	void eventSetSsr(Button* but);
+	void eventSetVsync(Button* but);
 	void eventSetGammaSL(Button* but);
 	void eventSetGammaLE(Button* but);
 	void eventSetFovSL(Button* but);

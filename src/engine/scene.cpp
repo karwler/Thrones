@@ -141,6 +141,7 @@ void FrameSet::free() {
 
 // CAMERA
 
+#ifndef OPENVR
 Camera::Camera(const vec3& position, const vec3& lookAt, float vfov, float pitchMax, float yawMax, ivec2 res) :
 	pmax(pitchMax),
 	ymax(yawMax),
@@ -241,6 +242,7 @@ ivec2 Camera::screenPos(const vec3& pnt) const {
 	vec4 clip = proj * glm::lookAt(pos, lat, up) * vec4(pnt, 1.f);
 	return vec2((clip.x / clip.w + 1.f) * res.x, (1.f - clip.y / clip.w) * res.y);
 }
+#endif
 
 // LIGHT
 
@@ -256,13 +258,13 @@ Light::Light(const Settings* sets, const vec3& position, const vec3& color, floa
 		glGenFramebuffers(1, &fboDepth);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboDepth);
 
-		glActiveTexture(ShaderLight::depthTexa);
+		glActiveTexture(ShaderLight::shadowTexa);
 		glGenTextures(1, &texDepth);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, texDepth);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
 		for (uint i = 0; i < 6; ++i)
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, sets->shadowRes, sets->shadowRes, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X, texDepth, 0);	// bind one to make the check happy
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X, texDepth, 0);
 #ifdef OPENGLES
 		GLenum none = GL_NONE;
 		glDrawBuffers(1, &none);
@@ -366,7 +368,7 @@ void Animation::append(Animation& ani) {
 // SCENE
 
 Scene::Scene() :
-	camera(!World::vr() ? std::make_unique<Camera>(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup, World::window()->getScreenView()) : nullptr),
+	camera(std::make_unique<Camera>(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup, World::window()->getScreenView())),
 	light(World::sets()),
 	frames(World::sets(), World::window()->getScreenView())
 {
@@ -534,12 +536,12 @@ void Scene::tick(float dSec) {
 
 void Scene::onExternalResize() {
 	resetFrames();
-	if (World::vr()) {
-		// TODO: update program uniforms
-	} else {
-		camera->updateProjection(World::window()->getScreenView());
-		camera->updateView();
-	}
+#ifdef OPENVR
+	// TODO: update program uniforms
+#else
+	camera->updateProjection(World::window()->getScreenView());
+	camera->updateView();
+#endif
 	onInternalResize();
 }
 
@@ -834,19 +836,19 @@ void Scene::deselect() {
 Interactable* Scene::getSelected(ivec2 mPos) {
 	if (outRange(mPos, ivec2(0), World::window()->getScreenView()))
 		return titleBar ? getTitleBarSelected(ivec2(mPos.x, mPos.y + World::window()->getTitleBarHeight())) : nullptr;
-	if (context && context->rect().contain(mPos))
+	if (context && context->rect().contains(mPos))
 		return context;
 
 	Layout* box = layout;
 	if (!popups.empty())
 		box = popups.back();
 	else for (vector<Overlay*>::reverse_iterator it = overlays.rbegin(); it != overlays.rend(); ++it)
-		if ((*it)->canInteract() && (*it)->rect().contain(mPos))
+		if ((*it)->canInteract() && (*it)->rect().contains(mPos))
 			box = *it;
 
 	for (;;) {
 		Rect frame = box->rect();
-		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(mPos); }); it != box->getWidgets().end()) {
+		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &mPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contains(mPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
@@ -875,7 +877,7 @@ ScrollArea* Scene::findFirstScrollArea(Widget* wgt) {
 Interactable* Scene::getTitleBarSelected(ivec2 tmPos) {
 	for (Layout* box = titleBar;;) {
 		Rect frame = box->rect();
-		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &tmPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contain(tmPos); }); it != box->getWidgets().end()) {
+		if (vector<Widget*>::const_iterator it = std::find_if(box->getWidgets().begin(), box->getWidgets().end(), [&frame, &tmPos](const Widget* wi) -> bool { return wi->rect().intersect(frame).contains(tmPos); }); it != box->getWidgets().end()) {
 			if (Layout* lay = dynamic_cast<Layout*>(*it))
 				box = lay;
 			else
@@ -886,7 +888,11 @@ Interactable* Scene::getTitleBarSelected(ivec2 tmPos) {
 }
 
 array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
-	GLsizei res = GLsizei(float(World::vr() ? World::window()->getGuiView().y : World::sets()->windowSizes().back().y) * GuiGen::iconSize);
+#ifdef OPENVR
+	GLsizei res = GLsizei(float(World::window()->getGuiView().y) * GuiGen::iconSize);
+#else
+	GLsizei res = GLsizei(float(World::sets()->windowSizes().back().y) * GuiGen::iconSize);
+#endif
 	const Material* matl = material(Settings::colorNames[uint8(World::sets()->colorAlly)]);
 	Settings::AntiAliasing oldAa = World::sets()->antiAliasing;
 	uint16 oldShadowRes = World::sets()->shadowRes;

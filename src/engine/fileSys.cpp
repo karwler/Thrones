@@ -202,6 +202,8 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 #endif
 	if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordMsamples))
 		sets.antiAliasing = strToEnum(Settings::antiAliasingNames, il.val, Settings::AntiAliasing::none);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordAnisotropy))
+		sets.anisotropy = strToEnum(Settings::anisotropyNames, il.val, Settings::Anisotropy::none);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordShadows))
 		readShadows(il.val.c_str(), sets);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSsao))
@@ -210,10 +212,10 @@ void FileSys::readSetting(void* settings, IniLine& il) {
 		sets.bloom = toBool(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordSsr))
 		sets.ssr = toBool(il.val);
+	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVsync))
+		sets.vsync = toBool(il.val);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordTexScale))
 		sets.texScale = std::clamp(toNum<uint8>(il.val), 1_ub, 100_ub);
-	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordVsync))
-		sets.vsync = strToEnum(Settings::vsyncNames, il.val, Settings::defaultVSync + 1) - 1;
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordGamma))
 		sets.gamma = std::clamp(toNum<float>(il.val), 0.f, Settings::gammaMax);
 	else if (!SDL_strcasecmp(il.prp.c_str(), iniKeywordFov))
@@ -347,12 +349,13 @@ void FileSys::saveSettings(const Settings& sets, const InputSys* input) {
 	IniLine::write(ofh, iniKeywordVersionLookup, strEnclose(sets.versionLookupUrl) + ' ' + strEnclose(sets.versionLookupRegex));
 #endif
 	IniLine::write(ofh, iniKeywordMsamples, Settings::antiAliasingNames[uint8(sets.antiAliasing)]);
+	IniLine::write(ofh, iniKeywordAnisotropy, Settings::anisotropyNames[uint8(sets.anisotropy)]);
 	IniLine::write(ofh, iniKeywordShadows, toStr(sets.shadowRes) + ' ' + toStr(sets.softShadows));
 	IniLine::write(ofh, iniKeywordSsao, toStr(sets.ssao));
 	IniLine::write(ofh, iniKeywordBloom, toStr(sets.bloom));
 	IniLine::write(ofh, iniKeywordSsr, toStr(sets.ssr));
+	IniLine::write(ofh, iniKeywordVsync, toStr(sets.vsync));
 	IniLine::write(ofh, iniKeywordTexScale, toStr(sets.texScale));
-	IniLine::write(ofh, iniKeywordVsync, Settings::vsyncNames[uint8(sets.vsync + 1)]);
 	IniLine::write(ofh, iniKeywordGamma, toStr(sets.gamma));
 	IniLine::write(ofh, iniKeywordFov, toStr(sets.fov));
 	IniLine::write(ofh, iniKeywordAVolume, toStr(sets.avolume));
@@ -424,7 +427,7 @@ umap<string, Config> FileSys::loadConfigs() {
 			if (cit)
 				readConfigPrpKeyVal(il, *cit);
 		}
-	return !confs.empty() ? confs : umap<string, Config>{ pair(Config::defaultName, Config()) };
+	return !confs.empty() ? confs : umap<string, Config>{ pair(Settings::defaultConfigName, Config()) };
 }
 
 void FileSys::readConfigPrpVal(const IniLine& il, Config& cfg) {

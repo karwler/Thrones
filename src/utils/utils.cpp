@@ -206,7 +206,7 @@ void TextureCol::replace(TexLoc& loc, const SDL_Surface* img, ivec2 size, ivec2 
 		glActiveTexture(Shader::wgtTexa);
 		uploadSubTex(img, offset, loc.rct, loc.tid);
 	} else {
-		if (rit != page.end())
+		if (rit != page.end() && rit->pos() == loc.rct.pos())
 			page.erase(rit);
 		loc = insert(img, size, offset);
 	}
@@ -230,8 +230,8 @@ void TextureCol::uploadSubTex(const SDL_Surface* img, ivec2 offset, const Rect& 
 
 pair<vector<Rect>::iterator, bool> TextureCol::findReplaceable(const TexLoc& loc, ivec2& size) {
 	vector<Rect>& page = pages[loc.tid];
-	vector<Rect>::iterator rit = std::find_if(page.begin(), page.end(), [loc](const Rect& it) -> bool { return it.pos() == loc.rct.pos(); });
-	if (size = glm::min(size, res); rit != page.end() && size.y == rit->h)
+	vector<Rect>::iterator rit = std::lower_bound(page.begin(), page.end(), loc.rct, Less());
+	if (size = glm::min(size, res); rit != page.end() && rit->pos() == loc.rct.pos() && size.y == rit->h)
 		if (vector<Rect>::iterator next = rit + 1; loc.rct.x + size.x <= (next != page.end() && next->y == rit->y ? next->x : res))
 			return pair(rit, true);
 	return pair(rit, false);
@@ -240,7 +240,7 @@ pair<vector<Rect>::iterator, bool> TextureCol::findReplaceable(const TexLoc& loc
 void TextureCol::erase(TexLoc& loc) {
 	if (!loc.blank()) {
 		vector<Rect>& page = pages[loc.tid];
-		if (vector<Rect>::iterator rit = std::find_if(page.begin(), page.end(), [loc](const Rect& it) -> bool { return it.pos() == loc.rct.pos(); }); rit != page.end()) {
+		if (vector<Rect>::iterator rit = std::lower_bound(page.begin(), page.end(), loc.rct, Less()); rit != page.end() && rit->pos() == loc.rct.pos()) {
 			if (page.erase(rit); loc.tid == pages.size() - 1 && page.empty()) {
 				pages.pop_back();
 				glActiveTexture(Shader::wgtTexa);

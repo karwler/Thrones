@@ -466,53 +466,6 @@ void Binding::reset(Binding::Type type) {
 
 // SETTINGS
 
-Settings::Settings() :
-	address(defaultAddress),
-	port(Com::defaultPort),
-	lastConfig(Config::defaultName),
-	versionLookupUrl(defaultVersionLocation),
-	versionLookupRegex(defaultVersionRegex),
-	font(defaultFont),
-	fov(35.0),
-	mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr },
-	size(1280, 720),
-	gamma(1.f),
-#ifdef OPENGLES
-	shadowRes(0),
-#else
-	shadowRes(1024),
-#endif
-	chatLines(511),
-	deadzone(12000),
-	display(0),
-	screen(defaultScreen),
-	vsync(defaultVSync),
-	texScale(100),
-#ifdef OPENGLES
-	antiAliasing(AntiAliasing::none),
-	softShadows(false),
-	ssao(false),
-	bloom(false),
-	ssr(false),
-#else
-	antiAliasing(AntiAliasing::msaa4),
-	softShadows(true),
-	ssao(true),
-	bloom(true),
-	ssr(true),
-#endif
-	hinting(defaultHinting),
-	avolume(0),
-	colorAlly(defaultAlly),
-	colorEnemy(defaultEnemy),
-	scaleTiles(true),
-	scalePieces(false),
-	autoVictoryPoints(true),
-	tooltips(true),
-	resolveFamily(defaultFamily),
-	invertWheel(false)
-{}
-
 bool Settings::trySetDisplay(int dip) {
 	if (dip >= 0 && display != dip) {
 		display = dip;

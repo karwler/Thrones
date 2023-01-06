@@ -157,7 +157,7 @@ string toStr(T num) {
 template <uint8 base = 10, class T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int> = 0>
 string toStr(T num, uint8 pad) {
 	array<char, sizeof(T) * 8 + std::is_signed_v<T>> buf;
-	std::to_chars_result res = std::to_chars(buf.data(), buf.data() + buf.size(), num);
+	std::to_chars_result res = std::to_chars(buf.data(), buf.data() + buf.size(), num, base);
 	if constexpr (base > 10)
 		std::transform(buf.data(), res.ptr, buf.data(), toupper);
 
@@ -197,7 +197,7 @@ string toStr(T num) {
 #endif
 
 template <glm::length_t L, class T, glm::qualifier Q, std::enable_if_t<(std::is_integral_v<T> && !std::is_same_v<T, bool>) || std::is_floating_point_v<T>, int> = 0>
-string toStr(const glm::vec<L, T, Q>& v, string_view sep = " ") {
+string toStr(const glm::vec<L, T, Q>& v, const char* sep = " ") {
 	string str;
 	for (glm::length_t i = 0; i < L - 1; ++i)
 		str += toStr(v[i]) + sep;

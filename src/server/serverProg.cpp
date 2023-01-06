@@ -514,7 +514,7 @@ int main(int argc, char** argv) {
 
 	vector<pollfd> pfds = { { INVALID_SOCKET, POLLIN | POLLRDHUP, 0 } };	// first element is server
 	try {
-		Arguments args(argc, argv, { arg4, arg6, argVerbose }, { argPort, argMaxPlayers, argLog, argMaxLogs });
+		Arguments args(argc - 1, argv + 1, { arg4, arg6, argVerbose }, { argPort, argMaxPlayers, argLog, argMaxLogs });
 		const char* maxLogs = args.getOpt(argMaxLogs);
 		slog.start(args.hasFlag(argVerbose), args.getOpt(argLog), maxLogs ? toNum<uint>(maxLogs) : Log::defaultMaxLogfiles);
 

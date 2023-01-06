@@ -936,13 +936,14 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		"Mode",
 #endif
 		"Anti-aliasing",
+		"Anisotropic filtering",
 		"Shadow resolution",
 		"Soft shadows",
 		"SSAO",
 		"Bloom",
 		"Reflections",
-		"Texture scale",
 		"VSync",
+		"Texture scale",
 		"Gamma",
 		"FOV",
 		"Volume",
@@ -970,9 +971,6 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 
 	constexpr char shadowTip[] = "Width/height of shadow cubemap";
 	constexpr char scaleTip[] = "Scale factor of texture sizes";
-	constexpr char vsyncTip[] = "Immediate: off\n"
-		"Synchronized: on\n"
-		"Adaptive: on and smooth (works on fewer computers)";
 	constexpr char gammaTip[] = "Brightness";
 	constexpr char fovTip[] = "Vertical field of view";
 	constexpr char volumeTip[] = "Audio volume";
@@ -997,7 +995,10 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 	}, {
 #endif
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new ComboBox(1.f, Settings::antiAliasingNames[uint8(World::sets()->antiAliasing)], vector<string>(Settings::antiAliasingNames.begin(), Settings::antiAliasingNames.begin() + uint8(Settings::AntiAliasing::fxaa) + uint8(World::window()->maxAntiAliasing())), &Program::eventSetSamples, nullptr, nullptr, "Anti-aliasing algorithm")
+		new ComboBox(1.f, Settings::antiAliasingNames[uint8(World::sets()->antiAliasing)], vector<string>(Settings::antiAliasingNames.begin(), Settings::antiAliasingNames.begin() + uint8(World::window()->maxAntiAliasing()) + 1), &Program::eventSetSamples, nullptr, nullptr, "Anti-aliasing algorithm")
+	}, {
+		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
+		new ComboBox(1.f, Settings::anisotropyNames[uint8(World::sets()->anisotropy)], vector<string>(Settings::anisotropyNames.begin(), Settings::anisotropyNames.begin() + uint8(World::window()->maxAnisotropicFiltering()) + 1), &Program::eventSetAnisotropy, nullptr, nullptr, "Anisotropic filtering of textures")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new Slider(1.f, World::sets()->shadowRes ? int(std::log2(World::sets()->shadowRes)) : -1, -1, Settings::shadowBitMax, 1, &Program::eventSetShadowResSL, &Program::eventUpdateShadowResSL, shadowTip),
@@ -1016,11 +1017,11 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		new CheckBox(getSize(SizeRef::lineHeight), World::sets()->ssr, &Program::eventSetSsr, &Program::eventSetSsr, "Screen space reflections")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new Slider(1.f, World::sets()->texScale, 1, 100, 5, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, scaleTip),
-		new LabelEdit(getSize(SizeRef::settingsSlleWidth), toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, scaleTip)
+		new CheckBox(getSize(SizeRef::lineHeight), World::sets()->vsync, &Program::eventSetVsync, &Program::eventSetVsync, "Vertical synchronization")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new ComboBox(1.f, Settings::vsyncNames[uint8(World::sets()->vsync + 1)], vector<string>(Settings::vsyncNames.begin(), Settings::vsyncNames.end()), &Program::eventSetVsync, nullptr, nullptr, vsyncTip)
+		new Slider(1.f, World::sets()->texScale, 1, 100, 5, &Program::eventSetTexturesScaleSL, &Program::eventPrcSliderUpdate, scaleTip),
+		new LabelEdit(getSize(SizeRef::settingsSlleWidth), toStr(World::sets()->texScale) + '%', &Program::eventSetTextureScaleLE, nullptr, nullptr, nullptr, scaleTip)
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new Slider(1.f, int(World::sets()->gamma * gammaStepFactor), 0, int(Settings::gammaMax * gammaStepFactor), 1, &Program::eventSaveSettings, &Program::eventSetGammaSL, gammaTip),

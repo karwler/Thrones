@@ -257,7 +257,7 @@ void InstLayout::onResize(Instance*) {
 	if (numInsts) {
 		vector<Instance> instanceData = initInstanceData();
 		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
-			widgets[i]->onResize(&instanceData[qid]);
+			widgets[i]->onResize(instanceData.data() + qid);
 		updateInstances(instanceData.data(), 0, instanceData.size());
 	} else
 		for (Widget* it : widgets)
@@ -275,7 +275,7 @@ void InstLayout::postInit(Instance*) {
 	if (numInsts) {
 		vector<Instance> instanceData = initInstanceData();
 		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
-			widgets[i]->postInit(&instanceData[qid]);
+			widgets[i]->postInit(instanceData.data() + qid);
 		initBuffer();
 		uploadInstances(instanceData.data(), instanceData.size());
 	} else
@@ -287,7 +287,7 @@ void InstLayout::setInstances(Instance*) {
 	if (numInsts) {
 		vector<Instance> instanceData = initInstanceData();
 		for (uint i = 0, qid = startInst; i < widgets.size(); qid += widgets[i++]->numInstances())
-			widgets[i]->setInstances(&instanceData[qid]);
+			widgets[i]->setInstances(instanceData.data() + qid);
 		updateInstances(instanceData.data(), 0, instanceData.size());
 	}
 }
@@ -316,11 +316,11 @@ void InstLayout::insertWidgets(uint id, Widget** wgts, uint cnt) {
 	vector<Instance> instanceData = initInstanceData();
 	uint qid = startInst;
 	for (i = 0; i < id; qid += widgets[i++]->numInstances())
-		widgets[i]->onResize(&instanceData[qid]);
+		widgets[i]->onResize(instanceData.data() + qid);
 	for (; i < id + cnt; qid += widgets[i++]->numInstances())
-		widgets[i]->postInit(&instanceData[qid]);
+		widgets[i]->postInit(instanceData.data() + qid);
 	for (; i < widgets.size(); qid += widgets[i++]->numInstances())
-		widgets[i]->onResize(&instanceData[qid]);
+		widgets[i]->onResize(instanceData.data() + qid);
 	if (numInsts) {
 		initBuffer();
 		uploadInstances(instanceData.data(), instanceData.size());
@@ -432,7 +432,7 @@ vector<Quad::Instance> Popup::initInstanceData() {
 }
 
 void Popup::onClick(ivec2 mPos, uint8 mBut) {
-	if ((mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) && !getBackgroundRect().contain(mPos))
+	if ((mBut == SDL_BUTTON_LEFT || mBut == SDL_BUTTON_RIGHT) && !getBackgroundRect().contains(mPos))
 		World::prun(ccall, nullptr);
 }
 
@@ -517,7 +517,7 @@ void ScrollArea::onResize(Instance*) {
 	for (i = 0; i < visWgts.x; ++i)
 		widgets[i]->onResize(nullptr);
 	for (uint qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->onResize(&instanceData[qid]);
+		widgets[i]->onResize(instanceData.data() + qid);
 	for (; i < widgets.size(); ++i)
 		widgets[i]->onResize(nullptr);
 	if (oldVis == numInsts)
@@ -538,7 +538,7 @@ void ScrollArea::postInit(Quad::Instance*) {
 	for (i = 0; i < visWgts.x; ++i)
 		widgets[i]->postInit(nullptr);
 	for (uint qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->postInit(&instanceData[qid]);
+		widgets[i]->postInit(instanceData.data() + qid);
 	for (; i < widgets.size(); ++i)
 		widgets[i]->postInit(nullptr);
 	initBuffer();
@@ -550,7 +550,7 @@ void ScrollArea::setInstances(Quad::Instance*) {
 	setVisibleWidgets();
 	vector<Instance> instanceData = initInstanceData();
 	for (uint i = visWgts.x, qid = startInst; i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->setInstances(&instanceData[qid]);
+		widgets[i]->setInstances(instanceData.data() + qid);
 	if (numInsts == oldVis)
 		updateInstances(instanceData.data(), 0, instanceData.size());
 	else
@@ -572,19 +572,19 @@ void ScrollArea::insertWidgets(uint id, Widget** wgts, uint cnt) {
 	for (i = 0; i < id && i < visWgts.x; ++i)
 		widgets[i]->onResize(nullptr);
 	for (; i < id && i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->onResize(&instanceData[qid]);
+		widgets[i]->onResize(instanceData.data() + qid);
 	while (i < id)
 		widgets[i++]->onResize(nullptr);
 	while (i < end && i < visWgts.x)
 		widgets[i++]->postInit(nullptr);
 	for (; i < end && i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->postInit(&instanceData[qid]);
+		widgets[i]->postInit(instanceData.data() + qid);
 	while (i < end)
 		widgets[i++]->postInit(nullptr);
 	while (i < widgets.size() && i < visWgts.x)
 		widgets[i++]->onResize(nullptr);
 	for (; i < widgets.size() && i < visWgts.y; qid += widgets[i++]->numInstances())
-		widgets[i]->onResize(&instanceData[qid]);
+		widgets[i]->onResize(instanceData.data() + qid);
 	while (i < widgets.size())
 		widgets[i++]->onResize(nullptr);
 	initBuffer();

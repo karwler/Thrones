@@ -192,7 +192,7 @@ void Arguments::setArgs(int argc, const char* const* argv, const uset<char>& flg
 
 template <class C, class F>
 void Arguments::setArgs(int argc, const C* const* argv, F conv, const uset<char>& flg, const uset<char>& opt) {
-	for (int i = 1; i < argc; ++i) {
+	for (int i = 0; i < argc; ++i) {
 		if (char key; argv[i][0] == '-') {
 			for (int j = 1; (key = char(argv[i][j])); ++j) {
 				if (!argv[i][j + 1] && i + 1 < argc && opt.count(key)) {

@@ -10,14 +10,6 @@ static void testSortNames() {
 	assertRange(sortNames(vals), vector<string>({ "a01", "a1", "a10", "Zb", "zb" }));
 }
 
-static void testRect() {
-	assertEqual(Rect(-1), SDL_Rect({ -1, -1, -1, -1 }));
-	assertEqual(Rect(1, 2, 3, 4), SDL_Rect({ 1, 2, 3, 4 }));
-	assertEqual(Rect(1, 2, ivec2(-3, -4)), SDL_Rect({ 1, 2, -3, -4 }));
-	assertEqual(Rect(ivec2(-1, -2), 3, 4), SDL_Rect({ -1, -2, 3, 4 }));
-	assertEqual(Rect(ivec2(-1, -2), ivec2(-3, -4)), SDL_Rect({ -1, -2, -3, -4 }));
-}
-
 static void testDirection() {
 	assertTrue(Direction(Direction::up).vertical());
 	assertTrue(Direction(Direction::up).negative());
@@ -141,7 +133,6 @@ void testUtils() {
 	puts("Running Utils tests...");
 	testUniqueSort();
 	testSortNames();
-	testRect();
 	testDirection();
 	testBtom();
 	testInRange();

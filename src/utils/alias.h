@@ -135,6 +135,13 @@ using CCall = void (Program::*)(uint, const string&);
 using SBCall = void (ProgState::*)();
 using SACall = void (ProgState::*)(float);
 
+namespace Com {
+
+constexpr string_view commonVersion = "0.5.3";
+constexpr char defaultPort[] = "39741";
+
+}
+
 template <class T, std::enable_if_t<std::is_enum_v<T>, int> = 0>
 constexpr T operator++(T& a) {
 	return a = T(std::underlying_type_t<T>(a) + std::underlying_type_t<T>(1));

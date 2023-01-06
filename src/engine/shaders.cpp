@@ -128,7 +128,7 @@ ShaderLight::ShaderLight(const string& srcVert, const string& srcFrag, const Set
 	glUniform1i(optSsao, sets->ssao);
 	glUniform1i(glGetUniformLocation(program, "colorMap"), colorTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "normaMap"), normalTexa - GL_TEXTURE0);
-	glUniform1i(glGetUniformLocation(program, "depthMap"), depthTexa - GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(program, "depthMap"), shadowTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "ssaoMap"), ssao1Texa - GL_TEXTURE0);
 }
 

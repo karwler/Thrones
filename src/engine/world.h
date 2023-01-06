@@ -25,8 +25,6 @@ public:
 	static Settings* sets();
 #ifdef OPENVR
 	static VrSys* vr();
-#else
-	static constexpr VrSys* vr();
 #endif
 	static const ShaderGeom* geom();
 	static const ShaderDepth* depth();
@@ -98,11 +96,9 @@ inline Settings* World::sets() {
 
 #ifdef OPENVR
 inline VrSys* World::vr() {
-#else
-constexpr VrSys* World::vr() {
-#endif
 	return windowSys.getVr();
 }
+#endif
 
 inline const ShaderGeom* World::geom() {
 	return windowSys.getGeom();

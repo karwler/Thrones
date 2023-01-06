@@ -1028,11 +1028,11 @@ void Program::eventOpenMatch() {
 
 void Program::playGameStartAnimations() const {
 	World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYDown, game.board->getScreen()->getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
-	if (!World::vr()) {
-		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
-		World::scene()->getCamera()->pmax = Camera::pmaxMatch;
-		World::scene()->getCamera()->ymax = Camera::ymaxMatch;
-	}
+#ifndef OPENVR
+	World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posMatch, std::nullopt, Camera::latMatch) })));
+	World::scene()->getCamera()->pmax = Camera::pmaxMatch;
+	World::scene()->getCamera()->ymax = Camera::ymaxMatch;
+#endif
 }
 
 void Program::eventEndTurn(Button*) {
@@ -1277,14 +1277,14 @@ void Program::uninitGame() {
 	game.board->uninitObjects();
 	if (dynamic_cast<ProgMatch*>(state)) {
 		World::scene()->addAnimation(Animation(game.board->getScreen(), std::queue<Keyframe>({ Keyframe(0.f, std::nullopt, std::nullopt, vec3(1.f)), Keyframe(transAnimTime, vec3(game.board->getScreen()->getPos().x, Board::screenYUp, game.board->getScreen()->getPos().z)) })));
-		if (!World::vr()) {
-			World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posSetup, std::nullopt, Camera::latSetup) })));
-			for (Piece& it : game.board->getPieces())
-				if (it.getPos().z <= game.board->getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
-					World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(it.getPos().x, pieceYDown, it.getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
-			World::scene()->getCamera()->pmax = Camera::pmaxSetup;
-			World::scene()->getCamera()->ymax = Camera::ymaxSetup;
-		}
+#ifndef OPENVR
+		World::scene()->addAnimation(Animation(World::scene()->getCamera(), std::queue<Keyframe>({ Keyframe(transAnimTime, Camera::posSetup, std::nullopt, Camera::latSetup) })));
+		for (Piece& it : game.board->getPieces())
+			if (it.getPos().z <= game.board->getScreen()->getPos().z && it.getPos().z >= Config::boardWidth / -2.f)
+				World::scene()->addAnimation(Animation(&it, std::queue<Keyframe>({ Keyframe(transAnimTime, vec3(it.getPos().x, pieceYDown, it.getPos().z)), Keyframe(0.f, std::nullopt, std::nullopt, vec3(0.f)) })));
+		World::scene()->getCamera()->pmax = Camera::pmaxSetup;
+		World::scene()->getCamera()->ymax = Camera::ymaxSetup;
+#endif
 	}
 }
 
@@ -1455,19 +1455,19 @@ void Program::eventSetWindowMode(uint, const string& str) {
 	}
 }
 
-void Program::eventSetVsync(uint id, const string&) {
-	if (Settings::VSync vsync = Settings::VSync(id - 1); vsync != World::sets()->vsync) {
-		World::sets()->vsync = vsync;
-		World::window()->setSwapInterval();
-		eventSaveSettings();
-	}
-}
-
 void Program::eventSetSamples(uint id, const string&) {
 	if (Settings::AntiAliasing aa = Settings::AntiAliasing(id); aa != World::sets()->antiAliasing) {
 		World::sets()->antiAliasing = aa;
 		World::window()->setMultisampling();
 		World::scene()->resetFrames();
+		eventSaveSettings();
+	}
+}
+
+void Program::eventSetAnisotropy(uint id, const string&) {
+	if (Settings::Anisotropy af = Settings::Anisotropy(id); af != World::sets()->anisotropy) {
+		World::sets()->anisotropy = af;
+		World::window()->setSamplers();
 		eventSaveSettings();
 	}
 }
@@ -1547,6 +1547,12 @@ void Program::finishFramebufferSettings() {
 	eventSaveSettings();
 }
 
+void Program::eventSetVsync(Button* but) {
+	World::sets()->vsync = static_cast<CheckBox*>(but)->getOn();
+	World::window()->setSwapInterval();
+	eventSaveSettings();
+}
+
 void Program::eventSetGammaSL(Button* but) {
 	if (float gamma = float(static_cast<Slider*>(but)->getValue()) / GuiGen::gammaStepFactor; gamma != World::sets()->gamma) {
 		World::window()->setGamma(gamma);
@@ -1567,8 +1573,9 @@ void Program::eventSetGammaLE(Button* but) {
 void Program::eventSetFovSL(Button* but) {
 	if (double fov = double(static_cast<Slider*>(but)->getValue()) / GuiGen::fovStepFactor; fov != World::sets()->fov) {
 		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
-		if (!World::vr())
-			World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
+#ifndef OPENVR
+		World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
+#endif
 		but->getParent()->getWidget<LabelEdit>(but->getIndex() + 1)->setText(toStr(World::sets()->fov));
 	}
 }
@@ -1577,8 +1584,9 @@ void Program::eventSetFovLE(Button* but) {
 	LabelEdit* le = static_cast<LabelEdit*>(but);
 	if (double fov = toNum<double>(le->getText()); fov != World::sets()->fov) {
 		World::sets()->fov = std::clamp(fov, Settings::fovLimit.x, Settings::fovLimit.y);
-		if (!World::vr())
-			World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
+#ifndef OPENVR
+		World::scene()->getCamera()->setFov(float(glm::radians(World::sets()->fov)), World::window()->getScreenView());
+#endif
 		le->setText(toStr(World::sets()->fov));
 		but->getParent()->getWidget<Slider>(but->getIndex() - 1)->setVal(int(World::sets()->fov * GuiGen::fovStepFactor));
 		eventSaveSettings();

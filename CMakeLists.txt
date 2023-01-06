@@ -38,6 +38,7 @@ endif()
 # target names and source/resource files
 
 string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
+set(GAMEVR_NAME "ThronesVr")
 set(SERVER_NAME "Server")
 set(DATA_NAME "assets")
 set(ADATA_NAME "${DATA_NAME}_android")
@@ -300,9 +301,9 @@ set(TESTS_SRC
 
 # dependencies
 
-set(VER_SDL "2.0.22")
-set(VER_IMG "2.6.0")
-set(VER_TTF "2.20.0")
+set(VER_SDL "2.26.2")
+set(VER_IMG "2.6.2")
+set(VER_TTF "2.20.1")
 set(VER_GLEW "2.2.0")
 set(VER_GLM "0.9.9.8")
 set(VER_ASSIMP "5.2.4")
@@ -583,7 +584,7 @@ endif()
 
 # compiler/linker flags
 
-add_compile_definitions($<$<BOOL:${EXTERNAL}>:EXTERNAL> $<$<BOOL:${SERVICE}>:SERVICE> $<$<BOOL:${UPDATE_CHECK}>:UPDATE_CHECK> $<$<BOOL:${OPENVR}>:OPENVR> $<$<BOOL:${SYSLIBS}>:SYSLIBS>
+add_compile_definitions($<$<BOOL:${EXTERNAL}>:EXTERNAL> $<$<BOOL:${SERVICE}>:SERVICE> $<$<BOOL:${UPDATE_CHECK}>:UPDATE_CHECK> $<$<BOOL:${SYSLIBS}>:SYSLIBS>
 						$<$<OR:$<BOOL:${OPENGLES}>,$<BOOL:${EMSCRIPTEN}>>:$<IF:$<STREQUAL:${OPENGLES},32>,OPENGLES=32,OPENGLES=1>>
 						$<$<BOOL:${APPLE}>:GL_SILENCE_DEPRECATION>
 						"$<$<BOOL:${WIN32}>:UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;$<$<NOT:$<BOOL:${MSVC}>>:_WIN32_WINNT=0x600>>"
@@ -643,16 +644,15 @@ endfunction()
 
 function(setMainTargetLinks TARGET_NAME)
 	if(WIN32)
-		target_link_libraries(${TARGET_NAME} SDL2 SDL2_image SDL2_ttf $<IF:$<BOOL:${MSVC}>,glew32s,glew32> opengl32 "$<$<BOOL:${OPENVR}>:$<IF:$<BOOL:${MSVC}>,openvr_api,openvr_api$<$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>:64>.dll>>" ws2_32)
+		target_link_libraries(${TARGET_NAME} SDL2 SDL2_image SDL2_ttf $<IF:$<BOOL:${MSVC}>,glew32s,glew32> opengl32 ws2_32)
 		add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
 							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_SDL}/SDL2.dll" "${BIN_IMG}/SDL2_image.dll" "${BIN_TTF}/SDL2_ttf.dll" "$<TARGET_FILE_DIR:${TARGET_NAME}>"
-							COMMAND "$<$<BOOL:${OPENVR}>:${CMAKE_COMMAND};-E;copy_if_different;${BIN_OVR}/$<IF:$<BOOL:${MSVC}>,openvr_api.dll,libopenvr_api$<$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>:64>.dll>;$<TARGET_FILE_DIR:${TARGET_NAME}>>"
 							COMMAND "$<$<BOOL:${UPDATE_CHECK}>:${CMAKE_COMMAND};-E;copy_if_different;${BIN_CURL}/$<IF:$<OR:$<BOOL:${MSVC}>,$<NOT:$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>>>,libcurl.dll,libcurl-x64.dll>;$<TARGET_FILE_DIR:${TARGET_NAME}>>"
 							COMMAND_EXPAND_LISTS)
 	elseif(APPLE)
-		target_link_libraries(${TARGET_NAME} "${LIB_SDL}" "${LIB_IMG}" "${LIB_TTF}" "${LIB_OPENGL}" $<$<BOOL:${OPENVR}>:openvr_api>)
+		target_link_libraries(${TARGET_NAME} "${LIB_SDL}" "${LIB_IMG}" "${LIB_TTF}" "${LIB_OPENGL}")
 	else()
-		target_link_libraries(${TARGET_NAME} SDL2 SDL2_image SDL2_ttf $<IF:$<BOOL:${OPENGLES}>,GLESv2,GLEW;GL> $<$<BOOL:${UPDATE_CHECK}>:dl> $<$<BOOL:${OPENVR}>:openvr_api>)
+		target_link_libraries(${TARGET_NAME} SDL2 SDL2_image SDL2_ttf $<IF:$<BOOL:${OPENGLES}>,GLESv2,GLEW;GL> $<$<BOOL:${UPDATE_CHECK}>:dl>)
 		if(NOT SYSLIBS AND NOT APPIMAGE)
 			file(GLOB SOLIB_FILES "${DIR_TMP}/lib/*.so")
 			add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
@@ -673,6 +673,23 @@ setMainTargetLinks(${PROJECT_NAME})
 add_dependencies(${PROJECT_NAME} ${DATA_NAME})
 set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DPI_AWARE "PerMonitor")
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+
+if(OPENVR)
+	add_executable(${GAMEVR_NAME} WIN32 MACOSX_BUNDLE ${THRONES_SRC})
+	setMainTargetProperties(${GAMEVR_NAME} "$<IF:$<BOOL:${WIN32}>,${PBOUT_DIR},$<IF:$<OR:$<BOOL:${APPLE}>,$<BOOL:${APPIMAGE}>>,${PBOUT_DIR}/MacOS,${TBIN_DIR}>>")
+	setMainTargetLinks(${GAMEVR_NAME})
+	target_compile_definitions(${GAMEVR_NAME} PUBLIC OPENVR)
+	add_dependencies(${GAMEVR_NAME} ${DATA_NAME})
+	set_property(TARGET ${GAMEVR_NAME} PROPERTY VS_DPI_AWARE "PerMonitor")
+
+	if(WIN32)
+		target_link_libraries(${GAMEVR_NAME} $<IF:$<BOOL:${MSVC}>,openvr_api,openvr_api$<$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>:64>.dll>)
+		add_custom_command(TARGET ${GAMEVR_NAME} POST_BUILD
+							COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${BIN_OVR}/$<IF:$<BOOL:${MSVC}>,openvr_api.dll,libopenvr_api$<$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>:64>.dll>" "$<TARGET_FILE_DIR:${GAMEVR_NAME}>")
+	else()
+		target_link_libraries(${GAMEVR_NAME} openvr_api)
+	endif()
+endif()
 
 if(APPLE)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

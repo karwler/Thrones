@@ -31,6 +31,7 @@ private:
 	template <GLint iform, GLenum pform, GLenum active> static GLuint makeTexture(ivec2 res);
 };
 
+#ifndef OPENVR
 // additional data for rendering objects
 class Camera {
 public:
@@ -96,6 +97,7 @@ inline float Camera::calcPitch(const vec3& pos, float dist) {
 inline float Camera::calcYaw(const vec3& pos, float dist) {
 	return std::acos(pos.z / dist) * (pos.x >= 0.f ? 1.f : -1.f);
 }
+#endif
 
 // single light information
 class Light {
@@ -183,7 +185,9 @@ private:
 	Interactable* select = nullptr;	// currently selected widget/object
 	Interactable* firstSelect = nullptr;
 	Capture capture;	// either pointer to widget currently hogging all keyboard input or something that's currently being dragged. nullptr otherwise
+#ifndef OPENVR
 	uptr<Camera> camera;
+#endif
 	RootLayout* layout = nullptr;
 	vector<Popup*> popups;
 	vector<Overlay*> overlays;

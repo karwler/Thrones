@@ -79,7 +79,7 @@ if __name__ == '__main__':
 	inc = 1 if len(sys.argv) < 3 else int(sys.argv[2])
 
 	try:
-		setVersion('src/server/server.h')
+		setVersion('src/utils/alias.h')
 		setGradle('android/app/build.gradle', inc)
 		setAndroid('android/app/src/main/AndroidManifest.xml', inc)
 		setInfo('rsc/Info.plist')

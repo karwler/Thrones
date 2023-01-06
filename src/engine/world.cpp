@@ -3,9 +3,9 @@
 template <class C>
 void World::setArgs(int argc, const C* const* argv) {
 #ifdef NDEBUG
-	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog, Settings::argVr }, { Settings::argExternal });
+	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog }, { Settings::argExternal });
 #else
-	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog, Settings::argVr, Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
+	args.setArgs(argc, argv, { Settings::argCompositor, Settings::argLog, Settings::argConsole, Settings::argSetup }, { Settings::argExternal });
 #endif
 }
 
@@ -22,7 +22,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR pCmdLine, int) {
 	}
 #else
 int main(int argc, char** argv) {
-	World::setArgs(argc, argv);
+	World::setArgs(argc - 1, argv + 1);
 #endif
 #ifdef __ANDROID__
 	exit(World::window()->start(World::args));

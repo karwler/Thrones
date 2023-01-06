@@ -133,7 +133,7 @@ bool ScrollBar::hold(ivec2 mPos, uint8 mBut, Interactable* wgt, ivec2 listSize, 
 	motion = vec2(0.f);	// get rid of scroll motion
 	if (mBut == SDL_BUTTON_LEFT) {	// check scroll bar left click
 		World::scene()->setCapture(wgt);
-		if ((draggingSlider = barRect(listSize, pos, size, vert).contain(mPos))) {
+		if ((draggingSlider = barRect(listSize, pos, size, vert).contains(mPos))) {
 			int sp = sliderPos(listSize, pos, size, vert), ss = sliderSize(listSize, size, vert);
 			if (moved = outRange(mPos[vert], sp, sp + ss); moved)	// if mouse outside of slider but inside bar
 				setSlider(mPos[vert] - ss / 2, listSize, pos, size, vert);
@@ -701,7 +701,7 @@ ivec2 Label::textOfs(int resx, Alignment align, ivec2 pos, int sizx, int margin)
 
 inline Rect Label::textRect() const {
 	ivec2 siz = size();
-	return Rect(textOfs(textTex.rct.size().x, halign, position(), siz.x, siz.y / textMarginFactor), textTex.rct.size());
+	return Rect(textOfs(textTex.rct.w, halign, position(), siz.x, siz.y / textMarginFactor), textTex.rct.size());
 }
 
 void Label::updateTextTex() {

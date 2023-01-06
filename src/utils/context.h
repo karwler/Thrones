@@ -58,7 +58,7 @@ inline Interactable* Context::getParent() const {
 }
 
 inline uint Context::getSelected(ivec2 mPos) const {
-	return rect().contain(mPos) ? (mPos.y - position.y + scroll.listPos.y) / lineHeight : UINT_MAX;
+	return rect().contains(mPos) ? (mPos.y - position.y + scroll.listPos.y) / lineHeight : UINT_MAX;
 }
 
 inline int Context::itemPos(sizet id) const {

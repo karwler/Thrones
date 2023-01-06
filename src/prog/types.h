@@ -92,7 +92,6 @@ struct Config {
 		dragonStraight = 0x400
 	};
 
-	static constexpr char defaultName[] = "default";
 	static constexpr uint8 maxNameLength = 63;
 	static constexpr float boardWidth = 10.f;
 	static constexpr uint8 randomLimit = 100;

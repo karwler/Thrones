@@ -22,7 +22,7 @@ public:
 	static constexpr GLenum gaussTexa = GL_TEXTURE10;	// blurred bright colors in scene by ShaderBrights and ShaderGauss for ShaderFinal
 	static constexpr GLenum ssr0Texa = GL_TEXTURE11;	// reflection map output by ShaderSsr and ShaderBlur
 	static constexpr GLenum ssr1Texa = GL_TEXTURE12;	// reflection map output by ShaderSsrColor
-	static constexpr GLenum depthTexa = GL_TEXTURE13;	// shadow map by ShaderDepth
+	static constexpr GLenum shadowTexa = GL_TEXTURE13;	// shadow map by ShaderDepth
 	static constexpr GLenum noiseTexa = GL_TEXTURE14;	// noise map for ShaderSsao
 	static constexpr GLenum wgtTexa = GL_TEXTURE15;		// widget textures for ShderGui
 

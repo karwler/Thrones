@@ -296,10 +296,7 @@ void WindowSys::exec() {
 	oldTime = newTime;
 
 #ifdef OPENVR
-	if (vrSys)
-		vrSys->draw();
-	else
-		scene->draw(mousePos());
+	vrSys->draw();
 #else
 	scene->draw(mousePos());
 #endif
@@ -317,8 +314,7 @@ void WindowSys::exec() {
 		handleEvent(event);
 	} while (!SDL_TICKS_PASSED(SDL_GetTicks(), timeout));
 #ifdef OPENVR
-	if (vrSys)
-		vrSys->handleInput();
+	vrSys->handleInput();
 #endif
 }
 
@@ -383,33 +379,26 @@ void WindowSys::init(const Arguments& args) {
 	SDL_EventState(SDL_RENDER_TARGETS_RESET, SDL_DISABLE);
 	SDL_EventState(SDL_RENDER_DEVICE_RESET, SDL_DISABLE);
 #ifdef OPENVR
-	if (args.hasFlag(Settings::argVr)) {
-		try {
-			vrSys = new VrSys;
-			SDL_EventState(SDL_WINDOWEVENT, SDL_DISABLE);
-			SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
-			SDL_EventState(SDL_KEYUP, SDL_DISABLE);
-			SDL_EventState(SDL_MOUSEMOTION, SDL_DISABLE);
-			SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_DISABLE);
-			SDL_EventState(SDL_MOUSEBUTTONUP, SDL_DISABLE);
-			SDL_EventState(SDL_MOUSEWHEEL, SDL_DISABLE);
-			SDL_EventState(SDL_JOYHATMOTION, SDL_DISABLE);
-			SDL_EventState(SDL_JOYBUTTONDOWN, SDL_DISABLE);
-			SDL_EventState(SDL_JOYBUTTONUP, SDL_DISABLE);
-			SDL_EventState(SDL_JOYDEVICEADDED, SDL_DISABLE);
-			SDL_EventState(SDL_JOYDEVICEREMOVED, SDL_DISABLE);
-			SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_DISABLE);
-			SDL_EventState(SDL_CONTROLLERBUTTONDOWN, SDL_DISABLE);
-			SDL_EventState(SDL_CONTROLLERBUTTONUP, SDL_DISABLE);
-			SDL_EventState(SDL_FINGERDOWN, SDL_DISABLE);
-			SDL_EventState(SDL_FINGERUP, SDL_DISABLE);
-			SDL_EventState(SDL_FINGERMOTION, SDL_DISABLE);
-			SDL_EventState(SDL_MULTIGESTURE, SDL_DISABLE);
-			SDL_EventState(SDL_DROPTEXT, SDL_DISABLE);
-		} catch (const std::runtime_error& err) {
-			logError(err.what());
-		}
-	}
+	SDL_EventState(SDL_WINDOWEVENT, SDL_DISABLE);
+	SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_KEYUP, SDL_DISABLE);
+	SDL_EventState(SDL_MOUSEMOTION, SDL_DISABLE);
+	SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_MOUSEBUTTONUP, SDL_DISABLE);
+	SDL_EventState(SDL_MOUSEWHEEL, SDL_DISABLE);
+	SDL_EventState(SDL_JOYHATMOTION, SDL_DISABLE);
+	SDL_EventState(SDL_JOYBUTTONDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_JOYBUTTONUP, SDL_DISABLE);
+	SDL_EventState(SDL_JOYDEVICEADDED, SDL_DISABLE);
+	SDL_EventState(SDL_JOYDEVICEREMOVED, SDL_DISABLE);
+	SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_DISABLE);
+	SDL_EventState(SDL_CONTROLLERBUTTONDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_CONTROLLERBUTTONUP, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERDOWN, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERUP, SDL_DISABLE);
+	SDL_EventState(SDL_FINGERMOTION, SDL_DISABLE);
+	SDL_EventState(SDL_MULTIGESTURE, SDL_DISABLE);
+	SDL_EventState(SDL_DROPTEXT, SDL_DISABLE);
 #endif
 	if (SDL_RegisterEvents(1) == UINT32_MAX)
 		throw std::runtime_error("failed to register application events:"s + linend + SDL_GetError());
@@ -499,16 +488,14 @@ ShaderStartup* WindowSys::createWindow() {
 #endif
 	ivec2 winSize = sets->size;
 #ifdef OPENVR
-	if (vrSys) {
-		SDL_Rect max;
-		if (SDL_GetDisplayBounds(sets->display, &max))
-			max.w = max.h = INT_MAX;
+	SDL_Rect max;
+	if (SDL_GetDisplayBounds(sets->display, &max))
+		max.w = max.h = INT_MAX;
 
-		screenView = vrSys->getRenderSize();
-		winSize = ivec2(screenView.x * 2, screenView.y);
-		for (; winSize.x > max.w || winSize.y > max.h; winSize /= 2);
-		guiView = ivec2(ceilPower2(std::max(screenView.x, screenView.y)));
-	}
+	screenView = vrSys->getRenderSize();
+	winSize = ivec2(screenView.x * 2, screenView.y);
+	for (; winSize.x > max.w || winSize.y > max.h; winSize /= 2);
+	guiView = ivec2(ceilPower2(std::max(screenView.x, screenView.y)));
 #endif
 	int winPos = SDL_WINDOWPOS_CENTERED_DISPLAY(sets->display);
 	if (window = SDL_CreateWindow(title, winPos, winPos, winSize.x, winSize.y, getWindowFlags()); !window)
@@ -573,7 +560,7 @@ ShaderStartup* WindowSys::createWindow() {
 	if (glGetIntegerv(GL_MAX_TEXTURE_SIZE, gvals); gvals[0] < std::max(wsizes.back().x, wsizes.back().y))
 		throw std::runtime_error("texture size is limited to " + toStr(gvals[0]));
 #ifdef OPENVR
-	if (vrSys && gvals[0] < guiView.x)
+	if (gvals[0] < guiView.x)
 		guiView = ivec2(gvals[0]);
 #endif
 	if (glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, gvals); gvals[0] < largestObjTexture)
@@ -595,6 +582,12 @@ ShaderStartup* WindowSys::createWindow() {
 	else
 		glDisable(GL_MULTISAMPLE);
 #endif
+	if (GLEW_ARB_texture_filter_anisotropic || GLEW_EXT_texture_filter_anisotropic) {
+		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropy);
+		maxAnisotropy = std::clamp(maxAnisotropy, 1.f, Settings::getAf(Settings::Anisotropy::x16));
+	} else
+		maxAnisotropy = 1.f;
+	sets->anisotropy = std::min(sets->anisotropy, maxAnisotropicFiltering());
 
 	updateView();
 	glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -606,8 +599,7 @@ ShaderStartup* WindowSys::createWindow() {
 	glFrontFace(GL_CCW);
 
 	glGenSamplers(samplers.size(), samplers.data());
-	setSampler<GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, 0>(samplers[0]);
-	setSampler<GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT>(samplers[1]);
+	setSamplers();
 	glBindSampler(Shader::tmpTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::vposTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::normTexa - GL_TEXTURE0, samplers[0]);
@@ -618,7 +610,7 @@ ShaderStartup* WindowSys::createWindow() {
 	glBindSampler(Shader::gaussTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::ssr0Texa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::ssr1Texa - GL_TEXTURE0, samplers[0]);
-	glBindSampler(Shader::depthTexa - GL_TEXTURE0, samplers[0]);
+	glBindSampler(Shader::shadowTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::noiseTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::wgtTexa - GL_TEXTURE0, samplers[0]);
 	glBindSampler(Shader::colorTexa - GL_TEXTURE0, samplers[1]);
@@ -645,8 +637,8 @@ ShaderStartup* WindowSys::createWindow() {
 #endif
 	setGamma(sets->gamma);
 #ifdef OPENVR
-	if (vrSys)
-		vrSys->init(sources, windowView);
+	vrSys = new VrSys;
+	vrSys->init(sources, windowView);
 #endif
 
 	ShaderStartup* stlog = new ShaderStartup(sources.at(ShaderStartup::fileVert), sources.at(ShaderStartup::fileFrag));
@@ -657,9 +649,8 @@ ShaderStartup* WindowSys::createWindow() {
 uint32 WindowSys::getWindowFlags() const {
 	uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 #ifdef OPENVR
-	if (vrSys)
-		return flags;
-#endif
+	return flags;
+#else
 	switch (sets->screen) {
 	case Settings::Screen::borderlessWindow: case Settings::Screen::borderless:
 		return flags | SDL_WINDOW_BORDERLESS;
@@ -669,10 +660,16 @@ uint32 WindowSys::getWindowFlags() const {
 		return flags | SDL_WINDOW_FULLSCREEN_DESKTOP;
 	}
 	return flags;
+#endif
+}
+
+void WindowSys::setSamplers() {
+	setSampler<GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, 0>(samplers[0]);
+	setSampler<GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT>(samplers[1], sets->getAf());
 }
 
 template <GLint min, GLint mag, GLint wrap, int lod>
-void WindowSys::setSampler(GLuint sampler) {
+void WindowSys::setSampler(GLuint sampler, float anisotropy) {
 	glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, min);
 	glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, mag);
 	glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD, -lod);
@@ -680,12 +677,14 @@ void WindowSys::setSampler(GLuint sampler) {
 	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, wrap);
 	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, wrap);
 	glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, wrap);
+	if (GLEW_ARB_texture_filter_anisotropic || GLEW_EXT_texture_filter_anisotropic)
+		glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
 }
 
 void WindowSys::destroyWindow() {
 #ifdef OPENVR
-	if (vrSys)
-		vrSys->free();
+	vrSys->free();
+	delete vrSys;
 #endif
 	delete gui;
 	delete skybox;
@@ -856,34 +855,19 @@ Settings::AntiAliasing WindowSys::maxAntiAliasing() const {
 	return aa;
 }
 
-void WindowSys::setSwapInterval() {
-	switch (sets->vsync) {
-	case Settings::VSync::adaptive:
-		if (trySetSwapInterval())
-			break;
-		sets->vsync = Settings::VSync::synchronized;
-	case Settings::VSync::synchronized:
-		if (trySetSwapInterval())
-			break;
-		sets->vsync = Settings::VSync::immediate;
-	case Settings::VSync::immediate:
-		trySetSwapInterval();
-	}
+Settings::Anisotropy WindowSys::maxAnisotropicFiltering() const {
+	Settings::Anisotropy af = Settings::Anisotropy::x16;
+	for (; Settings::getAf(af) > maxAnisotropy; --af);
+	return af;
 }
 
-bool WindowSys::trySetSwapInterval() {
-	if (SDL_GL_SetSwapInterval(int8(sets->vsync))) {
-		logError("swap interval ", int(sets->vsync), " not supported");
-		return false;
-	}
-	return true;
+void WindowSys::setSwapInterval() {
+	if (!sets->vsync || (SDL_GL_SetSwapInterval(-1) && SDL_GL_SetSwapInterval(1)))
+		SDL_GL_SetSwapInterval(0);
 }
 
 void WindowSys::setScreen() {
-#ifdef OPENVR
-	if (vrSys)
-		return;
-#endif
+#ifndef OPENVR
 	bool hadTitleBar = titleBarHeight;
 	if (sets->display >= SDL_GetNumVideoDisplays())
 		sets->display = 0;
@@ -913,6 +897,7 @@ void WindowSys::setScreen() {
 	program->getGui()->makeTitleBar();
 	program->getState()->updateTitleBar(hadTitleBar);
 	scene->onExternalResize();
+#endif
 }
 
 void WindowSys::updateView() {
@@ -924,14 +909,12 @@ void WindowSys::updateView() {
 	SDL_GL_GetDrawableSize(window, &windowView.x, &windowView.y);
 #endif
 #ifdef OPENVR
-	if (vrSys) {
-		glViewport(0, 0, screenView.x, screenView.y);
-		return;
-	}
-#endif
+	glViewport(0, 0, screenView.x, screenView.y);
+#else
 	screenView = ivec2(windowView.x, windowView.y - titleBarHeight);
 	guiView = screenView;
 	glViewport(0, 0, screenView.x, screenView.y);
+#endif
 }
 
 void WindowSys::setTitleBarHeight() {

@@ -257,7 +257,7 @@ int main(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
 
-	if (Arguments arg(argc, argv, {}, { argJson, argMaterial, argObject, argShader, argShaderE, argTexture, argScale }); arg.getVals().empty())
+	if (Arguments arg(argc - 1, argv + 1, {}, { argJson, argMaterial, argObject, argShader, argShaderE, argTexture, argScale }); arg.getVals().empty())
 		logInfo("no input files", linend, messageUsage);
 	else if (const char* dest = arg.getOpt(argJson); dest)
 		process(dest, arg.getVals(), processJson);

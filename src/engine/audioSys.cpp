@@ -16,9 +16,9 @@ AudioSys::AudioSys(const uint8& avolume) :
 	if (aspec.freq != spec.freq)
 		logInfo("audio frequency changed from ", spec.freq, " to ", aspec.freq);
 	if (aspec.format != spec.format)
-		logInfo("audio format changed from ", toStr<16>(spec.format), " to ", aspec.format);
+		logInfo("audio format changed from ", formatToStr(spec.format), " to ", formatToStr(aspec.format));
 	if (aspec.channels != spec.channels)
-		logInfo("audio channels changed from ", spec.channels, " to ", aspec.channels);
+		logInfo("audio channels changed from ", uint(spec.channels), " to ", uint(aspec.channels));
 	sounds = FileSys::loadAudios(aspec);
 }
 

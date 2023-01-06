@@ -280,17 +280,6 @@ struct Settings {
 		"desktop"
 	};
 
-	enum class VSync : int8 {
-		adaptive = -1,
-		immediate,
-		synchronized
-	};
-	static constexpr array<const char*, sizet(VSync::synchronized) + 2> vsyncNames = {	// add 1 to vsync value to get name
-		"adaptive",
-		"immediate",
-		"synchronized"
-	};
-
 	enum class AntiAliasing : uint8 {
 		none,
 		fxaa,
@@ -304,6 +293,21 @@ struct Settings {
 		"MSAAx2",
 		"MSAAx4",
 		"MSAAx8"
+	};
+
+	enum class Anisotropy : uint8 {
+		none,
+		x2,
+		x4,
+		x8,
+		x16
+	};
+	static constexpr array<const char*, sizet(Anisotropy::x16) + 1> anisotropyNames = {
+		"none",
+		"x2",
+		"x4",
+		"x8",
+		"x16"
 	};
 
 	enum class Hinting : uint8 {
@@ -359,6 +363,7 @@ struct Settings {
 
 	static constexpr char defaultAddress[] = "94.16.112.206";
 	static constexpr uint8 playerNameLimit = 31;
+	static constexpr char defaultConfigName[] = "default";
 	static constexpr char defaultVersionLocation[] = "https://github.com/karwler/Thrones/releases";
 	static constexpr char defaultVersionRegex[] = R"r(<a\s+.*?href="/karwler/Thrones/releases/tag/v(\d+\.\d+\.\d+(\.\d+)?)".*?>)r";
 	static constexpr char defaultFont[] = "Romanesque";
@@ -369,7 +374,23 @@ struct Settings {
 #else
 	static constexpr Screen defaultScreen = Screen::borderlessWindow;
 #endif
-	static constexpr VSync defaultVSync = VSync::synchronized;
+#ifdef OPENGLES
+	static constexpr uint16 defaultShadowRes = 0;
+	static constexpr AntiAliasing defaultAntiAliasing = AntiAliasing::none;
+	static constexpr Anisotropy defaultAnisotropy = Anisotropy::none;
+	static constexpr bool defaultSoftShadows = false;
+	static constexpr bool defaultSsao = false;
+	static constexpr bool defaultBloom = false;
+	static constexpr bool defaultSsr = false;
+#else
+	static constexpr uint16 defaultShadowRes = 1024;
+	static constexpr AntiAliasing defaultAntiAliasing = AntiAliasing::msaa4;
+	static constexpr Anisotropy defaultAnisotropy = Anisotropy::x8;
+	static constexpr bool defaultSoftShadows = true;
+	static constexpr bool defaultSsao = true;
+	static constexpr bool defaultBloom = true;
+	static constexpr bool defaultSsr = true;
+#endif
 	static constexpr uint8 shadowBitMax = 13;
 	static constexpr float gammaMax = 4.f;
 	static constexpr dvec2 fovLimit = dvec2(30.0, 40.0);
@@ -383,52 +404,54 @@ struct Settings {
 	static constexpr char argExternal = 'e';
 	static constexpr char argCompositor = 'k';
 	static constexpr char argLog = 'l';
-	static constexpr char argVr = 'r';
 #ifndef NDEBUG
 	static constexpr char argConsole = 'c';
 	static constexpr char argSetup = 's';
 #endif
 	static constexpr float minimumRatio = 1.4f;
 
-	string address;
-	string port;
+	string address = defaultAddress;
+	string port = Com::defaultPort;
 	string playerName;
-	string lastConfig;
-	string versionLookupUrl;
-	string versionLookupRegex;
-	string font;
-	double fov;
-	SDL_DisplayMode mode;
-	ivec2 size;
-	float gamma;
-	uint16 shadowRes;
-	uint16 chatLines;
-	uint16 deadzone;
-	uint8 display;
-	Screen screen;
-	VSync vsync;
-	uint8 texScale;
-	AntiAliasing antiAliasing;
-	bool softShadows;
-	bool ssao;
-	bool bloom;
-	bool ssr;
-	Hinting hinting;
-	uint8 avolume;
-	Color colorAlly, colorEnemy;
-	bool scaleTiles, scalePieces;
-	bool autoVictoryPoints;
-	bool tooltips;
-	Family resolveFamily;
-	bool invertWheel;
-
-	Settings();
+	string lastConfig = defaultConfigName;
+	string versionLookupUrl = defaultVersionLocation;
+	string versionLookupRegex = defaultVersionRegex;
+	string font = defaultFont;
+	double fov = 35.0;
+	SDL_DisplayMode mode{ SDL_PIXELFORMAT_RGB888, 1920, 1080, 60, nullptr };
+	ivec2 size = ivec2(1280, 720);
+	float gamma = 1.f;
+	uint16 shadowRes = defaultShadowRes;
+	uint16 chatLines = 511;
+	uint16 deadzone = 12000;
+	uint8 display = 0;
+	Screen screen = defaultScreen;
+	bool vsync = true;
+	uint8 texScale = 100;
+	AntiAliasing antiAliasing = defaultAntiAliasing;
+	Anisotropy anisotropy = defaultAnisotropy;
+	bool softShadows = defaultSoftShadows;
+	bool ssao = defaultSsao;
+	bool bloom = defaultBloom;
+	bool ssr = defaultSsr;
+	Hinting hinting = defaultHinting;
+	uint8 avolume = 0;
+	Color colorAlly = defaultAlly;
+	Color colorEnemy = defaultEnemy;
+	bool scaleTiles = true;
+	bool scalePieces = false;
+	bool autoVictoryPoints = true;
+	bool tooltips = true;
+	Family resolveFamily = defaultFamily;
+	bool invertWheel = false;
 
 	bool trySetDisplay(int dip);
 	int getFamily() const;
 	int getShadowOpt() const;
 	uint getMsaa() const;
 	static uint getMsaa(AntiAliasing aa);
+	float getAf() const;
+	static float getAf(Anisotropy af);
 
 	vector<ivec2> windowSizes() const;
 	vector<SDL_DisplayMode> displayModes() const;
@@ -444,4 +467,12 @@ inline uint Settings::getMsaa() const {
 
 inline uint Settings::getMsaa(AntiAliasing aa) {
 	return aa >= AntiAliasing::msaa2 ? 1 << (uint8(aa) - uint8(AntiAliasing::msaa2) + 1) : 0;
+}
+
+inline float Settings::getAf() const {
+	return getAf(anisotropy);
+}
+
+inline float Settings::getAf(Anisotropy af) {
+	return float(1 << uint8(af));
 }

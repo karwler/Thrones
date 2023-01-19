@@ -95,12 +95,6 @@ void Mesh::setInstanceAttrib() {
 	glEnableVertexAttribArray(Shader::diffuse);
 	glVertexAttribPointer(Shader::diffuse, decltype(Instance::diffuse)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, diffuse)));
 	glVertexAttribDivisor(Shader::diffuse, 1);
-	glEnableVertexAttribArray(Shader::specShine);
-	glVertexAttribPointer(Shader::specShine, decltype(Instance::specShine)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, specShine)));
-	glVertexAttribDivisor(Shader::specShine, 1);
-	glEnableVertexAttribArray(Shader::reflRough);
-	glVertexAttribPointer(Shader::reflRough, decltype(Instance::reflRough)::length(), GL_FLOAT, GL_FALSE, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, reflRough)));
-	glVertexAttribDivisor(Shader::reflRough, 1);
 	glEnableVertexAttribArray(Shader::texid);
 	glVertexAttribIPointer(Shader::texid, decltype(Instance::texid)::length(), GL_UNSIGNED_INT, sizeof(Instance), reinterpret_cast<void*>(offsetof(Instance, texid)));
 	glVertexAttribDivisor(Shader::texid, 1);
@@ -112,8 +106,6 @@ void Mesh::setInstanceAttrib() {
 void Mesh::disableAttrib() {
 	glDisableVertexAttribArray(Shader::show);
 	glDisableVertexAttribArray(Shader::texid);
-	glDisableVertexAttribArray(Shader::reflRough);
-	glDisableVertexAttribArray(Shader::specShine);
 	glDisableVertexAttribArray(Shader::diffuse);
 	glDisableVertexAttribArray(Shader::normat2);
 	glDisableVertexAttribArray(Shader::normat1);
@@ -199,21 +191,19 @@ Object::Object(const vec3& position, const vec3& rotation, const vec3& scale, bo
 	rigid(interactive)
 {}
 
-void Object::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible) {
+void Object::init(Mesh* model, uint id, uint material, uvec2 texture, bool visible) {
 	mesh = model;
 	matl = material;
 	meshIndex = id;
 	init(model, id, pos, rot, scl, material, texture, visible);
 }
 
-void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, uvec2 texture, bool visible) {
+void Object::init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, uint material, uvec2 texture, bool visible) {
 	Mesh::Instance& ins = model->getInstance(id);
 	ins.model = getTransform(pos, rot, scl);
 	ins.normat = glm::inverseTranspose(mat3(ins.model));
-	ins.diffuse = material->color;
-	ins.specShine = vec4(material->spec, material->shine);
-	ins.reflRough = vec2(material->reflect, material->rough);
-	ins.texid = texture;
+	ins.diffuse = World::scene()->material(material)->color;
+	ins.texid = uvec3(texture, material);
 	ins.show = visible;
 }
 
@@ -269,18 +259,19 @@ void Object::getTransform(mat4& model, mat3& normat) {
 	normat = glm::inverseTranspose(mat3(model));
 }
 
-void Object::setMaterial(const Material* material) {
+void Object::setMaterial(uint material) {
 	matl = material;
 	Mesh::Instance& ins = mesh->getInstance(meshIndex);
-	ins.diffuse = matl->color;
-	ins.specShine = vec4(matl->spec, matl->shine);
-	ins.reflRough = vec2(material->reflect, material->rough);
-	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(ins.diffuse) + sizeof(ins.specShine) + sizeof(ins.reflRough));
+	ins.diffuse = World::scene()->material(matl)->color;
+	ins.texid.z = matl;
+	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(Mesh::Instance::diffuse) + sizeof(Mesh::Instance::texid));
 }
 
 void Object::setTexture(uvec2 texture) {
-	mesh->getInstance(meshIndex).texid = texture;
-	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, texid), sizeof(Mesh::Instance::texid));
+	Mesh::Instance& ins = mesh->getInstance(meshIndex);
+	ins.texid.x = texture.x;
+	ins.texid.y = texture.y;
+	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, texid), sizeof(Mesh::Instance::texid.x) + sizeof(Mesh::Instance::texid.y));
 }
 
 void Object::setShow(bool visible) {
@@ -290,7 +281,7 @@ void Object::setShow(bool visible) {
 
 // BOARD OBJECT
 
-void BoardObject::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, float alpha) {
+void BoardObject::init(Mesh* model, uint id, uint material, uvec2 texture, bool visible, float alpha) {
 	mesh = model;
 	matl = material;
 	meshIndex = id;
@@ -298,24 +289,20 @@ void BoardObject::init(Mesh* model, uint id, const Material* material, uvec2 tex
 	float dfac = emissionFactor();
 	Mesh::Instance& ins = mesh->getInstance(meshIndex);
 	getTransform(ins.model, ins.normat);
-	ins.diffuse = matl->color * vec4(dfac, dfac, dfac, alpha);
-	ins.specShine = vec4(matl->spec, matl->shine);
-	ins.reflRough = vec2(material->reflect, material->rough);
-	ins.texid = texture;
+	ins.diffuse = World::scene()->material(matl)->color * vec4(dfac, dfac, dfac, alpha);
+	ins.texid = uvec3(texture, matl);
 	ins.show = visible;
 }
 
-void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool solid) {
+void BoardObject::setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, uint material, const vec4& colorFactor, uvec2 texture, bool solid) {
 	topSolid = solid;
 
 	vec3 isct = World::scene()->rayXZIsct(World::scene()->pickerRay(mPos));
 	Mesh::Instance& top = tmesh->getInstanceTop();
 	top.model = getTransform(vec3(isct.x, getTopY(), isct.z), getRot(), getScl());
 	top.normat = normat;
-	top.diffuse = material->color * colorFactor;
-	top.specShine = vec4(material->spec, material->shine);
-	top.reflRough = vec2(material->reflect, material->rough);
-	top.texid = texture;
+	top.diffuse = World::scene()->material(material)->color * colorFactor;
+	top.texid = uvec3(texture, material);
 	top.show = true;
 	tmesh->updateInstanceDataTop();
 	World::state()->initObjectDrag(this, tmesh, vec2(isct.x, isct.z));
@@ -439,16 +426,17 @@ void BoardObject::startKeyDrag(uint8 mBut) {
 void BoardObject::setEmission(Emission emi) {
 	emission = emi;
 
+	const vec4& color = World::scene()->material(matl)->color;
 	float dfac = emissionFactor();
 	vec4& diffuse = mesh->getInstance(meshIndex).diffuse;
-	diffuse.r = matl->color.r * dfac;
-	diffuse.g = matl->color.g * dfac;
-	diffuse.b = matl->color.b * dfac;
+	diffuse.r = color.r * dfac;
+	diffuse.g = color.g * dfac;
+	diffuse.b = color.b * dfac;
 	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse), sizeof(diffuse.r) + sizeof(diffuse.g) + sizeof(diffuse.b));
 }
 
 void BoardObject::setAlphaFactor(float alpha) {
-	mesh->getInstance(meshIndex).diffuse.a = matl->color.a * alpha;
+	mesh->getInstance(meshIndex).diffuse.a = World::scene()->material(matl)->color.a * alpha;
 	mesh->updateInstance(meshIndex, offsetof(Mesh::Instance, diffuse.a), sizeof(Mesh::Instance::diffuse.a));
 }
 
@@ -498,7 +486,7 @@ void Tile::setType(TileType newType) {
 	bool amVisible = type != TileType::empty || (getEmission() & EMI_SEL);
 
 	swapMesh();
-	setMaterial(World::scene()->material(type != TileType::empty ? "tile" : "empty"));
+	setMaterial(World::scene()->matlId(type != TileType::empty ? "tile" : "empty"));
 	setAlphaFactor(amVisible ? 1.f : 0.f);
 	setTexture(World::scene()->objTex(tileNames[uint8(type)]));
 	setShow(amVisible);
@@ -543,7 +531,7 @@ void TileCol::update(const Config& conf) {
 
 // PIECE
 
-void Piece::init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, PieceType iniType) {
+void Piece::init(Mesh* model, uint id, uint material, uvec2 texture, bool visible, PieceType iniType) {
 	type = iniType;
 	BoardObject::init(model, id, material, texture, visible);
 }
@@ -561,7 +549,7 @@ void Piece::onHold(ivec2 mPos, uint8 mBut) {
 				setTop(mPos, ins.normat, mesh, matl, moveColorFactor, ins.texid);
 			} else {
 				SDL_ShowCursor(SDL_DISABLE);
-				setTop(mPos, mat3(1.f), World::scene()->mesh("plane"), World::scene()->material("reticle"), vec4(1.f), World::scene()->objTex("reticle"), false);
+				setTop(mPos, mat3(1.f), World::scene()->mesh("plane"), World::scene()->matlId("reticle"), vec4(1.f), World::scene()->objTex("reticle"), false);
 			}
 		}
 		World::prun(hgcall, this, mBut);

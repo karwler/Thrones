@@ -130,7 +130,7 @@ public:
 	static void saveSetups(const umap<string, Setup>& sets);
 	static vector<string> listFonts();
 	static umap<string, Sound> loadAudios(const SDL_AudioSpec& spec);
-	static umap<string, Material> loadMaterials();
+	static vector<Material> loadMaterials(umap<string, uint16>& refs);
 	static vector<Mesh> loadObjects(umap<string, uint16>& refs);
 	static umap<string, string> loadShaders();
 	static TextureSet::Import loadTextures(vector<TextureCol::Element>& icns, int& minUiHeight, float scale);

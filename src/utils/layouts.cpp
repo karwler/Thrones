@@ -35,7 +35,9 @@ Interactable* Navigator::findFirstSelectable() const {
 }
 
 void Navigator::navSelectOut(const vec3& pos, Direction dir) {
+#ifndef OPENVR
 	parent->navSelectNext(index, World::scene()->getCamera()->screenPos(pos)[dir.horizontal()], dir);
+#endif
 }
 
 // LAYOUT

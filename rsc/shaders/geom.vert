@@ -7,13 +7,13 @@ layout(location = 0) in vec3 vpos;
 layout(location = 1) in vec3 normal;
 layout(location = 4) in mat4 model;
 layout(location = 11) in vec4 diffuse;
-layout(location = 13) in vec2 reflRough;
-layout(location = 15) in int show;
+layout(location = 12) in uvec3 texid;
+layout(location = 13) in int show;
 
 out vec4 fragPos;
 out vec3 fragNormal;
 flat out float fragAlpha;
-flat out vec2 fragReflRough;
+flat out uint fragMatl;
 flat out int fragShow;
 
 void main() {
@@ -22,7 +22,7 @@ void main() {
 	fragPos = vloc;
 	fragNormal = transpose(inverse(mat3(vmodel))) * normal;
 	fragAlpha = diffuse.a;
-	fragReflRough = reflRough;
+	fragMatl = texid.z;
 	fragShow = show;
 	gl_Position = proj * vloc;
 }

@@ -27,8 +27,8 @@ public:
 	void free();
 
 private:
-	template <GLint iform, GLenum pform, GLenum active> static pair<GLuint, GLuint> makeFramebuffer(ivec2 res, string_view name);
-	template <GLint iform, GLenum pform, GLenum active> static GLuint makeTexture(ivec2 res);
+	template <GLint iform, GLenum pform, GLenum type, GLenum active> static pair<GLuint, GLuint> makeFramebuffer(ivec2 res, string_view name);
+	template <GLint iform, GLenum pform, GLenum type, GLenum active> static GLuint makeTexture(ivec2 res);
 };
 
 #ifndef OPENVR
@@ -149,13 +149,17 @@ private:
 	Keyframe begin;		// initial state of the object
 	union {
 		Object* object;
+#ifndef OPENVR
 		Camera* camera;
+#endif
 	};	// cannot be null
 	bool useObject;
 
 public:
 	Animation(Object* obj, std::queue<Keyframe>&& keyframes);
+#ifndef OPENVR
 	Animation(Camera* cam, std::queue<Keyframe>&& keyframes);
+#endif
 
 	bool tick(float dSec);
 	void append(Animation& ani);
@@ -196,7 +200,8 @@ private:
 	vector<Animation> animations;
 	vector<Mesh> meshes;
 	umap<string, uint16> meshRefs;
-	umap<string, Material> matls;
+	vector<Material> materials;
+	umap<string, uint16> matlRefs;
 	umap<string, TexLoc> texColRefs;
 	TextureSet texSet;
 	TextureCol texCol;
@@ -228,7 +233,8 @@ public:
 	void onXbutCancel();
 
 	Mesh* mesh(const string& name);
-	const Material* material(const string& name) const;
+	const Material* material(uint id) const;
+	uint matlId(const string& name) const;
 	void loadObjects();
 	TextureCol* getTexCol();
 	const TexLoc& wgtTex(const string& name = string()) const;
@@ -244,7 +250,9 @@ public:
 	void setCapture(Interactable* inter, bool reset = true);
 	void resetLayouts();
 	void updateTooltips();
+#ifndef OPENVR
 	Camera* getCamera();
+#endif
 	RootLayout* getLayout();
 	Popup* getPopup();
 	vector<Overlay*>& getOverlays();
@@ -273,7 +281,7 @@ private:
 	static ScrollArea* findFirstScrollArea(Widget* wgt);
 
 	array<SDL_Surface*, pieceLim> renderPieceIcons();
-	void renderModel(GLuint fbo, const FrameSet& frms, const string& name, const Material* matl);
+	void renderModel(GLuint fbo, const FrameSet& frms, const string& name, uint matl);
 	static void startDepthDraw(const Shader* shader, GLuint fbo);
 	static void drawFrame(const Shader* shader, GLuint fbo);
 };
@@ -302,9 +310,11 @@ inline Interactable* Scene::getCapture() const {
 	return capture.inter;
 }
 
+#ifndef OPENVR
 inline Camera* Scene::getCamera() {
 	return camera.get();
 }
+#endif
 
 inline RootLayout* Scene::getLayout() {
 	return layout;
@@ -339,19 +349,31 @@ inline ScrollArea* Scene::getSelectedScrollArea(Interactable* inter) const {
 }
 
 inline vec3 Scene::pickerRay(ivec2 mPos) const {
+#ifdef OPENVR
+	return vec3(0.f);
+#else
 	return camera->direction(mPos) * Camera::zfar;	// TODO: VR handling
+#endif
 }
 
 inline vec3 Scene::rayXZIsct(const vec3& ray) const {
+#ifdef OPENVR
+	return vec3(0.f);
+#else
 	return camera->getPos() - ray * (camera->getPos().y / ray.y);	// TODO: VR handling
+#endif
 }
 
 inline Mesh* Scene::mesh(const string& name) {
 	return &meshes[meshRefs.at(name)];
 }
 
-inline const Material* Scene::material(const string& name) const {
-	return &matls.at(name);
+inline const Material* Scene::material(uint id) const {
+	return &materials[id];
+}
+
+inline uint Scene::matlId(const string& name) const {
+	return matlRefs.at(name);
 }
 
 inline TextureCol* Scene::getTexCol() {

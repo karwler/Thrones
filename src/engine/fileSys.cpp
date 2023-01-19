@@ -610,15 +610,16 @@ umap<string, Sound> FileSys::loadAudios(const SDL_AudioSpec& spec) {
 	return audios;
 }
 
-umap<string, Material> FileSys::loadMaterials() {
+vector<Material> FileSys::loadMaterials(umap<string, uint16>& refs) {
 	SDL_RWops* ifh = SDL_RWFromFile((dataPath() + fileMaterials).c_str(), defaultReadMode);
 	if (!ifh)
 		throw std::runtime_error("failed to load materials");
 
 	uint16 size;
 	SDL_RWread(ifh, &size, sizeof(size), 1);
-	umap<string, Material> mtls = { pair(string(), Material()) };
-	mtls.reserve(size + 1);
+	refs.reserve(size + 1);
+	refs.emplace(string(), 0);
+	vector<Material> mtls(size + 1);
 
 	uint16 len;
 	Material matl;
@@ -628,8 +629,8 @@ umap<string, Material> FileSys::loadMaterials() {
 		name.resize(len);
 
 		SDL_RWread(ifh, name.data(), sizeof(*name.data()), name.length());
-		SDL_RWread(ifh, &matl, sizeof(matl), 1);
-		mtls.emplace(std::move(name), matl);
+		SDL_RWread(ifh, &mtls[i + 1], sizeof(*mtls.data()), 1);
+		refs.emplace(std::move(name), i + 1);
 	}
 	SDL_RWclose(ifh);
 	return mtls;
@@ -915,7 +916,7 @@ void FileSys::saveScreenshot(SDL_Surface* img, string_view desc) {
 }
 
 void SDLCALL FileSys::logWrite(void* userdata, int, SDL_LogPriority priority, const char* message) {
-	string prefix = DateTime::now().toString() + ' ';
+	string prefix = DateTime::now().timeString() + ' ';
 	switch (priority) {
 	case SDL_LOG_PRIORITY_VERBOSE:
 		prefix += "VERBOSE: ";

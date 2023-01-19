@@ -73,6 +73,7 @@ using glm::vec4;
 using glm::dvec2;
 using glm::ivec2;
 using glm::uvec2;
+using glm::uvec3;
 using glm::uvec4;
 using svec2 = glm::u16vec2;
 

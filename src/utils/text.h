@@ -45,7 +45,7 @@ template <class T>
 string operator+(std::basic_string_view<T> a, std::basic_string<T>&& b) {
 	sizet blen = b.length();
 	b.resize(a.length() + blen);
-	std::move_backward(b.begin(), b.begin() + blen, b.begin() + a.length());
+	std::move_backward(b.begin(), b.begin() + blen, b.end());
 	std::copy(a.begin(), a.end(), b.begin());
 	return b;
 }
@@ -337,7 +337,7 @@ struct DateTime {
 	DateTime(uint8 second, uint8 minute, uint8 dhour, uint8 mday, uint8 ymonth, uint16 tyear, uint8 weekDay);
 
 	static DateTime now();
-	string timeString(char ts = '-') const;
+	string timeString(char ts = ':') const;
 	string dateString(char ds = '-') const;
 	string toString(char ts = '-', char sep = '_', char ds = '-') const;
 	bool datecmp(const DateTime& date) const;

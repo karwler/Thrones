@@ -18,7 +18,7 @@ VrSys::VrSys() {
 	if (error != VRInitError_None)
 		throw std::runtime_error("Failed to initialize VR runtime: "s + VR_GetVRInitErrorAsEnglishDescription(error));
 
-	leftProj = hmdToMat4(system->GetProjectionMatrix(Eye_Left, znear, zfar));	// TODO: all this needs to be passed to Camera
+	leftProj = hmdToMat4(system->GetProjectionMatrix(Eye_Left, znear, zfar));
 	rightProj = hmdToMat4(system->GetProjectionMatrix(Eye_Right, znear, zfar));
 	leftPos = hmdToMat4(system->GetEyeToHeadTransform(Eye_Left));
 	rightPos = hmdToMat4(system->GetEyeToHeadTransform(Eye_Right));
@@ -128,7 +128,7 @@ void VrSys::free() {
 }
 
 void VrSys::createFrameBuffer(Framebuffer& framebuffer) {
-	glGenFramebuffers(1, &framebuffer.fboRender);	// TODO: we can handle generating both at once
+	glGenFramebuffers(1, &framebuffer.fboRender);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fboRender);
 
 	glGenRenderbuffers(1, &framebuffer.rboDepth);
@@ -319,7 +319,7 @@ void VrSys::drawControllerAxes() {
 void VrSys::drawStereoTargets() {
 	for (Hmd_Eye eye = Eye_Left; eye <= Eye_Right; ++eye) {
 		glViewport(0, 0, renderSize.x, renderSize.y);	// TODO: this needs to be handled in scene
-		drawScene(Eye_Left);
+		drawScene(eye);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 }

@@ -1,14 +1,19 @@
 #version 330 core
 
+struct Material {
+	float reflect;
+};
+
 const float maxDistance = 6.0;
 const float resolution = 0.3;
 const float thickness = 0.5;
 
 uniform mat4 proj;
+uniform Material materials[19];
 
 uniform sampler2D vposMap;
 uniform sampler2D normMap;
-uniform sampler2D matlMap;
+uniform usampler2D matlMap;
 
 noperspective in vec2 fragUV;
 
@@ -16,7 +21,7 @@ out vec4 fragColor;
 
 void main() {
 	vec4 positionFrom = texture(vposMap, fragUV);
-	if (positionFrom.w <= 0.0 || texture(matlMap, fragUV).r <= 0.0) {
+	if (positionFrom.w <= 0.0 || materials[texture(matlMap, fragUV).r].reflect <= 0.0) {
 		fragColor = vec4(0.0);
 		return;
 	}

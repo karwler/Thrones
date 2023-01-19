@@ -15,12 +15,12 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 		constexpr array<GLenum, 3> attach = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 		glGenFramebuffers(1, &fboGeom);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboGeom);
-		texPosition = makeTexture<GL_RGBA32F, GL_RGBA, Shader::vposTexa>(res);
+		texPosition = makeTexture<GL_RGBA32F, GL_RGBA, GL_FLOAT, Shader::vposTexa>(res);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, attach[0], GL_TEXTURE_2D, texPosition, 0);
-		texNormal = makeTexture<GL_RGBA32F, GL_RGBA, Shader::normTexa>(res);
+		texNormal = makeTexture<GL_RGBA32F, GL_RGBA, GL_FLOAT, Shader::normTexa>(res);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, attach[1], GL_TEXTURE_2D, texNormal, 0);
 		if (sets->ssr) {
-			texMatl = makeTexture<GL_RG32F, GL_RG, Shader::matlTexa>(res);
+			texMatl = makeTexture<GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, Shader::matlTexa>(res);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, attach[2], GL_TEXTURE_2D, texMatl, 0);
 		}
 		glDrawBuffers(attach.size() - !sets->ssr, attach.data());
@@ -33,12 +33,12 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 		checkFramebufferStatus("geometry buffer");
 	}
 	if (sets->ssao) {
-		std::tie(fboSsao[0], texSsao[0]) = makeFramebuffer<GL_R16F, GL_RED, Shader::ssao0Texa>(res, "SSAO buffer 0");
-		std::tie(fboSsao[1], texSsao[1]) = makeFramebuffer<GL_R16F, GL_RED, Shader::ssao1Texa>(res, "SSAO buffer 1");
+		std::tie(fboSsao[0], texSsao[0]) = makeFramebuffer<GL_R16F, GL_RED, GL_FLOAT, Shader::ssao0Texa>(res, "SSAO buffer 0");
+		std::tie(fboSsao[1], texSsao[1]) = makeFramebuffer<GL_R16F, GL_RED, GL_FLOAT, Shader::ssao1Texa>(res, "SSAO buffer 1");
 	}
 	if (sets->ssr) {
-		std::tie(fboSsr[0], texSsr[0]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::ssr0Texa>(res, "SSR buffer 0");
-		std::tie(fboSsr[1], texSsr[1]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::ssr1Texa>(res, "SSR buffer 1");
+		std::tie(fboSsr[0], texSsr[0]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, GL_FLOAT, Shader::ssr0Texa>(res, "SSR buffer 0");
+		std::tie(fboSsr[1], texSsr[1]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, GL_FLOAT, Shader::ssr1Texa>(res, "SSR buffer 1");
 	}
 
 	uint msaa = sets->getMsaa();
@@ -63,7 +63,7 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 #endif
 	glGenFramebuffers(1, &fboLight[0]);
 	glBindFramebuffer(GL_FRAMEBUFFER, fboLight[0]);
-	texLight[0] = makeTexture<GL_RGBA16F, GL_RGBA, Shader::sceneTexa>(res);
+	texLight[0] = makeTexture<GL_RGBA16F, GL_RGBA, GL_FLOAT, Shader::sceneTexa>(res);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texLight[0], 0);
 	glReadBuffer(GL_NONE);
 
@@ -77,7 +77,7 @@ FrameSet::FrameSet(const Settings* sets, ivec2 res) {
 
 	if (sets->bloom)
 		for (sizet i = 0; i < fboGauss.size(); ++i)
-			std::tie(fboGauss[i], texGauss[i]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, Shader::gaussTexa>(res, "gauss buffer " + toStr(i));
+			std::tie(fboGauss[i], texGauss[i]) = makeFramebuffer<GL_RGBA16F, GL_RGBA, GL_FLOAT, Shader::gaussTexa>(res, "gauss buffer " + toStr(i));
 }
 
 void FrameSet::bindTextures() {
@@ -99,26 +99,26 @@ void FrameSet::bindTextures() {
 	glBindTexture(GL_TEXTURE_2D, texLight[0]);
 }
 
-template <GLint iform, GLenum pform, GLenum active>
+template <GLint iform, GLenum pform, GLenum type, GLenum active>
 pair<GLuint, GLuint> FrameSet::makeFramebuffer(ivec2 res, string_view name) {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	GLuint tex = makeTexture<iform, pform, active>(res);
+	GLuint tex = makeTexture<iform, pform, type, active>(res);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 	glReadBuffer(GL_NONE);
 	checkFramebufferStatus(name);
 	return pair(fbo, tex);
 }
 
-template <GLint iform, GLenum pform, GLenum active>
+template <GLint iform, GLenum pform, GLenum type, GLenum active>
 GLuint FrameSet::makeTexture(ivec2 res) {
 	GLuint tex;
 	glActiveTexture(active);
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexImage2D(GL_TEXTURE_2D, 0, iform, res.x, res.y, 0, pform, GL_FLOAT, nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, iform, res.x, res.y, 0, pform, type, nullptr);
 	return tex;
 }
 
@@ -264,7 +264,7 @@ Light::Light(const Settings* sets, const vec3& position, const vec3& color, floa
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
 		for (uint i = 0; i < 6; ++i)
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT32F, sets->shadowRes, sets->shadowRes, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X, texDepth, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X, texDepth, 0);	// bind one to make the check happy
 #ifdef OPENGLES
 		GLenum none = GL_NONE;
 		glDrawBuffers(1, &none);
@@ -331,6 +331,7 @@ Animation::Animation(Object* obj, std::queue<Keyframe>&& keyframes) :
 	useObject(true)
 {}
 
+#ifndef OPENVR
 Animation::Animation(Camera* cam, std::queue<Keyframe>&& keyframes) :
 	kframes(std::move(keyframes)),
 	begin(0.f, cam->getPos(), std::nullopt, cam->getLat()),
@@ -339,22 +340,31 @@ Animation::Animation(Camera* cam, std::queue<Keyframe>&& keyframes) :
 {
 	cam->state = Camera::State::animating;
 }
+#endif
 
 bool Animation::tick(float dSec) {
 	begin.time += dSec;
 	if (float td = kframes.front().time > 0.f ? std::clamp(begin.time / kframes.front().time, 0.f, 1.f) : 1.f; useObject)
 		object->setTrans(kframes.front().pos ? glm::mix(*begin.pos, *kframes.front().pos, td) : object->getPos(), kframes.front().rot ? glm::mix(*begin.rot, *kframes.front().rot, td) : object->getRot(), kframes.front().scl ? glm::mix(*begin.scl, *kframes.front().scl, td) : object->getScl());
+#ifndef OPENVR
 	else
 		camera->setPos(kframes.front().pos ? glm::mix(*begin.pos, *kframes.front().pos, td) : camera->getPos(), kframes.front().lat ? glm::mix(*begin.lat, *kframes.front().lat, td) : camera->getLat());
-
+#endif
 	if (begin.time >= kframes.front().time) {
 		float ovhead = begin.time - kframes.front().time;
 		if (kframes.pop(); !kframes.empty()) {
-			begin = Keyframe(0.f, useObject ? object->getPos() : camera->getPos(), useObject ? object->getRot() : quat(), useObject ? object->getScl() : camera->getLat());
+			if (useObject)
+				begin = Keyframe(0.f, object->getPos(), object->getRot(), object->getScl());
+#ifndef OPENVR
+			else
+				begin = Keyframe(0.f, camera->getPos(), std::nullopt, camera->getLat());
+#endif
 			return tick(ovhead);
 		}
+#ifndef OPENVR
 		if (!useObject)
 			camera->state = Camera::State::stationary;
+#endif
 		return false;
 	}
 	return true;
@@ -368,7 +378,9 @@ void Animation::append(Animation& ani) {
 // SCENE
 
 Scene::Scene() :
+#ifndef OPENVR
 	camera(std::make_unique<Camera>(Camera::posSetup, Camera::latSetup, float(glm::radians(World::sets()->fov)), Camera::pmaxSetup, Camera::ymaxSetup, World::window()->getScreenView())),
+#endif
 	light(World::sets()),
 	frames(World::sets(), World::window()->getScreenView())
 {
@@ -667,7 +679,10 @@ void Scene::onXbutCancel() {
 
 void Scene::loadObjects() {
 	meshes = FileSys::loadObjects(meshRefs);
-	matls = FileSys::loadMaterials();
+	materials = FileSys::loadMaterials(matlRefs);
+	World::light()->setMaterials(materials);
+	World::ssr()->setMaterials(materials);
+	World::sfinal()->setMaterials(materials);
 }
 
 void Scene::loadTextures(int recomTexSize) {
@@ -893,7 +908,7 @@ array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
 #else
 	GLsizei res = GLsizei(float(World::sets()->windowSizes().back().y) * GuiGen::iconSize);
 #endif
-	const Material* matl = material(Settings::colorNames[uint8(World::sets()->colorAlly)]);
+	uint matl = matlId(Settings::colorNames[uint8(World::sets()->colorAlly)]);
 	Settings::AntiAliasing oldAa = World::sets()->antiAliasing;
 	uint16 oldShadowRes = World::sets()->shadowRes;
 	bool oldSsao = World::sets()->ssao;
@@ -913,6 +928,7 @@ array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
 			throw std::runtime_error("Failed to render piece icons:"s + linend + SDL_GetError());
 		}
 
+#ifndef OPENVR	// TODO: use camera
 	constexpr pair<vec3, float> camPositions[10] = {
 		pair(vec3(1.52f, 1.1f, 0.9f), 0.37f),
 		pair(vec3(1.55f, 1.1f, 0.95f), 0.39f),
@@ -983,10 +999,11 @@ array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
 	World::sets()->bloom = oldBloom;
 	World::sets()->ssr = oldSsr;
 	World::window()->setShaderOptions();
+#endif
 	return icons;
 }
 
-void Scene::renderModel(GLuint fbo, const FrameSet& frms, const string& name, const Material* matl) {
+void Scene::renderModel(GLuint fbo, const FrameSet& frms, const string& name, uint matl) {
 	Mesh* model = mesh(name);
 	bool hadTop = model->hasTop();
 	if (!hadTop)
@@ -996,10 +1013,8 @@ void Scene::renderModel(GLuint fbo, const FrameSet& frms, const string& name, co
 	Mesh::Instance oldTop = insTop;
 	insTop.model = mat4(1.f);
 	insTop.normat = mat3(1.f);
-	insTop.diffuse = matl->color;
-	insTop.specShine = vec4(matl->spec, matl->shine);
-	insTop.reflRough = vec2(matl->reflect, matl->rough);
-	insTop.texid = objTex("metal");
+	insTop.diffuse = materials[matl].color;
+	insTop.texid = uvec3(objTex("metal"), matl);
 	insTop.show = true;
 	model->updateInstanceDataTop();
 

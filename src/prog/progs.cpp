@@ -14,28 +14,38 @@ void ProgState::chatEmbedAxisScroll(float val) {
 }
 
 void ProgState::eventCameraReset() {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->setPos(Camera::posSetup, Camera::latSetup);
+#endif
 }
 
 void ProgState::eventCameraLeft(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->rotate(vec2(0.f, val * World::window()->getDeltaSec()), 0.f);
+#endif
 }
 
 void ProgState::eventCameraRight(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->rotate(vec2(0.f, -val * World::window()->getDeltaSec()), 0.f);
+#endif
 }
 
 void ProgState::eventCameraUp(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->rotate(vec2(val * World::window()->getDeltaSec(), 0.f), 0.f);
+#endif
 }
 
 void ProgState::eventCameraDown(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->rotate(vec2(-val * World::window()->getDeltaSec(), 0.f), 0.f);
+#endif
 }
 
 void ProgState::eventConfirm() {
@@ -65,6 +75,7 @@ void ProgState::eventRight() {
 }
 
 void ProgState::eventStartCamera() {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		World::scene()->getCamera()->state = Camera::State::dragging;
 #ifndef __EMSCRIPTEN__
@@ -72,9 +83,11 @@ void ProgState::eventStartCamera() {
 		SDL_SetRelativeMouseMode(SDL_TRUE);
 #endif
 	}
+#endif
 }
 
 void ProgState::eventStopCamera() {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		World::scene()->getCamera()->state = Camera::State::stationary;
 #ifndef __EMSCRIPTEN__
@@ -82,6 +95,7 @@ void ProgState::eventStopCamera() {
 #endif
 		World::input()->simulateMouseMove();
 	}
+#endif
 }
 
 void ProgState::eventChat() {
@@ -669,8 +683,10 @@ void ProgMatch::eventEnter() {
 }
 
 void ProgMatch::eventWheel(int ymov) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->zoom(ymov);
+#endif
 }
 
 void ProgMatch::eventFinish() {
@@ -719,22 +735,28 @@ void ProgMatch::eventDeceive() {
 }
 
 void ProgMatch::eventCameraReset() {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating)
 		World::scene()->getCamera()->setPos(Camera::posMatch, Camera::latMatch);
+#endif
 }
 
 void ProgMatch::eventCameraLeft(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		val *= -World::window()->getDeltaSec();
 		World::scene()->getCamera()->rotate(vec2(0.f, val), val);
 	}
+#endif
 }
 
 void ProgMatch::eventCameraRight(float val) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating) {
 		val *= World::window()->getDeltaSec();
 		World::scene()->getCamera()->rotate(vec2(0.f, val), val);
 	}
+#endif
 }
 
 void ProgMatch::setIcons(Favor favor, Icon* homefront) {

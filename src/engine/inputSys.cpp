@@ -63,12 +63,14 @@ void InputSys::eventMouseMotion(const SDL_MouseMotionEvent& motion, int yoffset)
 	mouseLast = motion.type == SDL_MOUSEMOTION;
 	mouseMove = ivec2(motion.xrel, motion.yrel);
 	moveTime = motion.timestamp;
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::dragging)
 		World::scene()->onMouseMove(ivec2(motion.x, motion.y - yoffset), mouseMove, motion.state);
 	else {
 		vec2 rot(glm::radians(float(motion.yrel) / 2.f), glm::radians(float(-motion.xrel) / 2.f));
 		World::scene()->getCamera()->rotate(rot, dynamic_cast<ProgMatch*>(World::state()) ? rot.y : 0.f);
 	}
+#endif
 }
 
 void InputSys::eventMouseButtonDown(const SDL_MouseButtonEvent& button, int yoffset) {
@@ -229,8 +231,10 @@ void InputSys::eventFingerMove(const SDL_TouchFingerEvent& fin, int yoffset, int
 }
 
 void InputSys::eventFingerGesture(const SDL_MultiGestureEvent& ges) {
+#ifndef OPENVR
 	if (World::scene()->getCamera()->state != Camera::State::animating && dynamic_cast<ProgMatch*>(World::state()) && ges.numFingers == 2 && std::abs(ges.dDist) > FLT_EPSILON)
 		World::scene()->getCamera()->zoom(int(ges.dDist * float(World::window()->getScreenView().y)));
+#endif
 }
 
 void InputSys::eventFingerDown(const SDL_TouchFingerEvent& fin, int yoffset, int windowHeight) {

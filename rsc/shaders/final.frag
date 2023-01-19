@@ -1,5 +1,10 @@
 #version 330 core
 
+struct Material {
+	float reflect;
+	float rough;
+};
+
 const vec3 toLuma = vec3(0.299, 0.587, 0.114);
 const float lumaThreshold = 0.63;		// [0, 1]
 const float mulReduce = 1.0 / 8.0;		// [1, 256]
@@ -10,11 +15,12 @@ uniform bool optFxaa;
 uniform bool optSsr;
 uniform bool optBloom;
 uniform float gamma;
+uniform Material materials[19];
 uniform sampler2D sceneMap;
 uniform sampler2D bloomMap;
 uniform sampler2D ssrCleanMap;
 uniform sampler2D ssrBlurMap;
-uniform sampler2D matlMap;
+uniform usampler2D matlMap;
 
 noperspective in vec2 fragUV;
 
@@ -50,8 +56,8 @@ void main() {
 	vec4 base = texture(sceneMap, fragUV);
 	vec3 color = optFxaa ? fxaa(base.rgb) : base.rgb;
 	if (optSsr) {
-		vec2 matl = texture(matlMap, fragUV).rg;
-		color += mix(texture(ssrCleanMap, fragUV).rgb, texture(ssrBlurMap, fragUV).rgb, matl.y) * matl.x;
+		uint mi = texture(matlMap, fragUV).r;
+		color += mix(texture(ssrCleanMap, fragUV).rgb, texture(ssrBlurMap, fragUV).rgb, materials[mi].rough) * materials[mi].reflect;
 	}
 	if (optBloom)
 		color += texture(bloomMap, fragUV).rgb;

@@ -13,9 +13,7 @@ public:
 		mat4 model;
 		mat3 normat;
 		vec4 diffuse;
-		vec4 specShine;	// RGB = specular, A = shininess
-		vec2 reflRough;	// x = reflectiveness, y = roughness
-		uvec2 texid;	// x = color, y = normal
+		uvec3 texid;	// x = color, y = normal, z = material	// TODO: move z to x
 		int show;
 	};
 
@@ -71,7 +69,7 @@ inline Mesh::Instance& Mesh::getInstanceTop() {
 class Object : public Interactable {
 protected:
 	Mesh* mesh = nullptr;
-	const Material* matl;
+	uint matl;
 private:
 	vec3 pos, scl;
 	quat rot;
@@ -88,8 +86,8 @@ public:
 	Object& operator=(const Object&) = default;
 	Object& operator=(Object&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible = true);
-	static void init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, const Material* material, uvec2 texture, bool visible = true);
+	void init(Mesh* model, uint id, uint material, uvec2 texture, bool visible = true);
+	static void init(Mesh* model, uint id, const vec3& pos, const quat& rot, const vec3& scl, uint material, uvec2 texture, bool visible = true);
 
 	const vec3& getPos() const;
 	void setPos(const vec3& vec);
@@ -104,7 +102,7 @@ public:
 	void setTrans(const vec3& position, const quat& rotation, const vec3& scale);
 
 	Mesh* getMesh();
-	void setMaterial(const Material* material);
+	void setMaterial(uint material);
 	void setTexture(uvec2 texture);
 	bool getShow() const;
 	void setShow(bool visible);
@@ -170,7 +168,7 @@ public:
 	BoardObject& operator=(const BoardObject&) = default;
 	BoardObject& operator=(BoardObject&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible = true, float alpha = 1.f);
+	void init(Mesh* model, uint id, uint material, uvec2 texture, bool visible = true, float alpha = 1.f);
 	virtual float getTopY();
 
 	void onDrag(ivec2 mPos, ivec2 mMov) override;
@@ -195,7 +193,7 @@ public:
 	void setAlphaFactor(float alpha);
 
 protected:
-	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, const Material* material, const vec4& colorFactor, uvec2 texture, bool solid = true);
+	void setTop(vec2 mPos, const mat3& normat, Mesh* tmesh, uint material, const vec4& colorFactor, uvec2 texture, bool solid = true);
 
 private:
 	float emissionFactor();
@@ -386,7 +384,7 @@ public:
 	Piece& operator=(const Piece&) = default;
 	Piece& operator=(Piece&&) = default;
 
-	void init(Mesh* model, uint id, const Material* material, uvec2 texture, bool visible, PieceType iniType);
+	void init(Mesh* model, uint id, uint material, uvec2 texture, bool visible, PieceType iniType);
 	float getTopY() override;
 
 	void onHold(ivec2 mPos, uint8 mBut) override;

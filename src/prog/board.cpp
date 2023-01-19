@@ -26,12 +26,12 @@ Board::Board(Scene* sceneSys, Settings* settings) :
 	meshPlane->allocate(tileTops.size(), true);
 	meshOutline->allocate(1);
 
-	Object::init(meshGround, 0, vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->material("ground"), scene->objTex("grass"));
-	Object::init(meshTable, 0, vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->material("board"), scene->objTex("rock"));
-	screen.init(meshScreen, 0, scene->material("screen"), scene->objTex("wall"));
+	Object::init(meshGround, 0, vec3(Config::boardWidth / 2.f, -6.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->matlId("ground"), scene->objTex("grass"));
+	Object::init(meshTable, 0, vec3(Config::boardWidth / 2.f, 0.f, Config::boardWidth / 2.f), vec3(0.f), vec3(1.f), scene->matlId("board"), scene->objTex("rock"));
+	screen.init(meshScreen, 0, scene->matlId("screen"), scene->objTex("wall"));
 	for (uint8 i = 0; i < tileTops.size(); ++i)
-		tileTops[i].init(meshPlane, i, scene->material("tile"), scene->objTex(TileTop(i).name()), false);
-	pxpad.init(meshOutline, 0, scene->material("red"), scene->objTex(), false);
+		tileTops[i].init(meshPlane, i, scene->matlId("tile"), scene->objTex(TileTop(i).name()), false);
+	pxpad.init(meshOutline, 0, scene->matlId("red"), scene->objTex(), false);
 
 	meshGround->updateInstanceData();
 	meshTable->updateInstanceData();
@@ -80,7 +80,7 @@ void Board::initObjects(bool regular, bool basicInitPieces, bool initAllPieces) 
 
 	// prepare objects for setup
 	tiles.update(config);
-	const Material* matl = scene->material("empty");
+	uint matl = scene->matlId("empty");
 	uvec2 tex = scene->objTex(tileNames[uint8(TileType::empty)]);
 	Mesh* mesh = scene->mesh("tile");
 	mesh->allocate(tiles.getSize(), true);
@@ -103,7 +103,7 @@ void Board::initObjects(bool regular, bool basicInitPieces, bool initAllPieces) 
 			meshes[i]->allocate(!initAllPieces ? ownPieceAmts[i] : ownPieceAmts[i] + enePieceAmts[i], true);
 		}
 
-		matl = scene->material(Settings::colorNames[uint8(sets->colorAlly)]);
+		matl = scene->matlId(Settings::colorNames[uint8(sets->colorAlly)]);
 		tex = scene->objTex("metal");
 		uint8 t = 0;
 		for (uint16 i = 0, c = 0; i < pieces.getNum(); ++i, ++c) {
@@ -120,7 +120,7 @@ void Board::initObjects(bool regular, bool basicInitPieces, bool initAllPieces) 
 }
 
 void Board::initEnePieces(Mesh** meshes) {
-	const Material* matl = scene->material(Settings::colorNames[uint8(sets->colorEnemy)]);
+	uint matl = scene->matlId(Settings::colorNames[uint8(sets->colorEnemy)]);
 	uvec2 tex = scene->objTex("metal");
 	uint8 t = 0;
 	for (uint16 i = 0, c = 0; i < pieces.getNum(); ++i, ++c) {
@@ -129,7 +129,7 @@ void Board::initEnePieces(Mesh** meshes) {
 	}
 }
 
-void Board::setTiles(uint16 id, uint16 yofs, Mesh* mesh, const Material* matl, uvec2 tex) {
+void Board::setTiles(uint16 id, uint16 yofs, Mesh* mesh, uint matl, uvec2 tex) {
 	for (uint16 y = yofs; y < yofs + config.homeSize.y; ++y)
 		for (uint16 x = 0; x < config.homeSize.x; ++x, ++id) {
 			tiles[id] = Tile(gtop(svec2(x, y)), objectSize);
@@ -154,7 +154,7 @@ void Board::setPieces(Piece* pces, float rot) {
 void Board::setBgrid() {
 	Mesh* mesh = scene->mesh("grid");
 	mesh->allocate(config.homeSize.x - 1 + boardHeight - 1);
-	const Material* matl = scene->material("grid");
+	uint matl = scene->matlId("grid");
 	uvec2 tex = scene->objTex("grid");
 
 	uint i = 0;

@@ -2,6 +2,7 @@
 #include "server/server.h"
 #include "utils/settings.h"
 #include "utils/text.h"
+#include <glm/gtc/type_ptr.hpp>
 #include <random>
 
 Shader::Shader(const string& srcVert, const string& srcFrag, const char* name) {
@@ -104,6 +105,12 @@ ShaderSsr::ShaderSsr(const string& srcVert, const string& srcFrag) :
 	glUniform1i(glGetUniformLocation(program, "matlMap"), matlTexa - GL_TEXTURE0);
 }
 
+void ShaderSsr::setMaterials(const vector<Material>& matls) const {
+	glUseProgram(program);
+	for (sizet i = 0; i < matls.size(); ++i)
+		glUniform1f(glGetUniformLocation(program, ("materials[" + toStr(i) + "].reflect").c_str()), matls[i].reflect);
+}
+
 ShaderSsrColor::ShaderSsrColor(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader SSR color")
 {
@@ -130,6 +137,15 @@ ShaderLight::ShaderLight(const string& srcVert, const string& srcFrag, const Set
 	glUniform1i(glGetUniformLocation(program, "normaMap"), normalTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "depthMap"), shadowTexa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "ssaoMap"), ssao1Texa - GL_TEXTURE0);
+}
+
+void ShaderLight::setMaterials(const vector<Material>& matls) const {
+	glUseProgram(program);
+	for (sizet i = 0; i < matls.size(); ++i) {
+		string pref = "materials[" + toStr(i) + "].";
+		glUniform3fv(glGetUniformLocation(program, (pref + "spec").c_str()), 1, glm::value_ptr(matls[i].spec));
+		glUniform1f(glGetUniformLocation(program, (pref + "shine").c_str()), matls[i].shine);
+	}
 }
 
 ShaderBrights::ShaderBrights(const string& srcVert, const string& srcFrag) :
@@ -160,6 +176,15 @@ ShaderFinal::ShaderFinal(const string& srcVert, const string& srcFrag, const Set
 	glUniform1i(glGetUniformLocation(program, "ssrCleanMap"), ssr1Texa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "ssrBlurMap"), ssr0Texa - GL_TEXTURE0);
 	glUniform1i(glGetUniformLocation(program, "matlMap"), matlTexa - GL_TEXTURE0);
+}
+
+void ShaderFinal::setMaterials(const vector<Material>& matls) const {
+	glUseProgram(program);
+	for (sizet i = 0; i < matls.size(); ++i) {
+		string pref = "materials[" + toStr(i) + "].";
+		glUniform1f(glGetUniformLocation(program, (pref + "reflect").c_str()), matls[i].reflect);
+		glUniform1f(glGetUniformLocation(program, (pref + "rough").c_str()), matls[i].rough);
+	}
 }
 
 ShaderSkybox::ShaderSkybox(const string& srcVert, const string& srcFrag) :

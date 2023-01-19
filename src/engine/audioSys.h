@@ -23,5 +23,5 @@ private:
 };
 
 inline string AudioSys::formatToStr(SDL_AudioFormat fmt) {
-	return (SDL_AUDIO_ISSIGNED(fmt) ? 'S' : 'U') + (SDL_AUDIO_ISFLOAT(fmt) ? "FLOAT" : "INT") + toStr(SDL_AUDIO_BITSIZE(fmt)) + (SDL_AUDIO_ISBIGENDIAN(fmt) ? "BE" : "LE");
+	return (SDL_AUDIO_ISSIGNED(fmt) ? "S"s : "U"s) + (SDL_AUDIO_ISFLOAT(fmt) ? "FLOAT" : "INT") + toStr(SDL_AUDIO_BITSIZE(fmt)) + (SDL_AUDIO_ISBIGENDIAN(fmt) ? "BE" : "LE");
 }

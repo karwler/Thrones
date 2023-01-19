@@ -11,9 +11,8 @@ layout(location = 3) in vec3 tangent;
 layout(location = 4) in mat4 model;
 layout(location = 8) in mat3 normat;
 layout(location = 11) in vec4 diffuse;
-layout(location = 12) in vec4 specShine;
-layout(location = 14) in uvec2 texid;
-layout(location = 15) in int show;
+layout(location = 12) in uvec3 texid;
+layout(location = 13) in int show;
 
 out vec3 fragPos;
 out vec2 fragUV;
@@ -21,8 +20,7 @@ out vec3 tanLightPos;
 out vec3 tanViewPos;
 out vec3 tanFragPos;
 flat out vec4 fragDiffuse;
-flat out vec4 fragSpecShine;
-flat out uvec2 fragTexid;
+flat out uvec3 fragTexid;
 flat out int fragShow;
 
 void main() {
@@ -38,7 +36,6 @@ void main() {
 	tanViewPos = tbn * viewPos;
 	tanFragPos = tbn * wloc.xyz;
 	fragDiffuse = diffuse;
-	fragSpecShine = specShine;
 	fragTexid = texid;
 	fragShow = show;
 	gl_Position = pview * wloc;

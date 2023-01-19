@@ -1,5 +1,10 @@
 #version 330 core
 
+struct Material {
+	vec3 spec;
+	float shine;
+};
+
 const int samples = 20;
 const vec3 gridDisk[samples] = vec3[](
     vec3(1.0, 1.0, 1.0), vec3(1.0, -1.0, 1.0), vec3(-1.0, -1.0, 1.0), vec3(-1.0, 1.0, 1.0),
@@ -18,6 +23,7 @@ uniform float lightLinear;
 uniform float lightQuadratic;
 uniform vec3 viewPos;
 uniform float farPlane;
+uniform Material materials[19];
 uniform sampler2DArray colorMap;
 uniform sampler2DArray normaMap;
 uniform samplerCube depthMap;
@@ -29,8 +35,7 @@ in vec3 tanLightPos;
 in vec3 tanViewPos;
 in vec3 tanFragPos;
 flat in vec4 fragDiffuse;
-flat in vec4 fragSpecShine;
-flat in uvec2 fragTexid;
+flat in uvec3 fragTexid;
 flat in int fragShow;
 
 out vec4 fragColor;
@@ -67,7 +72,7 @@ void main() {
 	vec4 color = texture(colorMap, vec3(fragUV, fragTexid.x)) * fragDiffuse;
 	vec3 ambient = color.rgb * lightAmbient;
 	vec3 diffuse = color.rgb * lightDiffuse * max(dot(normal, lightDir), 0.0);
-	vec3 specular = fragSpecShine.rgb * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), fragSpecShine.a);
+	vec3 specular = materials[fragTexid.z].spec * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), materials[fragTexid.z].shine);
 	float shadow = optShadow == 2 ? calcShadowSoft() : optShadow == 1 ? calcShadowHard() : 1.0;
 	float ssao = optSsao ? texture(ssaoMap, gl_FragCoord.xy / vec2(textureSize(ssaoMap, 0))).r : 1.0;
 	fragColor = vec4((ambient + (diffuse + specular) * shadow) / attenuation * ssao, color.a);

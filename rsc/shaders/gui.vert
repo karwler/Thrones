@@ -12,7 +12,7 @@ uniform vec2 pview;
 layout(location = 0) in vec4 rect;
 layout(location = 1) in vec4 uvrc;
 layout(location = 11) in vec4 diffuse;
-layout(location = 14) in uint texid;
+layout(location = 12) in uint texid;
 
 noperspective out vec2 fragUV;
 flat out vec4 fragDiffuse;

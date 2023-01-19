@@ -492,6 +492,7 @@ ShaderStartup* WindowSys::createWindow() {
 	if (SDL_GetDisplayBounds(sets->display, &max))
 		max.w = max.h = INT_MAX;
 
+	vrSys = new VrSys;
 	screenView = vrSys->getRenderSize();
 	winSize = ivec2(screenView.x * 2, screenView.y);
 	for (; winSize.x > max.w || winSize.y > max.h; winSize /= 2);
@@ -592,6 +593,7 @@ ShaderStartup* WindowSys::createWindow() {
 	updateView();
 	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClearDepth(1.0);
+	glDisable(GL_DITHER);
 	glDepthFunc(GL_LEQUAL);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_CULL_FACE);
@@ -631,13 +633,12 @@ ShaderStartup* WindowSys::createWindow() {
 	sfinal = new ShaderFinal(sources.at(ShaderFinal::fileVert), sources.at(ShaderFinal::fileFrag), sets);
 	skybox = new ShaderSkybox(sources.at(ShaderSkybox::fileVert), sources.at(ShaderSkybox::fileFrag));
 #ifdef OPENVR
-	gui = new ShaderGui(sources.at(vrSys ? ShaderGui::fileVertVr : ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
+	gui = new ShaderGui(sources.at(ShaderGui::fileVertVr), sources.at(ShaderGui::fileFrag));
 #else
 	gui = new ShaderGui(sources.at(ShaderGui::fileVert), sources.at(ShaderGui::fileFrag));
 #endif
 	setGamma(sets->gamma);
 #ifdef OPENVR
-	vrSys = new VrSys;
 	vrSys->init(sources, windowView);
 #endif
 

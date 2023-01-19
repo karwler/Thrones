@@ -1618,7 +1618,7 @@ void Program::eventSetColorEnemy(uint id, const string&) {
 
 void Program::setColorPieces(Settings::Color clr, Piece* pos, Piece* end) {
 	for (; pos != end; ++pos)
-		pos->setMaterial(World::scene()->material(Settings::colorNames[uint8(clr)]));
+		pos->setMaterial(World::scene()->matlId(Settings::colorNames[uint8(clr)]));
 	eventSaveSettings();
 }
 

@@ -7,7 +7,7 @@ public:
 	static constexpr GLuint vpos = 0, normal = 1, uvloc = 2, tangent = 3;
 	static constexpr GLuint model0 = 4, model1 = 5, model2 = 6, model3 = 7;
 	static constexpr GLuint normat0 = 8, normat1 = 9, normat2 = 10;
-	static constexpr GLuint diffuse = 11, specShine = 12, reflRough = 13, texid = 14, show = 15;
+	static constexpr GLuint diffuse = 11, texid = 12, show = 13;
 
 	static constexpr GLenum tmpTexa = GL_TEXTURE0;		// for temporary or intermediate textures
 	static constexpr GLenum colorTexa = GL_TEXTURE1;	// color texture of 3D objects for ShaderLight
@@ -107,6 +107,8 @@ public:
 	GLint proj;
 
 	ShaderSsr(const string& srcVert, const string& srcFrag);
+
+	void setMaterials(const vector<Material>& matls) const;
 };
 
 class ShaderSsrColor : public Shader {
@@ -127,6 +129,8 @@ public:
 	GLint farPlane, lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
 
 	ShaderLight(const string& srcVert, const string& srcFrag, const Settings* sets);
+
+	void setMaterials(const vector<Material>& matls) const;
 };
 
 class ShaderBrights : public Shader {
@@ -156,6 +160,8 @@ public:
 	GLint gamma;
 
 	ShaderFinal(const string& srcVert, const string& srcFrag, const Settings* sets);
+
+	void setMaterials(const vector<Material>& matls) const;
 };
 
 class ShaderSkybox : public Shader {

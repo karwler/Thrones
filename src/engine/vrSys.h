@@ -15,12 +15,6 @@ private:
 		handRight
 	};
 
-	struct Framebuffer {
-		GLuint fboRender;
-		GLuint rboDepth;
-		GLuint texRender;
-	};
-
 	struct Model {
 		GLuint vao, vbo, ebo;
 		GLuint tex;
@@ -47,14 +41,14 @@ private:
 	static constexpr float znear = 0.1f;
 	static constexpr float zfar = 100.f;
 
-	Framebuffer leftEye, rightEye;
+	array<GLuint, 2> fboEye{}, rboEye{}, texEye{};
 	mat4 leftProj, rightProj;
 	mat4 leftPos, rightPos;
 	mat4 sysPose;
 	vr::TrackedDevicePose_t trackedDevicePose[vr::k_unMaxTrackedDeviceCount];
 	mat4 devicePose[vr::k_unMaxTrackedDeviceCount];
 
-	vr::IVRSystem* system;
+	vr::IVRSystem* system = nullptr;
 	uvec2 renderSize;
 
 	vector<Model*> models;
@@ -82,9 +76,9 @@ private:
 	static constexpr uint companionWindowIndexSize = 12;
 	ivec2 companionWindowSize;
 
-	ShaderVrController* shdController;	// TODO: compile and use shaders
-	ShaderVrModel* shdModel;
-	ShaderVrWindow* shdWindow;
+	ShaderVrController* shdController = nullptr;	// TODO: compile and use shaders
+	ShaderVrModel* shdModel = nullptr;
+	ShaderVrWindow* shdWindow = nullptr;
 
 public:
 	VrSys();
@@ -98,7 +92,7 @@ public:
 	uvec2 getRenderSize() const;
 
 private:
-	void createFrameBuffer(Framebuffer& framebuffer);
+	void createFrameBuffer(GLuint fbo, GLuint rbo, GLuint tex, string_view name);
 	void drawControllerAxes();
 	void drawStereoTargets();
 	void drawScene(vr::Hmd_Eye eye);

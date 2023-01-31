@@ -55,8 +55,7 @@ ShaderDepth::ShaderDepth(const string& srcVert, const string& srcFrag) :
 	Shader(srcVert, srcFrag, "Shader depth"),
 	pvTrans(glGetUniformLocation(program, "pvTrans")),
 	pvId(glGetUniformLocation(program, "pvId")),
-	lightPos(glGetUniformLocation(program, "lightPos")),
-	farPlane(glGetUniformLocation(program, "farPlane"))
+	lightPos(glGetUniformLocation(program, "lightPos"))
 {}
 
 ShaderSsao::ShaderSsao(const string& srcVert, const string& srcFrag) :
@@ -124,12 +123,7 @@ ShaderLight::ShaderLight(const string& srcVert, const string& srcFrag, const Set
 	optSsao(glGetUniformLocation(program, "optSsao")),
 	pview(glGetUniformLocation(program, "pview")),
 	viewPos(glGetUniformLocation(program, "viewPos")),
-	farPlane(glGetUniformLocation(program, "farPlane")),
-	lightPos(glGetUniformLocation(program, "lightPos")),
-	lightAmbient(glGetUniformLocation(program, "lightAmbient")),
-	lightDiffuse(glGetUniformLocation(program, "lightDiffuse")),
-	lightLinear(glGetUniformLocation(program, "lightLinear")),
-	lightQuadratic(glGetUniformLocation(program, "lightQuadratic"))
+	lightPos(glGetUniformLocation(program, "lightPos"))
 {
 	glUniform1i(optShadow, sets->getShadowOpt());
 	glUniform1i(optSsao, sets->ssao);

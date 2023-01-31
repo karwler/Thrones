@@ -103,19 +103,14 @@ inline float Camera::calcYaw(const vec3& pos, float dist) {
 class Light {
 public:
 	GLuint fboDepth = 0, texDepth = 0;
-	vec3 pos;
 
+	static constexpr vec3 pos = vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f);
 private:
 	static constexpr float snear = 0.1f;
-
-	vec3 ambient;
-	vec3 diffuse;
-	float linear;
-	float quadratic;
-	float farPlane;
+	static constexpr float sfar = 140.f;
 
 public:
-	Light(const Settings* sets, const vec3& position = vec3(Config::boardWidth / 2.f, 4.f, Config::boardWidth / 2.f), const vec3& color = vec3(1.f, 0.98f, 0.92f), float ambiFac = 0.8f, float range = 140.f);
+	Light(const Settings* sets);
 
 	void free();
 };

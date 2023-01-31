@@ -510,7 +510,7 @@ void ScrollArea::tick(float dSec) {
 
 void ScrollArea::onResize(Instance*) {
 	calculateWidgetPositions();
-	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));	// TODO: use scroll.setListPos
 	uint oldVis = numInsts;
 	setVisibleWidgets();
 
@@ -533,7 +533,7 @@ void ScrollArea::postInit(Quad::Instance*) {
 	for (i = 0; i < widgets.size(); ++i)
 		widgets[i]->setParent(this, i);
 	calculateWidgetPositions();
-	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), ScrollBar::listLim(listSize(), size()));	// TODO: use scroll.setListPos
 	setVisibleWidgets();
 
 	vector<Instance> instanceData = initInstanceData();

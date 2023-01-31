@@ -161,7 +161,7 @@ void ScrollBar::undrag(ivec2 mPos, uint8 mBut, bool vert) {
 
 void ScrollBar::cancelDrag() {
 	SDL_CaptureMouse(SDL_FALSE);
-	draggingSlider = false;
+	draggingSlider = false;	// TODO: pretty shure this isn't necessary
 }
 
 void ScrollBar::scroll(ivec2 wMov, ivec2 listSize, ivec2 size, bool vert) {
@@ -617,14 +617,14 @@ int Slider::sliderLim() const {
 
 // LABEL
 
-Label::Label(const Size& size, string line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
+Label::Label(const Size& size, string&& line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
 	Button(size, leftCall, rightCall, std::move(tooltip), dim, tex, clr),
 	text(std::move(line)),
 	halign(align),
 	showBG(bg)
 {}
 
-Label::Label(string line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
+Label::Label(string&& line, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
 	Button(precalcWidth, leftCall, rightCall, std::move(tooltip), dim, tex, clr),
 	text(std::move(line)),
 	halign(align),
@@ -726,7 +726,7 @@ int Label::txtLen(const char* str, float hfac) {
 
 // TEXT BOX
 
-TextBox::TextBox(const Size& size, const Size& lineH, string lines, BCall leftCall, BCall rightCall, string&& tooltip, float dim, uint16 lineL, bool stickTop, bool bg, const TexLoc& tex, const vec4& clr) :
+TextBox::TextBox(const Size& size, const Size& lineH, string&& lines, BCall leftCall, BCall rightCall, string&& tooltip, float dim, uint16 lineL, bool stickTop, bool bg, const TexLoc& tex, const vec4& clr) :
 	Label(size, std::move(lines), leftCall, rightCall, std::move(tooltip), dim, Alignment::left, bg, tex, clr),
 	alignTop(stickTop),
 	lineSize(lineH),
@@ -748,7 +748,7 @@ void TextBox::tick(float dSec) {
 
 void TextBox::onResize(Quad::Instance* ins) {
 	updateTextTex();
-	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), textImg ? ScrollBar::listLim(ivec2(textImg->w, textImg->h), size()) : ivec2(0));
+	scroll.listPos = glm::clamp(scroll.listPos, ivec2(0), textImg ? ScrollBar::listLim(ivec2(textImg->w, textImg->h), size()) : ivec2(0));	// TODO: use scroll.setListPos
 	if (ins)
 		setInstances(ins);
 }
@@ -889,7 +889,7 @@ void TextBox::cutLines() {
 
 // ICON
 
-Icon::Icon(const Size& size, string line, BCall leftCall, BCall rightCall, BCall holdCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr, bool select) :
+Icon::Icon(const Size& size, string&& line, BCall leftCall, BCall rightCall, BCall holdCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr, bool select) :
 	Label(size, std::move(line), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	selected(select),
 	hcall(holdCall)
@@ -939,7 +939,7 @@ void Icon::setSelected(bool on) {
 
 // COMBO BOX
 
-ComboBox::ComboBox(const Size& size, string curOpt, vector<string> opts, CCall optCall, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
+ComboBox::ComboBox(const Size& size, string&& curOpt, vector<string> opts, CCall optCall, BCall leftCall, BCall rightCall, string&& tooltip, float dim, Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
 	Label(size, std::move(curOpt), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	options(std::move(opts)),
 	ocall(optCall)
@@ -974,7 +974,7 @@ void ComboBox::set(vector<string>&& opts, const string& name) {
 
 // LABEL EDIT
 
-LabelEdit::LabelEdit(const Size& size, string line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, string&& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
+LabelEdit::LabelEdit(const Size& size, string&& line, BCall leftCall, BCall rightCall, BCall retCall, BCall cancCall, string&& tooltip, float dim, uint16 lim, bool isChat, Label::Alignment align, bool bg, const TexLoc& tex, const vec4& clr) :
 	Label(size, std::move(line), leftCall, rightCall, std::move(tooltip), dim, align, bg, tex, clr),
 	oldText(text),
 	ecall(retCall),

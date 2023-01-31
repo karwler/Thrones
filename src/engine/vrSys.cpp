@@ -89,8 +89,11 @@ void VrSys::init(const umap<string, string>& sources, ivec2 windowSize) {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-	createFrameBuffer(leftEye);
-	createFrameBuffer(rightEye);
+	glGenFramebuffers(fboEye.size(), fboEye.data());
+	glGenRenderbuffers(rboEye.size(), rboEye.data());
+	glGenTextures(texEye.size(), texEye.data());
+	createFrameBuffer(fboEye[Eye_Left], rboEye[Eye_Left], texEye[Eye_Left], "left eye buffer");
+	createFrameBuffer(fboEye[Eye_Right], rboEye[Eye_Right], texEye[Eye_Right], "right eye buffer");
 	if (!VRCompositor())
 		throw std::runtime_error("Failed to initialize compositor");
 }
@@ -105,13 +108,9 @@ void VrSys::free() {
 	delete shdModel;
 	delete shdWindow;
 
-	glDeleteTextures(1, &leftEye.texRender);
-	glDeleteRenderbuffers(1, &leftEye.rboDepth);
-	glDeleteFramebuffers(1, &leftEye.fboRender);
-
-	glDeleteTextures(1, &rightEye.texRender);
-	glDeleteRenderbuffers(1, &rightEye.rboDepth);
-	glDeleteFramebuffers(1, &rightEye.fboRender);
+	glDeleteTextures(texEye.size(), texEye.data());
+	glDeleteRenderbuffers(rboEye.size(), rboEye.data());
+	glDeleteFramebuffers(fboEye.size(), fboEye.data());
 
 	glBindVertexArray(vaoController);
 	glDisableVertexAttribArray(0);
@@ -127,24 +126,19 @@ void VrSys::free() {
 	glDeleteVertexArrays(1, &vaoCompanionWindow);
 }
 
-void VrSys::createFrameBuffer(Framebuffer& framebuffer) {
-	glGenFramebuffers(1, &framebuffer.fboRender);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fboRender);
-
-	glGenRenderbuffers(1, &framebuffer.rboDepth);
-	glBindRenderbuffer(GL_RENDERBUFFER, framebuffer.rboDepth);
+void VrSys::createFrameBuffer(GLuint fbo, GLuint rbo, GLuint tex, string_view name) {
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH_COMPONENT, renderSize.x, renderSize.y);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer.rboDepth);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
-	glGenTextures(1, &framebuffer.texRender);
-	glBindTexture(GL_TEXTURE_2D, framebuffer.texRender);
+	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, renderSize.x, renderSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.texRender, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	checkFramebufferStatus(name);
 
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		throw std::runtime_error("incomplete framebuffer");
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -202,9 +196,9 @@ void VrSys::draw() {
 	drawStereoTargets();
 	drawCompanionWindow();
 
-	Texture_t leftEyeTexture = { (void*)(uintptr_t)leftEye.texRender, TextureType_OpenGL, ColorSpace_Gamma };
+	Texture_t leftEyeTexture = { (void*)(uintptr_t)texEye[Eye_Left], TextureType_OpenGL, ColorSpace_Gamma};
 	VRCompositor()->Submit(Eye_Left, &leftEyeTexture);
-	Texture_t rightEyeTexture = { (void*)(uintptr_t)rightEye.texRender, TextureType_OpenGL, ColorSpace_Gamma };
+	Texture_t rightEyeTexture = { (void*)(uintptr_t)texEye[Eye_Right], TextureType_OpenGL, ColorSpace_Gamma};
 	VRCompositor()->Submit(Eye_Right, &rightEyeTexture);
 
 	// Spew out the controller and pose count whenever they change.
@@ -355,7 +349,7 @@ void VrSys::drawScene(Hmd_Eye eye) {
 	glUniform2f(World::sgui()->pview, float(World::window()->getGuiView().x) / 2.f, float(World::window()->getGuiView().y) / 2.f);
 	// ENDSECTION
 
-	World::scene()->draw(World::window()->mousePos(), eye == Eye_Left ? leftEye.fboRender : rightEye.fboRender);
+	World::scene()->draw(World::window()->mousePos(), fboEye[eye]);
 
 	if (system->IsInputAvailable()) {
 		glUseProgram(*shdController);
@@ -383,7 +377,7 @@ void VrSys::drawCompanionWindow() {
 	glUseProgram(*shdWindow);
 
 	// render left eye (first half of index array )
-	glBindTexture(GL_TEXTURE_2D, leftEye.texRender);
+	glBindTexture(GL_TEXTURE_2D, texEye[Eye_Left]);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -391,7 +385,7 @@ void VrSys::drawCompanionWindow() {
 	glDrawElements(GL_TRIANGLES, companionWindowIndexSize / 2, GL_UNSIGNED_SHORT, 0);
 
 	// render right eye (second half of index array )
-	glBindTexture(GL_TEXTURE_2D, rightEye.texRender);
+	glBindTexture(GL_TEXTURE_2D, texEye[Eye_Right]);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

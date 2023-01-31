@@ -155,18 +155,18 @@ pair<RootLayout*, Interactable*> GuiGen::makeMainMenu(LabelEdit*& pname, Label*&
 	// server input
 	vector<Widget*> srv = {
 		new Label(getSize(SizeRef::menuSideWidth), "Server:"),
-		new LabelEdit(1.f, World::sets()->address, &Program::eventUpdateAddress, &Program::eventResetAddress)
+		new LabelEdit(1.f, string(World::sets()->address), &Program::eventUpdateAddress, &Program::eventResetAddress)
 	};
 
 	// port input and connect button
 	vector<Widget*> prt = {
 		new Label(getSize(SizeRef::menuSideWidth), "Port:"),
-		new LabelEdit(1.f, World::sets()->port, &Program::eventUpdatePort, &Program::eventResetPort)
+		new LabelEdit(1.f, string(World::sets()->port), &Program::eventUpdatePort, &Program::eventResetPort)
 	};
 
 	vector<Widget*> pnm = {
 		new Label(getSize(SizeRef::menuSideWidth), "Name:"),
-		pname = new LabelEdit(1.f, World::sets()->playerName, &Program::eventUpdatePlayerName, &Program::eventResetPlayerName, nullptr, nullptr, string(), 1.f, Settings::playerNameLimit)
+		pname = new LabelEdit(1.f, string(World::sets()->playerName), &Program::eventUpdatePlayerName, &Program::eventResetPlayerName, nullptr, nullptr, string(), 1.f, Settings::playerNameLimit)
 	};
 
 	// net buttons
@@ -200,7 +200,7 @@ pair<RootLayout*, Interactable*> GuiGen::makeMainMenu(LabelEdit*& pname, Label*&
 		new Widget()
 	};
 	vector<Widget*> vers = {
-		versionNotif = new Label(1.f, World::program()->getLatestVersion(), nullptr, nullptr, string(), 1.f, Label::Alignment::left, false),
+		versionNotif = new Label(1.f, string(World::program()->getLatestVersion()), nullptr, nullptr, string(), 1.f, Label::Alignment::left, false),
 		new Label(string(Com::commonVersion), nullptr, nullptr, string(), 1.f, Label::Alignment::right, false)
 	};
 	vector<Widget*> cont = {
@@ -271,7 +271,7 @@ pair<RootLayout*, Interactable*> GuiGen::makeRoom(ConfigIO& wio, RoomIO& rio, Te
 #endif
 			rio.start = new Label(1.f, "Open", &Program::eventHostServer, nullptr, string(), 1.f, Label::Alignment::center),
 			new Label("Port:"),
-			new LabelEdit(getSize(SizeRef::roomPortWidth), World::sets()->port, &Program::eventUpdatePort)
+			new LabelEdit(getSize(SizeRef::roomPortWidth), string(World::sets()->port), &Program::eventUpdatePort)
 		};
 #endif
 	} else if (host) {
@@ -292,7 +292,7 @@ pair<RootLayout*, Interactable*> GuiGen::makeRoom(ConfigIO& wio, RoomIO& rio, Te
 	vector<Widget*> menu = createConfigList(wio, host ? confs.at(startConfig) : World::game()->board->config, host, false);
 	vector<Widget*> top1 = {
 		new Label("Configuration:"),
-		configName = new ComboBox(1.f, startConfig, host ? sortNames(confs) : vector<string>{ startConfig }, host ? &Program::eventSwitchConfig : nullptr),
+		configName = new ComboBox(1.f, string(startConfig), host ? sortNames(confs) : vector<string>{ startConfig }, host ? &Program::eventSwitchConfig : nullptr),
 		new Label("Copy", &Program::eventConfigCopyInput)
 	};
 	if (host) {
@@ -370,7 +370,7 @@ vector<Widget*> GuiGen::createConfigList(ConfigIO& wio, const Config& cfg, bool 
 		new Label(getSize(SizeRef::configDescWidth), *itxs++),
 		new CheckBox(getSize(SizeRef::lineHeight), cfg.record, rupdate, rupdate, "Record the next match"),
 		new Label("name:"),
-		new LabelEdit(1.f, cfg.recordName, update ? &Program::eventSetConfigRecordName : nullptr, nullptr, nullptr, nullptr, "Name of the saved record")
+		new LabelEdit(1.f, string(cfg.recordName), update ? &Program::eventSetConfigRecordName : nullptr, nullptr, nullptr, nullptr, "Name of the saved record")
 	}, {
 		new Label(getSize(SizeRef::configDescWidth), *itxs++),
 		wio.victoryPoints = new CheckBox(getSize(SizeRef::lineHeight), cfg.opts & Config::victoryPoints, vupdate, vupdate, "Use the victory points game variant"),
@@ -609,7 +609,7 @@ void GuiGen::openPopupFavorPick(uint16 availableFF) const {
 void GuiGen::openPopupConfig(const string& configName, const Config& cfg, ScrollArea*& configList, bool match) {
 	ConfigIO wio;
 	vector<Widget*> top = {
-		new Label(1.f, configName, nullptr, nullptr, string(), 1.f, Label::Alignment::center),
+		new Label(1.f, string(configName), nullptr, nullptr, string(), 1.f, Label::Alignment::center),
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 		new Label("Rules", &Program::eventOpenRules, nullptr, string(), 1.f, Label::Alignment::center),
 		new Label("Docs", &Program::eventOpenDocs, nullptr, string(), 1.f, Label::Alignment::center)
@@ -1068,7 +1068,7 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 		new ComboBox(1.f, Settings::familyNames[uint8(World::sets()->resolveFamily)], vector<string>(Settings::familyNames.begin(), Settings::familyNames.end()), &Program::eventSetResolveFamily, nullptr, nullptr, "What family to use for resolving a host address")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
-		new ComboBox(1.f, World::sets()->font, fonts, &Program::eventSetFont, nullptr, nullptr, "UI font"),
+		new ComboBox(1.f, string(World::sets()->font), fonts, &Program::eventSetFont, nullptr, nullptr, "UI font"),
 		new ComboBox(1.f, Settings::hintingNames[uint8(World::sets()->hinting)], vector<string>(Settings::hintingNames.begin(), Settings::hintingNames.end()), &Program::eventSetFontHinting, nullptr, nullptr, "Font hinting")
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
@@ -1389,7 +1389,7 @@ void GuiGen::appendProgram(vector<Widget*>& lines, initlist<const char*>::iterat
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*IMG_Linked_Version())), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
 		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, versionText(*TTF_Linked_Version())), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
 #if defined(UPDATE_CHECK) && !defined(__EMSCRIPTEN__)
-		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, World::program()->getCurlVersion()), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
+		new Layout(getSize(SizeRef::lineHeight), { new Label(getSize(SizeRef::infoArgWidth), *args++), new Label(1.f, string(World::program()->getCurlVersion())), new Label(getSize(SizeRef::infoProgRightLen), std::move(*icmpver++)) }, false, getSize(SizeRef::lineSpacing)),
 #endif
 		new Widget(getSize(SizeRef::lineHeight))
 	});

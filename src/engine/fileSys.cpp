@@ -688,7 +688,7 @@ umap<string, string> FileSys::loadShaders() {
 TextureSet::Import FileSys::loadTextures(vector<TextureCol::Element>& icns, int& minUiIcon, float scale) {
 	string dirPath = texturePath();
 	TextureSet::Import imp;
-	vector<pairStr> svgUiFiles;
+	vector<pair<string, string>> svgUiFiles;
 	listOperateDirectory(dirPath, [&dirPath, &imp, &icns, &svgUiFiles, &minUiIcon, scale](string&& name) {
 		if (auto [place, num, path] = beginTextureLoad(dirPath, name, false); place != Texplace::none) {
 			if (place != Texplace::cube) {
@@ -716,7 +716,7 @@ TextureSet::Import FileSys::loadTextures(vector<TextureCol::Element>& icns, int&
 				loadSkyTextures(imp, path, dirPath.length(), num);
 		}
 	});
-	for (pairStr& it : svgUiFiles) {
+	for (pair<string, string>& it : svgUiFiles) {
 #if SDL_IMAGE_VERSION_ATLEAST(2, 6, 0)
 		if (SDL_RWops* fh = SDL_RWFromFile(it.first.c_str(), defaultReadMode)) {
 			if (auto [img, pform] = pickPixFormat(IMG_LoadSizedSVG_RW(fh, minUiIcon, minUiIcon)); img)

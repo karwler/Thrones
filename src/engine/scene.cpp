@@ -246,14 +246,7 @@ ivec2 Camera::screenPos(const vec3& pnt) const {
 
 // LIGHT
 
-Light::Light(const Settings* sets, const vec3& position, const vec3& color, float ambiFac, float range) :
-	pos(position),
-	ambient(color * ambiFac),
-	diffuse(color),
-	linear(4.5f / range),
-	quadratic(75.f / (range * range)),
-	farPlane(range)
-{
+Light::Light(const Settings* sets) {
 	if (sets->shadowRes) {
 		glGenFramebuffers(1, &fboDepth);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboDepth);
@@ -277,14 +270,9 @@ Light::Light(const Settings* sets, const vec3& position, const vec3& color, floa
 
 	glUseProgram(*World::light());
 	glUniform1i(World::light()->optShadow, sets->getShadowOpt());
-	glUniform1f(World::light()->farPlane, farPlane);
 	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(pos));
-	glUniform3fv(World::light()->lightAmbient, 1, glm::value_ptr(ambient));
-	glUniform3fv(World::light()->lightDiffuse, 1, glm::value_ptr(diffuse));
-	glUniform1f(World::light()->lightLinear, linear);
-	glUniform1f(World::light()->lightQuadratic, quadratic);
 
-	mat4 shadowProj = glm::perspective(glm::half_pi<float>(), 1.f, snear, farPlane);
+	mat4 shadowProj = glm::perspective(glm::half_pi<float>(), 1.f, snear, sfar);
 	mat4 shadowTransforms[6] = {
 		shadowProj * lookAt(pos, pos + vec3(1.f, 0.f, 0.f), vec3(0.f, -1.f, 0.f)),
 		shadowProj * lookAt(pos, pos + vec3(-1.f, 0.f, 0.f), vec3(0.f, -1.f, 0.f)),
@@ -296,7 +284,6 @@ Light::Light(const Settings* sets, const vec3& position, const vec3& color, floa
 	glUseProgram(*World::depth());
 	glUniformMatrix4fv(World::depth()->pvTrans, 6, GL_FALSE, reinterpret_cast<float*>(shadowTransforms));
 	glUniform3fv(World::depth()->lightPos, 1, glm::value_ptr(pos));
-	glUniform1f(World::depth()->farPlane, farPlane);
 }
 
 void Light::free() {
@@ -989,7 +976,7 @@ array<SDL_Surface*, pieceLim> Scene::renderPieceIcons() {
 	glDeleteFramebuffers(1, &fbo);
 
 	glUseProgram(*World::light());
-	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(light.pos));
+	glUniform3fv(World::light()->lightPos, 1, glm::value_ptr(Light::pos));
 	camera->updateProjection(World::window()->getScreenView());
 	camera->setPos(oldCamPos, oldCamLat);
 

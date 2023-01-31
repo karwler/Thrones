@@ -312,8 +312,8 @@ protected:
 	const bool showBG;
 
 public:
-	Label(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
-	Label(string line, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
+	Label(const Size& size = 1.f, string&& line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
+	Label(string&& line, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~Label() override;
 
 	void onResize(Quad::Instance* ins) override;
@@ -368,7 +368,7 @@ private:
 	uint16 lineCnt;
 
 public:
-	TextBox(const Size& size = 1.f, const Size& lineH = 0.1f, string lines = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lineL = UINT16_MAX, bool stickTop = true, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
+	TextBox(const Size& size = 1.f, const Size& lineH = 0.1f, string&& lines = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lineL = UINT16_MAX, bool stickTop = true, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~TextBox() override;
 
 	uint numInstances() const override;
@@ -411,7 +411,7 @@ private:
 	static constexpr int outlineFactor = 16;
 
 public:
-	Icon(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall holdCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal, bool select = false);
+	Icon(const Size& size = 1.f, string&& line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall holdCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal, bool select = false);
 	~Icon() override = default;
 
 	uint numInstances() const override;
@@ -437,7 +437,7 @@ private:
 	CCall ocall;
 
 public:
-	ComboBox(const Size& size = 1.f, string curOpt = string(), vector<string> opts = vector<string>(), CCall optCall = nullptr, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
+	ComboBox(const Size& size = 1.f, string&& curOpt = string(), vector<string> opts = vector<string>(), CCall optCall = nullptr, BCall leftCall = nullptr, BCall rightCall = nullptr, string&& tooltip = string(), float dim = 1.f, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~ComboBox() override = default;
 
 	void onClick(ivec2 mPos, uint8 mBut) override;
@@ -471,7 +471,7 @@ private:
 	bool chatMode;
 
 public:
-	LabelEdit(const Size& size = 1.f, string line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
+	LabelEdit(const Size& size = 1.f, string&& line = string(), BCall leftCall = nullptr, BCall rightCall = nullptr, BCall retCall = nullptr, BCall cancCall = nullptr, string&& tooltip = string(), float dim = 1.f, uint16 lim = UINT16_MAX, bool isChat = false, Alignment align = Alignment::left, bool bg = true, const TexLoc& tex = TextureCol::blank, const vec4& clr = colorNormal);
 	~LabelEdit() override;
 
 	void postInit(Quad::Instance* ins) override;

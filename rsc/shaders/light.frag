@@ -7,22 +7,23 @@ struct Material {
 
 const int samples = 20;
 const vec3 gridDisk[samples] = vec3[](
-    vec3(1.0, 1.0, 1.0), vec3(1.0, -1.0, 1.0), vec3(-1.0, -1.0, 1.0), vec3(-1.0, 1.0, 1.0),
-    vec3(1.0, 1.0, -1.0), vec3(1.0, -1.0, -1.0), vec3(-1.0, -1.0, -1.0), vec3(-1.0, 1.0, -1.0),
-    vec3(1.0, 1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(-1.0, -1.0, 0.0), vec3(-1.0, 1.0, 0.0),
-    vec3(1.0, 0.0, 1.0), vec3(-1.0, 0.0, 1.0), vec3(1.0, 0.0, -1.0), vec3(-1.0, 0.0, -1.0),
-    vec3(0.0, 1.0, 1.0), vec3(0.0, -1.0, 1.0), vec3(0.0, -1.0, -1.0), vec3(0.0, 1.0, -1.0)
+	vec3(1.0, 1.0, 1.0), vec3(1.0, -1.0, 1.0), vec3(-1.0, -1.0, 1.0), vec3(-1.0, 1.0, 1.0),
+	vec3(1.0, 1.0, -1.0), vec3(1.0, -1.0, -1.0), vec3(-1.0, -1.0, -1.0), vec3(-1.0, 1.0, -1.0),
+	vec3(1.0, 1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(-1.0, -1.0, 0.0), vec3(-1.0, 1.0, 0.0),
+	vec3(1.0, 0.0, 1.0), vec3(-1.0, 0.0, 1.0), vec3(1.0, 0.0, -1.0), vec3(-1.0, 0.0, -1.0),
+	vec3(0.0, 1.0, 1.0), vec3(0.0, -1.0, 1.0), vec3(0.0, -1.0, -1.0), vec3(0.0, 1.0, -1.0)
 );
+
+const float lightRange = 140.0;
+const vec3 lightColor = vec3(1.0, 0.98, 0.92);
+const vec3 lightAmbient = lightColor * 0.8;
+const float lightLinear = 4.5 / lightRange;
+const float lightQuadratic = 75.0 / (lightRange * lightRange);
 
 uniform int optShadow;
 uniform bool optSsao;
 uniform vec3 lightPos;
-uniform vec3 lightAmbient;
-uniform vec3 lightDiffuse;
-uniform float lightLinear;
-uniform float lightQuadratic;
 uniform vec3 viewPos;
-uniform float farPlane;
 uniform Material materials[19];
 uniform sampler2DArray colorMap;
 uniform sampler2DArray normaMap;
@@ -42,16 +43,16 @@ out vec4 fragColor;
 
 float calcShadowHard() {
 	vec3 fragToLight = fragPos - lightPos;
-	return length(fragToLight) - 0.05 > texture(depthMap, fragToLight).r * farPlane ? 0.0 : 1.0;
+	return length(fragToLight) - 0.05 > texture(depthMap, fragToLight).r * lightRange ? 0.0 : 1.0;
 }
 
 float calcShadowSoft() {
 	vec3 fragToLight = fragPos - lightPos;
 	float currentDepth = length(fragToLight) - 0.15;
-	float diskRadius = (1.0 + length(viewPos - fragPos) / farPlane) / 25.0;
+	float diskRadius = (1.0 + length(viewPos - fragPos) / lightRange) / 25.0;
 	float shadow = 0.0;
 	for (int i = 0; i < samples; ++i)
-		if (currentDepth > texture(depthMap, fragToLight + gridDisk[i] * diskRadius).r * farPlane)
+		if (currentDepth > texture(depthMap, fragToLight + gridDisk[i] * diskRadius).r * lightRange)
 			shadow += 1.0;
 	return 1.0 - (shadow / float(samples));
 }
@@ -71,7 +72,7 @@ void main() {
 
 	vec4 color = texture(colorMap, vec3(fragUV, fragTexid.x)) * fragDiffuse;
 	vec3 ambient = color.rgb * lightAmbient;
-	vec3 diffuse = color.rgb * lightDiffuse * max(dot(normal, lightDir), 0.0);
+	vec3 diffuse = color.rgb * lightColor * max(dot(normal, lightDir), 0.0);
 	vec3 specular = materials[fragTexid.z].spec * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), materials[fragTexid.z].shine);
 	float shadow = optShadow == 2 ? calcShadowSoft() : optShadow == 1 ? calcShadowHard() : 1.0;
 	float ssao = optSsao ? texture(ssaoMap, gl_FragCoord.xy / vec2(textureSize(ssaoMap, 0))).r : 1.0;

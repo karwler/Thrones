@@ -57,12 +57,10 @@ using std::wstring;
 using std::wstring_view;
 
 template <class T> using initlist = std::initializer_list<T>;
-template <class... T> using sptr = std::shared_ptr<T...>;
 template <class... T> using uptr = std::unique_ptr<T...>;
 template <class... T> using umap = std::unordered_map<T...>;
 template <class... T> using mumap = std::unordered_multimap<T...>;
 template <class... T> using uset = std::unordered_set<T...>;
-using pairStr = pair<string, string>;
 
 using glm::mat3;
 using glm::mat4;

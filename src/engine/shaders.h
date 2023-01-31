@@ -64,7 +64,7 @@ public:
 	static constexpr char fileFrag[] = "depth.frag";
 
 	GLint pvTrans, pvId;
-	GLint lightPos, farPlane;
+	GLint lightPos;
 
 	ShaderDepth(const string& srcVert, const string& srcFrag);
 };
@@ -125,8 +125,7 @@ public:
 	static constexpr char fileFrag[] = "light.frag";
 
 	GLint optShadow, optSsao;
-	GLint pview, viewPos;
-	GLint farPlane, lightPos, lightAmbient, lightDiffuse, lightLinear, lightQuadratic;
+	GLint pview, viewPos, lightPos;
 
 	ShaderLight(const string& srcVert, const string& srcFrag, const Settings* sets);
 

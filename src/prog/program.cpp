@@ -84,13 +84,13 @@ int WebFetchProc::fetchVersion(void* data) {
 #ifdef _WIN32
 	HMODULE lib = LoadLibraryW(L"libcurl.dll");
 	FARPROC (WINAPI* const libsym)(HMODULE, const char*) = GetProcAddress;
-	string (* const liberror)() = lastErrorMessage;
+	string (*const liberror)() = lastErrorMessage;
 	BOOL (WINAPI* const libclose)(HMODULE) = FreeLibrary;
 #else
 	void* lib = dlopen("libcurl.so", RTLD_NOW);
-	void* (* const libsym)(void*, const char*) = dlsym;
-	char* (* const liberror)() = dlerror;
-	int (* const libclose)(void*) = dlclose;
+	void* (*const libsym)(void*, const char*) = dlsym;
+	char* (*const liberror)() = dlerror;
+	int (*const libclose)(void*) = dlclose;
 	FILE* dnull = fopen("/dev/null", "w");
 #endif
 	int rc = EXIT_SUCCESS;
@@ -98,20 +98,20 @@ int WebFetchProc::fetchVersion(void* data) {
 	try {
 		if (!lib)
 			throw std::runtime_error(liberror());
-		CURL* (*easy_init)() = reinterpret_cast<CURL* (*)()>(libsym(lib, "curl_easy_init"));
+		CURL* (*easy_init)() = reinterpret_cast<decltype(easy_init)>(libsym(lib, "curl_easy_init"));
 		if (!easy_init)
 			throw std::runtime_error(liberror());
-		if (easy_cleanup = reinterpret_cast<void (*)(CURL*)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
+		if (easy_cleanup = reinterpret_cast<decltype(easy_cleanup)>(libsym(lib, "curl_easy_cleanup")); !easy_cleanup)
 			throw std::runtime_error(liberror());
-		CURLcode(*easy_setopt)(CURL*, CURLoption, ...) = reinterpret_cast<CURLcode(*)(CURL*, CURLoption, ...)>(libsym(lib, "curl_easy_setopt"));
+		CURLcode (*easy_setopt)(CURL*, CURLoption, ...) = reinterpret_cast<decltype(easy_setopt)>(libsym(lib, "curl_easy_setopt"));
 		if (!easy_setopt)
 			throw std::runtime_error(liberror());
-		CURLcode(*easy_perform)(CURL*) = reinterpret_cast<CURLcode(*)(CURL*)>(libsym(lib, "curl_easy_perform"));
+		CURLcode (*easy_perform)(CURL*) = reinterpret_cast<decltype(easy_perform)>(libsym(lib, "curl_easy_perform"));
 		if (!easy_perform)
 			throw std::runtime_error(liberror());
-		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<const char* (*)(CURLcode)>(libsym(lib, "curl_easy_strerror"));
+		const char* (*easy_strerror)(CURLcode) = reinterpret_cast<decltype(easy_strerror)>(libsym(lib, "curl_easy_strerror"));
 
-		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<curl_version_info_data* (*)(CURLversion)>(libsym(lib, "curl_version_info"))) {
+		if (curl_version_info_data* (*version_info)(CURLversion) = reinterpret_cast<decltype(version_info)>(libsym(lib, "curl_version_info"))) {
 			const curl_version_info_data* cinf = version_info(CURLVERSION_NOW);
 			string clver;
 			if (cinf->features & CURL_VERSION_IPV6)

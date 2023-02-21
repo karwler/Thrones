@@ -1,23 +1,23 @@
 newmtl tile
-Kd 0.8 0.8 0.8
-Ks 0.3 0.3 0.3
-Ns 600
-Rl 1
-Rh 0.5
+C 0.8 0.8 0.8
+G 0.5
+M 0.2
+R 1
 
 newmtl empty
-Kd 0.8 0.8 0.8
-Ks 0.3 0.3 0.3
-Ns 600
-d 0.12
+C 0.8 0.8 0.8 0.12
+G 0.5
+M 0.2
+R 0
 
 newmtl destroy
-Kd 1 0.1 0.1
-Ks 0.6 0.3 0.3
-Ns 600
+C 1 0.1 0.1
+G 0.8
+M 0.1
+R 1
 
 newmtl reticle
-Kd 1 0.1 0.1
-Ks 0.4 0.2 0.2
-Ns 600
-d 0.9
+C 1 0.1 0.1 0.9
+G 0
+M 1
+R 0

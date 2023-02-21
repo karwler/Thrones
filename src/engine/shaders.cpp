@@ -107,7 +107,7 @@ ShaderSsr::ShaderSsr(const string& srcVert, const string& srcFrag) :
 void ShaderSsr::setMaterials(const vector<Material>& matls) const {
 	glUseProgram(program);
 	for (sizet i = 0; i < matls.size(); ++i)
-		glUniform1f(glGetUniformLocation(program, ("materials[" + toStr(i) + "].reflect").c_str()), matls[i].reflect);
+		glUniform1f(glGetUniformLocation(program, ("materials[" + toStr(i) + "].reflective").c_str()), matls[i].reflective);
 }
 
 ShaderSsrColor::ShaderSsrColor(const string& srcVert, const string& srcFrag) :
@@ -137,8 +137,9 @@ void ShaderLight::setMaterials(const vector<Material>& matls) const {
 	glUseProgram(program);
 	for (sizet i = 0; i < matls.size(); ++i) {
 		string pref = "materials[" + toStr(i) + "].";
-		glUniform3fv(glGetUniformLocation(program, (pref + "spec").c_str()), 1, glm::value_ptr(matls[i].spec));
-		glUniform1f(glGetUniformLocation(program, (pref + "shine").c_str()), matls[i].shine);
+		glUniform1f(glGetUniformLocation(program, (pref + "ao").c_str()), matls[i].ao);
+		glUniform1f(glGetUniformLocation(program, (pref + "metallic").c_str()), matls[i].metallic);
+		glUniform1f(glGetUniformLocation(program, (pref + "roughness").c_str()), matls[i].roughness);
 	}
 }
 
@@ -176,8 +177,8 @@ void ShaderFinal::setMaterials(const vector<Material>& matls) const {
 	glUseProgram(program);
 	for (sizet i = 0; i < matls.size(); ++i) {
 		string pref = "materials[" + toStr(i) + "].";
-		glUniform1f(glGetUniformLocation(program, (pref + "reflect").c_str()), matls[i].reflect);
-		glUniform1f(glGetUniformLocation(program, (pref + "rough").c_str()), matls[i].rough);
+		glUniform1f(glGetUniformLocation(program, (pref + "roughness").c_str()), matls[i].roughness);
+		glUniform1f(glGetUniformLocation(program, (pref + "reflective").c_str()), matls[i].reflective);
 	}
 }
 

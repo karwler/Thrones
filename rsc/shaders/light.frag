@@ -1,10 +1,12 @@
 #version 330 core
 
 struct Material {
-	vec3 spec;
-	float shine;
+	float ao;
+	float metallic;
+	float roughness;
 };
 
+const float pi = 3.14159265359;
 const int samples = 20;
 const vec3 gridDisk[samples] = vec3[](
 	vec3(1.0, 1.0, 1.0), vec3(1.0, -1.0, 1.0), vec3(-1.0, -1.0, 1.0), vec3(-1.0, 1.0, 1.0),
@@ -15,8 +17,7 @@ const vec3 gridDisk[samples] = vec3[](
 );
 
 const float lightRange = 140.0;
-const vec3 lightColor = vec3(1.0, 0.98, 0.92);
-const vec3 lightAmbient = lightColor * 0.8;
+const vec3 lightColor = vec3(1.0, 0.98, 0.92) * 6.0;
 const float lightLinear = 4.5 / lightRange;
 const float lightQuadratic = 75.0 / (lightRange * lightRange);
 
@@ -41,6 +42,35 @@ flat in int fragShow;
 
 out vec4 fragColor;
 
+float distribution(vec3 normal, vec3 h, float roughness) {
+	float a = roughness*roughness;
+	float a2 = a*a;
+	float NdotH = max(dot(normal, h), 0.0);
+	float NdotH2 = NdotH*NdotH;
+
+	float nom   = a2;
+	float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+	denom = pi * denom * denom;
+
+	return nom / denom;
+}
+
+float geometrySchlick(float ndotv, float roughness) {
+	float r = (roughness + 1.0);
+	float k = (r * r) / 8.0;
+	return ndotv / (ndotv * (1.0 - k) + k);
+}
+
+float geometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, float roughness) {
+	float ndotv = max(dot(normal, viewDir), 0.0);
+	float ndotl = max(dot(normal, lightDir), 0.0);
+	return geometrySchlick(ndotl, roughness) * geometrySchlick(ndotv, roughness);
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 f0) {
+	return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 float calcShadowHard() {
 	vec3 fragToLight = fragPos - lightPos;
 	return length(fragToLight) - 0.05 > texture(depthMap, fragToLight).r * lightRange ? 0.0 : 1.0;
@@ -63,18 +93,31 @@ void main() {
 		return;
 	}
 
+	Material mtl = materials[fragTexid.z];
+	vec4 color = texture(colorMap, vec3(fragUV, fragTexid.x)) * fragDiffuse;
 	vec3 normal = normalize(texture(normaMap, vec3(fragUV, fragTexid.y)).xyz * 2.0 - 1.0);
 	vec3 lightDir = tanLightPos - tanFragPos;
 	float lightDist = length(lightDir);
-	float attenuation = 1.0 + lightLinear * lightDist + lightQuadratic * (lightDist * lightDist);
 	vec3 viewDir = normalize(tanViewPos - tanFragPos);
 	lightDir = normalize(lightDir);
 
-	vec4 color = texture(colorMap, vec3(fragUV, fragTexid.x)) * fragDiffuse;
-	vec3 ambient = color.rgb * lightAmbient;
-	vec3 diffuse = color.rgb * lightColor * max(dot(normal, lightDir), 0.0);
-	vec3 specular = materials[fragTexid.z].spec * pow(max(dot(normal, normalize(lightDir + viewDir)), 0.0), materials[fragTexid.z].shine);
+	vec3 f0 = mix(vec3(0.04), color.rgb, mtl.metallic);
+	vec3 h = normalize(viewDir + lightDir);
+	float attenuation = 1.0 / (1.0 + lightLinear * lightDist + lightQuadratic * (lightDist * lightDist));
+	vec3 radiance = lightColor * attenuation;
+	float ndf = distribution(normal, h, mtl.roughness);
+	float g = geometrySmith(normal, viewDir, lightDir, mtl.roughness);
+	vec3 f = fresnelSchlick(max(dot(h, viewDir), 0.0), f0);
+	vec3 numerator = ndf * g * f;
+	float denominator = 4.0 * max(dot(normal, viewDir), 0.0) * max(dot(normal, lightDir), 0.0) + 0.0001;
+	vec3 specular = numerator / denominator;
+	vec3 ks = f;
+	vec3 kd = (vec3(1.0) - ks) * (1.0 - mtl.metallic);
+	float ndotl = max(dot(normal, lightDir), 0.0);
+	vec3 lo = (kd * color.rgb / pi + specular) * radiance * ndotl;
+	vec3 ambient = vec3(0.03) * color.rgb * mtl.ao;
+
 	float shadow = optShadow == 2 ? calcShadowSoft() : optShadow == 1 ? calcShadowHard() : 1.0;
 	float ssao = optSsao ? texture(ssaoMap, gl_FragCoord.xy / vec2(textureSize(ssaoMap, 0))).r : 1.0;
-	fragColor = vec4((ambient + (diffuse + specular) * shadow) / attenuation * ssao, color.a);
+	fragColor = vec4((ambient + lo * shadow) * ssao, color.a);
 }

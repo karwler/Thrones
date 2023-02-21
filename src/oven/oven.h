@@ -34,12 +34,12 @@ constexpr char defaultWriteMode[] = "wb";
 
 struct Material {
 	vec4 color;
-	vec3 spec;
-	float shine;
-	float reflect;
-	float rough;
+	float ao;
+	float metallic;
+	float roughness;
+	float reflective;
 
-	Material(const vec4& diffuse = vec4(1.f), const vec3& specular = vec3(1.f), float shininess = 32.f, float reflectiveness = 0.f, float roughness = 0.f);
+	Material(const vec4& diffuse = vec4(1.f), float ambient = 0.8f, float metal = 0.f, float rough = 0.f, float reflect = 0.f);
 };
 
 struct Vertex {

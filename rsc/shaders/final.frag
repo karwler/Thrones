@@ -1,8 +1,8 @@
 #version 330 core
 
 struct Material {
-	float reflect;
-	float rough;
+	float roughness;
+	float reflective;
 };
 
 const vec3 toLuma = vec3(0.299, 0.587, 0.114);
@@ -57,7 +57,7 @@ void main() {
 	vec3 color = optFxaa ? fxaa(base.rgb) : base.rgb;
 	if (optSsr) {
 		uint mi = texture(matlMap, fragUV).r;
-		color += mix(texture(ssrCleanMap, fragUV).rgb, texture(ssrBlurMap, fragUV).rgb, materials[mi].rough) * materials[mi].reflect;
+		color += mix(texture(ssrCleanMap, fragUV).rgb, texture(ssrBlurMap, fragUV).rgb, materials[mi].roughness) * materials[mi].reflective;
 	}
 	if (optBloom)
 		color += texture(bloomMap, fragUV).rgb;

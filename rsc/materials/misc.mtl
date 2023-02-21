@@ -1,20 +1,23 @@
 newmtl ground
-Kd 0.5 0.5 0.5
-Ks 0.06 0.2 0.06
-Ns 200
+C 0.5 0.5 0.5
+G 1
+M 0
+R 0
 
 newmtl board
-Kd 0.3 0.3 0.3
-Ks 0.12 0.12 0.12
-Ns 400
+C 0.3 0.3 0.3
+G 0.6
+M 0.2
+R 0
 
 newmtl screen
-Kd 0.6 0.6 0.6
-Ks 0.2 0.2 0.2
-Ns 200
+C 0.6 0.6 0.6
+G 0.6
+M 0.2
+R 0
 
 newmtl grid
-Kd 1 0.757 0.145
-Ks 0.628 0.556 0.366
-Ns 400
-Rl 1
+C 1 0.757 0.145
+G 0
+M 1
+R 1

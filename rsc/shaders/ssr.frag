@@ -1,7 +1,7 @@
 #version 330 core
 
 struct Material {
-	float reflect;
+	float reflective;
 };
 
 const float maxDistance = 6.0;
@@ -21,7 +21,7 @@ out vec4 fragColor;
 
 void main() {
 	vec4 positionFrom = texture(vposMap, fragUV);
-	if (positionFrom.w <= 0.0 || materials[texture(matlMap, fragUV).r].reflect <= 0.0) {
+	if (positionFrom.w <= 0.0 || materials[texture(matlMap, fragUV).r].reflective <= 0.0) {
 		fragColor = vec4(0.0);
 		return;
 	}

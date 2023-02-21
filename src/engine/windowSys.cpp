@@ -104,6 +104,7 @@ void Loader::uploadTexture(GLuint tex, const void* pixels, ivec2 res, int rowLen
 string FontSet::init(string name, Settings::Hinting hint) {
 #if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	TTF_CloseFont(font);
+	font = nullptr;
 #else
 	clear();
 #endif
@@ -123,13 +124,15 @@ string FontSet::init(string name, Settings::Hinting hint) {
 			}
 		}
 	}
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	TTF_SetFontHinting(tmp, int(hint));
+#endif
+
 	int size;	// get approximate height scale factor
 	heightScale = !TTF_SizeUTF8(tmp, fontTestString, nullptr, &size) ? float(FileSys::fontTestHeight) / float(size) : fallbackScale;
 #if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	font = tmp;
 #else
-	hinting = hint;
 	TTF_CloseFont(tmp);
 #endif
 	return name;
@@ -169,10 +172,9 @@ TTF_Font* FontSet::getFont(int height) {
 		return it->second;
 
 	TTF_Font* font = TTF_OpenFontRW(SDL_RWFromConstMem(fontData.data(), fontData.size()), SDL_TRUE, height);
-	if (font) {
-		TTF_SetFontHinting(font, int(hinting));
+	if (font)
 		fonts.emplace(height, font);
-	} else
+	else
 		logError(TTF_GetError());
 #endif
 	return font;
@@ -206,16 +208,6 @@ bool FontSet::hasGlyph(uint16 ch) {
 		return yes;
 	}
 	return false;
-#endif
-}
-
-void FontSet::setHinting(Settings::Hinting hint) {
-#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
-	TTF_SetFontHinting(font, int(hint));
-#else
-	hinting = hint;
-	for (auto [size, font] : fonts)
-		TTF_SetFontHinting(font, int(hinting));
 #endif
 }
 

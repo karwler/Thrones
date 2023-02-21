@@ -3,12 +3,12 @@
 
 // MATERIAL
 
-Material::Material(const vec4& diffuse, const vec3& specular, float shininess, float reflectiveness, float roughness) :
+Material::Material(const vec4& diffuse, float ambient, float metal, float rough, float reflect) :
 	color(diffuse),
-	spec(specular),
-	shine(shininess),
-	reflect(reflectiveness),
-	rough(roughness)
+	ao(ambient),
+	metallic(metal),
+	roughness(rough),
+	reflective(reflect)
 {}
 
 // VERTEX

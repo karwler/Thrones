@@ -1677,8 +1677,10 @@ void Program::eventSetFont(uint, const string& str) {
 void Program::eventSetFontHinting(uint id, const string&) {
 	if (Settings::Hinting hint = Settings::Hinting(id); hint != World::sets()->hinting) {
 		World::sets()->hinting = hint;
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 		World::fonts()->setHinting(hint);
 		World::scene()->onInternalResize();
+#endif
 		eventSaveSettings();
 	}
 }

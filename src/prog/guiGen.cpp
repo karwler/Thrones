@@ -1069,7 +1069,9 @@ ScrollArea* GuiGen::createSettingsList(sizet& bindingsStart) {
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new ComboBox(1.f, string(World::sets()->font), fonts, &Program::eventSetFont, nullptr, nullptr, "UI font"),
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 		new ComboBox(1.f, Settings::hintingNames[uint8(World::sets()->hinting)], vector<string>(Settings::hintingNames.begin(), Settings::hintingNames.end()), &Program::eventSetFontHinting, nullptr, nullptr, "Font hinting")
+#endif
 	}, {
 		new Label(getSize(SizeRef::settingsDescWidth), *itxs++),
 		new CheckBox(getSize(SizeRef::lineHeight), World::sets()->invertWheel, &Program::eventSetInvertWheel, &Program::eventSetInvertWheel, "Invert the mouse wheel motion")

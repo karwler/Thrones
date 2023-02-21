@@ -66,24 +66,23 @@ static void processMaterials(const vector<string>& files, const string& dest) {
 					mtls.back() = std::move(next);
 				else
 					mtls.push_back(std::move(next));
-			} else if (char c0 = char(toupper(line[0])); c0 == 'K') {
-				if (char c1 = char(toupper(line[1])); c1 == 'A' || c1 == 'D')	// ambient and diffuse always have the same value
+			} else
+				switch (toupper(line[0])) {
+				case 'A':
+					mtls.back().second.ao = toNum<float>(string_view(line).substr(1));
+					break;
+				case 'C':
 					mtls.back().second.color = toVec<vec4>(string_view(line).substr(2), 1.f);
-				else if (c1 == 'S')
-					mtls.back().second.spec = toVec<vec3>(string_view(line).substr(2), 1.f);
-			} else if (c0 == 'N') {
-				if (toupper(line[1]) == 'S')
-					mtls.back().second.shine = toNum<float>(string_view(line).substr(2)) / 1000.f * 128.f;
-			} else if (c0 == 'D')
-				mtls.back().second.color.a = toNum<float>(string_view(line).substr(1));
-			else if (c0 == 'T' && toupper(line[1]) == 'R')
-				mtls.back().second.color.a = 1.f - toNum<float>(string_view(line).substr(2));	// inverse of d
-			else if (c0 == 'R') {
-				if (char c1 = char(toupper(line[1])); c1 == 'L')
-					mtls.back().second.reflect = toNum<float>(string_view(line).substr(2));
-				else if (c1 == 'H')
-					mtls.back().second.rough = toNum<float>(string_view(line).substr(2));
-			}
+					break;
+				case 'G':
+					mtls.back().second.roughness = toNum<float>(string_view(line).substr(1));
+					break;
+				case 'M':
+					mtls.back().second.metallic = toNum<float>(string_view(line).substr(1));
+					break;
+				case 'R':
+					mtls.back().second.reflective = toNum<float>(string_view(line).substr(1));
+				}
 		}
 		if (mtls.back().first.empty())
 			mtls.pop_back();

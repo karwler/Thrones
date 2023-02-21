@@ -64,7 +64,6 @@ private:
 #else
 	umap<int, TTF_Font*> fonts;
 	vector<uint8> fontData;
-	Settings::Hinting hinting;
 #endif
 	float heightScale;	// for scaling down font size to fit requested height
 
@@ -79,7 +78,9 @@ public:
 	int length(const string& text, int height);
 	int length(char* text, int height, sizet length);
 	bool hasGlyph(uint16 ch);
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
 	void setHinting(Settings::Hinting hinting);
+#endif
 	SDL_Surface* render(const char* text, int height);
 	SDL_Surface* render(const string& text, int height);
 	SDL_Surface* render(const char* text, int height, uint length);
@@ -98,6 +99,12 @@ inline FontSet::~FontSet() {
 	clear();
 #endif
 }
+
+#if SDL_TTF_VERSION_ATLEAST(2, 0, 18)
+inline void FontSet::setHinting(Settings::Hinting hint) {
+	TTF_SetFontHinting(font, int(hint));
+}
+#endif
 
 inline int FontSet::length(const string& text, int height) {
 	return length(text.c_str(), height);

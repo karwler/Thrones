@@ -12,14 +12,16 @@ void World::setArgs(int argc, const C* const* argv) {
 #ifdef _WIN32
 #ifdef __MINGW32__
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR lpCmdLine, int) {
-	if (int argc; LPWSTR* argv = CommandLineToArgvW(sstow(lpCmdLine).c_str(), &argc)) {
+	if (lpCmdLine && lpCmdLine[0])
+		if (int argc; LPWSTR* argv = CommandLineToArgvW(sstow(lpCmdLine).c_str(), &argc)) {
 #else
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR pCmdLine, int) {
-	if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
+	if (pCmdLine && pCmdLine[0])
+		if (int argc; LPWSTR* argv = CommandLineToArgvW(pCmdLine, &argc)) {
 #endif
-		World::setArgs(argc, argv);
-		LocalFree(argv);
-	}
+			World::setArgs(argc, argv);
+			LocalFree(argv);
+		}
 #else
 int main(int argc, char** argv) {
 	World::setArgs(argc - 1, argv + 1);
